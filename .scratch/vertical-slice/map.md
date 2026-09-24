@@ -22,6 +22,8 @@ A written **vertical-slice spec** for Descent VR, ready to hand off as build tic
 
 <!-- one line per resolved ticket: [title](link): gist -->
 
+- [Quest 3 browser performance budget](issues/04-quest-3-browser-performance-budget.md): target 72 fps. Draw calls are the binding limit (~300, since every draw runs once per eye). At most 4 constant point lights, no shadows, ~8 enemies on screen, rooms merged and culled to what's visible.
+
 ## Not yet specified
 
 - **Enemy roster:** which enemy types the slice needs and what each one tests in the player (ranged, which forces shield use and movement, is the obvious candidate). This waits on the combat-depth decision.
