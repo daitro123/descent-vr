@@ -1,0 +1,38 @@
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #0c0a0e;
+  color: #e0d6c0;
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+}
+
+canvas {
+  display: block;
+}
+
+#intro {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 12px 16px;
+  background: rgb(0 0 0 / 0.6);
+  border: 1px solid #5a4a30;
+  font-size: 13px;
+  line-height: 1.5;
+  pointer-events: none;
+}
+
+#intro h1 {
+  margin: 0 0 6px;
+  font-size: 18px;
+  letter-spacing: 0.1em;
+  color: #e0b060;
+}
+
+#intro ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
