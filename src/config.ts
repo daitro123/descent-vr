@@ -1,15 +1,79 @@
 // Every tunable in one place. White-boxing is mostly turning these knobs,
 // so keep gameplay numbers here rather than scattered through systems.
 
+import type { EnemyKind } from './models/characters';
+
+/** Which keyframe pair (enemies/poses.ts) an attack animates between. */
+export type AttackPoseName = 'chop' | 'slashR' | 'slashL' | 'slam' | 'draw' | 'summon';
+
+export interface AttackConfig {
+  pose: AttackPoseName;
+  /**
+   * melee: the weapon's arc is swept against shield, sword and body. slam: AOE
+   * where the weapon lands. shot: an arrow. summon: raises the dead.
+   */
+  kind: 'melee' | 'slam' | 'shot' | 'summon';
+  windup: number; // s of telegraph (the weapon glows)
+  active: number; // s of the swing itself
+  recover: number;
+  damage: number;
+  /** false: red telegraph, shields don't help, get out of the way. */
+  blockable: boolean;
+  /** Blocking still stings and numbs the shield arm. */
+  guardBreak?: boolean;
+  /** Horizontal slash: tilt the arc to the player's chest height at wind-up start (so you can duck it). */
+  aim?: boolean;
+  radius?: number; // slam AOE, metres around the impact
+  weight: number; // how often it's picked
+  /** Combo: attack index that follows immediately (the Warden). */
+  next?: number;
+  /** Weapon stuck in the floor after the blow: a window of bonus damage. */
+  exposeOnRecover?: boolean;
+}
+
+export interface EnemyConfig {
+  hp: number;
+  radius: number; // body collision and hurt capsule
+  speed: number; // m/s
+  turnSpeed: number; // rad/s
+  /** Hits dealing less than this don't interrupt its attacks (super armour). */
+  poise: number;
+  attackRange: number; // starts an attack within this distance (feet to feet)
+  holdDistance: number; // without an attack token, circle the player at this range
+  attackCooldown: readonly [number, number]; // s between its own attacks (random in range)
+  staggerTime: number;
+  blockStagger: number;
+  parryStagger: number;
+  exposedTime: number; // bonus-damage window after a parry, bash or stuck weapon
+  critMultiplier: number; // head hits
+  orbChance: number;
+  death: 'shatter' | 'topple';
+  attacks: readonly AttackConfig[];
+}
+
 export const CONFIG = {
   arena: {
     halfSize: 7, // room is (2*halfSize) metres square
-    wallHeight: 3.5,
+    wallHeight: 4,
+    gate: { width: 1.8, height: 2.8, depth: 1.4 },
     pillars: [
       { x: -3, z: -3, r: 0.45 },
       { x: 3, z: -3, r: 0.45 },
       { x: -3, z: 3, r: 0.45 },
       { x: 3, z: 3, r: 0.45 },
+    ],
+    // Other round colliders: the throne, corner braziers, crates. Keep them
+    // either flush with a wall or a body-width clear of it and of each other:
+    // a gap narrower than an enemy makes a pocket it can be knocked into and
+    // never leave.
+    obstacles: [
+      { kind: 'throne', x: 0, z: -6.3, r: 0.9 },
+      { kind: 'brazier', x: -6.4, z: -6.4, r: 0.4 },
+      { kind: 'brazier', x: 6.4, z: -6.4, r: 0.4 },
+      { kind: 'brazier', x: 6.4, z: 6.4, r: 0.4 },
+      { kind: 'brazier', x: -6.4, z: 6.4, r: 0.4 },
+      { kind: 'crate', x: -4.4, z: 6.3, r: 0.55 },
+      { kind: 'crate', x: -3.3, z: 6.5, r: 0.3 },
     ],
   },
 
@@ -21,6 +85,23 @@ export const CONFIG = {
     stickDeadzone: 0.25,
     maxRage: 100,
     rageDecayPerSec: 2,
+    // What enemy weapons can hit, relative to the headset: a head sphere and a
+    // torso capsule hanging below it. Duck, and a slash passes over.
+    body: {
+      headRadius: 0.12,
+      headDrop: 0.04, // the skull's centre sits a little below the eyes
+      torsoTop: 0.28,
+      torsoBottom: 0.85,
+      torsoRadius: 0.2,
+    },
+  },
+
+  dash: {
+    // B / Y: a quick step in the left-stick direction (backwards if neutral).
+    distance: 1.7,
+    time: 0.16, // short enough to read as a step, not a glide (comfort)
+    cooldown: 1.1,
+    invulnerable: 0.22, // s of dodge frames from the start of the dash
   },
 
   sword: {
@@ -35,11 +116,12 @@ export const CONFIG = {
     fullDamageSpeed: 5.0, // tip speed at which damage stops scaling up
     minDamage: 8,
     maxDamage: 28,
-    critHeight: 1.45, // hits above this (head) crit
-    critMultiplier: 1.6,
     perEnemyCooldown: 0.35, // s — one swing registers one hit per enemy
     knockback: 2.8, // m/s at full swing speed
     sweepSamples: 5, // sub-steps between frames so fast swings don't tunnel
+    parrySpeed: 2.2, // tip speed that turns a sword block into a parry
+    exposedMultiplier: 1.5,
+    frenzyMultiplier: 1.35,
   },
 
   shield: {
@@ -52,47 +134,168 @@ export const CONFIG = {
     forwardOffset: 0.06,
     blockMargin: 0.08, // forgiveness: grows the block box on every side
     parrySpeed: 1.8, // m/s shield speed toward the attacker at impact = parry
+    guardBreakChip: 0.3, // share of a heavy blow that gets through a block
+    numbTime: 1.0, // s the shield can't block after a guard break
+    // Shield bash: punch the shield into an enemy.
+    bashSpeed: 2.2, // m/s toward the enemy
+    bashReach: 0.22, // shield centre to body surface
+    bashDamage: 6,
+    bashKnockback: 3.2,
+    bashCooldown: 0.8,
   },
 
-  enemy: {
-    hp: 40,
-    radius: 0.35,
-    height: 1.55,
-    moveSpeed: 1.3,
-    turnSpeed: 6, // rad/s
-    attackRange: 1.15, // starts wind-up within this distance (head XZ)
-    reachBonus: 0.35, // strike still lands if player is within range + this
-    windup: 0.75, // telegraph time, the window to block or step back
-    strikeTime: 0.15,
-    recover: 0.9,
-    damage: 14,
-    staggerTime: 0.35, // interrupts wind-up: hitting first matters
-    blockStagger: 0.6,
-    parryStagger: 1.4,
-    orbDropChance: 0.4,
-    separation: 0.8,
+  // Ranged attacks: arrows are straight and quick, so blocking and side-stepping both work.
+  arrow: {
+    speed: 10, // damage comes from the archer's attack
+    reflectDamage: 30,
+    life: 2.5,
+    stickTime: 2.5, // how long spent arrows stay stuck in walls and shields
+    hitRadius: 0.05,
+  },
+
+  // Attack tokens: how many enemies may be mid-attack at once, per type of
+  // threat, and the minimum spacing (s) between two attacks starting.
+  tokens: { melee: 2, ranged: 2, meleeGap: 0.9, rangedGap: 0.6 },
+
+  enemies: {
+    grunt: {
+      hp: 45,
+      radius: 0.33,
+      speed: 1.35,
+      turnSpeed: 6,
+      poise: 0,
+      attackRange: 1.15,
+      holdDistance: 2.3,
+      attackCooldown: [0.8, 1.8],
+      staggerTime: 0.4,
+      blockStagger: 0.7,
+      parryStagger: 1.5,
+      exposedTime: 1.5,
+      critMultiplier: 1.6,
+      orbChance: 0.35,
+      death: 'shatter',
+      attacks: [
+        { pose: 'chop', kind: 'melee', windup: 0.8, active: 0.22, recover: 0.75, damage: 14, blockable: true, weight: 1 },
+        { pose: 'slashR', kind: 'melee', windup: 0.75, active: 0.24, recover: 0.7, damage: 12, blockable: true, aim: true, weight: 1 },
+        { pose: 'slashL', kind: 'melee', windup: 0.75, active: 0.24, recover: 0.7, damage: 12, blockable: true, aim: true, weight: 1 },
+      ],
+    },
+    archer: {
+      hp: 28,
+      radius: 0.3,
+      speed: 1.5,
+      turnSpeed: 5,
+      poise: 0,
+      attackRange: 9, // longest shot
+      holdDistance: 5.5, // preferred range; backs off inside 3.5 m
+      attackCooldown: [1.4, 2.6],
+      staggerTime: 0.5,
+      blockStagger: 0.5,
+      parryStagger: 1.2,
+      exposedTime: 1.5,
+      critMultiplier: 1.6,
+      orbChance: 0.3,
+      death: 'shatter',
+      attacks: [{ pose: 'draw', kind: 'shot', windup: 1.1, active: 0.15, recover: 0.6, damage: 10, blockable: true, weight: 1 }],
+    },
+    brute: {
+      hp: 170,
+      radius: 0.5,
+      speed: 1.05,
+      turnSpeed: 3.5,
+      poise: 22,
+      attackRange: 1.65,
+      holdDistance: 2.8,
+      attackCooldown: [1.2, 2.2],
+      staggerTime: 0.5,
+      blockStagger: 0.6,
+      parryStagger: 2.0,
+      exposedTime: 2.2,
+      critMultiplier: 1.6,
+      orbChance: 1,
+      death: 'topple',
+      attacks: [
+        { pose: 'slashR', kind: 'melee', windup: 1.05, active: 0.3, recover: 0.9, damage: 22, blockable: true, guardBreak: true, aim: true, weight: 2 },
+        { pose: 'slam', kind: 'slam', windup: 1.25, active: 0.25, recover: 1.6, damage: 30, blockable: false, radius: 1.5, exposeOnRecover: true, weight: 1 },
+      ],
+    },
+    warden: {
+      hp: 1100,
+      radius: 0.55,
+      speed: 1.25,
+      turnSpeed: 3,
+      poise: 45,
+      attackRange: 2.2,
+      holdDistance: 2.2,
+      attackCooldown: [0.6, 1.3],
+      staggerTime: 0.6,
+      blockStagger: 0.5,
+      parryStagger: 0, // a parry drops the Warden to one knee instead (see warden)
+      exposedTime: 2.8,
+      critMultiplier: 2,
+      orbChance: 0,
+      death: 'shatter',
+      attacks: [
+        { pose: 'slashR', kind: 'melee', windup: 0.85, active: 0.28, recover: 0.3, damage: 18, blockable: true, aim: true, weight: 2, next: 1 },
+        { pose: 'slashL', kind: 'melee', windup: 0.5, active: 0.28, recover: 0.3, damage: 18, blockable: true, aim: true, weight: 0, next: 2 },
+        { pose: 'chop', kind: 'melee', windup: 0.6, active: 0.3, recover: 0.9, damage: 24, blockable: true, weight: 0 },
+        { pose: 'slam', kind: 'slam', windup: 1.3, active: 0.3, recover: 1.0, damage: 34, blockable: false, radius: 2.2, exposeOnRecover: true, weight: 1 },
+      ],
+    },
+  } satisfies Record<EnemyKind, EnemyConfig>,
+
+  warden: {
+    summonAt: [0.7, 0.4], // HP fractions at which it raises grunts
+    summonCount: 2,
+    enrageAt: 0.35, // below this HP fraction, wind-ups are faster
+    enrageWindup: 0.75,
+    kneelTime: 2.6,
   },
 
   waves: {
-    first: 2,
-    growth: 1,
-    delay: 3,
-    spawnDistance: 6,
+    // Each wave's roster, in order; after the last (the Warden) the run is won.
+    list: [
+      { grunt: 2 },
+      { grunt: 3 },
+      { grunt: 2, archer: 1 },
+      { grunt: 2, archer: 2 },
+      { brute: 1, grunt: 2 },
+      { brute: 1, grunt: 2, archer: 2 },
+      { warden: 1 },
+    ] as Partial<Record<EnemyKind, number>>[],
+    delay: 4, // s between waves
+    spawnInterval: 0.7, // s between enemies of one wave
+    spawnDistance: [4.5, 6] as const,
+    maxAlive: 8, // performance budget: ~8 on screen
   },
 
-  ability: {
-    // War Cry: spend rage, knock everything nearby away.
+  warCry: {
+    // A / X: spend rage, knock everything nearby away, then fight in a frenzy.
     cost: 50,
     radius: 3.5,
     damage: 15,
     knockback: 6,
     stagger: 1.2,
+    frenzyTime: 8,
+  },
+
+  groundSlam: {
+    // Drive the sword tip into the floor, fast, with enough rage.
+    cost: 35,
+    floorY: 0.12, // tip below this counts as striking the floor
+    minDownSpeed: 3.5, // m/s, downward tip speed
+    radius: 2.2,
+    damage: 30,
+    knockback: 5,
+    stagger: 1.0,
+    cooldown: 0.8,
   },
 
   rage: {
     perHit: 10,
     perBlock: 12,
     perParry: 25,
+    perBash: 8,
   },
 
   orb: {

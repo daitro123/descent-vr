@@ -1,10 +1,14 @@
-import { Matrix4, Vector3 } from 'three';
-import { CONFIG } from '../config';
-import type { Enemy, StrikeResult } from '../enemies/enemy';
+import { Matrix4, type Object3D, Vector3 } from 'three';
+import { type AttackConfig, CONFIG } from '../config';
+import type { Enemy, StrikeOutcome } from '../enemies/enemy';
 import type { FloatingText } from '../fx/floatingText';
+import type { Particles } from '../fx/particles';
 import { sfx } from '../fx/sfx';
+import type { Shockwaves } from '../fx/shockwave';
 import type { Player } from '../player/player';
-import { clamp01, closestSegmentSegment, segmentIntersectsBox, type SegmentHit } from './geometry';
+import { clamp01, closestPointOnSegment, closestSegmentSegment, segmentIntersectsBox, type SegmentHit } from './geometry';
+import { type Arrow, type ArrowContact, type ArrowResolver, Projectiles } from './projectiles';
+import { type Defender, sweepStrike, type SweepResult } from './strike';
 
 export interface CombatEvents {
   onEnemyHit(enemy: Enemy, killed: boolean): void;
@@ -12,7 +16,14 @@ export interface CombatEvents {
   hitStop(seconds: number): void;
 }
 
+export interface CombatFx {
+  text: FloatingText;
+  particles: Particles;
+  shockwaves: Shockwaves;
+}
+
 const _hit: SegmentHit = { distance: 0, pointA: new Vector3(), pointB: new Vector3() };
+const _sweep: SweepResult = { contact: 'body', point: new Vector3() };
 const _prevBase = new Vector3();
 const _prevTip = new Vector3();
 const _curBase = new Vector3();
@@ -21,40 +32,123 @@ const _sBase = new Vector3();
 const _sTip = new Vector3();
 const _capA = new Vector3();
 const _capB = new Vector3();
+const _headC = new Vector3();
 const _push = new Vector3();
-const _head = new Vector3();
-const _origin = new Vector3();
-const _target = new Vector3();
-const _inv = new Matrix4();
-const _half = new Vector3();
+const _feet = new Vector3();
 const _vel = new Vector3();
-const _toEnemy = new Vector3();
+const _to = new Vector3();
+const _p = new Vector3();
+const _a = new Vector3();
+const _b = new Vector3();
 
-/** Stats for the debug overlay / automated tests. */
-export const combatStats = { swings: 0, hits: 0, crits: 0, blocks: 0, parries: 0, hurts: 0 };
+/** Stats for the run summary, the debug overlay and automated tests. */
+export const combatStats = {
+  swings: 0,
+  hits: 0,
+  crits: 0,
+  kills: 0,
+  blocks: 0,
+  parries: 0,
+  hurts: 0,
+  dodges: 0,
+  bashes: 0,
+  slams: 0,
+  reflects: 0,
+};
 
-export class Combat {
+export function resetCombatStats(): void {
+  for (const k of Object.keys(combatStats) as (keyof typeof combatStats)[]) combatStats[k] = 0;
+}
+
+/** Sword damage before multipliers: scales with tip speed between the two thresholds. */
+export function swingDamage(tipSpeed: number): { damage: number; power: number } {
+  const S = CONFIG.sword;
+  const power = clamp01((tipSpeed - S.minHitSpeed) / (S.fullDamageSpeed - S.minHitSpeed));
+  return { damage: S.minDamage + (S.maxDamage - S.minDamage) * power, power };
+}
+
+/**
+ * Everything that deals damage. The player's side (sword, bash, ground slam,
+ * War Cry) runs from `update`; the enemy side is called by enemies through
+ * EnemyContext (`sweep`, `slam`, `shoot`) and by arrows (ArrowResolver).
+ */
+export class Combat implements ArrowResolver {
+  readonly projectiles: Projectiles;
   private swinging = false;
+  private slamCooldown = 0;
+  private readonly defender: Defender;
+  private readonly shieldInverse = new Matrix4();
+  private readonly swordBase = new Vector3();
+  private enemies: Enemy[] = [];
 
   constructor(
     private readonly player: Player,
-    private readonly text: FloatingText,
+    private readonly fx: CombatFx,
     private readonly events: CombatEvents,
-  ) {}
+    parent: Object3D,
+  ) {
+    this.projectiles = new Projectiles(parent);
+    const B = CONFIG.player.body;
+    const S = CONFIG.shield;
+    this.defender = {
+      head: new Vector3(),
+      headRadius: B.headRadius,
+      torsoTop: new Vector3(),
+      torsoBottom: new Vector3(),
+      torsoRadius: B.torsoRadius,
+      shieldInverse: null,
+      shieldHalf: new Vector3(S.width / 2 + S.blockMargin, S.height / 2 + S.blockMargin, S.depth / 2 + S.blockMargin),
+      swordBase: null,
+      swordTip: new Vector3(),
+      swordRadius: CONFIG.sword.bladeHalfWidth,
+    };
+  }
+
+  update(dt: number, enemies: Enemy[]): void {
+    this.enemies = enemies;
+    this.slamCooldown = Math.max(0, this.slamCooldown - dt);
+    this.refreshDefender();
+    this.updateSword(enemies);
+    this.updateBash(enemies);
+    this.updateGroundSlam(enemies);
+    this.projectiles.update(dt, this);
+  }
+
+  /** Snapshot the player's hurt volumes, shield and blade for this frame's enemy blows. */
+  private refreshDefender(): void {
+    const d = this.defender;
+    const { player } = this;
+    player.body(d.head, d.torsoTop, d.torsoBottom);
+    const { shield, sword } = player;
+    if (shield.canBlock && player.alive) {
+      shield.board.updateWorldMatrix(true, false);
+      d.shieldInverse = this.shieldInverse.copy(shield.board.matrixWorld).invert();
+    } else d.shieldInverse = null;
+    if (sword.tip.valid && player.alive) {
+      d.swordBase = sword.base.worldNow(player.rig, this.swordBase);
+      sword.tip.worldNow(player.rig, d.swordTip);
+    } else d.swordBase = null;
+  }
+
+  // ================================================================ player → enemies
 
   /**
    * Sword vs enemies. The blade is a segment; between frames we sweep it
    * through a few interpolated sub-steps so a fast swing can't tunnel through
    * a body in one 72–90 Hz frame. Contact only counts above a tip-speed
    * threshold, and damage scales with speed — you have to actually swing.
+   * The head is its own sphere: hit it for a crit.
    */
-  updateSword(enemies: Enemy[]): void {
+  private updateSword(enemies: Enemy[]): void {
     const { sword, rig } = this.player;
     if (!sword.tip.valid || !this.player.alive) return;
     const speed = sword.tipSpeed;
     const S = CONFIG.sword;
     const fast = speed >= S.minHitSpeed;
-    if (fast && !this.swinging) combatStats.swings++;
+    if (fast && !this.swinging) {
+      combatStats.swings++;
+      sfx.whoosh(sword.tip.worldNow(rig, _p));
+    }
     this.swinging = fast;
     if (!fast) return;
 
@@ -62,136 +156,387 @@ export class Combat {
     sword.tip.worldPrev(rig, _prevTip);
     sword.base.worldNow(rig, _curBase);
     sword.tip.worldNow(rig, _curTip);
-    const reach = CONFIG.enemy.radius + S.bladeHalfWidth;
 
     for (const enemy of enemies) {
       if (!enemy.hittable || enemy.hitCooldown > 0) continue;
       enemy.capsule(_capA, _capB);
+      const headR = enemy.headSphere(_headC);
+      const reach = enemy.def.radius + S.bladeHalfWidth;
 
-      let contact = false;
-      for (let i = 1; i <= S.sweepSamples && !contact; i++) {
+      let zone: 'head' | 'body' | null = null;
+      for (let i = 1; i <= S.sweepSamples && !zone; i++) {
         const t = i / S.sweepSamples;
         _sBase.lerpVectors(_prevBase, _curBase, t);
         _sTip.lerpVectors(_prevTip, _curTip, t);
-        closestSegmentSegment(_sBase, _sTip, _capA, _capB, _hit);
-        contact = _hit.distance <= reach;
+        closestPointOnSegment(_headC, _sBase, _sTip, _p);
+        if (_p.distanceTo(_headC) <= headR + S.bladeHalfWidth) zone = 'head';
+        else {
+          closestSegmentSegment(_sBase, _sTip, _capA, _capB, _hit);
+          if (_hit.distance <= reach) {
+            zone = 'body';
+            _p.copy(_hit.pointA);
+          }
+        }
       }
-      if (!contact) continue;
+      if (!zone) continue;
 
-      const power = clamp01((speed - S.minHitSpeed) / (S.fullDamageSpeed - S.minHitSpeed));
-      const crit = _hit.pointB.y >= S.critHeight;
-      const damage = Math.round(
-        (S.minDamage + (S.maxDamage - S.minDamage) * power) * (crit ? S.critMultiplier : 1),
-      );
+      const { damage: base, power } = swingDamage(speed);
+      const crit = zone === 'head';
+      let damage = base;
+      if (crit) damage *= enemy.def.critMultiplier;
+      if (enemy.exposed > 0) damage *= S.exposedMultiplier;
+      if (this.player.frenzy > 0) damage *= S.frenzyMultiplier;
+      damage = Math.round(damage);
 
       // Push along the blade's horizontal travel (world space).
       _push.copy(sword.tip.velocity).applyQuaternion(rig.quaternion);
       _push.y = 0;
       if (_push.lengthSq() > 1e-6) _push.normalize().multiplyScalar(S.knockback * (0.4 + 0.6 * power));
 
-      const killed = enemy.takeHit(damage, _push);
+      this.player.headPosition(_a);
+      const killed = enemy.takeHit(damage, _push, { from: _a });
       combatStats.hits++;
       if (crit) combatStats.crits++;
-      this.text.spawn(crit ? `${damage}!` : `${damage}`, _hit.pointA, {
-        color: crit ? '#ffd23a' : '#ffffff',
+      this.impactFx(enemy, _p, _push, crit || enemy.exposed > 0);
+      this.fx.text.spawn(crit ? `${damage}!` : `${damage}`, _p, {
+        color: crit ? '#ffd23a' : enemy.exposed > 0 ? '#9fd8ff' : '#ffffff',
         scale: crit ? 0.3 : 0.22,
       });
-      sfx.hit(crit);
+      sfx.hit(crit, _p);
       this.player.input.pulse('right', CONFIG.feel.hapticHit.intensity * (0.5 + 0.5 * power), CONFIG.feel.hapticHit.ms);
       this.player.addRage(CONFIG.rage.perHit);
-      this.events.hitStop(CONFIG.feel.hitStop * (0.5 + power));
+      this.events.hitStop(CONFIG.feel.hitStop * (0.5 + power) * (crit ? 1.5 : 1));
       this.events.onEnemyHit(enemy, killed);
+      if (killed) this.onKill(enemy);
     }
+  }
+
+  /** Bone chips from skeletons, dark ichor from the brute; sparks on crits. */
+  private impactFx(enemy: Enemy, at: Vector3, dir: Vector3, bright: boolean): void {
+    _vel.copy(dir).normalize();
+    if (enemy.kind === 'brute') this.fx.particles.burst('blood', at, 10, _vel);
+    else this.fx.particles.burst('bone', at, 6, _vel);
+    if (bright) this.fx.particles.burst('sparks', at, 14, _vel);
+  }
+
+  private onKill(enemy: Enemy): void {
+    combatStats.kills++;
+    enemy.capsule(_a, _b);
+    _a.lerp(_b, 0.5);
+    sfx.death(_a, enemy.kind === 'warden' || enemy.kind === 'brute');
+    if (enemy.kind === 'brute') this.fx.particles.burst('blood', _a, 24);
+    else this.fx.particles.burst('bone', _a, enemy.kind === 'warden' ? 40 : 14);
+    if (enemy.kind === 'warden') {
+      this.fx.particles.burst('magic', _a, 60);
+      this.fx.shockwaves.trigger(enemy.position, 5, 0x6ad0ff, 0.9);
+    }
+    this.fx.particles.burst('dust', enemy.position, 8);
   }
 
   /**
-   * An enemy's club lands. Out of reach → whiff (stepping back is a defence).
-   * Otherwise the blow travels shoulder → player's chest; if that line passes
-   * through the shield box it is blocked, and a shield moving *into* the blow
-   * is a parry.
+   * Shield bash: punch the shield into an enemy. Staggers anything but the
+   * Warden; catching an enemy mid wind-up also leaves it exposed.
    */
-  resolveStrike(enemy: Enemy): StrikeResult {
-    const E = CONFIG.enemy;
-    const player = this.player;
-    if (!player.alive) return 'miss';
+  private updateBash(enemies: Enemy[]): void {
+    const { shield, rig } = this.player;
+    if (!shield.tracked || !this.player.alive) return;
+    const S = CONFIG.shield;
+    _vel.copy(shield.centre.velocity).applyQuaternion(rig.quaternion);
+    if (_vel.length() < S.bashSpeed) return;
+    shield.centre.worldNow(rig, _p);
+    for (const enemy of enemies) {
+      if (!enemy.hittable || enemy.bashCooldown > 0) continue;
+      enemy.capsule(_capA, _capB);
+      closestPointOnSegment(_p, _capA, _capB, _a);
+      const d = _a.distanceTo(_p);
+      if (d > enemy.def.radius + S.bashReach) continue;
+      _to.subVectors(_a, _p).setY(0).normalize();
+      if (_vel.dot(_to) < S.bashSpeed) continue;
 
-    player.headPosition(_head);
-    const dx = _head.x - enemy.position.x;
-    const dz = _head.z - enemy.position.z;
-    if (Math.hypot(dx, dz) > E.attackRange + E.reachBonus) {
-      const at = _head.clone().lerp(enemy.position, 0.5).setY(_head.y - 0.2);
-      this.text.spawn('miss', at, { color: '#9a9a9a', scale: 0.15 });
-      return 'miss';
+      enemy.bashCooldown = S.bashCooldown;
+      const interrupted = enemy.attacking && enemy.phase === 'windup';
+      _push.copy(_to).multiplyScalar(S.bashKnockback);
+      const killed = enemy.takeHit(S.bashDamage, _push, { from: _p, ignorePoise: enemy.kind !== 'warden' });
+      if (interrupted && !killed && enemy.kind !== 'warden') enemy.expose(enemy.def.exposedTime * 0.7);
+      combatStats.bashes++;
+      this.fx.text.spawn(interrupted ? 'INTERRUPT' : 'BASH', _a.clone().setY(_a.y + 0.3), { color: '#ffb060', scale: 0.16 });
+      this.fx.particles.burst('dust', _a, 6);
+      sfx.bash(_a);
+      this.player.input.pulse('left', 1, 80);
+      this.player.addRage(CONFIG.rage.perBash);
+      this.events.hitStop(0.05);
+      this.events.onEnemyHit(enemy, killed);
+      if (killed) this.onKill(enemy);
     }
-
-    enemy.strikeOrigin(_origin);
-    _target.copy(_head);
-    _target.y -= 0.25; // aim between head and chest
-
-    const { shield } = player;
-    if (shield.tracked) {
-      const board = shield.board;
-      board.updateWorldMatrix(true, false);
-      _inv.copy(board.matrixWorld).invert();
-      const a = _origin.clone().applyMatrix4(_inv);
-      const b = _target.clone().applyMatrix4(_inv);
-      const S = CONFIG.shield;
-      _half.set(S.width / 2 + S.blockMargin, S.height / 2 + S.blockMargin, S.depth / 2 + S.blockMargin);
-
-      if (segmentIntersectsBox(a, b, _half)) {
-        // Shield velocity toward the attacker, world space.
-        _vel.copy(shield.centre.velocity).applyQuaternion(player.rig.quaternion);
-        _toEnemy.subVectors(_origin, _head).setY(0).normalize();
-        const parry = _vel.dot(_toEnemy) >= S.parrySpeed;
-        const at = board.getWorldPosition(new Vector3());
-        at.y += 0.3;
-        shield.flash();
-        if (parry) {
-          combatStats.parries++;
-          this.text.spawn('PARRY', at, { color: '#7fd4ff', scale: 0.2 });
-          sfx.parry();
-          player.addRage(CONFIG.rage.perParry);
-          this.events.hitStop(0.1);
-        } else {
-          combatStats.blocks++;
-          this.text.spawn('block', at, { color: '#c0c0c0', scale: 0.15 });
-          sfx.block();
-          player.addRage(CONFIG.rage.perBlock);
-        }
-        const h = CONFIG.feel.hapticBlock;
-        player.input.pulse('left', h.intensity, h.ms);
-        return parry ? 'parried' : 'blocked';
-      }
-    }
-
-    combatStats.hurts++;
-    player.damage(E.damage);
-    sfx.hurt();
-    this.events.onPlayerHurt();
-    return 'hit';
   }
 
-  /** War Cry: spend rage, blast nearby enemies back and stagger them. */
+  /** Earthshaker: drive the sword tip into the floor, fast, with enough rage. */
+  private updateGroundSlam(enemies: Enemy[]): void {
+    const G = CONFIG.groundSlam;
+    const { sword, rig } = this.player;
+    if (!sword.tip.valid || !this.player.alive || this.slamCooldown > 0 || this.player.rage < G.cost) return;
+    sword.tip.worldNow(rig, _p);
+    _vel.copy(sword.tip.velocity).applyQuaternion(rig.quaternion);
+    if (_p.y > G.floorY || _vel.y > -G.minDownSpeed) return;
+
+    this.slamCooldown = G.cooldown;
+    this.player.rage -= G.cost;
+    combatStats.slams++;
+    _p.y = 0;
+    for (const enemy of enemies) {
+      if (!enemy.hittable) continue;
+      _push.subVectors(enemy.position, _p).setY(0);
+      const d = _push.length();
+      if (d > G.radius + enemy.def.radius) continue;
+      const falloff = 1 - 0.5 * Math.min(1, d / G.radius);
+      _push.normalize().multiplyScalar(G.knockback * falloff);
+      const damage = Math.round(G.damage * falloff * (this.player.frenzy > 0 ? CONFIG.sword.frenzyMultiplier : 1));
+      const killed = enemy.takeHit(damage, _push, { from: _p, ignorePoise: enemy.kind !== 'warden' });
+      if (!killed) enemy.stagger(G.stagger);
+      this.fx.text.spawn(`${damage}`, enemy.position.clone().setY(1.7), { color: '#ffb020' });
+      this.events.onEnemyHit(enemy, killed);
+      if (killed) this.onKill(enemy);
+    }
+    this.fx.shockwaves.trigger(_p, G.radius, 0xff9a30, 0.35);
+    this.fx.particles.burst('dust', _p, 18);
+    this.fx.particles.burst('embers', _p, 24);
+    this.fx.particles.burst('sparks', _p.clone().setY(0.05), 16);
+    this.fx.text.spawn('EARTHSHAKER', _p.clone().setY(1.2), { color: '#ffb020', scale: 0.2 });
+    sfx.groundSlam(_p);
+    this.player.input.pulse('right', 1, 220);
+    this.events.hitStop(0.1);
+  }
+
+  /** War Cry: spend rage, blast nearby enemies back and stagger them, then fight in a frenzy. */
   warCry(enemies: Enemy[]): boolean {
-    const A = CONFIG.ability;
+    const A = CONFIG.warCry;
     const player = this.player;
     if (!player.alive || player.rage < A.cost) return false;
     player.rage -= A.cost;
-    player.feetPosition(_head);
+    player.frenzy = A.frenzyTime;
+    player.feetPosition(_feet);
     for (const enemy of enemies) {
       if (!enemy.hittable) continue;
-      _push.subVectors(enemy.position, _head).setY(0);
+      _push.subVectors(enemy.position, _feet).setY(0);
       const d = _push.length();
       if (d > A.radius) continue;
       _push.normalize().multiplyScalar(A.knockback * (1 - (d / A.radius) * 0.5));
-      const killed = enemy.takeHit(A.damage, _push);
+      const killed = enemy.takeHit(A.damage, _push, { from: _feet });
       if (!killed) enemy.stagger(A.stagger);
-      this.text.spawn(`${A.damage}`, enemy.position.clone().setY(1.7), { color: '#ffb020' });
+      this.fx.text.spawn(`${A.damage}`, enemy.position.clone().setY(1.7), { color: '#ffb020' });
       this.events.onEnemyHit(enemy, killed);
+      if (killed) this.onKill(enemy);
     }
+    this.fx.shockwaves.trigger(_feet, A.radius, 0xffb020);
+    this.fx.particles.burst('embers', _feet, 30);
     sfx.warCry();
     player.input.pulse('left', 1, 200);
     player.input.pulse('right', 1, 200);
     return true;
+  }
+
+  // ================================================================ enemies → player
+
+  /**
+   * One frame of an enemy's swing (EnemyContext.sweep). The weapon's motion is
+   * swept against shield, sword and body; the first contact decides it.
+   * Shield or sword moving *into* the blow at impact turns a block into a parry.
+   */
+  sweep(enemy: Enemy, attack: AttackConfig, prevBase: Vector3, prevTip: Vector3, base: Vector3, tip: Vector3): StrikeOutcome | null {
+    const player = this.player;
+    if (!player.alive) return null;
+    const res = sweepStrike(prevBase, prevTip, base, tip, enemy.weapon.radius, 6, this.defender, attack.blockable, _sweep);
+    if (!res) return null;
+
+    if (res.contact === 'body') {
+      if (player.invulnerable) {
+        combatStats.dodges++;
+        this.fx.text.spawn('dodge', res.point, { color: '#9a9a9a', scale: 0.14 });
+        return 'dodged';
+      }
+      this.hurtPlayer(attack.damage);
+      this.fx.particles.burst('sparks', res.point, 6, undefined, 0xff4020);
+      return 'hit';
+    }
+
+    // Blocked with the shield or the sword. Parry if it moved into the blow:
+    // toward the attacker, or against the blade's travel (whichever is more).
+    const onShield = res.contact === 'shield';
+    enemy.capsule(_a, _b);
+    _to.subVectors(_a, this.defender.torsoTop).setY(0).normalize();
+    let parry: boolean;
+    if (onShield) {
+      _vel.copy(player.shield.centre.velocity).applyQuaternion(player.rig.quaternion);
+      _p.subVectors(tip, prevTip).normalize();
+      parry = Math.max(_vel.dot(_to), -_vel.dot(_p)) >= CONFIG.shield.parrySpeed;
+    } else {
+      parry = player.sword.tipSpeed >= CONFIG.sword.parrySpeed;
+    }
+    const at = res.point;
+    if (parry) {
+      combatStats.parries++;
+      this.fx.text.spawn('PARRY', at.clone().setY(at.y + 0.25), { color: '#7fd4ff', scale: 0.2 });
+      this.fx.particles.burst('sparks', at, 26, _to.negate(), 0xbfe8ff);
+      sfx.parry();
+      player.addRage(CONFIG.rage.perParry);
+      this.events.hitStop(0.12);
+      if (onShield) player.shield.flash(0x9fdcff);
+      player.input.pulse(onShield ? 'left' : 'right', 1, 120);
+      return 'parried';
+    }
+    combatStats.blocks++;
+    this.fx.particles.burst('sparks', at, 12, _to.negate());
+    player.addRage(CONFIG.rage.perBlock);
+    const h = CONFIG.feel.hapticBlock;
+    player.input.pulse(onShield ? 'left' : 'right', h.intensity, h.ms);
+    if (attack.guardBreak) {
+      // A heavy blow: blocking beats taking it full, but it still hurts and numbs the arm.
+      const chip = Math.round(attack.damage * CONFIG.shield.guardBreakChip);
+      this.fx.text.spawn('GUARD BREAK', at.clone().setY(at.y + 0.25), { color: '#ff8040', scale: 0.17 });
+      sfx.guardBreak();
+      if (onShield) {
+        player.shield.numb = CONFIG.shield.numbTime;
+        player.shield.flash(0xff6030);
+      }
+      this.hurtPlayer(chip, false);
+      return 'hit';
+    }
+    this.fx.text.spawn('block', at.clone().setY(at.y + 0.2), { color: '#c0c0c0', scale: 0.15 });
+    if (onShield) {
+      player.shield.flash();
+      sfx.block(at);
+    } else sfx.clash(at);
+    return 'blocked';
+  }
+
+  /** A slam lands (EnemyContext.slam): unblockable, so only distance (or a dash) saves you. */
+  slam(_enemy: Enemy, attack: AttackConfig, at: Vector3): void {
+    const r = attack.radius ?? 1.5;
+    this.fx.shockwaves.trigger(at, r, 0xff3a10, 0.45);
+    this.fx.particles.burst('dust', at, 22, undefined, 0x5a5048);
+    this.fx.particles.burst('sparks', at.clone().setY(0.1), 10, undefined, 0xff6020);
+    sfx.slam(at);
+    const player = this.player;
+    player.feetPosition(_feet);
+    const d = _feet.distanceTo(at);
+    if (d < 5) {
+      // You feel it through the floor either way.
+      const k = 1 - d / 5;
+      player.input.pulse('left', 0.4 + 0.6 * k, 150);
+      player.input.pulse('right', 0.4 + 0.6 * k, 150);
+    }
+    if (!player.alive || d > r) return;
+    if (player.invulnerable) {
+      combatStats.dodges++;
+      this.fx.text.spawn('dodge', _feet.clone().setY(1.2), { color: '#9a9a9a', scale: 0.14 });
+      return;
+    }
+    this.hurtPlayer(attack.damage);
+  }
+
+  /** An archer looses (EnemyContext.shoot): aimed at the chest where the player is now. */
+  shoot(enemy: Enemy, from: Vector3, damage: number): void {
+    this.player.headPosition(_p);
+    _p.y -= 0.35;
+    this.projectiles.fire(enemy, from, _p, damage);
+    sfx.arrowLoose(from);
+  }
+
+  private hurtPlayer(amount: number, flinch = true): void {
+    combatStats.hurts++;
+    this.player.damage(amount);
+    sfx.hurt();
+    if (flinch) this.events.onPlayerHurt();
+  }
+
+  // ================================================================ arrows (ArrowResolver)
+
+  playerContact(prev: Vector3, pos: Vector3, arrow: Arrow): ArrowContact | null {
+    const player = this.player;
+    const d = this.defender;
+    if (!player.alive) return null;
+    const R = CONFIG.arrow.hitRadius;
+
+    if (d.shieldInverse) {
+      _a.copy(prev).applyMatrix4(d.shieldInverse);
+      _b.copy(pos).applyMatrix4(d.shieldInverse);
+      _p.copy(d.shieldHalf).addScalar(R);
+      if (segmentIntersectsBox(_a, _b, _p)) {
+        _vel.copy(player.shield.centre.velocity).applyQuaternion(player.rig.quaternion);
+        _to.copy(arrow.vel).normalize().negate();
+        if (_vel.dot(_to) >= CONFIG.shield.parrySpeed) {
+          this.reflectArrow(arrow, 'PARRY');
+          player.input.pulse('left', 1, 90);
+          return 'parried';
+        }
+        combatStats.blocks++;
+        this.projectiles.attach(arrow, player.shield.board);
+        player.shield.flash();
+        player.addRage(CONFIG.rage.perBlock * 0.5);
+        player.input.pulse('left', 0.7, 60);
+        sfx.arrowThunk(pos);
+        return 'blocked';
+      }
+    }
+    if (d.swordBase && player.sword.tipSpeed >= CONFIG.sword.minHitSpeed) {
+      // Both blade and arrow move several cm a frame: step them through the
+      // frame together so a well-timed swipe can't tunnel past the arrow.
+      const { sword, rig } = player;
+      sword.base.worldPrev(rig, _prevBase);
+      sword.tip.worldPrev(rig, _prevTip);
+      for (let i = 1; i <= 5; i++) {
+        const t = i / 5;
+        _sBase.lerpVectors(_prevBase, d.swordBase, t);
+        _sTip.lerpVectors(_prevTip, d.swordTip, t);
+        _a.lerpVectors(prev, pos, t);
+        closestPointOnSegment(_a, _sBase, _sTip, _b);
+        if (_b.distanceTo(_a) <= d.swordRadius + R + 0.06) {
+          this.reflectArrow(arrow, 'DEFLECT');
+          player.input.pulse('right', 0.8, 60);
+          return 'deflected';
+        }
+      }
+    }
+    closestPointOnSegment(d.head, prev, pos, _p);
+    const headHit = _p.distanceTo(d.head) <= d.headRadius + R;
+    closestSegmentSegment(prev, pos, d.torsoTop, d.torsoBottom, _hit);
+    if (headHit || _hit.distance <= d.torsoRadius + R) {
+      if (player.invulnerable) return 'dodged';
+      this.hurtPlayer(arrow.damage);
+      sfx.arrowThunk();
+      return 'hit';
+    }
+    return null;
+  }
+
+  private reflectArrow(arrow: Arrow, label: string): void {
+    combatStats.reflects++;
+    combatStats.parries++;
+    const owner = arrow.owner && arrow.owner.alive ? arrow.owner : null;
+    if (owner) owner.capsule(_a, _b);
+    this.projectiles.reflect(arrow, owner ? _a.lerp(_b, 0.6) : null);
+    this.fx.text.spawn(label, arrow.pos.clone().setY(arrow.pos.y + 0.2), { color: '#7fd4ff', scale: 0.17 });
+    this.fx.particles.burst('sparks', arrow.pos, 12, undefined, 0xbfe8ff);
+    sfx.clash(arrow.pos);
+    this.player.addRage(CONFIG.rage.perParry * 0.5);
+  }
+
+  enemyContact(prev: Vector3, pos: Vector3): Enemy | null {
+    for (const enemy of this.enemies) {
+      if (!enemy.hittable) continue;
+      enemy.capsule(_a, _b);
+      closestSegmentSegment(prev, pos, _a, _b, _hit);
+      if (_hit.distance > enemy.def.radius + CONFIG.arrow.hitRadius) continue;
+      _push.subVectors(pos, prev).setY(0).normalize().multiplyScalar(2);
+      const killed = enemy.takeHit(CONFIG.arrow.reflectDamage, _push, { from: prev, ignorePoise: enemy.kind !== 'warden' });
+      if (!killed) enemy.expose(enemy.def.exposedTime);
+      this.fx.text.spawn(`${CONFIG.arrow.reflectDamage}!`, _hit.pointB, { color: '#7fd4ff', scale: 0.26 });
+      this.impactFx(enemy, _hit.pointB, _push, true);
+      sfx.hit(true, _hit.pointB);
+      this.events.onEnemyHit(enemy, killed);
+      if (killed) this.onKill(enemy);
+      return enemy;
+    }
+    return null;
   }
 }

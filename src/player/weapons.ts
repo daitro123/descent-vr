@@ -1,15 +1,10 @@
-import {
-  BoxGeometry,
-  Color,
-  Group,
-  Mesh,
-  MeshLambertMaterial,
-  type Object3D,
-  Vector3,
-} from 'three';
+import { Color, Group, Mesh, Object3D, Vector3 } from 'three';
 import { CONFIG } from '../config';
+import { buildHeaterShield, buildLongsword } from '../models/gear';
+import { createModelMaterial } from '../models/materials';
 
 const DEG = Math.PI / 180;
+const _zero = new Vector3();
 
 /**
  * Tracks a point attached to a hand in *rig* space, so velocity reflects the
@@ -51,29 +46,17 @@ export class Sword {
   private readonly pivot = new Group();
   private readonly localBase: Vector3;
   private readonly localTip: Vector3;
-  private readonly bladeMat = new MeshLambertMaterial({ color: 0xc8ccd4 });
-  private readonly readyColor = new Color(0x5a7cff);
+  private readonly material = createModelMaterial();
+  private readonly readyColor = new Color(0x3a5cff);
+  private readonly frenzyColor = new Color(0xff4a10);
+  /** War Cry's frenzy buff: the blade burns orange while it lasts. */
+  frenzy = false;
 
   constructor() {
     const { bladeStart, bladeEnd, bladeHalfWidth, pitchDeg } = CONFIG.sword;
     this.pivot.rotation.x = pitchDeg * DEG;
     this.model.add(this.pivot);
-
-    const bladeLen = bladeEnd - bladeStart;
-    const blade = new Mesh(new BoxGeometry(bladeHalfWidth * 2, 0.012, bladeLen), this.bladeMat);
-    blade.position.z = -(bladeStart + bladeLen / 2);
-    const guard = new Mesh(
-      new BoxGeometry(0.2, 0.03, 0.03),
-      new MeshLambertMaterial({ color: 0x8a6a2a }),
-    );
-    guard.position.z = -bladeStart;
-    const handle = new Mesh(
-      new BoxGeometry(0.03, 0.03, 0.18),
-      new MeshLambertMaterial({ color: 0x4a3020 }),
-    );
-    handle.position.z = -bladeStart + 0.1;
-    this.pivot.add(blade, guard, handle);
-
+    this.pivot.add(new Mesh(buildLongsword(bladeStart, bladeEnd, bladeHalfWidth), this.material));
     this.localBase = new Vector3(0, 0, -bladeStart);
     this.localTip = new Vector3(0, 0, -bladeEnd);
   }
@@ -89,7 +72,16 @@ export class Sword {
     // Blade glows blue once it is moving fast enough to deal damage —
     // invaluable while tuning `minHitSpeed`.
     const ready = this.tipSpeed >= CONFIG.sword.minHitSpeed;
-    this.bladeMat.emissive.copy(ready ? this.readyColor : this.bladeMat.color).multiplyScalar(ready ? 0.6 : 0);
+    const glow = this.material.telegraph;
+    if (ready) glow.copy(this.frenzy ? this.frenzyColor : this.readyColor).multiplyScalar(0.8);
+    else if (this.frenzy) glow.copy(this.frenzyColor).multiplyScalar(0.25);
+    else glow.setRGB(0, 0, 0);
+  }
+
+  /** World-space blade segment (base → tip), this frame. */
+  segment(rig: Object3D, outBase: Vector3, outTip: Vector3): void {
+    this.base.worldNow(rig, outBase);
+    this.tip.worldNow(rig, outTip);
   }
 
   get tipSpeed(): number {
@@ -100,26 +92,23 @@ export class Sword {
 export class Shield {
   readonly model = new Group();
   readonly centre = new TrackedPoint();
-  /** The block volume; test against it in its local space. */
-  readonly board: Mesh;
-  private readonly material = new MeshLambertMaterial({ color: 0x6b4a2b });
+  /** The block volume (a box of CONFIG.shield size); test against it in its local space. */
+  readonly board = new Object3D();
+  private readonly material = createModelMaterial();
   private flashTimer = 0;
+  private flashColor = new Color(1, 0.9, 0.5);
+  /** Seconds the shield arm is numb after a guard break; it can't block meanwhile. */
+  numb = 0;
 
   constructor() {
     const { width, height, depth, forwardOffset, pitchDeg } = CONFIG.shield;
     const pivot = new Group();
     pivot.rotation.x = pitchDeg * DEG;
     this.model.add(pivot);
-    // Centre-grip buckler: the fist holds a bar behind the boss, so the board
+    // Centre-grip heater: the fist holds a bar behind the boss, so the board
     // sits just in front of the knuckles, face along the pivot's -Z.
-    this.board = new Mesh(new BoxGeometry(width, height, depth), this.material);
     this.board.position.set(0, 0, -forwardOffset);
-    const boss = new Mesh(
-      new BoxGeometry(0.12, 0.12, 0.04),
-      new MeshLambertMaterial({ color: 0x9a9aa0 }),
-    );
-    boss.position.z = -depth / 2 - 0.02;
-    this.board.add(boss);
+    this.board.add(new Mesh(buildHeaterShield(width, height, depth), this.material));
     pivot.add(this.board);
   }
 
@@ -128,16 +117,24 @@ export class Shield {
       this.centre.valid = false;
       return;
     }
-    this.centre.sample(new Vector3(), this.board, rig, dt);
+    this.centre.sample(_zero, this.board, rig, dt);
     this.flashTimer = Math.max(0, this.flashTimer - dt);
-    this.material.emissive.setRGB(1, 0.9, 0.5).multiplyScalar(this.flashTimer * 4);
+    this.numb = Math.max(0, this.numb - dt);
+    this.material.emissive.copy(this.flashColor).multiplyScalar(this.flashTimer * 3);
+    // A numb shield sags visibly so the player knows it won't block.
+    this.model.rotation.x = -0.6 * Math.min(1, this.numb * 3);
   }
 
-  flash(): void {
+  flash(color = 0xffe680): void {
+    this.flashColor.setHex(color);
     this.flashTimer = 0.2;
   }
 
   get tracked(): boolean {
     return this.centre.valid;
+  }
+
+  get canBlock(): boolean {
+    return this.centre.valid && this.numb <= 0;
   }
 }
