@@ -145,6 +145,7 @@ const RIGHT = (dist: number, headY = 1.6): Shield => ({ at: [0.28, headY - 0.3, 
 
 describe.each([
   ['grunt', () => new TestGrunt('grunt', 0, 0)],
+  ['grunt with an axe', () => new TestGrunt('grunt', 0, 0, 1)],
   ['brute', () => new TestBrute('brute', 0, 0)],
   ['warden', () => new TestWarden('warden', 0, 0)],
 ] as const)('%s melee', (_name, make) => {
