@@ -108,7 +108,8 @@ export class Archer extends Enemy {
   }
 }
 
-const SUMMON: AttackConfig = {
+/** The Warden's summon, cast at HP thresholds rather than picked from `attacks`. */
+export const SUMMON_ATTACK: AttackConfig = {
   pose: 'summon',
   kind: 'summon',
   windup: 1.2,
@@ -128,7 +129,7 @@ export class Warden extends Enemy {
     const W = CONFIG.warden;
     if (this.summonPending) {
       this.summonPending = false;
-      this.startAttack(SUMMON, ctx);
+      this.startAttack(SUMMON_ATTACK, ctx);
       return;
     }
     const [combo, , , slam] = d.attacks;
