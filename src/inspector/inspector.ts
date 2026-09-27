@@ -1,6 +1,5 @@
 import {
   BufferGeometry,
-  CanvasTexture,
   CircleGeometry,
   Color,
   DirectionalLight,
@@ -14,7 +13,6 @@ import {
   MeshLambertMaterial,
   PlaneGeometry,
   RingGeometry,
-  SRGBColorSpace,
   Vector3,
   type WebGLRenderer,
 } from 'three';
@@ -22,6 +20,7 @@ import { buildCharacter, type EnemyKind, type WeaponSpec } from '../models/chara
 import { createModelMaterial, type ModelMaterial } from '../models/materials';
 import type { Rig } from '../models/rig';
 import { XRInput } from '../player/input';
+import { TextPanel } from '../ui/panel';
 import { type Clip, clipsFor, type MutablePose } from './clips';
 
 // `?inspect`: a turntable for the bestiary. One enemy at a time on a plinth in
@@ -70,7 +69,7 @@ export class Inspector {
   private readonly guides = new Group();
   private readonly weaponLine = segmentLine(0x40e0ff);
   private readonly arrowLine = segmentLine(0xff4080);
-  private readonly panel: Panel;
+  private readonly panel: TextPanel;
   private readonly input: XRInput;
   private readonly built = new Map<number, Built>();
   private readonly pose: MutablePose = {};
@@ -101,7 +100,7 @@ export class Inspector {
     this.guides.add(this.weaponLine, this.arrowLine);
     this.root.add(stage, this.guides);
 
-    this.panel = new Panel();
+    this.panel = new TextPanel();
     this.panel.mesh.position.set(-1.1, 1.45, -1.25);
     this.panel.mesh.rotation.y = 0.65;
     this.root.add(this.panel.mesh);
@@ -361,45 +360,4 @@ function buildRuler(): Group {
   }
   g.rotation.y = -0.4; // angled toward the viewer
   return g;
-}
-
-/** The floating readout: a canvas redrawn only when its text changes. */
-class Panel {
-  readonly mesh: Mesh;
-  private readonly ctx: CanvasRenderingContext2D;
-  private readonly texture: CanvasTexture;
-  private last = '';
-
-  constructor() {
-    const canvas = document.createElement('canvas');
-    canvas.width = 1024;
-    canvas.height = 512;
-    this.ctx = canvas.getContext('2d')!;
-    this.texture = new CanvasTexture(canvas);
-    this.texture.colorSpace = SRGBColorSpace;
-    this.texture.anisotropy = 4;
-    this.mesh = new Mesh(new PlaneGeometry(1.0, 0.5), new MeshBasicMaterial({ map: this.texture, transparent: true }));
-  }
-
-  draw(lines: string[]): void {
-    const text = lines.join('\n');
-    if (text === this.last) return;
-    this.last = text;
-    const c = this.ctx;
-    c.clearRect(0, 0, 1024, 512);
-    c.fillStyle = 'rgba(8, 6, 10, 0.82)';
-    c.fillRect(0, 0, 1024, 512);
-    c.strokeStyle = '#5a4a30';
-    c.lineWidth = 4;
-    c.strokeRect(2, 2, 1020, 508);
-    c.textBaseline = 'top';
-    lines.forEach((line, i) => {
-      const head = i === 0;
-      const help = i >= 5;
-      c.font = `${head ? 'bold 44px' : help ? '30px' : '36px'} ui-monospace, Menlo, monospace`;
-      c.fillStyle = head ? '#e0b060' : help ? '#9a8f7a' : '#e0d6c0';
-      c.fillText(line, 28, 24 + i * 52 - (help ? 20 : 0), 968);
-    });
-    this.texture.needsUpdate = true;
-  }
 }
