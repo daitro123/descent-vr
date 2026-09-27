@@ -1,9 +1,9 @@
-import { Vector3 } from 'three';
+import { type Mesh, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
 import { attackClip, type MutablePose } from '../src/inspector/clips';
 import { buildCharacter, type EnemyKind } from '../src/models/characters';
-import { buildLongsword } from '../src/models/gear';
+import { Sword } from '../src/player/weapons';
 
 // Blades should land edge first. These play each melee swing with the game's
 // timings (via the inspector's clips) and compare the weapon's cutting side,
@@ -60,19 +60,26 @@ describe.each(WIELDERS)('%s', (_name, kind, variant) => {
 });
 
 describe('player longsword', () => {
-  it('has its edges and crossguard across the fist (grip ±Y), flats facing palm and back of hand (±X)', () => {
-    const { bladeStart, bladeEnd, bladeHalfWidth } = CONFIG.sword;
-    const pos = buildLongsword(bladeStart, bladeEnd, bladeHalfWidth).getAttribute('position');
+  it('is held with its edges toward palm and back of the hand, so a thumb-up side-to-side swing cuts', () => {
+    // Grip space: X is out of the back of the hand. A slash across the body
+    // with the thumb up moves the blade along ±X, so the edges (and the
+    // crossguard, which runs with them) belong there, whatever the pitch.
+    const { bladeStart } = CONFIG.sword;
+    const pivot = new Sword().model.children[0];
+    const across = new Vector3(0, 1, 0).applyAxisAngle(new Vector3(1, 0, 0), pivot.rotation.x);
+    const pos = (pivot.children[0] as Mesh).geometry.getAttribute('position');
+    const v = new Vector3();
     const blade = { x: 0, y: 0 };
     const guard = { x: 0, y: 0 };
     for (let i = 0; i < pos.count; i++) {
-      const [x, y, z] = [Math.abs(pos.getX(i)), Math.abs(pos.getY(i)), pos.getZ(i)];
-      const part = z < -bladeStart - 0.05 ? blade : Math.abs(z + bladeStart) < 0.04 ? guard : null;
+      v.fromBufferAttribute(pos, i);
+      const part = v.z < -bladeStart - 0.05 ? blade : Math.abs(v.z + bladeStart) < 0.04 ? guard : null;
       if (!part) continue;
-      part.x = Math.max(part.x, x);
-      part.y = Math.max(part.y, y);
+      v.applyQuaternion(pivot.quaternion);
+      part.x = Math.max(part.x, Math.abs(v.x));
+      part.y = Math.max(part.y, Math.abs(v.dot(across)));
     }
-    expect(blade.y).toBeGreaterThan(blade.x * 3);
-    expect(guard.y).toBeGreaterThan(guard.x * 3);
+    expect(blade.x).toBeGreaterThan(blade.y * 3);
+    expect(guard.x).toBeGreaterThan(guard.y * 3);
   });
 });

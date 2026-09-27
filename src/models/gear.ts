@@ -6,10 +6,9 @@ import { PAL } from './palette';
 // authored in the weapon's pivot space (see player/weapons.ts): the blade runs
 // along -Z out of the fist, the shield's painted face looks along -Z.
 //
-// WebXR grip space puts the back of the hand on X and the forearm along +Y,
-// so a sword held like a real one has its edges on ±Y (knuckles and wrist) and
-// its flats facing ±X (palm and back of the hand). A chop then lands on the
-// edge, and the crossguard runs across the fist rather than through it.
+// The longsword is authored with its edges and crossguard on ±Y and its flats
+// facing ±X. How it sits in the hand is the pivot's job: CONFIG.sword.rollDeg
+// turns it about the blade so the edges face palm and back of the hand.
 
 const PI = Math.PI;
 

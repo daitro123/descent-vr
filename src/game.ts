@@ -155,7 +155,7 @@ export class Game {
     this.updateShadows();
     if (sword.tip.valid) {
       sword.segment(rig, _a, _b);
-      this.trail.update(dt, _a, _b, sword.tipSpeed >= CONFIG.sword.minHitSpeed, this.player.frenzy > 0);
+      this.trail.update(dt, _a, _b, sword.hot, this.player.frenzy > 0);
     }
     this.orbs.update(dt, this.player);
     this.text.update(dt);

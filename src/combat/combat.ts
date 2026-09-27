@@ -139,8 +139,9 @@ export class Combat implements ArrowResolver {
   /**
    * Sword vs enemies. The blade is a segment; between frames we sweep it
    * through a few interpolated sub-steps so a fast swing can't tunnel through
-   * a body in one 72–90 Hz frame. Contact only counts above a tip-speed
-   * threshold, and damage scales with speed — you have to actually swing.
+   * a body in one 72–90 Hz frame. Contact only counts during a committed
+   * swing with the tip above a speed threshold (Sword.hot), and damage scales
+   * with speed — you have to actually swing.
    * The head is its own sphere: hit it for a crit. A raised guard in the
    * blade's way stops it first.
    */
@@ -149,7 +150,7 @@ export class Combat implements ArrowResolver {
     if (!sword.tip.valid || !this.player.alive) return;
     const speed = sword.tipSpeed;
     const S = CONFIG.sword;
-    const fast = speed >= S.minHitSpeed;
+    const fast = sword.hot;
     if (fast && !this.swinging) {
       combatStats.swings++;
       sfx.whoosh(sword.tip.worldNow(rig, _p));

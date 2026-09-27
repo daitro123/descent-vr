@@ -121,10 +121,26 @@ export const CONFIG = {
     // Quest is ~45° up-forward when the controller is held level. So 0 means
     // "blade continues out of the fist", like holding a real sword.
     pitchDeg: 0,
+    // Turns the blade about its own length. 90 puts the edges toward palm and
+    // back of the hand, so a side-to-side swing with the thumb up (the usual VR
+    // slash) lands on the edge. Try other grips in the headset with
+    // ?swordPitch=…&swordRoll=… (degrees).
+    rollDeg: 90,
     bladeStart: 0.12, // metres from grip origin to where the blade begins
     bladeEnd: 1.0, // tip distance
     bladeHalfWidth: 0.04,
-    minHitSpeed: 1.6, // m/s at the tip; slower contact is a "tap", no damage
+    minHitSpeed: 2.0, // m/s at the tip; slower contact is a "tap", no damage
+    // A swing only hurts once it is committed: the hand itself has travelled
+    // this far in one direction. Flicking the wrist whips the tip past
+    // minHitSpeed without moving the hand, and turning back starts over, so
+    // wiggling the blade never adds up to a hit.
+    minSwingTravel: 0.2, // m of hand travel
+    swingHandSpeed: 0.7, // m/s: the hand is swinging, not drifting
+    swingGrace: 0.06, // s the hand may dip below swingHandSpeed mid-swing
+    // Weight: the blade follows the hand's turns about `weightLag` seconds
+    // behind (0 = rigid), and never trails it by more than maxLagDeg.
+    weightLag: 0.04,
+    maxLagDeg: 20,
     fullDamageSpeed: 5.0, // tip speed at which damage stops scaling up
     minDamage: 8,
     maxDamage: 28,
