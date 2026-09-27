@@ -150,6 +150,7 @@ export abstract class Enemy {
   private flinch = 0;
   private staggerDuration = 0;
   private staggerSide = 1;
+  private steady = 0; // s left in which blows can't stagger it (def.steadyTime)
   private readonly riseTime: number;
   private readonly prevBase = new Vector3();
   private readonly prevTip = new Vector3();
@@ -285,7 +286,8 @@ export abstract class Enemy {
     }
     this.onDamaged();
     if (opts.from) this.staggerSide = this.sideOf(opts.from);
-    if (damage >= this.def.poise || this.exposed > 0 || opts.ignorePoise) this.stagger(this.def.staggerTime);
+    const breaks = damage >= this.def.poise || this.exposed > 0 || opts.ignorePoise;
+    if (breaks && this.steady <= 0) this.stagger(this.def.staggerTime);
     else this.flinch = 0.25;
     return false;
   }
@@ -305,6 +307,7 @@ export abstract class Enemy {
     if (this.state === 'stagger' && this.staggerDuration - this.stateTime > duration) return;
     this.endAttack();
     this.staggerDuration = duration;
+    if (this.def.steadyTime !== undefined) this.steady = duration + this.def.steadyTime;
     this.enter('stagger');
   }
 
@@ -784,6 +787,7 @@ export abstract class Enemy {
     this.flash = Math.max(0, this.flash - dt);
     this.flinch = Math.max(0, this.flinch - dt);
     this.exposed = Math.max(0, this.exposed - dt);
+    this.steady = Math.max(0, this.steady - dt);
     this.cooldown = Math.max(0, this.cooldown - dt);
     this.guardCooldown = Math.max(0, this.guardCooldown - dt);
     this.glint = Math.max(0, this.glint - dt);

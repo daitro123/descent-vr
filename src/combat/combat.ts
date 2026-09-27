@@ -265,7 +265,7 @@ export class Combat implements ArrowResolver {
       if (_vel.dot(_to) < S.bashSpeed) continue;
 
       enemy.bashCooldown = S.bashCooldown;
-      const interrupted = enemy.attacking && enemy.phase === 'windup';
+      const windingUp = enemy.attacking && enemy.phase === 'windup';
       // Bashing a raised guard knocks it aside and leaves the enemy open, even the Warden.
       const broke = enemy.guarding;
       if (broke) {
@@ -274,8 +274,10 @@ export class Combat implements ArrowResolver {
       }
       _push.copy(_to).multiplyScalar(S.bashKnockback);
       const killed = enemy.takeHit(S.bashDamage, _push, { from: _p, ignorePoise: enemy.kind !== 'warden' });
+      // A steady brute (just out of a stagger) shrugs the bash off and keeps swinging.
+      const interrupted = windingUp && !killed && !enemy.attacking;
       if (!killed && broke) enemy.expose(enemy.def.exposedTime * 0.7);
-      else if (interrupted && !killed && enemy.kind !== 'warden') enemy.expose(enemy.def.exposedTime * 0.7);
+      else if (interrupted && enemy.kind !== 'warden') enemy.expose(enemy.def.exposedTime * 0.7);
       combatStats.bashes++;
       const label = broke ? 'GUARD BREAK' : interrupted ? 'INTERRUPT' : 'BASH';
       this.fx.text.spawn(label, _a.clone().setY(_a.y + 0.3), { color: '#ffb060', scale: 0.16 });
