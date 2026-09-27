@@ -60,3 +60,101 @@ canvas {
 #viewer-hud b {
   color: #e0b060;
 }
+
+/* Map viewer touch controls (see src/viewer/touchControls.ts): shown once body has .touch. */
+.touch-buttons,
+.touch-pad {
+  display: none;
+}
+
+body.touch #viewer-hud {
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+body.touch .touch-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  white-space: normal;
+}
+
+body.touch .touch-pad {
+  display: block;
+}
+
+body.touch canvas,
+.touch-buttons,
+.touch-pad {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.touch-buttons button,
+.touch-rise button {
+  pointer-events: auto;
+  font: inherit;
+  color: #e0d6c0;
+  background: rgb(0 0 0 / 0.55);
+  border: 1px solid #5a4a30;
+  border-radius: 6px;
+}
+
+.touch-buttons button {
+  min-width: 52px;
+  padding: 8px 10px;
+}
+
+.touch-buttons button[aria-pressed='true'] {
+  color: #16131a;
+  background: #e0b060;
+  border-color: #e0b060;
+}
+
+/* Stick bottom left, ▲ ▼ bottom right. In portrait they sit above the VR button. */
+.touch-stick {
+  position: fixed;
+  left: 20px;
+  bottom: 24px;
+  width: 120px;
+  height: 120px;
+  border: 2px solid rgb(224 214 192 / 0.45);
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.3);
+}
+
+.touch-stick div {
+  position: absolute;
+  left: 35px;
+  top: 35px;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: rgb(224 176 96 / 0.8);
+}
+
+.touch-rise {
+  position: fixed;
+  right: 20px;
+  bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.touch-rise button {
+  width: 60px;
+  height: 54px;
+  font-size: 22px;
+}
+
+@media (orientation: portrait) {
+  .touch-stick,
+  .touch-rise {
+    bottom: 88px;
+  }
+}
