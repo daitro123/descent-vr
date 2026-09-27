@@ -13,6 +13,8 @@ const params = new URLSearchParams(location.search);
 async function wantsEmulator(): Promise<boolean> {
   if (params.has('emulate')) return true;
   if (params.has('noemulate')) return false;
+  // On a phone the map viewer has touch controls; the emulator's DevUI is for mouse and keyboard.
+  if (params.has('fly') && matchMedia('(pointer: coarse)').matches) return false;
   try {
     return !(await navigator.xr?.isSessionSupported('immersive-vr'));
   } catch {

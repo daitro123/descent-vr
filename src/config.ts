@@ -54,6 +54,12 @@ export interface EnemyConfig {
   holdDistance: number; // without an attack token, circle the player at this range
   attackCooldown: readonly [number, number]; // s between its own attacks (random in range)
   staggerTime: number;
+  /**
+   * s after a stagger ends in which blows only make it flinch, so a player who
+   * keeps hitting can't stun-lock it. Kinds without one can be staggered again
+   * as soon as they recover.
+   */
+  steadyTime?: number;
   blockStagger: number;
   parryStagger: number;
   exposedTime: number; // bonus-damage window after a parry, bash or stuck weapon
@@ -248,6 +254,7 @@ export const CONFIG = {
       holdDistance: 2.8,
       attackCooldown: [1.2, 2.2],
       staggerTime: 0.5,
+      steadyTime: 2.5, // long enough to wind up and land one blow before it can be staggered again
       blockStagger: 0.6,
       parryStagger: 2.0,
       exposedTime: 2.2,
