@@ -1,4 +1,6 @@
 import { Color, Euler, Group, Quaternion, Vector3 } from 'three';
+import { closestSegmentSegment, type SegmentHit } from '../combat/geometry';
+import type { BladeTarget } from '../combat/strike';
 import type { AttackConfig, EnemyConfig } from '../config';
 import { CONFIG } from '../config';
 import { buildCharacter, type EnemyKind, type WeaponSpec } from '../models/characters';
@@ -6,19 +8,28 @@ import { createModelMaterial, type ModelMaterial } from '../models/materials';
 import { BONES, type BoneName, blendPoses, type Pose, type Rig } from '../models/rig';
 import { HealthBar } from '../ui/healthBar';
 import type { Arena } from '../world/arena';
-import { ATTACK_POSES, IDLE, KNEEL, KNEEL_DROP, RISE, STAGGER, walkOffsets } from './poses';
+import { ATTACK_POSES, GUARD, type GuardSide, IDLE, KNEEL, KNEEL_DROP, RISE, STAGGER, walkOffsets } from './poses';
 import type { AttackTokens } from './tokens';
 
-export type EnemyState = 'rising' | 'move' | 'attack' | 'stagger' | 'kneel' | 'dead';
+export type EnemyState = 'rising' | 'move' | 'attack' | 'guard' | 'stagger' | 'kneel' | 'dead';
 export type AttackPhase = 'windup' | 'active' | 'recover';
 /** What one frame of a swing did. `dodged` = the player was in dodge frames. */
 export type StrikeOutcome = 'hit' | 'blocked' | 'parried' | 'dodged';
+
+/** The player's blade as enemies see it: world segment and tip speed. */
+export interface PlayerSword {
+  base: Vector3;
+  tip: Vector3;
+  speed: number;
+}
 
 /** The world as an enemy sees it, plus the hooks its attacks call. Game provides it. */
 export interface EnemyContext {
   /** Player's head projected to the floor. */
   playerFeet: Vector3;
   playerHead: Vector3;
+  /** Null when the sword isn't tracked or the player is down. Guards react to it. */
+  playerSword: PlayerSword | null;
   arena: Arena;
   meleeTokens: AttackTokens;
   rangedTokens: AttackTokens;
@@ -46,9 +57,11 @@ const _b = new Vector3();
 const _q = new Quaternion();
 const _q2 = new Quaternion();
 const _e = new Euler(0, 0, 0, 'YXZ');
+const _hit: SegmentHit = { distance: 0, pointA: new Vector3(), pointB: new Vector3() };
 const _telegraphBlock = new Color(1.0, 0.45, 0.05);
 const _telegraphUnblock = new Color(1.0, 0.05, 0.02);
 const _exposedGlow = new Color(0.15, 0.35, 0.6);
+const _blockGlint = new Color(0.9, 0.95, 1.0);
 
 function easeOut(t: number): number {
   return 1 - (1 - t) * (1 - t);
@@ -116,6 +129,8 @@ export abstract class Enemy {
 
   attack: AttackConfig | null = null;
   phase: AttackPhase = 'windup';
+  /** The guard it holds while in the 'guard' state. */
+  guardSide: GuardSide = 'right';
   phaseTime = 0;
   /** Seconds until it may start another attack. */
   protected cooldown = rand(0.4, 1.2);
@@ -144,6 +159,11 @@ export abstract class Enemy {
   private phaseDuration = 1;
   private releasePending = false; // loose the arrow on the next weapon sample
   private held: AttackTokens | null = null;
+  private guardTimer = 0; // s left with the guard up
+  private guardCooldown = 0;
+  private guardRead = 0; // s until it looks again at which side your blade is on
+  private swingSeen = false; // already decided whether to guard against this swing
+  private glint = 0; // weapon flash after a block
   private stuckFor = 0;
   private detour = 0;
   private readonly detourDir = new Vector3();
@@ -190,6 +210,11 @@ export abstract class Enemy {
     return this.state === 'attack';
   }
 
+  /** Weapon up to block: the player's blade stops on it (Combat, sweepBlade). */
+  get guarding(): boolean {
+    return this.state === 'guard';
+  }
+
   get hpFraction(): number {
     return Math.max(0, this.hp / this.maxHp);
   }
@@ -225,6 +250,19 @@ export abstract class Enemy {
     const bone = this.rig.bones[this.weapon.bone];
     outBase.set(...this.weapon.base).applyMatrix4(bone.matrixWorld);
     outTip.set(...this.weapon.tip).applyMatrix4(bone.matrixWorld);
+  }
+
+  /** What the player's blade can meet on it this frame, guard included (see sweepBlade). */
+  bladeTarget(out: BladeTarget): BladeTarget {
+    this.capsule(out.bottom, out.top);
+    out.radius = this.def.radius;
+    out.headRadius = this.headSphere(out.head);
+    out.guarding = this.guarding;
+    if (out.guarding) {
+      this.weaponSegment(out.guardBase, out.guardTip);
+      out.guardRadius = this.weapon.radius + CONFIG.guard.margin;
+    }
+    return out;
   }
 
   /** World position of a point in a bone's space. */
@@ -294,9 +332,19 @@ export abstract class Enemy {
 
   private sideOf(from: Vector3): number {
     // +1 if the blow came from its left (+X local), -1 from its right.
-    _v.subVectors(from, this.position);
+    return this.localX(from) >= 0 ? 1 : -1;
+  }
+
+  /** How far a world point is to its left (+) or right (-). */
+  private localX(p: Vector3): number {
     const yaw = this.root.rotation.y;
-    return _v.x * Math.cos(yaw) - _v.z * Math.sin(yaw) >= 0 ? 1 : -1;
+    return (p.x - this.position.x) * Math.cos(yaw) - (p.z - this.position.z) * Math.sin(yaw);
+  }
+
+  /** How far a world point is in front of it (+) or behind (-). */
+  private localZ(p: Vector3): number {
+    const yaw = this.root.rotation.y;
+    return (p.x - this.position.x) * Math.sin(yaw) + (p.z - this.position.z) * Math.cos(yaw);
   }
 
   private die(push: Vector3): void {
@@ -567,6 +615,86 @@ export abstract class Enemy {
     ctx.nock(this, _a, _b);
   }
 
+  // ------------------------------------------------------------ guarding
+
+  /**
+   * Raise the guard if the player's blade is coming at it. Rolled once per
+   * swing (while the tip is moving fast), so a kind's `chance` is how often it
+   * reads a swing in time. Returns true if it did.
+   */
+  private considerGuard(ctx: EnemyContext): boolean {
+    const g = this.def.guard;
+    const blade = ctx.playerSword;
+    if (!g || !blade || this.swingSeen || this.guardCooldown > 0) return false;
+    if (blade.speed < CONFIG.guard.threatSpeed) return false;
+    this.capsule(_a, _b);
+    closestSegmentSegment(blade.base, blade.tip, _a, _b, _hit);
+    if (_hit.distance > this.def.radius + CONFIG.guard.threatReach) return false;
+    this.swingSeen = true;
+    if (Math.random() >= g.chance) return false;
+    // It gives up its attack token while it defends.
+    this.releaseTokens();
+    this.guardSide = this.sideFacing(blade);
+    this.guardTimer = rand(...g.hold);
+    this.guardRead = g.reaction;
+    this.enter('guard');
+    return true;
+  }
+
+  /** Hold the guard, re-reading which side your blade is on a reaction time behind. */
+  private updateGuard(dt: number, ctx: EnemyContext): void {
+    this.faceToward(ctx.playerFeet, dt);
+    this.guardTimer -= dt;
+    this.guardRead -= dt;
+    if (this.guardRead <= 0 && ctx.playerSword) {
+      this.guardSide = this.sideFacing(ctx.playerSword);
+      this.guardRead = this.def.guard!.reaction;
+    }
+    if (this.guardTimer <= 0) this.dropGuard();
+  }
+
+  /** Lower the guard (time's up, or a shield bash knocked it aside). */
+  dropGuard(): void {
+    if (this.state !== 'guard') return;
+    this.guardCooldown = this.def.guard!.cooldown;
+    this.enter('move');
+  }
+
+  /** Its guard took a blow: the weapon glints and it is shoved back a little. */
+  guardBlocked(push: Vector3): void {
+    this.glint = 0.15;
+    this.hitCooldown = CONFIG.sword.perEnemyCooldown; // the rest of that swing can't slip through
+    this.knockback.addScaledVector(push, this.knockbackScale());
+  }
+
+  /** The guard that meets the blade where it is now: over its head, or on its left or right. */
+  private sideFacing(blade: PlayerSword): GuardSide {
+    _v.addVectors(blade.base, blade.tip).multiplyScalar(0.5);
+    const headR = this.headSphere(_a);
+    if (_v.y > _a.y + headR) return 'high';
+    return this.localX(_v) >= 0 ? 'left' : 'right';
+  }
+
+  /**
+   * Does the raised guard cover a blow landing at `point` (world) from a blade
+   * moving along `motion`? The high guard takes chops at the head and
+   * shoulders; a side guard takes anything else on its half of the body, down
+   * to the guard's lower end. So: chop past a side guard, slash under or
+   * round a high one, or go for the open side or the legs.
+   */
+  guardCovers(point: Vector3, motion: Vector3): boolean {
+    if (!this.guarding || this.localZ(point) < 0) return false; // from behind: wide open
+    const chop = motion.y < -0.7 * motion.length();
+    if (this.guardSide === 'high') return chop && point.y >= this.rig.bones.upperArmR.getWorldPosition(_a).y - 0.1;
+    if (chop) return false;
+    this.weaponSegment(_a, _b);
+    if (point.y < Math.min(_a.y, _b.y) - 0.1) return false;
+    // The halves overlap a little, so a thrust at the middle is still covered.
+    const x = this.localX(point);
+    const overlap = 0.08 * this.heightScale;
+    return this.guardSide === 'left' ? x > -overlap : x < overlap;
+  }
+
   // ------------------------------------------------------------ moving
 
   /** Walk along `dir` (unit, XZ) at `speed`, steering round pillars and props. */
@@ -657,6 +785,9 @@ export abstract class Enemy {
     this.flinch = Math.max(0, this.flinch - dt);
     this.exposed = Math.max(0, this.exposed - dt);
     this.cooldown = Math.max(0, this.cooldown - dt);
+    this.guardCooldown = Math.max(0, this.guardCooldown - dt);
+    this.glint = Math.max(0, this.glint - dt);
+    if (!ctx.playerSword || ctx.playerSword.speed < CONFIG.guard.threatSpeed) this.swingSeen = false;
     this.moveAmount = Math.max(0, this.moveAmount - dt * 4);
 
     if (this.state !== 'dead') {
@@ -681,9 +812,17 @@ export abstract class Enemy {
         break;
       }
       case 'move':
+        if (this.considerGuard(ctx)) {
+          target = GUARD[this.guardSide];
+          break;
+        }
         this.think(dt, ctx, dist);
         // think() may have started an attack (TS narrows `state` too eagerly here).
         if ((this.state as EnemyState) === 'attack') snap = true;
+        break;
+      case 'guard':
+        this.updateGuard(dt, ctx);
+        if (this.guarding) target = GUARD[this.guardSide];
         break;
       case 'attack':
         this.updateAttack(dt, ctx);
@@ -714,7 +853,8 @@ export abstract class Enemy {
         this.walkPhase += dt * 7 * this.moveAmount * (this.def.speed / Math.max(0.8, this.heightScale));
         walkOffsets(this.walkPhase, this.moveAmount, walkPose);
       }
-      const rate = 1 - Math.exp(-(this.state === 'stagger' ? 18 : 10) * dt);
+      const ease = this.state === 'stagger' ? 18 : this.state === 'guard' ? CONFIG.guard.raiseRate : 10;
+      const rate = 1 - Math.exp(-ease * dt);
       for (const name of BONES) {
         const t = target[name];
         const w = walkPose[name];
@@ -750,7 +890,8 @@ export abstract class Enemy {
       const k = this.phase === 'windup' ? Math.min(1, this.phaseTime / this.phaseDuration) : this.phase === 'active' ? 1 : 0;
       tele.copy(a.blockable ? _telegraphBlock : _telegraphUnblock).multiplyScalar(0.3 + 1.2 * k * k);
       if (this.phase === 'recover') tele.setRGB(0, 0, 0);
-    } else tele.setRGB(0, 0, 0);
+    } else if (this.glint > 0) tele.copy(_blockGlint).multiplyScalar(this.glint * 8);
+    else tele.setRGB(0, 0, 0);
     // Body: white hit flash, or a cold pulse while exposed.
     const e = this.material.emissive;
     if (this.flash > 0) e.setRGB(1, 1, 1);

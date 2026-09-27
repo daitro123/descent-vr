@@ -8,7 +8,7 @@ import type { Shockwaves } from '../fx/shockwave';
 import type { Player } from '../player/player';
 import { clamp01, closestPointOnSegment, closestSegmentSegment, segmentIntersectsBox, type SegmentHit } from './geometry';
 import { type Arrow, type ArrowContact, type ArrowResolver, Projectiles } from './projectiles';
-import { type Defender, sweepStrike, type SweepResult } from './strike';
+import { type BladeResult, bladeTarget, type Defender, sweepBlade, sweepStrike, type SweepResult } from './strike';
 
 export interface CombatEvents {
   onEnemyHit(enemy: Enemy, killed: boolean): void;
@@ -24,6 +24,8 @@ export interface CombatFx {
 
 const _hit: SegmentHit = { distance: 0, pointA: new Vector3(), pointB: new Vector3() };
 const _sweep: SweepResult = { contact: 'body', point: new Vector3() };
+const _blade: BladeResult = { zone: 'body', point: new Vector3() };
+const _target = bladeTarget();
 const _prevBase = new Vector3();
 const _prevTip = new Vector3();
 const _curBase = new Vector3();
@@ -32,7 +34,6 @@ const _sBase = new Vector3();
 const _sTip = new Vector3();
 const _capA = new Vector3();
 const _capB = new Vector3();
-const _headC = new Vector3();
 const _push = new Vector3();
 const _feet = new Vector3();
 const _vel = new Vector3();
@@ -54,6 +55,9 @@ export const combatStats = {
   bashes: 0,
   slams: 0,
   reflects: 0,
+  /** Your swings an enemy's guard stopped. */
+  guarded: 0,
+  guardBreaks: 0,
 };
 
 export function resetCombatStats(): void {
@@ -100,7 +104,7 @@ export class Combat implements ArrowResolver {
       shieldHalf: new Vector3(S.width / 2 + S.blockMargin, S.height / 2 + S.blockMargin, S.depth / 2 + S.blockMargin),
       swordBase: null,
       swordTip: new Vector3(),
-      swordRadius: CONFIG.sword.bladeHalfWidth,
+      swordRadius: CONFIG.sword.bladeHalfWidth + CONFIG.sword.blockMargin,
     };
   }
 
@@ -137,7 +141,8 @@ export class Combat implements ArrowResolver {
    * through a few interpolated sub-steps so a fast swing can't tunnel through
    * a body in one 72–90 Hz frame. Contact only counts above a tip-speed
    * threshold, and damage scales with speed — you have to actually swing.
-   * The head is its own sphere: hit it for a crit.
+   * The head is its own sphere: hit it for a crit. A raised guard in the
+   * blade's way stops it first.
    */
   private updateSword(enemies: Enemy[]): void {
     const { sword, rig } = this.player;
@@ -159,29 +164,16 @@ export class Combat implements ArrowResolver {
 
     for (const enemy of enemies) {
       if (!enemy.hittable || enemy.hitCooldown > 0) continue;
-      enemy.capsule(_capA, _capB);
-      const headR = enemy.headSphere(_headC);
-      const reach = enemy.def.radius + S.bladeHalfWidth;
-
-      let zone: 'head' | 'body' | null = null;
-      for (let i = 1; i <= S.sweepSamples && !zone; i++) {
-        const t = i / S.sweepSamples;
-        _sBase.lerpVectors(_prevBase, _curBase, t);
-        _sTip.lerpVectors(_prevTip, _curTip, t);
-        closestPointOnSegment(_headC, _sBase, _sTip, _p);
-        if (_p.distanceTo(_headC) <= headR + S.bladeHalfWidth) zone = 'head';
-        else {
-          closestSegmentSegment(_sBase, _sTip, _capA, _capB, _hit);
-          if (_hit.distance <= reach) {
-            zone = 'body';
-            _p.copy(_hit.pointA);
-          }
-        }
-      }
-      if (!zone) continue;
-
+      const res = sweepBlade(_prevBase, _prevTip, _curBase, _curTip, S.bladeHalfWidth, S.sweepSamples, enemy.bladeTarget(_target), _blade);
+      if (!res) continue;
       const { damage: base, power } = swingDamage(speed);
-      const crit = zone === 'head';
+      _vel.copy(sword.tip.velocity).applyQuaternion(rig.quaternion);
+      if (res.zone === 'guard' || enemy.guardCovers(res.point, _vel)) {
+        this.guarded(enemy, power);
+        continue;
+      }
+      _p.copy(res.point);
+      const crit = res.zone === 'head';
       let damage = base;
       if (crit) damage *= enemy.def.critMultiplier;
       if (enemy.exposed > 0) damage *= S.exposedMultiplier;
@@ -209,6 +201,24 @@ export class Combat implements ArrowResolver {
       this.events.onEnemyHit(enemy, killed);
       if (killed) this.onKill(enemy);
     }
+  }
+
+  /** Your blade met a raised guard: no damage, a clash on its weapon, and the guard gives a little. */
+  private guarded(enemy: Enemy, power: number): void {
+    const { sword, rig } = this.player;
+    _push.copy(sword.tip.velocity).applyQuaternion(rig.quaternion).setY(0);
+    if (_push.lengthSq() > 1e-6) _push.normalize().multiplyScalar(CONFIG.sword.guardKnockback * power);
+    enemy.guardBlocked(_push);
+    combatStats.guarded++;
+    enemy.weaponSegment(_a, _b);
+    closestSegmentSegment(_curBase, _curTip, _a, _b, _hit);
+    const at = _hit.pointB;
+    this.fx.particles.burst('sparks', at, 14, _vel.copy(_push).normalize().negate());
+    this.fx.text.spawn('guarded', at.clone().setY(at.y + 0.2), { color: '#c0c0c0', scale: 0.15 });
+    sfx.clash(at);
+    const h = CONFIG.feel.hapticBlock;
+    this.player.input.pulse('right', h.intensity, h.ms);
+    this.events.hitStop(0.04);
   }
 
   /** Bone chips from skeletons, dark ichor from the brute; sparks on crits. */
@@ -255,11 +265,19 @@ export class Combat implements ArrowResolver {
 
       enemy.bashCooldown = S.bashCooldown;
       const interrupted = enemy.attacking && enemy.phase === 'windup';
+      // Bashing a raised guard knocks it aside and leaves the enemy open, even the Warden.
+      const broke = enemy.guarding;
+      if (broke) {
+        enemy.dropGuard();
+        combatStats.guardBreaks++;
+      }
       _push.copy(_to).multiplyScalar(S.bashKnockback);
       const killed = enemy.takeHit(S.bashDamage, _push, { from: _p, ignorePoise: enemy.kind !== 'warden' });
-      if (interrupted && !killed && enemy.kind !== 'warden') enemy.expose(enemy.def.exposedTime * 0.7);
+      if (!killed && broke) enemy.expose(enemy.def.exposedTime * 0.7);
+      else if (interrupted && !killed && enemy.kind !== 'warden') enemy.expose(enemy.def.exposedTime * 0.7);
       combatStats.bashes++;
-      this.fx.text.spawn(interrupted ? 'INTERRUPT' : 'BASH', _a.clone().setY(_a.y + 0.3), { color: '#ffb060', scale: 0.16 });
+      const label = broke ? 'GUARD BREAK' : interrupted ? 'INTERRUPT' : 'BASH';
+      this.fx.text.spawn(label, _a.clone().setY(_a.y + 0.3), { color: '#ffb060', scale: 0.16 });
       this.fx.particles.burst('dust', _a, 6);
       sfx.bash(_a);
       this.player.input.pulse('left', 1, 80);
@@ -478,7 +496,18 @@ export class Combat implements ArrowResolver {
         return 'blocked';
       }
     }
-    if (d.swordBase && player.sword.tipSpeed >= CONFIG.sword.minHitSpeed) {
+    if (d.swordBase && player.sword.tipSpeed < CONFIG.sword.minHitSpeed) {
+      // A blade held still across the arrow's path stops it, but only a swipe sends it back.
+      closestSegmentSegment(prev, pos, d.swordBase, d.swordTip, _hit);
+      if (_hit.distance <= d.swordRadius + R) {
+        combatStats.blocks++;
+        this.fx.particles.burst('sparks', _hit.pointB, 10);
+        sfx.clash(_hit.pointB);
+        player.addRage(CONFIG.rage.perBlock * 0.5);
+        player.input.pulse('right', 0.7, 60);
+        return 'glanced';
+      }
+    } else if (d.swordBase) {
       // Both blade and arrow move several cm a frame: step them through the
       // frame together so a well-timed swipe can't tunnel past the arrow.
       const { sword, rig } = player;

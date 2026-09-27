@@ -13,8 +13,8 @@ import { sharedModelMaterial } from '../models/materials';
 import { PAL } from '../models/palette';
 import { pushOutOfCircle } from './geometry';
 
-/** What an enemy arrow met on the player this frame. */
-export type ArrowContact = 'blocked' | 'parried' | 'deflected' | 'hit' | 'dodged';
+/** What an enemy arrow met on the player this frame. `glanced`: stopped by a still blade, and gone. */
+export type ArrowContact = 'blocked' | 'parried' | 'deflected' | 'glanced' | 'hit' | 'dodged';
 
 /** Combat decides what an arrow touched (and applies damage); Projectiles handles the flight. */
 export interface ArrowResolver {
@@ -135,7 +135,7 @@ export class Projectiles {
 
       if (!a.reflected) {
         const hit = resolver.playerContact(a.prev, a.pos, a);
-        if (hit === 'hit') {
+        if (hit === 'hit' || hit === 'glanced') {
           this.arrows.splice(i, 1);
           continue;
         }

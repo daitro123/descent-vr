@@ -232,6 +232,56 @@ export const SUMMON: AttackPoses = {
   },
 };
 
+export type GuardSide = 'high' | 'left' | 'right';
+
+/**
+ * Guards: the weapon raised to take the player's blade (Enemy.updateGuard
+ * picks one from where your sword is). `left` covers the enemy's left, which
+ * is where your forehand arrives; `high` holds the blade flat over the head
+ * against a chop. Edge toward the blow, knees soft.
+ */
+export const GUARD: Record<GuardSide, Pose> = {
+  high: {
+    spine: [0.05, 0.07, 0],
+    head: [-0.1, -0.07, 0],
+    upperArmR: [-2.06, -1.7, 0.27],
+    forearmR: [-1.14, 0.12, 0],
+    handR: [-1.3, 0.2, 0],
+    upperArmL: [-0.5, 0, 0.3],
+    forearmL: [-1.0, 0, 0],
+    thighL: [-0.25, 0, 0.08],
+    shinL: [0.3, 0, 0],
+    thighR: [0.1, 0, -0.08],
+    shinR: [0.2, 0, 0],
+  },
+  left: {
+    spine: [0.05, 0.11, 0],
+    head: [0, -0.1, 0],
+    upperArmR: [-0.15, 0.44, 0.15],
+    forearmR: [-1.41, 0, 0],
+    handR: [-1.3, 0.6, -0.24],
+    upperArmL: [-0.3, -0.2, 0.35],
+    forearmL: [-0.9, 0, 0],
+    thighL: [-0.25, 0, 0.08],
+    shinL: [0.3, 0, 0],
+    thighR: [0.1, 0, -0.08],
+    shinR: [0.2, 0, 0],
+  },
+  right: {
+    spine: [0.05, -0.23, 0],
+    head: [0, 0.2, 0],
+    upperArmR: [0, 0, -0.14],
+    forearmR: [-1.63, 0, 0],
+    handR: [-1.3, -0.19, 0.1],
+    upperArmL: [-0.45, 0, 0.25],
+    forearmL: [-1.0, 0, 0],
+    thighL: [-0.25, 0, 0.08],
+    shinL: [0.3, 0, 0],
+    thighR: [0.1, 0, -0.08],
+    shinR: [0.2, 0, 0],
+  },
+};
+
 /** Knocked to one knee: brings a giant's head down into sword reach. */
 export const KNEEL: Pose = {
   spine: [0.45, 0, 0],
