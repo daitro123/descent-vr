@@ -53,6 +53,8 @@ async function start(): Promise<void> {
   if (params.has('inspect')) return startInspector(renderer, scene, camera);
   // ?fly opens the map viewer (?fly=<id> for one map) instead of the game.
   if (params.has('fly')) return startMapViewer(renderer, scene, camera, device);
+  // ?map=<id> walks a map with no enemies (src/maps).
+  if (params.has('map')) return (await import('./maps/walk')).startWalk(renderer, scene, camera, params.get('map') || 'forest');
 
   // ?wave=N starts the run at wave N (7 is the Warden) for testing.
   const firstWave = Math.max(1, Math.min(CONFIG.waves.list.length, Number(params.get('wave')) || 1));

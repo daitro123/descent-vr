@@ -29,6 +29,7 @@ npm run dev          # http://localhost:5173
   - `?wave=N` starts the run at wave N (`?wave=7` goes straight to the boss).
   - `?showcase` pins the title-screen camera on the bestiary lineup, for reviewing models without a headset.
   - `?fly` opens the map viewer: fly freely through any map, with no enemies and no walls in the way. `?fly=crypt` opens one map. Walk mode drops you to eye height with the player's collision. R (desktop) or Y (headset) steps through the map's start, its landmarks and an overview from above. On the desktop, click to look around, WASD to move, Q/E for down and up, shift to go fast, M for the next map, G to walk, F for fog. In the headset, the left stick moves where you look, the right stick turns and rises, grip goes fast, A is the next map, B walks or flies, and X toggles fog. The readout floats over your left controller.
+  - `?map=forest` walks the outdoor map with no enemies (`?map=crypt` for the crypt hall). Headset: left stick moves, right stick turns. Desktop: WASD or the arrow keys walk (Shift to hurry), dragging looks around.
 
 Other commands: `npm test` runs the unit tests, `npm run typecheck`, `npm run build`.
 
@@ -96,6 +97,13 @@ src/
     poses.ts         keyframe poses; the arc between wind-up and strike is the blow
     tokens.ts        attack tokens: who may swing, and spacing between swings
   world/             arena (merged geometry, colliders), glow sprites, blob shadows, pixel textures, orbs
+  maps/
+    types.ts         GameMap: what gameplay and the map viewer need from any map (scene, sky, ground height, collision)
+    registry.ts      finds every map folder (src/maps/<id>/index.ts); add a map by adding a folder
+    walk.ts          ?map=<id>: walk a map with the warrior's locomotion, no enemies
+    crypt/           the crypt hall (world/arena.ts) as a map
+    forest/          Oakvale, the outdoor map: layout.ts is the plan (heights, roads, what stands where,
+                     colliders, unit tested); terrain, nature, buildings and sky turn it into chunked meshes
   fx/                particles, sword trail, shockwaves, floating text, spatial synthesised SFX
   ui/                belt HUD and vignette, enemy health bars, debug text panel
 ```
