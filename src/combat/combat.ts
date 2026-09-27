@@ -437,7 +437,7 @@ export class Combat implements ArrowResolver {
   /** An archer looses (EnemyContext.shoot): aimed at the chest where the player is now. */
   shoot(enemy: Enemy, from: Vector3, damage: number): void {
     this.player.headPosition(_p);
-    _p.y -= 0.35;
+    _p.y -= CONFIG.arrow.aimBelowHead;
     this.projectiles.fire(enemy, from, _p, damage);
     sfx.arrowLoose(from);
   }

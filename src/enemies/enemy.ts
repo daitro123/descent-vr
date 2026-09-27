@@ -1,4 +1,4 @@
-import { Color, Group, Quaternion, Vector3 } from 'three';
+import { Color, Euler, Group, Quaternion, Vector3 } from 'three';
 import type { AttackConfig, EnemyConfig } from '../config';
 import { CONFIG } from '../config';
 import { buildCharacter, type EnemyKind, type WeaponSpec } from '../models/characters';
@@ -44,6 +44,8 @@ const _v = new Vector3();
 const _a = new Vector3();
 const _b = new Vector3();
 const _q = new Quaternion();
+const _q2 = new Quaternion();
+const _e = new Euler(0, 0, 0, 'YXZ');
 const _telegraphBlock = new Color(1.0, 0.45, 0.05);
 const _telegraphUnblock = new Color(1.0, 0.05, 0.02);
 const _exposedGlow = new Color(0.15, 0.35, 0.6);
@@ -67,6 +69,20 @@ interface AimCalibration {
   shoulderY: number;
 }
 const aimCache = new Map<string, AimCalibration>();
+
+/** The nocked arrow at full draw, facing +Z from the origin, measured once per kind. */
+interface DrawCalibration {
+  nock: Vector3;
+  yaw: number;
+  pitch: number;
+}
+const drawCache = new Map<string, DrawCalibration>();
+/** Nock (on the string hand) and arrow rest (on the bow grip), in their hands' space. */
+const NOCK: [number, number, number] = [0, -0.06, 0.02];
+const GRIP: [number, number, number] = [0, -0.06, 0];
+/** How far the archer will twist and bend at the waist to track the player. */
+const MAX_AIM_YAW = 0.6;
+const MAX_AIM_PITCH = 0.5;
 
 interface Shard {
   vel: Vector3;
@@ -319,6 +335,7 @@ export abstract class Enemy {
     copyPose(poses.windup, this.windupPose);
     copyPose(poses.strike, this.strikePose);
     if (attack.aim) this.aimAt(attack, ctx);
+    if (attack.kind === 'shot') this.aimBow(ctx);
     this.enter('attack');
     ctx.telegraph(this, attack);
   }
@@ -342,30 +359,90 @@ export abstract class Enemy {
     if (hit) return hit;
     // Sample the arc at bind proportions, facing +Z from the origin, and find
     // where the tip crosses straight ahead.
+    const cal = this.atOrigin(() => {
+      const poses = ATTACK_POSES[attack.pose];
+      let best = { x: Infinity, y: 0, z: 0, shoulderY: 0, shoulderZ: 0 };
+      for (let t = 0; t <= 1.0001; t += 0.02) {
+        this.rig.apply(blendPoses(poses.windup, poses.strike, t, this.scratch));
+        this.root.updateMatrixWorld(true);
+        this.weaponSegment(_a, _b);
+        if (_b.z > 0.3 && Math.abs(_b.x) < Math.abs(best.x)) {
+          this.rig.bones.upperArmR.getWorldPosition(_a);
+          best = { x: _b.x, y: _b.y, z: _b.z, shoulderY: _a.y, shoulderZ: _a.z };
+        }
+      }
+      return { angle: Math.atan2(best.y - best.shoulderY, best.z - best.shoulderZ), shoulderY: best.shoulderY };
+    });
+    aimCache.set(key, cal);
+    return cal;
+  }
+
+  /**
+   * Turn and bend the archer at the waist so the nocked arrow points at the
+   * player's chest. Called when the draw starts and every frame of it, so the
+   * draw tracks a moving player; the release keeps the last aim.
+   */
+  private aimBow(ctx: EnemyContext): void {
+    const cal = this.calibrateDraw();
+    // The target in the root's frame (facing +Z), relative to the nock.
+    const yaw = this.root.rotation.y;
+    const dx = ctx.playerHead.x - this.position.x;
+    const dz = ctx.playerHead.z - this.position.z;
+    const x = dx * Math.cos(yaw) - dz * Math.sin(yaw) - cal.nock.x;
+    const z = dx * Math.sin(yaw) + dz * Math.cos(yaw) - cal.nock.z;
+    const y = ctx.playerHead.y - CONFIG.arrow.aimBelowHead - this.position.y - cal.nock.y;
+    const wantYaw = Math.atan2(x, z);
+    const wantPitch = Math.atan2(y, Math.hypot(x, z));
+    let turn = wantYaw - cal.yaw;
+    turn = Math.max(-MAX_AIM_YAW, Math.min(MAX_AIM_YAW, Math.atan2(Math.sin(turn), Math.cos(turn))));
+    const bend = Math.max(-MAX_AIM_PITCH, Math.min(MAX_AIM_PITCH, cal.pitch - wantPitch)); // > 0 aims down
+    // Twist about the vertical, then tip about the horizontal axis across the
+    // shot, so the arrow's pitch changes by exactly `bend` whatever the stance.
+    _q2.setFromAxisAngle(_v.set(Math.cos(cal.yaw + turn), 0, -Math.sin(cal.yaw + turn)), bend);
+    const poses = ATTACK_POSES[this.attack!.pose];
+    for (const [base, out] of [
+      [poses.windup, this.windupPose],
+      [poses.strike, this.strikePose],
+    ] as const) {
+      const s = base.spine ?? [0, 0, 0];
+      _q.setFromEuler(_e.set(s[0], s[1] + turn, s[2]));
+      _e.setFromQuaternion(_q.premultiply(_q2), 'YXZ');
+      out.spine = [_e.x, _e.y, _e.z];
+    }
+  }
+
+  private calibrateDraw(): DrawCalibration {
+    const pose = this.attack!.pose;
+    const key = `${this.kind}:${pose}`;
+    const hit = drawCache.get(key);
+    if (hit) return hit;
+    const cal = this.atOrigin(() => {
+      this.rig.apply(ATTACK_POSES[pose].windup);
+      this.root.updateMatrixWorld(true);
+      const nock = this.bonePoint('handR', ...NOCK, new Vector3());
+      const dir = this.bonePoint('handL', ...GRIP, _a).sub(nock).normalize();
+      return { nock, yaw: Math.atan2(dir.x, dir.z), pitch: Math.asin(dir.y) };
+    });
+    drawCache.set(key, cal);
+    return cal;
+  }
+
+  /** Run `measure` with the rig at the origin facing +Z, standing tall, then put everything back. */
+  private atOrigin<T>(measure: () => T): T {
     const saved = this.root.position.clone();
     const savedYaw = this.root.rotation.y;
     const savedY = this.visual.position.y;
     this.root.position.set(0, 0, 0);
     this.root.rotation.y = 0;
     this.visual.position.y = 0;
-    const poses = ATTACK_POSES[attack.pose];
-    let best = { x: Infinity, y: 0, z: 0, shoulderY: 0, shoulderZ: 0 };
-    for (let t = 0; t <= 1.0001; t += 0.02) {
-      this.rig.apply(blendPoses(poses.windup, poses.strike, t, this.scratch));
-      this.root.updateMatrixWorld(true);
-      this.weaponSegment(_a, _b);
-      if (_b.z > 0.3 && Math.abs(_b.x) < Math.abs(best.x)) {
-        this.rig.bones.upperArmR.getWorldPosition(_a);
-        best = { x: _b.x, y: _b.y, z: _b.z, shoulderY: _a.y, shoulderZ: _a.z };
-      }
-    }
-    const cal = { angle: Math.atan2(best.y - best.shoulderY, best.z - best.shoulderZ), shoulderY: best.shoulderY };
+    this.rig.setHipOffset(0, 0, 0); // update() sets it again every frame
+    const result = measure();
     this.rig.apply(this.pose);
     this.root.position.copy(saved);
     this.root.rotation.y = savedYaw;
     this.visual.position.y = savedY;
-    aimCache.set(key, cal);
-    return cal;
+    this.root.updateMatrixWorld(true);
+    return result;
   }
 
   /** Stop attacking and give the token back. */
@@ -398,6 +475,7 @@ export abstract class Enemy {
 
     if (this.phase === 'windup') {
       this.faceToward(ctx.playerFeet, dt);
+      if (a.kind === 'shot') this.aimBow(ctx);
       blendPoses(this.snapshot, this.windupPose, easeOut(k), this.pose);
       if (a.kind === 'shot') this.nock(ctx);
       if (k >= 1) this.nextPhase('active', a.active);
@@ -461,7 +539,7 @@ export abstract class Enemy {
     }
     if (this.releasePending && this.attack) {
       this.releasePending = false;
-      this.bonePoint('handR', 0, -0.06, 0.02, _a);
+      this.bonePoint('handR', ...NOCK, _a);
       ctx.shoot(this, _a, a.damage);
       this.rangedDone();
     }
@@ -484,8 +562,8 @@ export abstract class Enemy {
   }
 
   private nock(ctx: EnemyContext): void {
-    this.bonePoint('handR', 0, -0.06, 0.02, _a);
-    this.bonePoint('handL', 0, -0.06, 0, _b);
+    this.bonePoint('handR', ...NOCK, _a);
+    this.bonePoint('handL', ...GRIP, _b);
     ctx.nock(this, _a, _b);
   }
 

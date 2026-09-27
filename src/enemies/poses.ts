@@ -166,17 +166,22 @@ export const SLAM: AttackPoses = {
   },
 };
 
-/** Archer: bow arm straight at the target, string hand drawn to the cheek. */
+/**
+ * Archer: side-on, bow arm straight at the target, string hand drawn to the
+ * chin. At full draw the nocked arrow points straight ahead and level; the
+ * enemy turns and bends the spine at runtime so it tracks the player (see
+ * Enemy.aimBow).
+ */
 export const DRAW: AttackPoses = {
   windup: {
-    spine: [0, -0.25, 0],
-    head: [0, 0.25, 0],
-    upperArmL: [-1.55, -0.05, 0],
+    spine: [0, -0.97, 0],
+    head: [0, 0.97, 0],
+    upperArmL: [-1.73, 0.74, 0],
     forearmL: [0, 0, 0],
     handL: [0, 0, 0],
-    upperArmR: [-1.45, 0.55, 0],
-    forearmR: [-2.15, 0, 0],
-    handR: [-0.3, 0, 0],
+    upperArmR: [-0.69, 1.25, 0.03],
+    forearmR: [-2.16, 0, 0],
+    handR: [-0.17, 0, 0],
     thighL: [-0.25, 0, 0.08],
     shinL: [0.15, 0, 0],
     thighR: [0.2, 0, -0.1],
@@ -184,13 +189,13 @@ export const DRAW: AttackPoses = {
   },
   // Release: the string hand flicks back past the ear.
   strike: {
-    spine: [0, -0.3, 0],
-    head: [0, 0.25, 0],
-    upperArmL: [-1.55, -0.05, 0],
+    spine: [0, -1.02, 0],
+    head: [0, 0.97, 0],
+    upperArmL: [-1.73, 0.74, 0],
     forearmL: [0, 0, 0],
-    upperArmR: [-1.5, 0.2, -0.4],
+    upperArmR: [-0.74, 0.9, -0.37],
     forearmR: [-2.3, 0, 0],
-    handR: [-0.5, 0, 0],
+    handR: [-0.37, 0, 0],
     thighL: [-0.25, 0, 0.08],
     shinL: [0.15, 0, 0],
     thighR: [0.2, 0, -0.1],

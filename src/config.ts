@@ -151,6 +151,7 @@ export const CONFIG = {
     life: 2.5,
     stickTime: 2.5, // how long spent arrows stay stuck in walls and shields
     hitRadius: 0.05,
+    aimBelowHead: 0.35, // archers aim at the chest: this far below the player's head
   },
 
   // Attack tokens: how many enemies may be mid-attack at once, per type of
