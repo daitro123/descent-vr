@@ -1,10 +1,14 @@
-import { Color, Group, Mesh, Object3D, Vector3 } from 'three';
+import { Color, Group, Mesh, Object3D, Quaternion, Vector3 } from 'three';
 import { CONFIG } from '../config';
 import { buildHeaterShield, buildLongsword } from '../models/gear';
 import { createModelMaterial } from '../models/materials';
+import { SwingDetector } from './swing';
 
 const DEG = Math.PI / 180;
 const _zero = new Vector3();
+const _gripQ = new Quaternion();
+const _rigQ = new Quaternion();
+const _target = new Quaternion();
 
 /**
  * Tracks a point attached to a hand in *rig* space, so velocity reflects the
@@ -43,7 +47,13 @@ export class Sword {
   readonly model = new Group();
   readonly base = new TrackedPoint();
   readonly tip = new TrackedPoint();
+  /** The grip origin: where the hand is, for telling a swing from a wiggle. */
+  readonly hand = new TrackedPoint();
+  readonly swing = new SwingDetector();
   private readonly pivot = new Group();
+  /** The blade's orientation in rig space, trailing the hand's (see `follow`). */
+  private readonly held = new Quaternion();
+  private heldValid = false;
   private readonly localBase: Vector3;
   private readonly localTip: Vector3;
   private readonly material = createModelMaterial();
@@ -62,20 +72,49 @@ export class Sword {
   }
 
   update(rig: Object3D, dt: number): void {
-    if (!this.model.parent?.visible) {
-      this.base.valid = this.tip.valid = false;
+    const grip = this.model.parent;
+    if (!grip?.visible) {
+      this.base.valid = this.tip.valid = this.hand.valid = this.heldValid = false;
+      this.swing.reset();
       return;
     }
+    this.follow(grip, rig, dt);
     this.base.sample(this.localBase, this.pivot, rig, dt);
     this.tip.sample(this.localTip, this.pivot, rig, dt);
+    this.hand.sample(_zero, this.model, rig, dt);
+    this.swing.update(this.hand.rigPos, this.hand.velocity, dt);
 
-    // Blade glows blue once it is moving fast enough to deal damage —
-    // invaluable while tuning `minHitSpeed`.
-    const ready = this.tipSpeed >= CONFIG.sword.minHitSpeed;
+    // Blade glows blue while a swing can deal damage: invaluable while tuning
+    // `minHitSpeed` and `minSwingTravel`.
     const glow = this.material.telegraph;
-    if (ready) glow.copy(this.frenzy ? this.frenzyColor : this.readyColor).multiplyScalar(0.8);
+    if (this.hot) glow.copy(this.frenzy ? this.frenzyColor : this.readyColor).multiplyScalar(0.8);
     else if (this.frenzy) glow.copy(this.frenzyColor).multiplyScalar(0.25);
     else glow.setRGB(0, 0, 0);
+  }
+
+  /**
+   * Weight. The blade turns after the hand, `weightLag` seconds behind and at
+   * most `maxLagDeg` off, so it swings through a turn rather than snapping,
+   * and a flick of the wrist whips the tip less. Kept in rig space, so snap
+   * turns and walking carry the blade along instantly.
+   */
+  private follow(grip: Object3D, rig: Object3D, dt: number): void {
+    const { weightLag, maxLagDeg } = CONFIG.sword;
+    grip.getWorldQuaternion(_gripQ);
+    rig.getWorldQuaternion(_rigQ);
+    _target.copy(_rigQ).invert().multiply(_gripQ); // the hand, in rig space
+    if (!this.heldValid || weightLag <= 0) {
+      this.held.copy(_target);
+      this.heldValid = true;
+    } else {
+      this.held.slerp(_target, 1 - Math.exp(-dt / weightLag));
+      const lag = this.held.angleTo(_target);
+      const max = maxLagDeg * DEG;
+      if (lag > max) this.held.rotateTowards(_target, lag - max);
+    }
+    // Undo the hand's own turn and apply the trailing one: grip⁻¹ · rig · held.
+    this.model.quaternion.copy(_gripQ).invert().multiply(_rigQ).multiply(this.held);
+    this.model.updateMatrixWorld(true);
   }
 
   /** World-space blade segment (base → tip), this frame. */
@@ -86,6 +125,11 @@ export class Sword {
 
   get tipSpeed(): number {
     return this.tip.velocity.length();
+  }
+
+  /** A committed swing (see SwingDetector) with the tip at damage speed: this blade hurts. */
+  get hot(): boolean {
+    return this.swing.committed && this.tipSpeed >= CONFIG.sword.minHitSpeed;
   }
 }
 
