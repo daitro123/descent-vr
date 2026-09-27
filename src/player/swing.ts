@@ -16,6 +16,8 @@ const _dir = new Vector3();
 export class SwingDetector {
   /** This swing has carried the hand far enough to hurt. */
   committed = false;
+  /** Swings started so far: a turn back counts as a new one. */
+  count = 0;
   private active = false;
   private slow = 0; // s the hand has been below swing speed
   private readonly start = new Vector3();
@@ -36,6 +38,7 @@ export class SwingDetector {
       // A new swing, or the hand turned back: count from where it was last frame.
       this.active = true;
       this.committed = false;
+      this.count++;
       this.start.copy(hand).addScaledVector(velocity, -dt);
       this.dir.copy(_dir);
     } else {

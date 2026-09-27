@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { bladeTarget, sweepBlade } from '../src/combat/strike';
 import { CONFIG, type GuardConfig } from '../src/config';
 import type { Enemy, EnemyContext, PlayerSword } from '../src/enemies/enemy';
-import { Archer, Brute, Grunt, Warden } from '../src/enemies/kinds';
+import { Archer, Brute, DUELIST, Grunt, Warden } from '../src/enemies/kinds';
 import type { GuardSide } from '../src/enemies/poses';
 import { AttackTokens } from '../src/enemies/tokens';
 import type { Arena } from '../src/world/arena';
@@ -24,6 +24,9 @@ class TestGrunt extends Grunt {
   }
   protected think(dt: number, ctx: EnemyContext) {
     this.faceToward(ctx.playerFeet, dt);
+  }
+  swingAt(ctx: EnemyContext) {
+    this.startAttack(this.def.attacks[0], ctx);
   }
 }
 class TestWarden extends Warden {
@@ -285,5 +288,86 @@ describe.each([
     const r = swing(e, chop(e));
     expect(r).not.toBe('guarded');
     expect(r).not.toBeNull();
+  });
+});
+
+describe('the duelist (?duel)', () => {
+  const make = () => new TestGrunt('grunt', 0, 0, 0, DUELIST);
+
+  it('reads about nine swings in ten', () => {
+    // Evenly spread rolls in place of Math.random, so the count is repeatable.
+    let n = 0;
+    vi.spyOn(Math, 'random').mockImplementation(() => (n++ * 0.6180339887) % 1);
+    let raised = 0;
+    for (let i = 0; i < 100; i++) {
+      const e = spawn(make());
+      e.update(DT, context(WINDUP.left));
+      if (e.guarding) raised++;
+    }
+    expect(raised).toBeGreaterThanOrEqual(88);
+    expect(raised).toBeLessThan(97);
+  });
+
+  it('follows your blade to the other side almost at once, where a grunt takes a beat', () => {
+    alwaysGuard();
+    const duelist = spawn(make());
+    const grunt = spawn(new TestGrunt('grunt', 0, 0));
+    for (const e of [duelist, grunt]) {
+      e.update(DT, context(WINDUP.left));
+      run(e, context(WINDUP.right), 0.1);
+    }
+    expect(duelist.guardSide).toBe('right');
+    expect(grunt.guardSide).toBe('left');
+  });
+
+  it('keeps its guard up through a flurry', () => {
+    alwaysGuard();
+    const e = spawn(make());
+    e.update(DT, context(WINDUP.left));
+    run(e, context(WINDUP.left), 2.4);
+    expect(e.guarding).toBe(true);
+  });
+
+  it('drops its own wind-up to meet your swing', () => {
+    alwaysGuard();
+    const e = spawn(make());
+    const idle = context(null);
+    e.swingAt(idle);
+    run(e, idle, 0.2);
+    expect(e.attacking).toBe(true);
+    e.update(DT, context(WINDUP.left));
+    expect(e.guarding).toBe(true);
+    expect(e.attack).toBeNull();
+  });
+
+  it('reads each new swing afresh: a missed read only lasts until you turn back', () => {
+    const e = spawn(make());
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0.99);
+    e.update(DT, context({ ...WINDUP.left, swing: 1 }));
+    random.mockReturnValue(0);
+    run(e, context({ ...WINDUP.left, swing: 1 }), 0.2);
+    expect(e.guarding).toBe(false);
+    e.update(DT, context({ ...WINDUP.right, swing: 2 })); // backhand, without the blade ever slowing
+    expect(e.guarding).toBe(true);
+  });
+
+  it('a shield bash that breaks its guard leaves it open until it recovers', () => {
+    alwaysGuard();
+    const e = spawn(make());
+    e.update(DT, context(WINDUP.left));
+    e.dropGuard();
+    e.expose(1);
+    run(e, context({ ...WINDUP.left, swing: 5 }), 0.5);
+    expect(e.guarding).toBe(false);
+  });
+
+  it('stops a slash from its left, then one from its right straight after', () => {
+    alwaysGuard();
+    const e = spawn(make());
+    e.update(DT, context(WINDUP.left));
+    run(e, context(WINDUP.left), 0.3);
+    expect(swing(e, slash('left'))).toBe('guarded');
+    run(e, context(WINDUP.right), 0.12);
+    expect(swing(e, slash('right'))).toBe('guarded');
   });
 });

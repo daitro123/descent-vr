@@ -8,7 +8,16 @@ const DEG = Math.PI / 180;
 const _zero = new Vector3();
 const _gripQ = new Quaternion();
 const _rigQ = new Quaternion();
-const _target = new Quaternion();
+const _handQ = new Quaternion();
+const _swingQ = new Quaternion();
+const _handP = new Vector3();
+const _aim = new Vector3();
+const _want = new Vector3();
+const _dir = new Vector3();
+const _acc = new Vector3();
+const IDENTITY = new Quaternion();
+/** Longest step of the tip's spring (s): a dropped frame is split so it stays stable. */
+const TIP_STEP = 1 / 120;
 
 /**
  * Tracks a point attached to a hand in *rig* space, so velocity reflects the
@@ -51,9 +60,12 @@ export class Sword {
   readonly hand = new TrackedPoint();
   readonly swing = new SwingDetector();
   private readonly pivot = new Group();
-  /** The blade's orientation in rig space, trailing the hand's (see `follow`). */
-  private readonly held = new Quaternion();
-  private heldValid = false;
+  /** Where the blade points out of the fist, in the model's space. */
+  private readonly bladeAxis: Vector3;
+  /** The heavy tip (see `follow`): rig-space position and velocity. */
+  private readonly tipPos = new Vector3();
+  private readonly tipVel = new Vector3();
+  private tipValid = false;
   private readonly localBase: Vector3;
   private readonly localTip: Vector3;
   private readonly material = createModelMaterial();
@@ -69,12 +81,13 @@ export class Sword {
     this.pivot.add(new Mesh(buildLongsword(bladeStart, bladeEnd, bladeHalfWidth), this.material));
     this.localBase = new Vector3(0, 0, -bladeStart);
     this.localTip = new Vector3(0, 0, -bladeEnd);
+    this.bladeAxis = new Vector3(0, 0, -1).applyEuler(this.pivot.rotation);
   }
 
   update(rig: Object3D, dt: number): void {
     const grip = this.model.parent;
     if (!grip?.visible) {
-      this.base.valid = this.tip.valid = this.hand.valid = this.heldValid = false;
+      this.base.valid = this.tip.valid = this.hand.valid = this.tipValid = false;
       this.swing.reset();
       return;
     }
@@ -93,27 +106,50 @@ export class Sword {
   }
 
   /**
-   * Weight. The blade turns after the hand, `weightLag` seconds behind and at
-   * most `maxLagDeg` off, so it swings through a turn rather than snapping,
-   * and a flick of the wrist whips the tip less. Kept in rig space, so snap
-   * turns and walking carry the blade along instantly.
+   * Weight. The tip is a heavy point on the end of the blade: it chases where
+   * the hand points the blade on a critically damped spring, `tipLag` seconds
+   * behind, so it trails a fast turn or a quick sweep of the arm and the wrist
+   * can't flick it about. It never trails by more than `maxLagDeg`. All in rig
+   * space, so snap turns and walking carry the blade along instantly.
    */
   private follow(grip: Object3D, rig: Object3D, dt: number): void {
-    const { weightLag, maxLagDeg } = CONFIG.sword;
+    const { tipLag, maxLagDeg, bladeEnd } = CONFIG.sword;
     grip.getWorldQuaternion(_gripQ);
     rig.getWorldQuaternion(_rigQ);
-    _target.copy(_rigQ).invert().multiply(_gripQ); // the hand, in rig space
-    if (!this.heldValid || weightLag <= 0) {
-      this.held.copy(_target);
-      this.heldValid = true;
+    _handQ.copy(_rigQ).invert().multiply(_gripQ); // the hand's turn, in rig space
+    rig.worldToLocal(grip.getWorldPosition(_handP));
+    _aim.copy(this.bladeAxis).applyQuaternion(_handQ); // where the hand points the blade
+    _want.copy(_handP).addScaledVector(_aim, bladeEnd);
+    if (!this.tipValid || tipLag <= 0) {
+      this.tipPos.copy(_want);
+      this.tipVel.set(0, 0, 0);
+      this.tipValid = true;
     } else {
-      this.held.slerp(_target, 1 - Math.exp(-dt / weightLag));
-      const lag = this.held.angleTo(_target);
+      const w = 2 / tipLag;
+      const steps = Math.ceil(dt / TIP_STEP);
+      const h = dt / steps;
+      for (let i = 0; i < steps; i++) {
+        _acc.subVectors(_want, this.tipPos).multiplyScalar(w * w).addScaledVector(this.tipVel, -2 * w);
+        this.tipVel.addScaledVector(_acc, h);
+        this.tipPos.addScaledVector(this.tipVel, h);
+      }
+      // Back onto the blade: its length from the hand, at most maxLagDeg off the aim.
+      _dir.subVectors(this.tipPos, _handP);
+      if (_dir.lengthSq() < 1e-8) _dir.copy(_aim);
+      _dir.normalize();
+      const off = _dir.angleTo(_aim);
       const max = maxLagDeg * DEG;
-      if (lag > max) this.held.rotateTowards(_target, lag - max);
+      if (off > max) {
+        _swingQ.setFromUnitVectors(_aim, _dir).slerp(IDENTITY, 1 - max / off);
+        _dir.copy(_aim).applyQuaternion(_swingQ);
+      }
+      this.tipPos.copy(_handP).addScaledVector(_dir, bladeEnd);
     }
-    // Undo the hand's own turn and apply the trailing one: grip⁻¹ · rig · held.
-    this.model.quaternion.copy(_gripQ).invert().multiply(_rigQ).multiply(this.held);
+    // Swing the blade from where the hand points it to where the tip is, then
+    // undo the hand's own turn: grip⁻¹ · rig · swing · hand.
+    _dir.subVectors(this.tipPos, _handP).normalize();
+    _swingQ.setFromUnitVectors(_aim, _dir).multiply(_handQ);
+    this.model.quaternion.copy(_gripQ).invert().multiply(_rigQ).multiply(_swingQ);
     this.model.updateMatrixWorld(true);
   }
 
