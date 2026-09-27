@@ -42,6 +42,16 @@ async function start(): Promise<void> {
   const camera = new PerspectiveCamera(75, innerWidth / innerHeight, 0.05, 60);
   camera.position.set(0, 1.6, 0); // desktop preview; XR drives it once presenting
 
+  document.body.appendChild(VRButton.createButton(renderer));
+  addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+
+  // ?inspect opens the model inspector instead of the game.
+  if (params.has('inspect')) return startInspector(renderer, scene, camera);
+
   // ?wave=N starts the run at wave N (7 is the Warden) for testing.
   const firstWave = Math.max(1, Math.min(CONFIG.waves.list.length, Number(params.get('wave')) || 1));
   const game = new Game(scene, camera, renderer, firstWave);
@@ -50,7 +60,6 @@ async function start(): Promise<void> {
   const pinned = params.has('showcase');
   if (pinned) pinShowcaseCamera(camera);
 
-  document.body.appendChild(VRButton.createButton(renderer));
   const intro = document.getElementById('intro');
   renderer.xr.addEventListener('sessionstart', () => {
     unlockAudio();
@@ -63,12 +72,6 @@ async function start(): Promise<void> {
   });
   renderer.xr.addEventListener('sessionend', () => intro?.style.removeProperty('display'));
   addEventListener('pointerdown', unlockAudio, { once: true });
-
-  addEventListener('resize', () => {
-    camera.aspect = innerWidth / innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(innerWidth, innerHeight);
-  });
 
   // Handle for poking at the game from the console / automated smoke tests.
   // `paused` freezes gameplay (rendering continues) to inspect a moment.
@@ -87,6 +90,27 @@ async function start(): Promise<void> {
       camera.rotation.y += dt * 0.1; // idle orbit on the title screen
     }
     game.arena.update(dt, camera); // torch flicker; glows face this frame's head
+    renderer.render(scene, camera);
+  });
+}
+
+async function startInspector(renderer: WebGLRenderer, scene: Scene, camera: PerspectiveCamera): Promise<void> {
+  const { Inspector } = await import('./inspector/inspector');
+  const inspector = new Inspector(renderer);
+  scene.add(inspector.root);
+  scene.fog = null;
+  scene.background = new Color(0x16131a);
+  document.getElementById('intro')?.style.setProperty('display', 'none');
+  // Desktop view: stepped back far enough to see the Warden and the readout.
+  camera.position.set(0, 1.5, 1.2);
+  camera.lookAt(-0.2, 1.2, -1.8);
+  Object.assign(window, { __descent: { inspector, renderer } });
+
+  const timer = new Timer();
+  renderer.setAnimationLoop((time) => {
+    timer.update(time);
+    if (renderer.xr.isPresenting) renderer.xr.updateCamera(camera);
+    inspector.update(timer.getDelta());
     renderer.render(scene, camera);
   });
 }

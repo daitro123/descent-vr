@@ -36,3 +36,8 @@ canvas {
   margin: 6px 0 0;
   padding-left: 18px;
 }
+
+#intro a {
+  color: #e0b060;
+  pointer-events: auto;
+}
