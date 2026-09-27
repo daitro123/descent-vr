@@ -56,9 +56,23 @@ describe('wiggling the sword', () => {
     const h = held();
     const { peakTip, hot } = play(h, 1.5, (t) => [
       HAND.clone().setX(HAND.x + 0.08 * Math.sin(2 * Math.PI * 3 * t)),
-      new Euler(0, 15 * DEG * Math.sin(2 * Math.PI * 3 * t), 0),
+      new Euler(0, 25 * DEG * Math.sin(2 * Math.PI * 3 * t), 0),
     ]);
     expect(peakTip).toBeGreaterThan(CONFIG.sword.minHitSpeed);
+    expect(hot).toBe(false);
+  });
+});
+
+describe('dragging the sword', () => {
+  it('a slow sweep stays cold, even one that used to count as a swing', () => {
+    const h = held();
+    // The hand drags 0.55 m across at about 0.9 m/s as the blade turns 50°
+    // with it: the tip reaches over 2 m/s, which used to be enough to hurt.
+    const { peakTip, hot } = play(h, 0.6, (t) => {
+      const k = Math.min(1, t / 0.6);
+      return [HAND.clone().setX(0.35 - 0.55 * k), new Euler(-0.6, (50 * k - 25) * DEG, 0)];
+    });
+    expect(peakTip).toBeGreaterThan(2);
     expect(hot).toBe(false);
   });
 });

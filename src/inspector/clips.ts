@@ -144,7 +144,7 @@ export function clipsFor(kind: EnemyKind): Clip[] {
   }
   if (kind === 'warden') clips.push(attackClip(kind, SUMMON_ATTACK));
   if (def.guard) {
-    for (const side of ['high', 'left', 'right'] as GuardSide[]) clips.push(holdClip(kind, `guard ${side}`, GUARD[side], def.guard.hold[1]));
+    for (const side of ['high', 'left', 'right', 'low'] as GuardSide[]) clips.push(holdClip(kind, `guard ${side}`, GUARD[side], def.guard.hold[1]));
   }
   clips.push(holdClip(kind, 'stagger', STAGGER, def.staggerTime * 0.6));
   if (kind === 'warden') clips.push(holdClip(kind, 'kneel', KNEEL, CONFIG.warden.kneelTime, KNEEL_DROP));

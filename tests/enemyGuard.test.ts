@@ -84,10 +84,11 @@ function blade(mid: Vector3, dir: Vector3, speed: number): PlayerSword {
 /** Where a player's blade sits as a swing starts, against an enemy `s` times human height. */
 function windup(side: GuardSide, s = 1): PlayerSword {
   if (side === 'high') return blade(new Vector3(0, 2.15 * s, 0.75), new Vector3(0, 0.3, -1), 3); // raised overhead
+  if (side === 'low') return blade(new Vector3(0.45, 0.55 * s, 0.8), new Vector3(0.2, -0.5, -1), 3); // swung at the legs
   const x = side === 'left' ? 0.55 : -0.55; // your forehand comes from its left
   return blade(new Vector3(x, 1.4 * s, 0.75), new Vector3(x * 0.4, 1, -0.3), 3);
 }
-const WINDUP: Record<GuardSide, PlayerSword> = { left: windup('left'), right: windup('right'), high: windup('high') };
+const WINDUP: Record<GuardSide, PlayerSword> = { left: windup('left'), right: windup('right'), high: windup('high'), low: windup('low') };
 
 function spawn<T extends Ready>(e: T): T {
   e.ready();
@@ -108,7 +109,7 @@ function alwaysGuard(): void {
 afterEach(() => void vi.restoreAllMocks());
 
 describe('raising a guard', () => {
-  it.each(['left', 'right', 'high'] as GuardSide[])('raises the %s guard against a blade on that side', (side) => {
+  it.each(['left', 'right', 'high', 'low'] as GuardSide[])('raises the %s guard against a blade on that side', (side) => {
     alwaysGuard();
     const g = spawn(new TestGrunt('grunt', 0, 0));
     g.update(DT, context(WINDUP[side]));
@@ -254,6 +255,7 @@ describe.each([
     return e;
   }
   const chest = (e: Enemy) => 1.25 * (e.rig.proportions.hipY / 0.92);
+  const legs = (e: Enemy) => 0.5 * (e.rig.proportions.hipY / 0.92);
 
   it('an unguarded enemy takes the slash', () => {
     const e = spawn(make());
@@ -276,6 +278,18 @@ describe.each([
     const e = guarding('high');
     expect(swing(e, chop(e))).toBe('guarded');
     expect(swing(e, slash('left', chest(e)))).not.toBe('guarded');
+  });
+
+  it('a side guard leaves the legs open', () => {
+    const e = guarding('left');
+    expect(swing(e, slash('left', legs(e)))).toBe('body');
+  });
+
+  it('the low guard stops a slash at the legs from either side, but not one at the chest', () => {
+    const e = guarding('low');
+    expect(swing(e, slash('left', legs(e)))).toBe('guarded');
+    expect(swing(e, slash('right', legs(e)))).toBe('guarded');
+    expect(swing(e, slash('left', chest(e)))).toBe('body');
   });
 
   it('a slash from behind gets past the guard on that side', () => {
@@ -359,6 +373,17 @@ describe('the duelist (?duel)', () => {
     e.expose(1);
     run(e, context({ ...WINDUP.left, swing: 5 }), 0.5);
     expect(e.guarding).toBe(false);
+  });
+
+  it('drops its guard to its legs when your swing goes low', () => {
+    alwaysGuard();
+    const e = spawn(make());
+    e.update(DT, context(WINDUP.left));
+    run(e, context(WINDUP.left), 0.3);
+    expect(swing(e, slash('left', 0.5))).toBe('body'); // the left guard leaves the legs open
+    run(e, context(WINDUP.low), 0.12);
+    expect(e.guardSide).toBe('low');
+    expect(swing(e, slash('left', 0.5))).toBe('guarded');
   });
 
   it('stops a slash from its left, then one from its right straight after', () => {

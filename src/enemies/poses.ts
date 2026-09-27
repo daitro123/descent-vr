@@ -232,13 +232,14 @@ export const SUMMON: AttackPoses = {
   },
 };
 
-export type GuardSide = 'high' | 'left' | 'right';
+export type GuardSide = 'high' | 'left' | 'right' | 'low';
 
 /**
  * Guards: the weapon raised to take the player's blade (Enemy.updateGuard
  * picks one from where your sword is). `left` covers the enemy's left, which
  * is where your forehand arrives; `high` holds the blade flat over the head
- * against a chop. Edge toward the blow, knees soft.
+ * against a chop; `low` hangs it point down across the front of the legs, the
+ * wrist turned so the edge still faces you. Edge toward the blow, knees soft.
  */
 export const GUARD: Record<GuardSide, Pose> = {
   high: {
@@ -279,6 +280,19 @@ export const GUARD: Record<GuardSide, Pose> = {
     shinL: [0.3, 0, 0],
     thighR: [0.1, 0, -0.08],
     shinR: [0.2, 0, 0],
+  },
+  low: {
+    spine: [0.15, 0, 0],
+    head: [-0.2, 0, 0],
+    upperArmR: [-0.3, 0.06, 0.13],
+    forearmR: [-0.48, 0, 0],
+    handR: [-0.25, 2.92, -0.2],
+    upperArmL: [-0.3, -0.2, 0.35],
+    forearmL: [-0.9, 0, 0],
+    thighL: [-0.35, 0, 0.12],
+    shinL: [0.45, 0, 0],
+    thighR: [0.15, 0, -0.12],
+    shinR: [0.3, 0, 0],
   },
 };
 
