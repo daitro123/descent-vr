@@ -4,7 +4,16 @@ A Diablo-like action RPG for VR that runs in the browser (Three.js + WebXR). Thi
 
 For why this stack, other options, and the pixel-art pipeline, see [docs/tech-research.md](docs/tech-research.md).
 
-## Run it
+## Play it
+
+**https://daitro123.github.io/descent-vr/**
+
+- **On a Quest:** open the link in the Quest browser and press **Enter VR**. GitHub Pages serves over HTTPS, so WebXR works with no dev server and no certificate to accept.
+- **On a desktop:** the same link loads the IWER emulator (see below). The URL flags below work there too, for example `…/descent-vr/?wave=7`.
+
+Every push to `main` rebuilds and publishes the site ([`.github/workflows/pages.yml`](.github/workflows/pages.yml)). Pull requests run the same typecheck, tests and build without deploying. This needs the repository's **Settings → Pages → Build and deployment → Source** set to **GitHub Actions**.
+
+## Run it locally
 
 ```bash
 npm install
