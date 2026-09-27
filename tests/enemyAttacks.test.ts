@@ -237,6 +237,70 @@ describe('slams and shots', () => {
   });
 });
 
+describe('archer aim', () => {
+  /**
+   * Draw one arrow at a player whose head starts at `head` (and moves by
+   * `move` per second), from an archer at the origin facing `yaw`. Returns how
+   * far (degrees) the nocked arrow points from the player's chest on the last
+   * frame of the draw.
+   */
+  function drawAt(head: Vector3, opts: { yaw?: number; move?: Vector3 } = {}): number {
+    const a = new TestArcher('archer', 0, 0);
+    a.root.rotation.y = opts.yaw ?? 0;
+    let nock = new Vector3();
+    let grip = new Vector3();
+    const ctx: EnemyContext = {
+      playerFeet: head.clone().setY(0),
+      playerHead: head.clone(),
+      arena: openArena,
+      meleeTokens: new AttackTokens(9),
+      rangedTokens: new AttackTokens(9),
+      sweep: () => null,
+      slam: () => {},
+      shoot: () => {},
+      nock: (_e, n, g) => {
+        nock = n.clone();
+        grip = g.clone();
+      },
+      summon: () => {},
+      telegraph: () => {},
+    };
+    a.ready();
+    a.go(a.def.attacks[0], ctx);
+    let aimError = Infinity;
+    while (a.state === 'attack' && a.phase === 'windup') {
+      if (opts.move) {
+        ctx.playerHead.addScaledVector(opts.move, DT);
+        ctx.playerFeet.copy(ctx.playerHead).setY(0);
+      }
+      a.update(DT, ctx);
+      const chest = ctx.playerHead.clone().setY(ctx.playerHead.y - CONFIG.arrow.aimBelowHead);
+      const arrow = grip.clone().sub(nock);
+      aimError = (arrow.angleTo(chest.sub(nock)) * 180) / Math.PI;
+    }
+    return aimError;
+  }
+
+  it.each([
+    ['straight ahead', new Vector3(0, 1.7, 8)],
+    ['close and tall', new Vector3(0, 1.9, 3.5)],
+    ['crouching', new Vector3(0, 1.0, 6)],
+    ['up on a step', new Vector3(0, 2.4, 6)],
+    ['off to one side', new Vector3(4, 1.6, 5)],
+    ['off to the other side', new Vector3(-4, 1.6, 5)],
+  ])('the nocked arrow points at the player’s chest at full draw (%s)', (_name, head) => {
+    expect(drawAt(head)).toBeLessThan(3);
+  });
+
+  it('keeps tracking a player who strafes during the draw', () => {
+    expect(drawAt(new Vector3(-2, 1.7, 6), { move: new Vector3(3, 0, 0) })).toBeLessThan(3);
+  });
+
+  it('turns to find a player who starts behind its shoulder', () => {
+    expect(drawAt(new Vector3(0, 1.7, 6), { yaw: 1.2 })).toBeLessThan(3);
+  });
+});
+
 describe('pose constants', () => {
   it('are not mutated by enemies animating', async () => {
     const poses = await import('../src/enemies/poses');
