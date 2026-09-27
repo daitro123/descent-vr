@@ -110,6 +110,7 @@ function run(enemy: Enemy & Drivable, attack: AttackConfig, d: Defender, dist: n
   const ctx: EnemyContext = {
     playerFeet: new Vector3(0, 0, dist),
     playerHead: new Vector3(0, headY, dist),
+    playerSword: null,
     arena: openArena,
     meleeTokens: new AttackTokens(9),
     rangedTokens: new AttackTokens(9),
@@ -145,6 +146,7 @@ const RIGHT = (dist: number, headY = 1.6): Shield => ({ at: [0.28, headY - 0.3, 
 
 describe.each([
   ['grunt', () => new TestGrunt('grunt', 0, 0)],
+  ['grunt with an axe', () => new TestGrunt('grunt', 0, 0, 1)],
   ['brute', () => new TestBrute('brute', 0, 0)],
   ['warden', () => new TestWarden('warden', 0, 0)],
 ] as const)('%s melee', (_name, make) => {
@@ -252,6 +254,7 @@ describe('archer aim', () => {
     const ctx: EnemyContext = {
       playerFeet: head.clone().setY(0),
       playerHead: head.clone(),
+      playerSword: null,
       arena: openArena,
       meleeTokens: new AttackTokens(9),
       rangedTokens: new AttackTokens(9),
@@ -309,6 +312,7 @@ describe('pose constants', () => {
     const ctx = {
       playerFeet: new Vector3(0, 0, 3),
       playerHead: new Vector3(0, 1.6, 3),
+      playerSword: null,
       arena: openArena,
       meleeTokens: new AttackTokens(2),
       rangedTokens: new AttackTokens(2),

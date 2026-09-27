@@ -8,7 +8,9 @@ import { ModelBuilder } from './kit';
 //                             z abducts (right arm: z < 0 lifts it outward)
 //   legs:                     x < 0 swings forward;  shins: x > 0 bends the knee
 //   spine:                    x > 0 leans forward;   y < 0 turns the chest to its right
-// Weapons are held along the hand's -Y (continuing the arm), edge facing +Z.
+// Weapons are held along the hand's -Y (continuing the arm), cutting edge
+// facing -Z: down in the guard, leading on the chop, and leading on the slashes
+// once their pose rolls the hand (poses.ts).
 
 export const BONES = [
   'hips',

@@ -31,6 +31,16 @@ export interface AttackConfig {
   exposeOnRecover?: boolean;
 }
 
+/** Raising the weapon to block the player's sword (see CONFIG.guard). */
+export interface GuardConfig {
+  /** Chance to raise it against a swing, rolled once per swing. */
+  chance: number;
+  hold: readonly [number, number]; // s the guard stays up (random in range)
+  cooldown: number; // s before it will guard again
+  /** s between looks at which side your blade is on: a quicker feint gets past. */
+  reaction: number;
+}
+
 export interface EnemyConfig {
   hp: number;
   radius: number; // body collision and hurt capsule
@@ -49,6 +59,8 @@ export interface EnemyConfig {
   orbChance: number;
   death: 'shatter' | 'topple';
   attacks: readonly AttackConfig[];
+  /** Kinds without one never block. */
+  guard?: GuardConfig;
 }
 
 export const CONFIG = {
@@ -119,7 +131,9 @@ export const CONFIG = {
     perEnemyCooldown: 0.35, // s — one swing registers one hit per enemy
     knockback: 2.8, // m/s at full swing speed
     sweepSamples: 5, // sub-steps between frames so fast swings don't tunnel
+    blockMargin: 0.05, // forgiveness: thickens the blade when it's in the way of a blow or an arrow
     parrySpeed: 2.2, // tip speed that turns a sword block into a parry
+    guardKnockback: 1.2, // m/s shove on an enemy whose guard takes a full-speed swing
     exposedMultiplier: 1.5,
     frenzyMultiplier: 1.35,
   },
@@ -142,6 +156,16 @@ export const CONFIG = {
     bashDamage: 6,
     bashKnockback: 3.2,
     bashCooldown: 0.8,
+  },
+
+  // Enemy guards: kinds with a `guard` raise their weapon when your blade comes
+  // at them, on the side it comes from. A blade that meets the guard does no
+  // damage; swing at the open side, feint, or shield-bash the guard away.
+  guard: {
+    threatSpeed: 1.0, // m/s at your sword tip; below minHitSpeed, so they react to the wind-up
+    threatReach: 0.7, // your blade within this of its body counts as coming at it
+    margin: 0.02, // extra thickness on a guarding weapon
+    raiseRate: 20, // 1/s pose easing into the guard (walking eases at 10)
   },
 
   // Ranged attacks: arrows are straight and quick, so blocking and side-stepping both work.
@@ -180,6 +204,7 @@ export const CONFIG = {
         { pose: 'slashR', kind: 'melee', windup: 0.75, active: 0.24, recover: 0.7, damage: 12, blockable: true, aim: true, weight: 1 },
         { pose: 'slashL', kind: 'melee', windup: 0.75, active: 0.24, recover: 0.7, damage: 12, blockable: true, aim: true, weight: 1 },
       ],
+      guard: { chance: 0.35, hold: [0.9, 1.6], cooldown: 1.8, reaction: 0.3 },
     },
     archer: {
       hp: 28,
@@ -242,6 +267,7 @@ export const CONFIG = {
         { pose: 'chop', kind: 'melee', windup: 0.6, active: 0.3, recover: 0.9, damage: 24, blockable: true, weight: 0 },
         { pose: 'slam', kind: 'slam', windup: 1.3, active: 0.3, recover: 1.0, damage: 34, blockable: false, radius: 2.2, exposeOnRecover: true, weight: 1 },
       ],
+      guard: { chance: 0.25, hold: [0.6, 1.1], cooldown: 2.5, reaction: 0.22 },
     },
   } satisfies Record<EnemyKind, EnemyConfig>,
 

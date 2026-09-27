@@ -8,6 +8,8 @@ import type { Pose } from '../models/rig';
 // swing blends windup → `strike`, so the arc between them IS the blow that the
 // strike sweep tests against the player's shield, sword and body.
 
+const HALF_PI = Math.PI / 2;
+
 export const IDLE: Record<EnemyKind, Pose> = {
   grunt: {
     spine: [0.08, 0, 0],
@@ -91,7 +93,9 @@ export const CHOP: AttackPoses = {
 
 /**
  * Forehand slash from the attacker's right to its left. Facing it, the blade
- * arrives from the player's LEFT, the shield side.
+ * arrives from the player's LEFT, the shield side. The hand is rolled a
+ * quarter turn (y) so the edge leads the horizontal sweep instead of the
+ * flat; x then bends the wrist in the plane of the swing.
  */
 export const SLASH_R: AttackPoses = {
   windup: {
@@ -99,7 +103,7 @@ export const SLASH_R: AttackPoses = {
     head: [0, 0.6, 0],
     upperArmR: [-1.45, -1.35, -0.1],
     forearmR: [-0.9, 0, 0],
-    handR: [0, 0, -1.1],
+    handR: [-1.1, -HALF_PI, 0],
     upperArmL: [-1.1, -0.4, 0.3],
     forearmL: [-0.5, 0, 0],
   },
@@ -108,20 +112,23 @@ export const SLASH_R: AttackPoses = {
     head: [0, -0.5, 0],
     upperArmR: [-1.5, 1.15, 0],
     forearmR: [-0.1, 0, 0],
-    handR: [0, 0, 0.7],
+    handR: [0.7, -HALF_PI, 0],
     upperArmL: [-0.3, 0.2, 0.5],
     forearmL: [-0.5, 0, 0],
   },
 };
 
-/** Backhand slash from the attacker's left: arrives on the player's RIGHT, the sword side. */
+/**
+ * Backhand slash from the attacker's left: arrives on the player's RIGHT, the
+ * sword side. Rolled the other way from SLASH_R, so the same edge leads.
+ */
 export const SLASH_L: AttackPoses = {
   windup: {
     spine: [0.05, 0.7, 0],
     head: [0, -0.55, 0],
     upperArmR: [-1.4, 1.25, 0.1],
     forearmR: [-1.3, 0, 0],
-    handR: [0, 0, 1.1],
+    handR: [-1.1, HALF_PI, 0],
     upperArmL: [-0.4, 0.2, 0.4],
     forearmL: [-0.8, 0, 0],
   },
@@ -130,7 +137,7 @@ export const SLASH_L: AttackPoses = {
     head: [0, 0.5, 0],
     upperArmR: [-1.5, -1.25, -0.1],
     forearmR: [-0.05, 0, 0],
-    handR: [0, 0, -0.6],
+    handR: [0.6, HALF_PI, 0],
     upperArmL: [-0.8, -0.3, 0.3],
     forearmL: [-0.4, 0, 0],
   },
@@ -222,6 +229,56 @@ export const SUMMON: AttackPoses = {
     handR: [-0.3, 0, 0],
     upperArmL: [-0.4, 0, 0.9],
     forearmL: [-0.3, 0, 0],
+  },
+};
+
+export type GuardSide = 'high' | 'left' | 'right';
+
+/**
+ * Guards: the weapon raised to take the player's blade (Enemy.updateGuard
+ * picks one from where your sword is). `left` covers the enemy's left, which
+ * is where your forehand arrives; `high` holds the blade flat over the head
+ * against a chop. Edge toward the blow, knees soft.
+ */
+export const GUARD: Record<GuardSide, Pose> = {
+  high: {
+    spine: [0.05, 0.07, 0],
+    head: [-0.1, -0.07, 0],
+    upperArmR: [-2.06, -1.7, 0.27],
+    forearmR: [-1.14, 0.12, 0],
+    handR: [-1.3, 0.2, 0],
+    upperArmL: [-0.5, 0, 0.3],
+    forearmL: [-1.0, 0, 0],
+    thighL: [-0.25, 0, 0.08],
+    shinL: [0.3, 0, 0],
+    thighR: [0.1, 0, -0.08],
+    shinR: [0.2, 0, 0],
+  },
+  left: {
+    spine: [0.05, 0.11, 0],
+    head: [0, -0.1, 0],
+    upperArmR: [-0.15, 0.44, 0.15],
+    forearmR: [-1.41, 0, 0],
+    handR: [-1.3, 0.6, -0.24],
+    upperArmL: [-0.3, -0.2, 0.35],
+    forearmL: [-0.9, 0, 0],
+    thighL: [-0.25, 0, 0.08],
+    shinL: [0.3, 0, 0],
+    thighR: [0.1, 0, -0.08],
+    shinR: [0.2, 0, 0],
+  },
+  right: {
+    spine: [0.05, -0.23, 0],
+    head: [0, 0.2, 0],
+    upperArmR: [0, 0, -0.14],
+    forearmR: [-1.63, 0, 0],
+    handR: [-1.3, -0.19, 0.1],
+    upperArmL: [-0.45, 0, 0.25],
+    forearmL: [-1.0, 0, 0],
+    thighL: [-0.25, 0, 0.08],
+    shinL: [0.3, 0, 0],
+    thighR: [0.1, 0, -0.08],
+    shinR: [0.2, 0, 0],
   },
 };
 

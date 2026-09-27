@@ -41,6 +41,7 @@ describe('a crowd of grunts', () => {
     const ctx: EnemyContext = {
       playerFeet: new Vector3(0, 0, 0),
       playerHead: new Vector3(0, 1.6, 0),
+      playerSword: null,
       arena: { resolve: () => false, lineOfSight: () => true } as unknown as Arena,
       meleeTokens: new AttackTokens(CONFIG.tokens.melee, CONFIG.tokens.meleeGap),
       rangedTokens: new AttackTokens(CONFIG.tokens.ranged, CONFIG.tokens.rangedGap),

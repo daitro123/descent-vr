@@ -1,7 +1,7 @@
 import { type PerspectiveCamera, type Scene, Vector3, type WebGLRenderer } from 'three';
 import { Combat, combatStats, resetCombatStats } from './combat/combat';
 import { CONFIG } from './config';
-import type { Enemy, EnemyContext } from './enemies/enemy';
+import type { Enemy, EnemyContext, PlayerSword } from './enemies/enemy';
 import { createEnemy } from './enemies/kinds';
 import { AttackTokens } from './enemies/tokens';
 import { FloatingText } from './fx/floatingText';
@@ -66,6 +66,7 @@ export class Game {
   private spawnTimer = 0;
   private spawnIndex = 0;
   private readonly ctx: EnemyContext;
+  private readonly sword: PlayerSword = { base: new Vector3(), tip: new Vector3(), speed: 0 };
 
   constructor(
     private readonly scene: Scene,
@@ -100,6 +101,7 @@ export class Game {
     this.ctx = {
       playerFeet: new Vector3(),
       playerHead: new Vector3(),
+      playerSword: null,
       arena: this.arena,
       meleeTokens: this.meleeTokens,
       rangedTokens: this.rangedTokens,
@@ -130,6 +132,12 @@ export class Game {
     this.hitStop = Math.max(0, this.hitStop - dt);
     this.player.feetPosition(this.ctx.playerFeet);
     this.player.headPosition(this.ctx.playerHead);
+    const { sword, rig } = this.player;
+    if (sword.tip.valid && this.player.alive) {
+      sword.segment(rig, this.sword.base, this.sword.tip);
+      this.sword.speed = sword.tipSpeed;
+      this.ctx.playerSword = this.sword;
+    } else this.ctx.playerSword = null;
 
     this.combat.update(dt, this.enemies);
     this.meleeTokens.update(enemyDt);
@@ -145,7 +153,6 @@ export class Game {
     this.combat.projectiles.render();
 
     this.updateShadows();
-    const { sword, rig } = this.player;
     if (sword.tip.valid) {
       sword.segment(rig, _a, _b);
       this.trail.update(dt, _a, _b, sword.tipSpeed >= CONFIG.sword.minHitSpeed, this.player.frenzy > 0);

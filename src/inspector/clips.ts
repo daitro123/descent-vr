@@ -1,6 +1,6 @@
-import { type AttackConfig, CONFIG } from '../config';
+import { type AttackConfig, CONFIG, type EnemyConfig } from '../config';
 import { SUMMON_ATTACK } from '../enemies/kinds';
-import { ATTACK_POSES, IDLE, KNEEL, KNEEL_DROP, RISE, STAGGER, walkOffsets } from '../enemies/poses';
+import { ATTACK_POSES, GUARD, type GuardSide, IDLE, KNEEL, KNEEL_DROP, RISE, STAGGER, walkOffsets } from '../enemies/poses';
 import { type EnemyKind, PROPORTIONS } from '../models/characters';
 import { BONES, blendPoses, type Pose } from '../models/rig';
 
@@ -133,7 +133,7 @@ function holdClip(kind: EnemyKind, name: string, pose: Pose, hold: number, hipDr
 
 /** Every animation the game plays for this kind, in a stable order. */
 export function clipsFor(kind: EnemyKind): Clip[] {
-  const def = CONFIG.enemies[kind];
+  const def: EnemyConfig = CONFIG.enemies[kind];
   const clips: Clip[] = [idleClip(kind), walkClip(kind)];
   // One clip per distinct attack pose; the first config entry supplies the timings.
   const seen = new Set<string>();
@@ -143,6 +143,9 @@ export function clipsFor(kind: EnemyKind): Clip[] {
     clips.push(attackClip(kind, attack));
   }
   if (kind === 'warden') clips.push(attackClip(kind, SUMMON_ATTACK));
+  if (def.guard) {
+    for (const side of ['high', 'left', 'right'] as GuardSide[]) clips.push(holdClip(kind, `guard ${side}`, GUARD[side], def.guard.hold[1]));
+  }
   clips.push(holdClip(kind, 'stagger', STAGGER, def.staggerTime * 0.6));
   if (kind === 'warden') clips.push(holdClip(kind, 'kneel', KNEEL, CONFIG.warden.kneelTime, KNEEL_DROP));
   clips.push(holdClip(kind, 'rise', RISE, 0.8));

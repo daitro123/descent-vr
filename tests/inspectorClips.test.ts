@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CONFIG } from '../src/config';
+import { CONFIG, type EnemyConfig } from '../src/config';
 import { IDLE } from '../src/enemies/poses';
 import { clipsFor, type MutablePose } from '../src/inspector/clips';
 import type { EnemyKind } from '../src/models/characters';
@@ -15,6 +15,16 @@ describe('inspector clips', () => {
       expect(new Set(names).size).toBe(names.length);
     }
     expect(clipsFor('warden').map((c) => c.name)).toEqual(expect.arrayContaining(['summon', 'kneel']));
+  });
+
+  it('show the guards of the kinds that block', () => {
+    const guards = ['guard high', 'guard left', 'guard right'];
+    for (const kind of KINDS) {
+      const names = clipsFor(kind).map((c) => c.name);
+      const def: EnemyConfig = CONFIG.enemies[kind];
+      if (def.guard) expect(names).toEqual(expect.arrayContaining(guards));
+      else for (const g of guards) expect(names).not.toContain(g);
+    }
   });
 
   it('play attacks with the game timings, starting and ending at idle', () => {

@@ -152,10 +152,11 @@ function rustyAxe(ctx: DressContext): WeaponSpec {
     .on('handR')
     .box(0.035, 0.72, 0.035, { at: [0, -0.3, 0], color: PAL.wood })
     .box(0.04, 0.05, 0.04, { at: [0, -0.02, 0], color: PAL.leatherDark })
-    .box(0.03, 0.2, 0.08, { at: [0, -0.56, 0.05], color: PAL.rust, mask: 1 })
-    .taper(0.024, 0.2, 0.01, 0.28, 0.12, { at: [0, -0.56, 0.1], rot: [-PI / 2, 0, 0], color: PAL.iron, mask: 1 })
+    // Head on the cutting side (-Z): the bit flares out to a thin edge.
+    .box(0.03, 0.2, 0.08, { at: [0, -0.56, -0.05], color: PAL.rust, mask: 1 })
+    .taper(0.024, 0.2, 0.01, 0.28, 0.12, { at: [0, -0.56, -0.09], rot: [-PI / 2, 0, 0], color: PAL.iron, mask: 1 })
     .box(0.05, 0.06, 0.05, { at: [0, -0.66, 0], color: PAL.ironDark, mask: 1 });
-  return { bone: 'handR', base: [0, -0.3, 0], tip: [0, -0.68, 0.2], radius: 0.06 };
+  return { bone: 'handR', base: [0, -0.3, 0], tip: [0, -0.68, -0.2], radius: 0.06 };
 }
 
 function bow(ctx: DressContext): void {

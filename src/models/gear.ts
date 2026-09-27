@@ -5,6 +5,11 @@ import { PAL } from './palette';
 // The warrior's sword and shield, as static single-draw meshes. Both are
 // authored in the weapon's pivot space (see player/weapons.ts): the blade runs
 // along -Z out of the fist, the shield's painted face looks along -Z.
+//
+// WebXR grip space puts the back of the hand on X and the forearm along +Y,
+// so a sword held like a real one has its edges on ±Y (knuckles and wrist) and
+// its flats facing ±X (palm and back of the hand). A chop then lands on the
+// edge, and the crossguard runs across the fist rather than through it.
 
 const PI = Math.PI;
 
@@ -14,25 +19,25 @@ export function buildLongsword(bladeStart: number, bladeEnd: number, halfWidth: 
   const len = bladeEnd - bladeStart;
   const point = 0.09; // length of the tapered tip
   const w = halfWidth * 2;
-  const alongBlade: [number, number, number] = [-PI / 2, 0, 0]; // taper +Y → -Z
-  // Hilt: the fist sits around z = 0.
+  const alongBlade: [number, number, number] = [-PI / 2, 0, 0]; // taper +Y → -Z, its depth → Y
+  // Hilt: the fist sits around z = 0. The crossguard spans Y, like the edges.
   b.ball(0.028, { at: [0, 0, 0.15], color: PAL.gold })
     .box(0.032, 0.032, 0.2, { at: [0, 0, 0.035], color: PAL.leatherDark })
     .box(0.036, 0.036, 0.02, { at: [0, 0, 0.1], color: PAL.leather })
     .box(0.036, 0.036, 0.02, { at: [0, 0, -0.03], color: PAL.leather })
-    .box(0.24, 0.028, 0.034, { at: [0, 0, -bladeStart + 0.02], color: PAL.gold })
-    .box(0.04, 0.034, 0.04, { at: [0.13, 0, -bladeStart + 0.03], rot: [0, 0.4, 0], color: PAL.gold })
-    .box(0.04, 0.034, 0.04, { at: [-0.13, 0, -bladeStart + 0.03], rot: [0, -0.4, 0], color: PAL.gold })
-    .box(0.05, 0.04, 0.04, { at: [0, 0, -bladeStart + 0.02], color: PAL.ironDark });
-  // Blade with a darker fuller, then the point.
-  b.taper(w, 0.012, w * 0.82, 0.01, len - point, { at: [0, 0, -bladeStart], rot: alongBlade, color: PAL.steel, mask: 1, jitter: 0.03 })
-    .box(w * 0.22, 0.0135, (len - point) * 0.7, {
+    .box(0.028, 0.24, 0.034, { at: [0, 0, -bladeStart + 0.02], color: PAL.gold })
+    .box(0.034, 0.04, 0.04, { at: [0, 0.13, -bladeStart + 0.03], rot: [-0.4, 0, 0], color: PAL.gold })
+    .box(0.034, 0.04, 0.04, { at: [0, -0.13, -bladeStart + 0.03], rot: [0.4, 0, 0], color: PAL.gold })
+    .box(0.04, 0.05, 0.04, { at: [0, 0, -bladeStart + 0.02], color: PAL.ironDark });
+  // Blade (thin in X, wide in Y) with a darker fuller, then the point.
+  b.taper(0.012, w, 0.01, w * 0.82, len - point, { at: [0, 0, -bladeStart], rot: alongBlade, color: PAL.steel, mask: 1, jitter: 0.03 })
+    .box(0.0135, w * 0.22, (len - point) * 0.7, {
       at: [0, 0, -bladeStart - (len - point) * 0.38],
       color: PAL.iron,
       mask: 1,
       jitter: 0,
     })
-    .taper(w * 0.82, 0.01, 0.004, 0.004, point, { at: [0, 0, -bladeEnd + point], rot: alongBlade, color: PAL.steel, mask: 1 });
+    .taper(0.01, w * 0.82, 0.004, 0.004, point, { at: [0, 0, -bladeEnd + point], rot: alongBlade, color: PAL.steel, mask: 1 });
   return b.build();
 }
 
