@@ -39,6 +39,8 @@ export interface GuardConfig {
   cooldown: number; // s before it will guard again
   /** s between looks at which side your blade is on: a quicker feint gets past. */
   reaction: number;
+  /** Drops its own wind-up or recovery to meet your swing (only a blow already falling can't be stopped). */
+  breaksOff?: boolean;
 }
 
 export interface EnemyConfig {
@@ -138,10 +140,11 @@ export const CONFIG = {
     minSwingTravel: 0.2, // m of hand travel
     swingHandSpeed: 0.7, // m/s: the hand is swinging, not drifting
     swingGrace: 0.06, // s the hand may dip below swingHandSpeed mid-swing
-    // Weight: the blade follows the hand's turns about `weightLag` seconds
-    // behind (0 = rigid), and never trails it by more than maxLagDeg.
-    weightLag: 0.04,
-    maxLagDeg: 20,
+    // Weight: the tip is heavy. It chases where the hand points the blade about
+    // `tipLag` seconds behind (0 = rigid), so a fast swing or a quick sweep of
+    // the arm drags it behind the hand. It never trails by more than maxLagDeg.
+    tipLag: 0.09,
+    maxLagDeg: 35,
     fullDamageSpeed: 5.0, // tip speed at which damage stops scaling up
     minDamage: 8,
     maxDamage: 28,
@@ -295,6 +298,16 @@ export const CONFIG = {
     enrageAt: 0.35, // below this HP fraction, wind-ups are faster
     enrageWindup: 0.75,
     kneelTime: 2.6,
+  },
+
+  // ?duel: a practice duelist, one at a time. It is a grunt that reads nearly
+  // every swing and keeps its guard up, to test how often blocking can win.
+  // Its guard follows your blade almost at once; get round it, go low, catch
+  // it mid-attack, or shield-bash the guard away.
+  duelist: {
+    guard: { chance: 0.92, hold: [2.5, 4], cooldown: 0.1, reaction: 0.06, breaksOff: true },
+    poise: 30, // a hit that gets through doesn't stagger it out of its next guard
+    attackCooldown: [1.4, 2.6],
   },
 
   waves: {

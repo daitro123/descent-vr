@@ -21,6 +21,8 @@ export interface PlayerSword {
   base: Vector3;
   tip: Vector3;
   speed: number;
+  /** Which swing this is (the player's SwingDetector count): a new swing gets a fresh read. */
+  swing?: number;
 }
 
 /** The world as an enemy sees it, plus the hooks its attacks call. Game provides it. */
@@ -164,6 +166,7 @@ export abstract class Enemy {
   private guardCooldown = 0;
   private guardRead = 0; // s until it looks again at which side your blade is on
   private swingSeen = false; // already decided whether to guard against this swing
+  private lastSwing: number | undefined;
   private glint = 0; // weapon flash after a block
   private stuckFor = 0;
   private detour = 0;
@@ -175,8 +178,9 @@ export abstract class Enemy {
     x: number,
     z: number,
     variant = 0,
+    def: EnemyConfig = CONFIG.enemies[kind],
   ) {
-    this.def = CONFIG.enemies[kind];
+    this.def = def;
     this.hp = this.maxHp = this.def.hp;
     this.material = createModelMaterial();
     const model = buildCharacter(kind, { material: this.material, variant });
@@ -629,13 +633,18 @@ export abstract class Enemy {
     const g = this.def.guard;
     const blade = ctx.playerSword;
     if (!g || !blade || this.swingSeen || this.guardCooldown > 0) return false;
+    if (this.exposed > 0) return false; // knocked open (a parry, a guard break): no guard until it recovers
     if (blade.speed < CONFIG.guard.threatSpeed) return false;
     this.capsule(_a, _b);
     closestSegmentSegment(blade.base, blade.tip, _a, _b, _hit);
     if (_hit.distance > this.def.radius + CONFIG.guard.threatReach) return false;
     this.swingSeen = true;
     if (Math.random() >= g.chance) return false;
-    // It gives up its attack token while it defends.
+    // It gives up its attack (breaksOff) and its token while it defends.
+    if (this.attack) {
+      this.endAttack();
+      this.cooldown = rand(...this.def.attackCooldown);
+    }
     this.releaseTokens();
     this.guardSide = this.sideFacing(blade);
     this.guardTimer = rand(...g.hold);
@@ -660,6 +669,7 @@ export abstract class Enemy {
   dropGuard(): void {
     if (this.state !== 'guard') return;
     this.guardCooldown = this.def.guard!.cooldown;
+    this.swingSeen = false; // once it has cooled down, it reads the swing in progress afresh
     this.enter('move');
   }
 
@@ -791,7 +801,9 @@ export abstract class Enemy {
     this.cooldown = Math.max(0, this.cooldown - dt);
     this.guardCooldown = Math.max(0, this.guardCooldown - dt);
     this.glint = Math.max(0, this.glint - dt);
-    if (!ctx.playerSword || ctx.playerSword.speed < CONFIG.guard.threatSpeed) this.swingSeen = false;
+    const blade = ctx.playerSword;
+    if (!blade || blade.speed < CONFIG.guard.threatSpeed || blade.swing !== this.lastSwing) this.swingSeen = false;
+    this.lastSwing = blade?.swing;
     this.moveAmount = Math.max(0, this.moveAmount - dt * 4);
 
     if (this.state !== 'dead') {
@@ -829,6 +841,10 @@ export abstract class Enemy {
         if (this.guarding) target = GUARD[this.guardSide];
         break;
       case 'attack':
+        if (this.phase !== 'active' && this.def.guard?.breaksOff && this.considerGuard(ctx)) {
+          target = GUARD[this.guardSide];
+          break;
+        }
         this.updateAttack(dt, ctx);
         snap = this.state === 'attack';
         break;

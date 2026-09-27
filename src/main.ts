@@ -60,7 +60,8 @@ async function start(): Promise<void> {
 
   // ?wave=N starts the run at wave N (7 is the Warden) for testing.
   const firstWave = Math.max(1, Math.min(CONFIG.waves.list.length, Number(params.get('wave')) || 1));
-  const game = new Game(scene, camera, renderer, firstWave);
+  // ?duel fights one practice duelist after another (CONFIG.duelist) instead.
+  const game = new Game(scene, camera, renderer, firstWave, params.has('duel'));
   const showcase = buildShowcase();
   scene.add(showcase.root);
   const pinned = params.has('showcase');

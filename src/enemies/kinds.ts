@@ -1,5 +1,5 @@
 import { Vector3 } from 'three';
-import { type AttackConfig, CONFIG } from '../config';
+import { type AttackConfig, CONFIG, type EnemyConfig } from '../config';
 import type { EnemyKind } from '../models/characters';
 import { Enemy, type EnemyContext } from './enemy';
 
@@ -175,10 +175,13 @@ export class Warden extends Enemy {
   }
 }
 
-export function createEnemy(kind: EnemyKind, x: number, z: number, variant = 0): Enemy {
+/** The ?duel practice enemy: a grunt with a guard that stops most swings (CONFIG.duelist). */
+export const DUELIST: EnemyConfig = { ...CONFIG.enemies.grunt, ...CONFIG.duelist };
+
+export function createEnemy(kind: EnemyKind, x: number, z: number, variant = 0, def?: EnemyConfig): Enemy {
   switch (kind) {
     case 'grunt':
-      return new Grunt(kind, x, z, variant);
+      return new Grunt(kind, x, z, variant, def);
     case 'archer':
       return new Archer(kind, x, z, variant);
     case 'brute':

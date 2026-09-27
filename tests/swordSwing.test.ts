@@ -118,7 +118,21 @@ describe('weight', () => {
     const first = lag(h);
     expect(first).toBeGreaterThan(5);
     expect(first).toBeLessThanOrEqual(CONFIG.sword.maxLagDeg + 0.01);
-    for (let t = 0; t < 0.3; t += DT) frame(h, HAND, new Euler(-60 * DEG, 0, 0));
+    for (let t = 0; t < 0.5; t += DT) frame(h, HAND, new Euler(-60 * DEG, 0, 0));
+    expect(lag(h)).toBeLessThan(1);
+  });
+
+  it('sweeping the arm drags the tip behind the hand', () => {
+    const h = held();
+    const at = (x: number) => HAND.clone().setX(x);
+    for (let i = 0; i < 10; i++) frame(h, at(0), new Euler(0, 0, 0));
+    // The hand sweeps right at 2.5 m/s without turning.
+    let x = 0;
+    for (let t = 0; t < 0.25; t += DT) frame(h, at((x += 2.5 * DT)), new Euler(0, 0, 0));
+    expect(lag(h)).toBeGreaterThan(8);
+    expect(blade.x).toBeGreaterThan(0); // blade's +Z points to the pommel, so the tip trails left, behind the hand
+    // The hand stops: the tip swings back into line.
+    for (let t = 0; t < 0.5; t += DT) frame(h, at(x), new Euler(0, 0, 0));
     expect(lag(h)).toBeLessThan(1);
   });
 

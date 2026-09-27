@@ -2,7 +2,7 @@ import { type PerspectiveCamera, type Scene, Vector3, type WebGLRenderer } from 
 import { Combat, combatStats, resetCombatStats } from './combat/combat';
 import { CONFIG } from './config';
 import type { Enemy, EnemyContext, PlayerSword } from './enemies/enemy';
-import { createEnemy } from './enemies/kinds';
+import { createEnemy, DUELIST } from './enemies/kinds';
 import { AttackTokens } from './enemies/tokens';
 import { FloatingText } from './fx/floatingText';
 import { Particles } from './fx/particles';
@@ -66,13 +66,15 @@ export class Game {
   private spawnTimer = 0;
   private spawnIndex = 0;
   private readonly ctx: EnemyContext;
-  private readonly sword: PlayerSword = { base: new Vector3(), tip: new Vector3(), speed: 0 };
+  private readonly sword: PlayerSword = { base: new Vector3(), tip: new Vector3(), speed: 0, swing: 0 };
 
   constructor(
     private readonly scene: Scene,
     camera: PerspectiveCamera,
     renderer: WebGLRenderer,
     private readonly firstWave = 1,
+    /** ?duel: endless duelists, one at a time, instead of the waves. */
+    private readonly duel = false,
   ) {
     this.wave = firstWave - 1;
     scene.add(this.arena.root, this.orbs.root, this.shadows.mesh);
@@ -136,6 +138,7 @@ export class Game {
     if (sword.tip.valid && this.player.alive) {
       sword.segment(rig, this.sword.base, this.sword.tip);
       this.sword.speed = sword.tipSpeed;
+      this.sword.swing = sword.swing.count;
       this.ctx.playerSword = this.sword;
     } else this.ctx.playerSword = null;
 
@@ -230,7 +233,11 @@ export class Game {
           this.spawnTimer = CONFIG.waves.spawnInterval;
         }
         if (this.queue.length === 0 && this.enemies.length === 0) {
-          if (this.wave >= CONFIG.waves.list.length) {
+          if (this.duel) {
+            this.setPhase('intermission');
+            const s = combatStats;
+            this.banner(`blocked ${s.guarded} of ${s.guarded + s.hits} hits`, '#c0c0c0', 0.16);
+          } else if (this.wave >= CONFIG.waves.list.length) {
             this.setPhase('victory');
             this.banner('VICTORY', '#ffd060', 0.4);
             this.summary('the Warden is dust');
@@ -252,6 +259,14 @@ export class Game {
 
   private startWave(): void {
     this.wave++;
+    if (this.duel) {
+      this.queue = ['grunt'];
+      this.spawnIndex = this.spawnTimer = 0;
+      sfx.wave();
+      this.banner(`DUELIST ${this.wave}`, '#9fd8ff');
+      this.setPhase('fighting');
+      return;
+    }
     const roster = CONFIG.waves.list[Math.min(this.wave, CONFIG.waves.list.length) - 1];
     this.queue = waveRoster(roster);
     this.spawnIndex = 0;
@@ -268,7 +283,7 @@ export class Game {
   }
 
   private addEnemy(kind: EnemyKind, p: Vector3): Enemy {
-    const enemy = createEnemy(kind, p.x, p.z, Math.floor(Math.random() * 6));
+    const enemy = createEnemy(kind, p.x, p.z, Math.floor(Math.random() * 6), this.duel ? DUELIST : undefined);
     // Face the player from the first frame.
     enemy.root.rotation.y = Math.atan2(this.ctx.playerFeet.x - p.x, this.ctx.playerFeet.z - p.z);
     this.enemies.push(enemy);
