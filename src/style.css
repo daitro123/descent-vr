@@ -41,3 +41,22 @@ canvas {
   color: #e0b060;
   pointer-events: auto;
 }
+
+#viewer-hud {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  max-width: calc(100vw - 32px);
+  padding: 12px 16px;
+  background: rgb(0 0 0 / 0.6);
+  border: 1px solid #5a4a30;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+#viewer-hud b {
+  color: #e0b060;
+}
