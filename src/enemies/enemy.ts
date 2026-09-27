@@ -1,83 +1,165 @@
-import {
-  BoxGeometry,
-  CapsuleGeometry,
-  Group,
-  IcosahedronGeometry,
-  Mesh,
-  MeshBasicMaterial,
-  MeshLambertMaterial,
-  Vector3,
-} from 'three';
+import { Color, Group, Quaternion, Vector3 } from 'three';
+import type { AttackConfig, EnemyConfig } from '../config';
 import { CONFIG } from '../config';
+import { buildCharacter, type EnemyKind, type WeaponSpec } from '../models/characters';
+import { createModelMaterial, type ModelMaterial } from '../models/materials';
+import { BONES, type BoneName, blendPoses, type Pose, type Rig } from '../models/rig';
+import { HealthBar } from '../ui/healthBar';
+import type { Arena } from '../world/arena';
+import { ATTACK_POSES, IDLE, KNEEL, KNEEL_DROP, RISE, STAGGER, walkOffsets } from './poses';
+import type { AttackTokens } from './tokens';
 
-export type EnemyState = 'spawning' | 'chase' | 'windup' | 'strike' | 'recover' | 'stagger' | 'dead';
-export type StrikeResult = 'hit' | 'blocked' | 'parried' | 'miss';
+export type EnemyState = 'rising' | 'move' | 'attack' | 'stagger' | 'kneel' | 'dead';
+export type AttackPhase = 'windup' | 'active' | 'recover';
+/** What one frame of a swing did. `dodged` = the player was in dodge frames. */
+export type StrikeOutcome = 'hit' | 'blocked' | 'parried' | 'dodged';
 
+/** The world as an enemy sees it, plus the hooks its attacks call. Game provides it. */
 export interface EnemyContext {
   /** Player's head projected to the floor. */
   playerFeet: Vector3;
-  /** Called at the moment the club lands; decides what happened. */
-  resolveStrike(enemy: Enemy): StrikeResult;
+  playerHead: Vector3;
+  arena: Arena;
+  meleeTokens: AttackTokens;
+  rangedTokens: AttackTokens;
+  /** One frame of a melee swing: returns what the weapon struck, if anything. */
+  sweep(enemy: Enemy, attack: AttackConfig, prevBase: Vector3, prevTip: Vector3, base: Vector3, tip: Vector3): StrikeOutcome | null;
+  /** A slam lands at `at`. */
+  slam(enemy: Enemy, attack: AttackConfig, at: Vector3): void;
+  /** Loose an arrow from `from` at the player. */
+  shoot(enemy: Enemy, from: Vector3, damage: number): void;
+  /** Show an arrow on the string this frame, from nock to bow grip. */
+  nock(enemy: Enemy, nock: Vector3, grip: Vector3): void;
+  summon(enemy: Enemy, count: number): void;
+  /** An attack's wind-up began (sound cue, threat indicator). */
+  telegraph(enemy: Enemy, attack: AttackConfig): void;
 }
 
-const SPAWN_TIME = 0.8;
-const DEATH_TIME = 1.2;
-const ARM_REST = -0.3;
-const ARM_RAISED = -2.8;
-const ARM_STRUCK = -1.3;
+type MutablePose = Record<string, [number, number, number]>;
 
-// Shared geometry; materials are per-enemy so flashes don't bleed across.
-const bodyGeo = new CapsuleGeometry(0.28, 0.8, 2, 6);
-const headGeo = new IcosahedronGeometry(0.2, 0);
-const eyeGeo = new BoxGeometry(0.05, 0.03, 0.02);
-const clubGeo = new BoxGeometry(0.09, 0.7, 0.09);
-const eyeMat = new MeshBasicMaterial({ color: 0xff2a1a });
-
+const RISE_DEPTH = 1.9;
+const UP = new Vector3(0, 1, 0);
 const _to = new Vector3();
+const _v = new Vector3();
+const _a = new Vector3();
+const _b = new Vector3();
+const _q = new Quaternion();
+const _telegraphBlock = new Color(1.0, 0.45, 0.05);
+const _telegraphUnblock = new Color(1.0, 0.05, 0.02);
+const _exposedGlow = new Color(0.15, 0.35, 0.6);
+
+function easeOut(t: number): number {
+  return 1 - (1 - t) * (1 - t);
+}
+function easeIn(t: number): number {
+  return t * t;
+}
+function smooth(t: number): number {
+  return t * t * (3 - 2 * t);
+}
+function rand(lo: number, hi: number): number {
+  return lo + Math.random() * (hi - lo);
+}
+
+/** Where a slash crosses the enemy's front, measured once per kind at its bind proportions. */
+interface AimCalibration {
+  angle: number; // elevation of that crossing seen from the right shoulder
+  shoulderY: number;
+}
+const aimCache = new Map<string, AimCalibration>();
+
+interface Shard {
+  vel: Vector3;
+  spin: Vector3;
+}
 
 /**
- * A white-box melee grunt. The state machine is the combat design:
- * chase → windup (telegraph, blockable) → strike → recover, and any sword hit
- * during windup staggers it — so aggression and blocking both pay off.
+ * Shared machinery for every enemy: rising from the grave, locomotion and
+ * steering, the attack timeline (wind-up → swing → recover) driven by pose
+ * keyframes, stagger and exposure, deaths, and the hurt volumes the sword
+ * tests against. Subclasses (kinds.ts) only decide where to go and what to do.
  */
-export class Enemy {
+export abstract class Enemy {
   readonly root = new Group();
   readonly position: Vector3; // feet, alias of root.position
-  hp: number = CONFIG.enemy.hp;
-  state: EnemyState = 'spawning';
+  readonly def: EnemyConfig;
+  readonly rig: Rig;
+  readonly weapon: WeaponSpec;
+  readonly material: ModelMaterial;
+  readonly healthBar: HealthBar;
+  hp: number;
+  readonly maxHp: number;
+  state: EnemyState = 'rising';
   stateTime = 0;
   /** Seconds until the sword can hit this enemy again. */
   hitCooldown = 0;
+  bashCooldown = 0;
   readonly knockback = new Vector3();
-  private readonly bodyMat = new MeshLambertMaterial({ color: 0xb8b09a });
-  private readonly visual = new Group();
-  private readonly arm = new Group();
-  private flash = 0;
-  private staggerDuration: number = CONFIG.enemy.staggerTime;
+  /** Seconds of bonus damage left (after a parry, a bash on its wind-up, a stuck weapon). */
+  exposed = 0;
 
-  constructor(x: number, z: number) {
+  attack: AttackConfig | null = null;
+  phase: AttackPhase = 'windup';
+  phaseTime = 0;
+  /** Seconds until it may start another attack. */
+  protected cooldown = rand(0.4, 1.2);
+  protected strafeSign = Math.random() < 0.5 ? 1 : -1;
+  protected strafeTimer = rand(1.5, 3);
+  protected readonly visual = new Group();
+
+  private readonly pose: MutablePose = {};
+  private readonly snapshot: MutablePose = {};
+  private readonly windupPose: MutablePose = {};
+  private readonly strikePose: MutablePose = {};
+  private readonly scratch: MutablePose = {};
+  private hipDrop = 0;
+  private walkPhase = 0;
+  private moveAmount = 0;
+  private flash = 0;
+  private flinch = 0;
+  private staggerDuration = 0;
+  private staggerSide = 1;
+  private readonly riseTime: number;
+  private readonly prevBase = new Vector3();
+  private readonly prevTip = new Vector3();
+  private readonly base = new Vector3();
+  private readonly tip = new Vector3();
+  private struck = false; // this swing already connected
+  private phaseDuration = 1;
+  private releasePending = false; // loose the arrow on the next weapon sample
+  private held: AttackTokens | null = null;
+  private stuckFor = 0;
+  private detour = 0;
+  private readonly detourDir = new Vector3();
+  private shards: Shard[] | null = null;
+
+  constructor(
+    readonly kind: EnemyKind,
+    x: number,
+    z: number,
+    variant = 0,
+  ) {
+    this.def = CONFIG.enemies[kind];
+    this.hp = this.maxHp = this.def.hp;
+    this.material = createModelMaterial();
+    const model = buildCharacter(kind, { material: this.material, variant });
+    this.rig = model.rig;
+    this.weapon = model.weapon;
     this.position = this.root.position;
     this.root.position.set(x, 0, z);
     this.root.add(this.visual);
+    this.visual.add(this.rig.mesh);
+    this.riseTime = kind === 'warden' ? 2.4 : 1.1;
+    this.visual.position.y = -RISE_DEPTH * this.heightScale;
+    copyPose(RISE, this.pose); // copies: poses are shared constants, and this.pose is eased in place
 
-    const body = new Mesh(bodyGeo, this.bodyMat);
-    body.position.y = 0.75;
-    const head = new Mesh(headGeo, this.bodyMat);
-    head.position.y = 1.55;
-    const eyeL = new Mesh(eyeGeo, eyeMat);
-    eyeL.position.set(-0.07, 1.58, 0.17);
-    const eyeR = eyeL.clone();
-    eyeR.position.x = 0.07;
-
-    this.arm.position.set(0.34, 1.3, 0);
-    const club = new Mesh(clubGeo, new MeshLambertMaterial({ color: 0x5a4030 }));
-    club.position.y = -0.35;
-    this.arm.add(club);
-    this.arm.rotation.x = ARM_REST;
-
-    this.visual.add(body, head, eyeL, eyeR, this.arm);
-    this.visual.position.y = -1.8; // rises out of the floor on spawn
+    const big = kind === 'warden';
+    this.healthBar = big ? new HealthBar(1.4, 0.1, 0x6ad0ff, 'THE BONE WARDEN') : new HealthBar(0.5, 0.05, 0xc81e1e);
+    this.healthBar.root.position.y = this.headTopY() + (big ? 0.5 : 0.28);
+    this.root.add(this.healthBar.root);
   }
+
+  // ------------------------------------------------------------ queries
 
   get alive(): boolean {
     return this.state !== 'dead';
@@ -85,135 +167,566 @@ export class Enemy {
 
   /** Can the sword damage it right now? */
   get hittable(): boolean {
-    return this.state !== 'dead' && this.state !== 'spawning';
+    return this.state !== 'dead' && this.state !== 'rising';
   }
 
-  /** Axis of the hit capsule, world space. */
+  get attacking(): boolean {
+    return this.state === 'attack';
+  }
+
+  get hpFraction(): number {
+    return Math.max(0, this.hp / this.maxHp);
+  }
+
+  /** 1 for human-sized skeletons; the boss is ~1.5. */
+  protected get heightScale(): number {
+    return this.rig.proportions.hipY / 0.92;
+  }
+
+  private headTopY(): number {
+    const p = this.rig.proportions;
+    return p.hipY + 0.06 + p.neck + 0.26 * (p.head ?? 1);
+  }
+
+  /** Hurt capsule axis (feet to neck), world space. Follows lean and kneel. */
   capsule(outBottom: Vector3, outTop: Vector3): void {
-    const r = CONFIG.enemy.radius;
+    const r = this.def.radius;
     outBottom.set(this.position.x, r, this.position.z);
-    outTop.set(this.position.x, CONFIG.enemy.height, this.position.z);
+    this.rig.bones.head.getWorldPosition(outTop);
+    outTop.y = Math.max(outBottom.y + 0.1, outTop.y - 0.05);
   }
 
-  /** World position the club strikes from (the shoulder). */
-  strikeOrigin(out: Vector3): Vector3 {
-    return this.arm.getWorldPosition(out);
+  /** Head sphere (crit zone), world space. */
+  headSphere(outCentre: Vector3): number {
+    const s = this.rig.proportions.head ?? 1;
+    const head = this.rig.bones.head;
+    outCentre.set(0, 0.14 * s, 0.02 * s).applyMatrix4(head.matrixWorld);
+    return 0.13 * s;
   }
 
-  /** Returns true if this blow killed it. */
-  takeHit(damage: number, push: Vector3): boolean {
+  /** Current weapon segment, world space. */
+  weaponSegment(outBase: Vector3, outTip: Vector3): void {
+    const bone = this.rig.bones[this.weapon.bone];
+    outBase.set(...this.weapon.base).applyMatrix4(bone.matrixWorld);
+    outTip.set(...this.weapon.tip).applyMatrix4(bone.matrixWorld);
+  }
+
+  /** World position of a point in a bone's space. */
+  bonePoint(bone: BoneName, x: number, y: number, z: number, out: Vector3): Vector3 {
+    return out.set(x, y, z).applyMatrix4(this.rig.bones[bone].matrixWorld);
+  }
+
+  // ------------------------------------------------------------ taking hits
+
+  /** Returns true if this blow killed it. `from` is where the blow came from (world). */
+  takeHit(damage: number, push: Vector3, opts: { from?: Vector3; ignorePoise?: boolean } = {}): boolean {
     if (!this.hittable) return false;
     this.hp -= damage;
     this.flash = 0.12;
-    this.knockback.add(push);
+    this.knockback.addScaledVector(push, this.knockbackScale());
     this.hitCooldown = CONFIG.sword.perEnemyCooldown;
     if (this.hp <= 0) {
-      this.enter('dead');
+      this.die(push);
       return true;
     }
-    this.stagger(CONFIG.enemy.staggerTime);
+    this.onDamaged();
+    if (opts.from) this.staggerSide = this.sideOf(opts.from);
+    if (damage >= this.def.poise || this.exposed > 0 || opts.ignorePoise) this.stagger(this.def.staggerTime);
+    else this.flinch = 0.25;
     return false;
   }
 
+  /** How far pushes move it: heavy enemies barely budge. */
+  protected knockbackScale(): number {
+    return this.kind === 'brute' ? 0.35 : this.kind === 'warden' ? 0.15 : 1;
+  }
+
+  /** Hook: HP thresholds (the Warden's summons). */
+  protected onDamaged(): void {}
+
   stagger(duration: number): void {
-    if (!this.hittable) return;
+    if (!this.hittable || duration <= 0) return;
+    if (this.state === 'kneel') return; // already down, and longer
     // Don't shorten a longer stagger (e.g. a parry) with a quick hit.
     if (this.state === 'stagger' && this.staggerDuration - this.stateTime > duration) return;
+    this.endAttack();
     this.staggerDuration = duration;
     this.enter('stagger');
   }
 
-  private enter(state: EnemyState): void {
-    this.state = state;
-    this.stateTime = 0;
+  expose(seconds: number): void {
+    this.exposed = Math.max(this.exposed, seconds);
   }
 
-  /** Returns false once it has finished dying and should be removed. */
-  update(dt: number, ctx: EnemyContext): boolean {
-    const E = CONFIG.enemy;
-    this.stateTime += dt;
-    this.hitCooldown = Math.max(0, this.hitCooldown - dt);
-    this.flash = Math.max(0, this.flash - dt);
+  /** A block or parry stopped its blow. Subclasses can react differently (the Warden kneels). */
+  protected onBlocked(parried: boolean): void {
+    if (parried) {
+      this.stagger(this.def.parryStagger);
+      this.expose(this.def.exposedTime);
+    } else {
+      this.stagger(this.def.blockStagger);
+    }
+  }
 
-    // Knockback slides the body; decays quickly.
-    this.position.addScaledVector(this.knockback, dt);
-    this.knockback.multiplyScalar(Math.exp(-8 * dt));
+  /** Down on one knee, head in reach: the Warden's punish window. */
+  protected kneel(seconds: number): void {
+    this.endAttack();
+    this.staggerDuration = seconds;
+    this.expose(seconds);
+    this.enter('kneel');
+  }
 
-    _to.subVectors(ctx.playerFeet, this.position);
-    _to.y = 0;
-    const dist = _to.length();
+  private sideOf(from: Vector3): number {
+    // +1 if the blow came from its left (+X local), -1 from its right.
+    _v.subVectors(from, this.position);
+    const yaw = this.root.rotation.y;
+    return _v.x * Math.cos(yaw) - _v.z * Math.sin(yaw) >= 0 ? 1 : -1;
+  }
 
-    switch (this.state) {
-      case 'spawning': {
-        const k = Math.min(1, this.stateTime / SPAWN_TIME);
-        this.visual.position.y = -1.8 * (1 - k) * (1 - k);
-        this.face(_to, dt * 3);
-        if (k >= 1) this.enter('chase');
-        break;
-      }
-      case 'chase':
-        this.face(_to, dt);
-        this.arm.rotation.x = ARM_REST;
-        if (dist <= E.attackRange) this.enter('windup');
-        else this.position.addScaledVector(_to.normalize(), E.moveSpeed * dt);
-        break;
-      case 'windup': {
-        this.face(_to, dt);
-        const k = Math.min(1, this.stateTime / E.windup);
-        this.arm.rotation.x = ARM_REST + (ARM_RAISED - ARM_REST) * easeOut(k);
-        if (k >= 1) this.enter('strike');
-        break;
-      }
-      case 'strike': {
-        const k = Math.min(1, this.stateTime / E.strikeTime);
-        this.arm.rotation.x = ARM_RAISED + (ARM_STRUCK - ARM_RAISED) * k;
-        if (k >= 1) {
-          const result = ctx.resolveStrike(this);
-          if (result === 'blocked') this.stagger(E.blockStagger);
-          else if (result === 'parried') this.stagger(E.parryStagger);
-          else this.enter('recover');
-        }
-        break;
-      }
-      case 'recover':
-        this.arm.rotation.x += (ARM_REST - this.arm.rotation.x) * Math.min(1, dt * 4);
-        if (this.stateTime >= E.recover) this.enter('chase');
-        break;
-      case 'stagger':
-        // Rock back, arm flops down.
-        this.arm.rotation.x += (ARM_REST - this.arm.rotation.x) * Math.min(1, dt * 10);
-        this.visual.rotation.x = -0.25 * Math.sin(Math.min(1, this.stateTime / this.staggerDuration) * Math.PI);
-        if (this.stateTime >= this.staggerDuration) {
-          this.visual.rotation.x = 0;
-          this.enter('chase');
-        }
-        break;
-      case 'dead': {
-        const k = Math.min(1, this.stateTime / DEATH_TIME);
-        this.visual.rotation.x = (-Math.PI / 2) * easeOut(Math.min(1, k * 2));
-        this.visual.position.y = -0.6 * Math.max(0, k * 2 - 1);
-        if (k >= 1) return false;
-        break;
+  private die(push: Vector3): void {
+    this.endAttack();
+    this.enter('dead');
+    this.releaseTokens();
+    this.root.updateMatrixWorld(true);
+    if (this.def.death === 'shatter') {
+      // Rigid skinning means every bone can fly free: the skeleton collapses
+      // into a pile of its own parts, still in one draw call.
+      this.shards = [];
+      _v.copy(push).setY(0).applyAxisAngle(UP, -this.root.rotation.y);
+      for (const name of BONES) {
+        const bone = this.rig.bones[name];
+        this.rig.mesh.attach(bone);
+        const out = bone.position.clone().setY(0).normalize();
+        this.shards.push({
+          vel: new Vector3(out.x * rand(0.5, 1.6), rand(0.5, 2.4), out.z * rand(0.5, 1.6)).addScaledVector(_v, 0.35),
+          spin: new Vector3(rand(-8, 8), rand(-8, 8), rand(-8, 8)),
+        });
       }
     }
+  }
 
-    // Hit flash white; telegraph glows orange as the wind-up builds.
-    const tele = this.state === 'windup' ? this.stateTime / E.windup : this.state === 'strike' ? 1 : 0;
-    if (this.flash > 0) this.bodyMat.emissive.setRGB(1, 1, 1);
-    else this.bodyMat.emissive.setRGB(0.9 * tele, 0.35 * tele, 0);
+  // ------------------------------------------------------------ attacking
+
+  /** Begin an attack (the caller has already secured a token if it needs one). */
+  protected startAttack(attack: AttackConfig, ctx: EnemyContext, windupScale = 1): void {
+    this.attack = attack;
+    this.phase = 'windup';
+    this.phaseTime = 0;
+    this.phaseDuration = attack.windup * windupScale;
+    this.struck = false;
+    copyPose(this.pose, this.snapshot);
+    const poses = ATTACK_POSES[attack.pose];
+    copyPose(poses.windup, this.windupPose);
+    copyPose(poses.strike, this.strikePose);
+    if (attack.aim) this.aimAt(attack, ctx);
+    this.enter('attack');
+    ctx.telegraph(this, attack);
+  }
+
+  /** Tilt a horizontal slash so its arc crosses at the player's chest height (duck it!). */
+  private aimAt(attack: AttackConfig, ctx: EnemyContext): void {
+    const cal = this.calibrate(attack);
+    const dist = Math.max(0.4, _to.subVectors(ctx.playerFeet, this.position).setY(0).length());
+    const targetY = ctx.playerHead.y - 0.25;
+    const wanted = Math.atan2(targetY - cal.shoulderY, dist);
+    const delta = Math.max(-0.6, Math.min(1.0, cal.angle - wanted));
+    for (const p of [this.windupPose, this.strikePose]) {
+      const arm = p.upperArmR;
+      if (arm) arm[0] += delta;
+    }
+  }
+
+  private calibrate(attack: AttackConfig): AimCalibration {
+    const key = `${this.kind}:${attack.pose}`;
+    const hit = aimCache.get(key);
+    if (hit) return hit;
+    // Sample the arc at bind proportions, facing +Z from the origin, and find
+    // where the tip crosses straight ahead.
+    const saved = this.root.position.clone();
+    const savedYaw = this.root.rotation.y;
+    const savedY = this.visual.position.y;
+    this.root.position.set(0, 0, 0);
+    this.root.rotation.y = 0;
+    this.visual.position.y = 0;
+    const poses = ATTACK_POSES[attack.pose];
+    let best = { x: Infinity, y: 0, z: 0, shoulderY: 0, shoulderZ: 0 };
+    for (let t = 0; t <= 1.0001; t += 0.02) {
+      this.rig.apply(blendPoses(poses.windup, poses.strike, t, this.scratch));
+      this.root.updateMatrixWorld(true);
+      this.weaponSegment(_a, _b);
+      if (_b.z > 0.3 && Math.abs(_b.x) < Math.abs(best.x)) {
+        this.rig.bones.upperArmR.getWorldPosition(_a);
+        best = { x: _b.x, y: _b.y, z: _b.z, shoulderY: _a.y, shoulderZ: _a.z };
+      }
+    }
+    const cal = { angle: Math.atan2(best.y - best.shoulderY, best.z - best.shoulderZ), shoulderY: best.shoulderY };
+    this.rig.apply(this.pose);
+    this.root.position.copy(saved);
+    this.root.rotation.y = savedYaw;
+    this.visual.position.y = savedY;
+    aimCache.set(key, cal);
+    return cal;
+  }
+
+  /** Stop attacking and give the token back. */
+  protected endAttack(): void {
+    if (!this.attack) return;
+    this.attack = null;
+    this.releaseTokens();
+  }
+
+  /** Take a token from `pool` (melee or ranged). */
+  protected acquire(pool: AttackTokens): boolean {
+    if (!pool.tryAcquire(this)) return false;
+    this.held = pool;
     return true;
   }
 
-  private face(dir: Vector3, dt: number): void {
-    if (dir.lengthSq() < 1e-6) return;
-    const target = Math.atan2(dir.x, dir.z);
-    let delta = target - this.root.rotation.y;
+  protected releaseTokens(): void {
+    this.held?.release(this);
+    this.held = null;
+  }
+
+  protected get holdsToken(): boolean {
+    return this.held !== null;
+  }
+
+  private updateAttack(dt: number, ctx: EnemyContext): void {
+    const a = this.attack!;
+    this.phaseTime += dt;
+    const k = Math.min(1, this.phaseTime / this.phaseDuration);
+
+    if (this.phase === 'windup') {
+      this.faceToward(ctx.playerFeet, dt);
+      blendPoses(this.snapshot, this.windupPose, easeOut(k), this.pose);
+      if (a.kind === 'shot') this.nock(ctx);
+      if (k >= 1) this.nextPhase('active', a.active);
+      return;
+    }
+    if (this.phase === 'active') {
+      blendPoses(this.windupPose, this.strikePose, easeIn(k), this.pose);
+      if (k >= 1) {
+        this.finishSwing(ctx);
+        if (this.attack) this.nextPhase('recover', a.recover);
+      }
+      return;
+    }
+    // Recover.
+    const idle = IDLE[this.kind];
+    blendPoses(this.strikePose, idle, smooth(k), this.pose);
+    if (k >= 1) {
+      const next = a.next !== undefined ? this.def.attacks[a.next] : undefined;
+      this.endAttack();
+      if (next) this.startAttack(next, ctx, this.windupScale());
+      else {
+        this.cooldown = rand(...this.def.attackCooldown);
+        this.enter('move');
+      }
+    }
+  }
+
+  /** Enraged bosses wind up faster. */
+  protected windupScale(): number {
+    return 1;
+  }
+
+  private nextPhase(phase: AttackPhase, duration: number): void {
+    this.phase = phase;
+    this.phaseTime = 0;
+    this.phaseDuration = Math.max(0.01, duration);
+    if (phase === 'active') {
+      // Release the arrow at full draw.
+      this.releasePending = this.attack?.kind === 'shot';
+    }
+    if (phase === 'recover' && this.attack?.exposeOnRecover) this.onStuck();
+  }
+
+  /** Weapon buried in the floor after a slam. The Warden kneels instead. */
+  protected onStuck(): void {
+    this.expose(this.attack!.recover);
+  }
+
+  /** Called every frame after the pose is applied, while attacking. */
+  private sampleWeapon(ctx: EnemyContext): void {
+    const a = this.attack;
+    if (!a) return;
+    this.weaponSegment(this.base, this.tip);
+    if (this.phase === 'active' && a.kind === 'melee' && !this.struck) {
+      const outcome = ctx.sweep(this, a, this.prevBase, this.prevTip, this.base, this.tip);
+      if (outcome === 'hit' || outcome === 'dodged') this.struck = true;
+      else if (outcome === 'blocked' || outcome === 'parried') {
+        this.struck = true;
+        this.onBlocked(outcome === 'parried');
+      }
+    }
+    if (this.releasePending && this.attack) {
+      this.releasePending = false;
+      this.bonePoint('handR', 0, -0.06, 0.02, _a);
+      ctx.shoot(this, _a, a.damage);
+      this.rangedDone();
+    }
+    this.prevBase.copy(this.base);
+    this.prevTip.copy(this.tip);
+  }
+
+  /** Archers give the ranged token back as soon as the arrow flies. */
+  protected rangedDone(): void {}
+
+  private finishSwing(ctx: EnemyContext): void {
+    const a = this.attack!;
+    if (a.kind === 'slam') {
+      this.weaponSegment(_a, _b);
+      _b.y = 0;
+      ctx.slam(this, a, _b);
+    } else if (a.kind === 'summon') {
+      ctx.summon(this, CONFIG.warden.summonCount);
+    }
+  }
+
+  private nock(ctx: EnemyContext): void {
+    this.bonePoint('handR', 0, -0.06, 0.02, _a);
+    this.bonePoint('handL', 0, -0.06, 0, _b);
+    ctx.nock(this, _a, _b);
+  }
+
+  // ------------------------------------------------------------ moving
+
+  /** Walk along `dir` (unit, XZ) at `speed`, steering round pillars and props. */
+  protected walk(dir: Vector3, speed: number, dt: number, ctx: EnemyContext): void {
+    _v.copy(dir);
+    if (this.detour > 0) {
+      // Stuck: side-step along the detour for a moment instead.
+      this.detour -= dt;
+      _v.copy(this.detourDir);
+    } else this.avoidObstacles(_v);
+    _a.copy(this.position);
+    this.position.addScaledVector(_v, speed * dt);
+    ctx.arena.resolve(this.position, this.def.radius);
+    this.moveAmount = Math.min(1, speed / this.def.speed);
+
+    // Safety net for local traps (walls, props, other enemies): if we keep
+    // trying to walk but barely move, detour sideways for a second.
+    const moved = _a.distanceTo(this.position);
+    this.stuckFor = moved < speed * dt * 0.3 ? this.stuckFor + dt : Math.max(0, this.stuckFor - dt);
+    if (this.stuckFor > 0.8 && this.detour <= 0) {
+      this.stuckFor = 0;
+      this.detour = 1;
+      const side = Math.random() < 0.5 ? 1 : -1;
+      this.detourDir.set(-dir.z * side, 0, dir.x * side).addScaledVector(dir, -0.3).normalize();
+    }
+  }
+
+  private avoidObstacles(dir: Vector3): void {
+    const r = this.def.radius;
+    const all = [...CONFIG.arena.pillars, ...CONFIG.arena.obstacles];
+    for (const o of all) {
+      const dx = this.position.x - o.x;
+      const dz = this.position.z - o.z;
+      const d = Math.hypot(dx, dz);
+      const clear = o.r + r + 0.5;
+      if (d > clear || d < 1e-4) continue;
+      // Heading into it? Slide round the side we're already favouring.
+      const towards = -(dx * dir.x + dz * dir.z) / d;
+      if (towards <= 0) continue;
+      const side = dx * dir.z - dz * dir.x >= 0 ? 1 : -1;
+      const w = towards * (1 - (d - o.r - r) / 0.5);
+      dir.x += (-dz / d) * side * w * 1.5;
+      dir.z += (dx / d) * side * w * 1.5;
+    }
+    dir.setY(0).normalize();
+  }
+
+  protected faceToward(target: Vector3, dt: number, rate = 1): void {
+    _to.subVectors(target, this.position).setY(0);
+    if (_to.lengthSq() < 1e-6) return;
+    const want = Math.atan2(_to.x, _to.z);
+    let delta = want - this.root.rotation.y;
     delta = Math.atan2(Math.sin(delta), Math.cos(delta));
-    const maxStep = CONFIG.enemy.turnSpeed * dt;
+    const maxStep = this.def.turnSpeed * rate * dt;
     this.root.rotation.y += Math.max(-maxStep, Math.min(maxStep, delta));
+  }
+
+  /** Circle the player at `radius`, drifting sideways; returns the direction walked. */
+  protected circle(ctx: EnemyContext, radius: number, dt: number): void {
+    _to.subVectors(ctx.playerFeet, this.position).setY(0);
+    const d = _to.length() || 1;
+    _to.divideScalar(d);
+    this.strafeTimer -= dt;
+    if (this.strafeTimer <= 0) {
+      this.strafeSign *= -1;
+      this.strafeTimer = rand(1.5, 3.5);
+    }
+    // Radial correction toward the ring, plus a tangential drift.
+    const radial = Math.max(-1, Math.min(1, (d - radius) * 1.5));
+    _a.set(-_to.z * this.strafeSign, 0, _to.x * this.strafeSign);
+    _v.copy(_to).multiplyScalar(radial).addScaledVector(_a, 0.6);
+    const len = _v.length();
+    if (len > 0.05) this.walk(_v.divideScalar(len), this.def.speed * 0.55 * Math.min(1, len), dt, ctx);
+    this.faceToward(ctx.playerFeet, dt);
+  }
+
+  // ------------------------------------------------------------ per frame
+
+  /** Decide what to do while in the 'move' state. */
+  protected abstract think(dt: number, ctx: EnemyContext, dist: number): void;
+
+  /** Returns false once it has finished dying and should be removed. */
+  update(dt: number, ctx: EnemyContext): boolean {
+    this.stateTime += dt;
+    this.hitCooldown = Math.max(0, this.hitCooldown - dt);
+    this.bashCooldown = Math.max(0, this.bashCooldown - dt);
+    this.flash = Math.max(0, this.flash - dt);
+    this.flinch = Math.max(0, this.flinch - dt);
+    this.exposed = Math.max(0, this.exposed - dt);
+    this.cooldown = Math.max(0, this.cooldown - dt);
+    this.moveAmount = Math.max(0, this.moveAmount - dt * 4);
+
+    if (this.state !== 'dead') {
+      // Knockback slides the body; decays quickly.
+      this.position.addScaledVector(this.knockback, dt);
+      this.knockback.multiplyScalar(Math.exp(-8 * dt));
+      ctx.arena.resolve(this.position, this.def.radius);
+    }
+
+    const dist = _to.subVectors(ctx.playerFeet, this.position).setY(0).length();
+    const idle = IDLE[this.kind];
+    let target: Pose = idle;
+    let snap = false; // attacks drive the pose exactly (the arc is the hitbox)
+
+    switch (this.state) {
+      case 'rising': {
+        const k = Math.min(1, this.stateTime / this.riseTime);
+        this.visual.position.y = -RISE_DEPTH * this.heightScale * (1 - easeOut(k));
+        this.faceToward(ctx.playerFeet, dt, 0.5);
+        target = k < 0.7 ? RISE : idle;
+        if (k >= 1) this.enter('move');
+        break;
+      }
+      case 'move':
+        this.think(dt, ctx, dist);
+        // think() may have started an attack (TS narrows `state` too eagerly here).
+        if ((this.state as EnemyState) === 'attack') snap = true;
+        break;
+      case 'attack':
+        this.updateAttack(dt, ctx);
+        snap = this.state === 'attack';
+        break;
+      case 'stagger': {
+        const k = Math.min(1, this.stateTime / this.staggerDuration);
+        target = k < 0.6 ? STAGGER : idle;
+        if (k >= 1) this.enter('move');
+        break;
+      }
+      case 'kneel': {
+        target = KNEEL;
+        this.hipDrop += (KNEEL_DROP - this.hipDrop) * Math.min(1, dt * 8);
+        if (this.stateTime >= this.staggerDuration) this.enter('move');
+        break;
+      }
+      case 'dead':
+        return this.updateDeath(dt);
+    }
+    if (this.state !== 'kneel') this.hipDrop += (0 - this.hipDrop) * Math.min(1, dt * 5);
+
+    if (!snap) {
+      // Everything outside an attack eases toward its target pose.
+      const walkPose = this.scratch;
+      for (const k of Object.keys(walkPose)) delete walkPose[k];
+      if (this.moveAmount > 0.01 && (this.state === 'move' || this.state === 'rising')) {
+        this.walkPhase += dt * 7 * this.moveAmount * (this.def.speed / Math.max(0.8, this.heightScale));
+        walkOffsets(this.walkPhase, this.moveAmount, walkPose);
+      }
+      const rate = 1 - Math.exp(-(this.state === 'stagger' ? 18 : 10) * dt);
+      for (const name of BONES) {
+        const t = target[name];
+        const w = walkPose[name];
+        const cur = (this.pose[name] ??= [0, 0, 0]);
+        for (let i = 0; i < 3; i++) {
+          let goal = (t?.[i] ?? 0) + (w?.[i] ?? 0);
+          if (name === 'spine' && i === 2 && this.state === 'stagger') goal *= this.staggerSide;
+          cur[i] += (goal - cur[i]) * rate;
+        }
+      }
+    }
+
+    this.rig.apply(this.pose);
+    if (this.flinch > 0) this.rig.bones.spine.rotation.x -= this.flinch * 0.6;
+    const bob = this.state === 'move' ? -Math.abs(Math.sin(this.walkPhase)) * 0.03 * this.moveAmount : 0;
+    this.rig.setHipOffset(0, bob - this.hipDrop * this.rig.proportions.hipY, 0);
+    this.root.updateMatrixWorld(true);
+    if (this.state === 'attack') this.sampleWeapon(ctx);
+    else {
+      this.weaponSegment(this.prevBase, this.prevTip);
+    }
+
+    this.updateGlow();
+    this.healthBar.update(dt, this.hpFraction, ctx.playerHead, this.kind === 'warden');
+    return true;
+  }
+
+  private updateGlow(): void {
+    // Weapon telegraph: orange for blockable, red for "get out of the way".
+    const a = this.attack;
+    const tele = this.material.telegraph;
+    if (a && this.state === 'attack' && a.kind !== 'summon') {
+      const k = this.phase === 'windup' ? Math.min(1, this.phaseTime / this.phaseDuration) : this.phase === 'active' ? 1 : 0;
+      tele.copy(a.blockable ? _telegraphBlock : _telegraphUnblock).multiplyScalar(0.3 + 1.2 * k * k);
+      if (this.phase === 'recover') tele.setRGB(0, 0, 0);
+    } else tele.setRGB(0, 0, 0);
+    // Body: white hit flash, or a cold pulse while exposed.
+    const e = this.material.emissive;
+    if (this.flash > 0) e.setRGB(1, 1, 1);
+    else if (this.exposed > 0) e.copy(_exposedGlow).multiplyScalar(0.6 + 0.4 * Math.sin(this.stateTime * 12));
+    else if (a && this.phase === 'windup' && a.kind !== 'summon') {
+      // The whole body warms up too, so an overhead wind-up (weapon hidden
+      // behind the head) still reads from the front.
+      const k = Math.min(1, this.phaseTime / this.phaseDuration);
+      if (a.blockable) e.setRGB(0.4 * k, 0.16 * k, 0);
+      else e.setRGB(0.45 * k, 0, 0);
+    } else e.setRGB(0, 0, 0);
+  }
+
+  private updateDeath(dt: number): boolean {
+    const t = this.stateTime;
+    this.material.emissive.setRGB(0, 0, 0);
+    this.material.telegraph.setRGB(0, 0, 0);
+    this.healthBar.root.visible = false;
+    if (this.shards) {
+      const settle = t > 1.6;
+      BONES.forEach((name, i) => {
+        const bone = this.rig.bones[name];
+        const s = this.shards![i];
+        if (!settle) {
+          s.vel.y -= 9.8 * dt;
+          bone.position.addScaledVector(s.vel, dt);
+          _q.setFromAxisAngle(_v.copy(s.spin).normalize(), s.spin.length() * dt);
+          bone.quaternion.premultiply(_q);
+          if (bone.position.y < 0.04) {
+            bone.position.y = 0.04;
+            s.vel.y = Math.abs(s.vel.y) * 0.3;
+            s.vel.x *= 0.5;
+            s.vel.z *= 0.5;
+            s.spin.multiplyScalar(0.5);
+          }
+        }
+      });
+      if (settle) this.visual.position.y = -(t - 1.6) * 0.4;
+      return t < 2.6;
+    }
+    // Topple forward, then sink.
+    const k = Math.min(1, t / 0.8);
+    this.visual.rotation.x = (Math.PI / 2) * easeIn(k) * 0.95;
+    this.visual.position.y = t > 1.6 ? -(t - 1.6) * 0.5 : 0;
+    return t < 3.4;
+  }
+
+  protected enter(state: EnemyState): void {
+    this.state = state;
+    this.stateTime = 0;
   }
 }
 
-function easeOut(t: number): number {
-  return 1 - (1 - t) * (1 - t);
+function copyPose(src: Pose, out: MutablePose): void {
+  for (const k of Object.keys(out)) delete out[k];
+  for (const [k, v] of Object.entries(src)) out[k] = [v![0], v![1], v![2]];
 }

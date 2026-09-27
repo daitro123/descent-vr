@@ -64,6 +64,14 @@ export function closestSegmentSegment(
   return out;
 }
 
+/** Closest point to `p` on segment a→b. */
+export function closestPointOnSegment(p: Vector3, a: Vector3, b: Vector3, out: Vector3): Vector3 {
+  d1.subVectors(b, a);
+  const len2 = d1.lengthSq();
+  const t = len2 > 1e-12 ? clamp01(r.subVectors(p, a).dot(d1) / len2) : 0;
+  return out.copy(a).addScaledVector(d1, t);
+}
+
 /**
  * Does segment a→b intersect the axis-aligned box [-half, +half]?
  * Callers transform the segment into the box's local space first (OBB test).
