@@ -680,23 +680,26 @@ export abstract class Enemy {
     this.knockback.addScaledVector(push, this.knockbackScale());
   }
 
-  /** The guard that meets the blade where it is now: over its head, or on its left or right. */
+  /** The guard that meets the blade where it is now: over its head, at its legs, or on its left or right. */
   private sideFacing(blade: PlayerSword): GuardSide {
     _v.addVectors(blade.base, blade.tip).multiplyScalar(0.5);
     const headR = this.headSphere(_a);
     if (_v.y > _a.y + headR) return 'high';
+    if (_v.y < this.rig.bones.hips.getWorldPosition(_a).y) return 'low';
     return this.localX(_v) >= 0 ? 'left' : 'right';
   }
 
   /**
    * Does the raised guard cover a blow landing at `point` (world) from a blade
    * moving along `motion`? The high guard takes chops at the head and
-   * shoulders; a side guard takes anything else on its half of the body, down
-   * to the guard's lower end. So: chop past a side guard, slash under or
-   * round a high one, or go for the open side or the legs.
+   * shoulders; the low guard anything at the legs, from either side; a side
+   * guard anything else on its half of the body, down to the guard's lower
+   * end. So: chop past a side guard, slash under or round a high one, go
+   * high over a low one, or go for the open side or the legs.
    */
   guardCovers(point: Vector3, motion: Vector3): boolean {
     if (!this.guarding || this.localZ(point) < 0) return false; // from behind: wide open
+    if (this.guardSide === 'low') return point.y < this.rig.bones.hips.getWorldPosition(_a).y + 0.1 * this.heightScale;
     const chop = motion.y < -0.7 * motion.length();
     if (this.guardSide === 'high') return chop && point.y >= this.rig.bones.upperArmR.getWorldPosition(_a).y - 0.1;
     if (chop) return false;
