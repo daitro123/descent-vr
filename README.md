@@ -28,6 +28,7 @@ npm run dev          # http://localhost:5173
   - `?emulate` forces the emulator even when a real headset is present. `?emulate&nodevui` runs it without the DevUI, so controller poses are driven only by code (for scripted tests).
   - `?wave=N` starts the run at wave N (`?wave=7` goes straight to the boss).
   - `?showcase` pins the title-screen camera on the bestiary lineup, for reviewing models without a headset.
+  - `?map=forest` walks the outdoor map with no enemies (`?map=crypt` for the crypt hall). Headset: left stick moves, right stick turns. Desktop: WASD or the arrow keys walk (Shift to hurry), dragging looks around.
 
 Other commands: `npm test` runs the unit tests, `npm run typecheck`, `npm run build`.
 
@@ -93,6 +94,13 @@ src/
     poses.ts         keyframe poses; the arc between wind-up and strike is the blow
     tokens.ts        attack tokens: who may swing, and spacing between swings
   world/             arena (merged geometry, colliders), glow sprites, blob shadows, pixel textures, orbs
+  maps/
+    types.ts         GameMap: what gameplay and the map viewer need from any map (scene, sky, ground height, collision)
+    registry.ts      finds every map folder (src/maps/<id>/index.ts); add a map by adding a folder
+    walk.ts          ?map=<id>: walk a map with the warrior's locomotion, no enemies
+    crypt/           the crypt hall (world/arena.ts) as a map
+    forest/          Oakvale, the outdoor map: layout.ts is the plan (heights, roads, what stands where,
+                     colliders, unit tested); terrain, nature, buildings and sky turn it into chunked meshes
   fx/                particles, sword trail, shockwaves, floating text, spatial synthesised SFX
   ui/                belt HUD and vignette, enemy health bars
 ```
