@@ -121,11 +121,6 @@ export const CONFIG = {
     // Quest is ~45° up-forward when the controller is held level. So 0 means
     // "blade continues out of the fist", like holding a real sword.
     pitchDeg: 0,
-    // Turns the blade about its own length. 90 puts the edges toward palm and
-    // back of the hand, so a side-to-side swing with the thumb up (the usual VR
-    // slash) lands on the edge. Try other grips in the headset with
-    // ?swordPitch=…&swordRoll=… (degrees).
-    rollDeg: 90,
     bladeStart: 0.12, // metres from grip origin to where the blade begins
     bladeEnd: 1.0, // tip distance
     bladeHalfWidth: 0.04,

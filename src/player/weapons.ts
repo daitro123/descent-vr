@@ -10,13 +10,6 @@ const _gripQ = new Quaternion();
 const _rigQ = new Quaternion();
 const _target = new Quaternion();
 
-/** A grip angle from CONFIG.sword, unless the URL overrides it (?swordPitch=…&swordRoll=…, degrees). */
-function gripAngle(param: string, fallback: number): number {
-  const v = typeof location === 'undefined' ? null : new URLSearchParams(location.search).get(param);
-  const n = v ? Number(v) : NaN;
-  return Number.isFinite(n) ? n : fallback;
-}
-
 /**
  * Tracks a point attached to a hand in *rig* space, so velocity reflects the
  * arm's motion and not stick locomotion or snap turns moving the whole rig.
@@ -70,9 +63,8 @@ export class Sword {
   frenzy = false;
 
   constructor() {
-    const { bladeStart, bladeEnd, bladeHalfWidth, pitchDeg, rollDeg } = CONFIG.sword;
-    // Euler XYZ turns about Z first: roll the blade about its length, then pitch it off the fist.
-    this.pivot.rotation.set(gripAngle('swordPitch', pitchDeg) * DEG, 0, gripAngle('swordRoll', rollDeg) * DEG);
+    const { bladeStart, bladeEnd, bladeHalfWidth, pitchDeg } = CONFIG.sword;
+    this.pivot.rotation.x = pitchDeg * DEG;
     this.model.add(this.pivot);
     this.pivot.add(new Mesh(buildLongsword(bladeStart, bladeEnd, bladeHalfWidth), this.material));
     this.localBase = new Vector3(0, 0, -bladeStart);

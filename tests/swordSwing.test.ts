@@ -1,5 +1,5 @@
 import { Euler, Group, Vector3 } from 'three';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
 import { Sword } from '../src/player/weapons';
 
@@ -42,8 +42,6 @@ function play(h: Held, seconds: number, at: (t: number) => [Vector3, Euler]) {
 
 const HAND = new Vector3(0.25, 1.1, -0.35);
 const smooth = (k: number) => k * k * (3 - 2 * k);
-
-afterEach(() => void vi.unstubAllGlobals());
 
 describe('wiggling the sword', () => {
   it('flicking the wrist whips the tip past damage speed, but the blade stays cold', () => {
@@ -132,27 +130,5 @@ describe('weight', () => {
     frame(h, HAND, new Euler(0, 0, 0));
     expect(lag(h)).toBeLessThan(0.01);
     expect(h.sword.tipSpeed).toBeLessThan(0.01);
-  });
-});
-
-describe('grip angle', () => {
-  const pivotOf = (s: Sword) => s.model.children[0];
-
-  it('comes from CONFIG.sword', () => {
-    const { rotation } = pivotOf(new Sword());
-    expect(rotation.x).toBeCloseTo(CONFIG.sword.pitchDeg * DEG);
-    expect(rotation.z).toBeCloseTo(CONFIG.sword.rollDeg * DEG);
-  });
-
-  it('can be tried out in the headset from the URL', () => {
-    vi.stubGlobal('location', { search: '?swordPitch=-30&swordRoll=0' });
-    const { rotation } = pivotOf(new Sword());
-    expect(rotation.x).toBeCloseTo(-30 * DEG);
-    expect(rotation.z).toBeCloseTo(0);
-  });
-
-  it('ignores a URL value that is not a number', () => {
-    vi.stubGlobal('location', { search: '?swordRoll=abc' });
-    expect(pivotOf(new Sword()).rotation.z).toBeCloseTo(CONFIG.sword.rollDeg * DEG);
   });
 });
