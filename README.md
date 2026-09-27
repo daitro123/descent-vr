@@ -28,7 +28,7 @@ npm run dev          # http://localhost:5173
   - `?emulate` forces the emulator even when a real headset is present. `?emulate&nodevui` runs it without the DevUI, so controller poses are driven only by code (for scripted tests).
   - `?wave=N` starts the run at wave N (`?wave=7` goes straight to the boss).
   - `?showcase` pins the title-screen camera on the bestiary lineup, for reviewing models without a headset.
-  - `?maps` opens the map viewer: fly freely through any map, with no enemies and no walls in the way. `?maps=crypt` opens one map. On the desktop, click to look around, WASD to move, Q/E for down and up, shift to go fast, M for the next map, G to walk at eye height, F for fog. In the headset, the left stick moves where you look, the right stick turns and rises, grip goes fast, and A, B, X and Y switch map, walk or fly, toggle fog, and go back to the start. The readout sits above your left controller.
+  - `?fly` opens the map viewer: fly freely through any map, with no enemies and no walls in the way. `?fly=crypt` opens one map. Walk mode drops you to eye height with the player's collision. R (desktop) or Y (headset) steps through the map's start, its landmarks and an overview from above. On the desktop, click to look around, WASD to move, Q/E for down and up, shift to go fast, M for the next map, G to walk, F for fog. In the headset, the left stick moves where you look, the right stick turns and rises, grip goes fast, A is the next map, B walks or flies, and X toggles fog. The readout floats over your left controller.
 
 Other commands: `npm test` runs the unit tests, `npm run typecheck`, `npm run build`.
 
@@ -73,7 +73,7 @@ src/
   game.ts            owns the systems; wave director, spawning, summons, death/victory
   showcase.ts        title-screen bestiary (?showcase)
   viewer/
-    mapViewer.ts     ?maps: free flight through every map in world/maps.ts
+    mapViewer.ts     ?fly: free flight through every map in maps/
   models/
     kit.ts           procedural modelling: primitives → one merged, vertex-coloured, pixel-grained mesh
     rig.ts           humanoid skeleton, rigidly skinned (a whole animated character is one draw call)
@@ -95,7 +95,7 @@ src/
     kinds.ts         per-type brains: grunt, archer, brute, the Warden
     poses.ts         keyframe poses; the arc between wind-up and strike is the blow
     tokens.ts        attack tokens: who may swing, and spacing between swings
-  world/             arena (merged geometry, colliders), map registry, glow sprites, blob shadows, pixel textures, orbs
+  world/             arena (merged geometry, colliders), glow sprites, blob shadows, pixel textures, orbs
   fx/                particles, sword trail, shockwaves, floating text, spatial synthesised SFX
   ui/                belt HUD and vignette, enemy health bars, debug text panel
 ```

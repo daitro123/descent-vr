@@ -51,8 +51,8 @@ async function start(): Promise<void> {
 
   // ?inspect opens the model inspector instead of the game.
   if (params.has('inspect')) return startInspector(renderer, scene, camera);
-  // ?maps opens the map viewer (?maps=<id> for one map) instead of the game.
-  if (params.has('maps')) return startMapViewer(renderer, scene, camera, device);
+  // ?fly opens the map viewer (?fly=<id> for one map) instead of the game.
+  if (params.has('fly')) return startMapViewer(renderer, scene, camera, device);
 
   // ?wave=N starts the run at wave N (7 is the Warden) for testing.
   const firstWave = Math.max(1, Math.min(CONFIG.waves.list.length, Number(params.get('wave')) || 1));
@@ -124,7 +124,7 @@ async function startMapViewer(
   device: unknown,
 ): Promise<void> {
   const { MapViewer } = await import('./viewer/mapViewer');
-  const viewer = new MapViewer(scene, camera, renderer, params.get('maps'));
+  const viewer = new MapViewer(scene, camera, renderer, params.get('fly'));
   document.getElementById('intro')?.style.setProperty('display', 'none');
   Object.assign(window, { __descent: { viewer, device, renderer } });
 
