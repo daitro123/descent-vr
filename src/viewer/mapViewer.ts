@@ -4,11 +4,13 @@ import { MAPS } from '../maps/registry';
 import type { GameMap } from '../maps/types';
 import { XRInput } from '../player/input';
 import { TextPanel } from '../ui/panel';
+import { TouchControls } from './touchControls';
 
 // `?fly`: fly freely through any map in src/maps to look it over, with no
 // enemies. `?fly=<id>` opens that map. Flying ignores walls; walk mode puts you
 // at eye height on the ground with the player's collision, to see the map at
-// the player's scale. Works in the headset and on the desktop page.
+// the player's scale. Works in the headset, on the desktop page, and on phones
+// and tablets with on-screen touch controls.
 
 const EYE = 1.6; // desktop camera height above the rig (the headset supplies its own)
 const SPEEDS = [0.5, 1, 2, 4, 8, 16]; // m/s
@@ -28,6 +30,7 @@ const DESKTOP_HELP = [
   'wheel speed   M next map   1-9 pick map',
   'G walk/fly   F fog   R next spot   H hide',
 ];
+const TOUCH_HELP = ['stick: move   drag: look   ▲▼: up/down'];
 
 /** A place the viewer can jump you to. `y` is the rig's height; `pitch` only steers the desktop camera. */
 export interface Viewpoint {
@@ -84,8 +87,10 @@ export class MapViewer {
   private readonly input: XRInput;
   /** Readout floating over the left controller, for the headset. */
   private readonly panel = new TextPanel(0.3);
-  /** Readout on the page, for the desktop. */
+  /** Readout on the page, for the desktop and phones. */
   private readonly hud = document.createElement('div');
+  private readonly hudText = document.createElement('div');
+  private readonly touch: TouchControls;
   private readonly keys = new Set<string>();
   private pitch = 0;
   private snapLatched = false;
@@ -117,16 +122,26 @@ export class MapViewer {
     this.panel.mesh.visible = false;
     scene.add(this.panel.mesh);
 
+    const canvas = renderer.domElement;
+    this.touch = new TouchControls(
+      canvas,
+      {
+        map: () => void this.show(this.index + 1),
+        walk: () => this.toggleWalk(),
+        fog: () => this.toggleFog(),
+        spot: () => this.goTo(this.spot + 1),
+      },
+      (yaw, pitch) => this.look(yaw, pitch),
+    );
     this.hud.id = 'viewer-hud';
+    this.hud.append(this.hudText, this.touch.buttons);
     document.body.appendChild(this.hud);
 
-    const canvas = renderer.domElement;
-    canvas.addEventListener('click', () => void canvas.requestPointerLock?.()?.catch?.(() => {}));
+    canvas.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse') void canvas.requestPointerLock?.()?.catch?.(() => {});
+    });
     addEventListener('mousemove', (e) => {
-      if (document.pointerLockElement !== canvas) return;
-      this.rig.rotation.y -= e.movementX * LOOK;
-      this.pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, this.pitch - e.movementY * LOOK));
-      if (!renderer.xr.isPresenting) camera.rotation.x = this.pitch;
+      if (document.pointerLockElement === canvas) this.look(e.movementX * LOOK, e.movementY * LOOK);
     });
     addEventListener('wheel', (e) => this.setSpeed(this.speed - Math.sign(e.deltaY)), { passive: true });
     addEventListener('keydown', (e) => this.onKey(e, true));
@@ -174,6 +189,13 @@ export class MapViewer {
     if (!this.renderer.xr.isPresenting) this.camera.rotation.set(s.pitch, 0, 0);
     if (s.clear) this.fog = false;
     this.applyAtmosphere();
+  }
+
+  /** Turn the view: `yaw` to the right and `pitch` down, in radians. */
+  private look(yaw: number, pitch: number): void {
+    this.rig.rotation.y -= yaw;
+    this.pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, this.pitch - pitch));
+    if (!this.renderer.xr.isPresenting) this.camera.rotation.x = this.pitch;
   }
 
   toggleFog(): void {
@@ -250,12 +272,13 @@ export class MapViewer {
       if (left.primaryPressed) this.toggleFog(); // X
       if (left.secondaryPressed) this.goTo(this.spot + 1); // Y
     } else {
-      // Keys only drive the desktop view: in the emulator its own play mode uses them.
+      // Keys and touch only drive the page view: in the emulator its own play mode uses the keys.
       const held = (key: string) => (this.keys.has(key) ? 1 : 0);
-      forward = held('w') - held('s');
-      strafe = held('d') - held('a');
-      rise = held('e') - held('q');
-      fast = this.keys.has('shift');
+      const t = this.touch;
+      forward = held('w') - held('s') - t.moveY;
+      strafe = held('d') - held('a') + t.moveX;
+      rise = held('e') - held('q') + t.rise;
+      fast = this.keys.has('shift') || t.fast;
     }
 
     // Forward is where you look; flying follows your pitch, walking stays level.
@@ -304,7 +327,8 @@ export class MapViewer {
     this.placePanel();
     const status = this.describe(map);
     this.panel.draw([...status, '', ...QUEST_HELP]);
-    this.drawHud([...status, '', ...DESKTOP_HELP]);
+    this.touch.sync(this.walking, this.fog);
+    this.drawHud(this.touch.active ? [...status, ...TOUCH_HELP] : [...status, '', ...DESKTOP_HELP]);
   }
 
   /**
@@ -333,7 +357,7 @@ export class MapViewer {
     const f = (v: number) => v.toFixed(1);
     return [
       heading,
-      `${this.walking ? 'walk' : 'fly'}   ${SPEEDS[this.speed]} m/s   fog ${this.fog ? 'on' : 'off'}   next: ${this.spots[(this.spot + 1) % this.spots.length].label}`,
+      `${this.walking ? 'walk' : 'fly'}   ${SPEEDS[this.speed] * (this.touch.fast ? BOOST : 1)} m/s   fog ${this.fog ? 'on' : 'off'}   next: ${this.spots[(this.spot + 1) % this.spots.length].label}`,
       `x ${f(_head.x)}  y ${f(_head.y)}  z ${f(_head.z)}   ${COMPASS[Math.round(bearing / 45) % 8]} ${bearing.toFixed(0)}°`,
       `${f(above)} m above the ground${inside ? '' : ', outside the map'}`,
     ];
@@ -346,6 +370,6 @@ export class MapViewer {
     const [head, ...rest] = lines;
     const b = document.createElement('b');
     b.textContent = head;
-    this.hud.replaceChildren(b, '\n' + rest.join('\n'));
+    this.hudText.replaceChildren(b, '\n' + rest.join('\n'));
   }
 }
