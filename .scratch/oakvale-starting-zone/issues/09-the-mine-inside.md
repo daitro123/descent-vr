@@ -1,7 +1,7 @@
 # The mine inside
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 02, 04
 
 ## Question
