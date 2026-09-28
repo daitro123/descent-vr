@@ -1,7 +1,7 @@
 # Progression, death and saving
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 05
 
 ## Question
