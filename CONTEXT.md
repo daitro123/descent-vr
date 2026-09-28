@@ -69,5 +69,5 @@ Where you wake after dying, at full health, with nothing lost. Oakvale has two: 
 _Avoid_: graveyard, checkpoint, spawn
 
 **Interior**:
-The inside of a building you can walk into, part of its zone and entered through its door without a loading screen. In Oakvale, the inn and the house by the well.
-_Avoid_: instance, room, indoor zone, cell
+The inside of a building or a mine you can walk into, part of its zone and entered through its door or mouth without a loading screen. In Oakvale: the inn, the house by the well, and the old mine.
+_Avoid_: instance, dungeon (in WoW, a separate copy for a group), room, indoor zone, cell

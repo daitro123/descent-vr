@@ -59,3 +59,5 @@ Settled with Tom over three rounds on 2026-09-28; the rounds are under Comments.
 - Dying or fleeing mid-fight: the Warden goes back to full health and the skeletons it raised crumble. They also crumble when it falls.
 - Refilling: every group of enemies refills as a **camp**: the farm, the lumber camp with its leader, the watchtower, and the mine's undead, before and after the chain. Only the Warden stays dead. The leader's orders don't come back once handed in.
 - No names or levels over heads in Oakvale. It keeps the view clean in the headset, and can come back with quest tracking if levels turn out hard to judge.
+
+**2026-09-28:** [The mine inside](09-the-mine-inside.md) is resolved (by Claude on Tom's behalf) and sets the mine's counts: 2 grunts and an archer in the cart hall and a grunt and an archer in the gallery (level 3), a brute alone in the dig and another in the antechamber (level 4), then the Warden in today's crypt hall at the bottom. The Warden sits slumped on its throne while What Lies Below is active and rises as you step through the hall's gate; it never leaves the hall, and going back out through the gate counts as fleeing.
