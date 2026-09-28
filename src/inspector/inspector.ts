@@ -17,6 +17,9 @@ import {
   type WebGLRenderer,
 } from 'three';
 import { buildCharacter, type EnemyKind, type WeaponSpec } from '../models/characters';
+import { friendlyClips } from '../models/people-prototype/clips';
+import { PEOPLE, type Person } from '../models/people-prototype/people';
+import { IDLE } from '../enemies/poses';
 import { createModelMaterial, type ModelMaterial } from '../models/materials';
 import type { Rig } from '../models/rig';
 import { XRInput } from '../player/input';
@@ -32,6 +35,8 @@ export interface InspectorEntry {
   kind: EnemyKind;
   variant: number;
   label: string;
+  /** PROTOTYPE (Friendly characters): a human, shown beside a skeleton grunt for scale. */
+  person?: Person;
 }
 
 /** Every model the game builds: grunts come in six helmet/cloth/weapon combos. */
@@ -40,6 +45,7 @@ export const ENTRIES: InspectorEntry[] = [
   { kind: 'archer', variant: 0, label: 'Archer' },
   { kind: 'brute', variant: 0, label: 'Brute' },
   { kind: 'warden', variant: 0, label: 'Bone Warden' },
+  ...PEOPLE.map((p) => ({ kind: p.behaviour ?? ('grunt' as const), variant: 0, label: p.label, person: p })),
 ];
 
 export const SPEEDS = [1, 0.5, 0.25, 0.1];
@@ -76,6 +82,9 @@ export class Inspector {
   private readonly keys = new Set<string>();
   private readonly flicks = { left: { x: false, y: false }, right: { x: false, y: false } };
 
+  /** PROTOTYPE: a skeleton grunt beside every human, for scale and family. */
+  private readonly companion = buildCharacter('grunt', { material: createModelMaterial(), variant: 0 }).rig;
+
   entry = 0;
   clip = 0;
   time = 0;
@@ -97,6 +106,9 @@ export class Inspector {
     stage.position.z = STAGE_Z;
     stage.add(this.scaled);
     this.scaled.add(this.turntable, buildPlinth(), buildRuler());
+    this.companion.mesh.position.set(-1.25, 0, 0.1);
+    this.companion.apply(IDLE.grunt);
+    this.scaled.add(this.companion.mesh);
     this.guides.add(this.weaponLine, this.arrowLine);
     this.root.add(stage, this.guides);
 
@@ -133,8 +145,9 @@ export class Inspector {
     if (!b) {
       const e = ENTRIES[index];
       const material = createModelMaterial();
-      const { rig, weapon } = buildCharacter(e.kind, { material, variant: e.variant });
-      b = { rig, weapon, material, clips: clipsFor(e.kind) };
+      const { rig, weapon } = e.person ? e.person.build(material) : buildCharacter(e.kind, { material, variant: e.variant });
+      const clips = e.person && !e.person.behaviour ? friendlyClips(e.person.stand) : clipsFor(e.kind);
+      b = { rig, weapon, material, clips };
       this.built.set(index, b);
     }
     return b;
@@ -150,6 +163,7 @@ export class Inspector {
     this.clip = Math.max(0, found);
     this.time = 0;
     this.turntable.add(this.current.rig.mesh);
+    this.companion.mesh.visible = !!ENTRIES[this.entry].person;
   }
 
   playClip(index: number): void {
@@ -297,8 +311,9 @@ export class Inspector {
     const a = clip.attack;
     const timing = a ? `wind ${a.windup}s  swing ${a.active}s  recover ${a.recover}s` : '';
     const height = b.rig.proportions.hipY / 0.92;
+    const tris = b.rig.mesh.geometry.getAttribute('position').count / 3;
     return [
-      `${e.label.toUpperCase()}   ${this.entry + 1}/${ENTRIES.length}   ×${height.toFixed(2)} height`,
+      `${e.label.toUpperCase()}   ${this.entry + 1}/${ENTRIES.length}   ×${height.toFixed(2)} height   ${tris} tris`,
       `${clip.name}   ${this.clip + 1}/${b.clips.length}   ${this.phase}`,
       `${this.time.toFixed(2)} / ${clip.duration.toFixed(2)} s   ${timing}`,
       `${this.playing ? 'playing' : 'PAUSED'}  ${SPEEDS[this.speed]}x   scale ${this.scaled.scale.x.toFixed(2)}   guides ${this.showGuides ? 'on' : 'off'}`,

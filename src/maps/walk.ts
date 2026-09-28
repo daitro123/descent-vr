@@ -142,6 +142,9 @@ export async function startWalk(renderer: WebGLRenderer, scene: Scene, camera: P
   const buildMs = Math.round(performance.now() - t0);
 
   scene.add(map.root);
+  // PROTOTYPE (Friendly characters): everyone stood where they'd live.
+  const people = new URLSearchParams(location.search).has('people') ? (await import('../models/people-prototype/lineup')).buildLineup(map) : null;
+  if (people) scene.add(people);
   scene.background = new Color(map.sky.background);
   scene.fog = new Fog(map.sky.fog.color, map.sky.fog.near, map.sky.fog.far);
   camera.far = map.viewDistance;
@@ -161,7 +164,7 @@ export async function startWalk(renderer: WebGLRenderer, scene: Scene, camera: P
 
   // Handle for poking from the console and for scripted screenshots.
   const teleport = (x: number, z: number, yaw = 0) => walker.teleport(x, z, yaw);
-  Object.assign(window, { __descent: { map, walker, renderer, camera, teleport, buildMs } });
+  Object.assign(window, { __descent: { map, walker, renderer, camera, teleport, buildMs, people, scene } });
 
   const timer = new Timer();
   renderer.setAnimationLoop((time) => {

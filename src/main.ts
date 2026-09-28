@@ -26,6 +26,8 @@ async function start(): Promise<void> {
   const device = (await wantsEmulator())
     ? await (await import('./emulator')).installEmulator(!params.has('nodevui'))
     : null;
+  // PROTOTYPE (Friendly characters): the emulated headset, for scripted checks in walk mode.
+  Object.assign(window, { __xrDevice: device });
 
   const renderer = new WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -104,6 +106,13 @@ async function start(): Promise<void> {
 async function startInspector(renderer: WebGLRenderer, scene: Scene, camera: PerspectiveCamera): Promise<void> {
   const { Inspector } = await import('./inspector/inspector');
   const inspector = new Inspector(renderer);
+  // PROTOTYPE (Friendly characters): ?inspect=<label start> opens on that model.
+  const want = params.get('inspect')?.toLowerCase();
+  if (want) {
+    const { ENTRIES } = await import('./inspector/inspector');
+    const i = ENTRIES.findIndex((e) => e.label.toLowerCase().startsWith(want));
+    if (i >= 0) inspector.show(i);
+  }
   scene.add(inspector.root);
   scene.fog = null;
   scene.background = new Color(0x16131a);
@@ -111,7 +120,7 @@ async function startInspector(renderer: WebGLRenderer, scene: Scene, camera: Per
   // Desktop view: stepped back far enough to see the Warden and the readout.
   camera.position.set(0, 1.5, 1.2);
   camera.lookAt(-0.2, 1.2, -1.8);
-  Object.assign(window, { __descent: { inspector, renderer } });
+  Object.assign(window, { __descent: { inspector, renderer, camera } });
 
   const timer = new Timer();
   renderer.setAnimationLoop((time) => {
