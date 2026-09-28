@@ -1,6 +1,6 @@
 # Research: Quest 3 browser performance budget
 
-Answers ticket [04 — Quest 3 browser performance budget](../issues/04-quest-3-browser-performance-budget.md). Researched September 2026 against three.js **r186** (the version in `package.json`).
+Researched September 2026 against three.js **r186** (the version in `package.json`).
 
 **How the sources were read.** The three.js claims were checked directly against the r186 source (the npm tarball of `three@0.186.1`, identical to the `r186` tag on GitHub). The W3C WebXR and Layers specs and the Khronos `OVR_multiview2` spec were read from their GitHub source. **This environment's egress policy blocks `developers.meta.com`.** Claims from Meta's docs therefore come from search-engine extracts of those pages, not from reading the pages in full. Each Meta citation points at the page the extract came from, and these claims are **medium confidence**. Re-read the linked page before relying on an exact number. Anything that is a rule of thumb and not a documented limit is labelled **(rule of thumb)**.
 

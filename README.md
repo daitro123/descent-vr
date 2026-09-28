@@ -126,7 +126,6 @@ src/
 
 ## Next steps (suggested)
 
-1. A headset playtest pass (see `.scratch/vertical-slice/issues/01-headset-playtest-of-the-white-box.md`).
-2. Loot drops with rolled stats: the core Diablo loop.
-3. Hand-built floors, and a descent between them.
-4. Real models from Blockbench (glTF) once the look is settled. The rig and pose system can drive them.
+1. Loot drops with rolled stats: the core Diablo loop.
+2. Hand-built floors, and a descent between them.
+3. Real models from Blockbench (glTF) once the look is settled. The rig and pose system can drive them.
