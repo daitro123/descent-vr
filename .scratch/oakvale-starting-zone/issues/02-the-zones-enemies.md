@@ -1,7 +1,7 @@
 # The zone's enemies
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 
 
 ## Question
