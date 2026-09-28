@@ -21,3 +21,5 @@ Given the headset playtest notes, what does "deeper combat" mean for the slice? 
 - **Player moves:** shield bash (interrupts a wind-up and exposes the enemy), dash with dodge frames (B/Y), sword parry and clash, Earthshaker (sword tip into the floor, 35 rage), and War Cry now also grants frenzy (+35% damage for 8 s).
 - **Pressure types:** ranged (skeleton archer, with arrows that can be reflected), armoured and unblockable (grave brute: poise, a guard-breaking swing, a red slam), and a boss (the Bone Warden: a three-hit combo, a slam, summons, and a kneel punish window).
 - **Crowd rules:** attack tokens (2 melee, 2 ranged) with a 0.9 s gap between swing starts.
+
+**2026-09-28: the playtest is in** ([Headset playtest of the white box](01-headset-playtest-of-the-white-box.md)). Tom calls combat a viable prototype, to be tweaked later. Sword and shield carry every fight, while shield bash, dash, War Cry, Earthshaker and the orbs are rarely used. Since then the prototype also gained edge-only cuts, enemy guards (high, left, right and low), hits that need a committed swing, a trailing sword tip, and a `?duel` duelist that blocks about 90% of swings.

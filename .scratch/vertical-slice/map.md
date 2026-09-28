@@ -23,6 +23,7 @@ A written **vertical-slice spec** for Descent VR, ready to hand off as build tic
 <!-- one line per resolved ticket: [title](link): gist -->
 
 - [Quest 3 browser performance budget](issues/04-quest-3-browser-performance-budget.md): target 72 fps. Draw calls are the binding limit (~300, since every draw runs once per eye). At most 4 constant point lights, no shadows, ~8 enemies on screen, rooms merged and culled to what's visible.
+- [Headset playtest of the white box](issues/01-headset-playtest-of-the-white-box.md): combat is a viable prototype on the Quest 3 (Tom, 2026-09-28). Comfortable, no stutter, enemies readable, another wave wanted. Sword and shield carry every fight; the extra abilities go mostly unused.
 
 ## Not yet specified
 

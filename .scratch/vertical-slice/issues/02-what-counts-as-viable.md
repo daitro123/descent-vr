@@ -1,7 +1,7 @@
 # What counts as viable?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by:
 
 ## Question

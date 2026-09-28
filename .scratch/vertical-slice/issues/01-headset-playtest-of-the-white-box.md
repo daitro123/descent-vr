@@ -1,7 +1,7 @@
 # Headset playtest of the white box
 
 Type: task
-Status: claimed
+Status: resolved
 Blocked by:
 Mode: HITL
 
@@ -46,3 +46,18 @@ Checklist for the dev:
 - **Grave brute:** head hits stun-locked it, which made it useless. Fixed in PR #8.
 - **Guarding:** a `?duel` duelist that blocks about 90% was added to test it (PR #10). Duels exposed open legs (PR #11), then open hips and endless stabs (PR #12).
 - **Verdict (Tom, 2026-09-28):** combat is a viable prototype. It will be tweaked later, but it is in a good state for now.
+
+## Answer
+
+Played on the Quest 3 across 2026-09-27 and 2026-09-28. **Tom's verdict: combat is a viable prototype.** It will be tweaked later, but it is good enough to build the slice on. The fixes the play demanded are all merged (see the comment above: archer aim, sword edge, hits needing a committed swing and a trailing tip, the brute stun-lock, guard gaps at legs, hips and stabs).
+
+The checklist items that never came up in those sessions, as confirmed by Tom on 2026-09-28:
+
+- **Comfort:** stick movement, snap turn and the dash are fine. No motion sickness.
+- **Frame rate:** no stutter in a full wave.
+- **Reading enemies:** the side a slash comes from can mostly be read in time to block, parry or duck.
+- **Extras:** sword and shield carry every fight. Shield bash, dash, War Cry, Earthshaker and the orbs are rarely used.
+- **Brute, archers and the Warden:** fair, now that the brute no longer stun-locks.
+- **Fun:** yes, he wants another wave.
+
+No tuning values in `src/config.ts` were changed during play beyond what the PRs above merged.
