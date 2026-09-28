@@ -31,3 +31,10 @@ Decide by prototyping one camp (at the lumber camp, say) and playing it on the h
 - **C · Sight and alarm:** each sees 16 m ahead in a 120° cone, blocked by trees, tents and hills, and hears you within 3 m. It stops with a "?", then shouts and everyone within 15 m comes. Each gives up 6 s after losing sight of you, or 40 m from its post. You can sneak up behind the fire-watchers.
 
 A "?", "!" or "home" over a head shows what it's doing; holding the left grip shows a readout with the camp's state, the leash, and the frame rate, draw calls and triangles. Clicking the right stick doubles the camp to 14 for the budget. In the emulator, 7 more skeletons cost about 14k triangles and 30 draw calls; the terrain and trees are most of the ~200k.
+
+**2026-09-28:** Tom played round one on the Quest: A (the WoW-style pull), but the seven stood too close together and the camp was too easy to clear. He asked for fewer of them, for each to bring anyone within 10 m instead of 6 m, and for the camp to be harder. Round two at `?camp` (B and C are in the history at merge 7195835): five (3 thugs, an archer, the leader) spread round the clearing 5 to 18 m apart, so walking up the camp road pulls three. Three settings to compare, switched with a left-stick click:
+
+- **1 · Stronger:** 40% more health and damage; two swing at you at a time, as now.
+- **2 · More at once:** today's strength, but three swing at you at a time.
+- **3 · Both.**
+
