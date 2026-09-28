@@ -24,6 +24,10 @@ _Avoid_: active zone, loaded zone
 A friendly character who hands out quests and takes them back when they're done.
 _Avoid_: NPC (too broad: every friendly character is an NPC), questgiver
 
+**Villager**:
+A friendly character who lives in a zone and gives no quests. Oakvale has three: the innkeeper, the smith and the farmer.
+_Avoid_: NPC (too broad), townsfolk, civilian
+
 **Quest chain**:
 A run of quests where handing one in unlocks the next.
 _Avoid_: storyline, questline
