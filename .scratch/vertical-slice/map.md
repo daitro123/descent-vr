@@ -24,13 +24,13 @@ A written **vertical-slice spec** for Descent VR, ready to hand off as build tic
 
 - [Quest 3 browser performance budget](issues/04-quest-3-browser-performance-budget.md): target 72 fps. Draw calls are the binding limit (~300, since every draw runs once per eye). At most 4 constant point lights, no shadows, ~8 enemies on screen, rooms merged and culled to what's visible.
 - [Headset playtest of the white box](issues/01-headset-playtest-of-the-white-box.md): combat is a viable prototype on the Quest 3 (Tom, 2026-09-28). Comfortable, no stutter, enemies readable, another wave wanted. Sword and shield carry every fight; the extra abilities go mostly unused.
+- [What counts as viable?](issues/02-what-counts-as-viable.md): worth continuing as Tom's own hobby game, judged by Tom alone. The signal is wanting another run straight away, on evenings he isn't testing. Gates: 72 fps and no sickness or sore arms. Dull runs with fun combat mean pivot to an arena or duel mode; boring combat means stop.
 
 ## Not yet specified
 
 - **Enemy roster:** which enemy types the slice needs and what each one tests in the player (ranged, which forces shield use and movement, is the obvious candidate). This waits on the combat-depth decision.
 - **Atmosphere pass scope:** how much lighting, fog, torchlight and audio the slice needs to *feel* like a descent. Sharpens once the floors and the performance budget are known.
 - **The 3 items themselves:** what they are and what they change. This waits on the item UI prototype and on how runs work.
-- **Onboarding inside the slice:** how a first-time player learns sword, shield, parry and War Cry without the intro page. It matters for any viability test that involves another person.
 - **A boss or end-of-slice moment:** whether the slice ends in a climax and what it would be.
 - **Assembling the spec:** once the decisions above are in, write the vertical-slice spec itself and break it into build tickets.
 
@@ -43,3 +43,4 @@ A written **vertical-slice spec** for Descent VR, ready to hand off as build tic
 - Full art production (Blockbench models, pixel-art pipeline). Only a minimal atmosphere pass is in scope.
 - Procedurally generated dungeons. The slice uses hand-built floors, and procedural generation is a later effort.
 - Deep Diablo loot (rolled affixes, rarity tiers, big inventories). The slice has about 3 items.
+- Onboarding inside the slice (how a first-time player learns the controls). Only Tom plays the viability test, see [What counts as viable?](issues/02-what-counts-as-viable.md).

@@ -1,7 +1,7 @@
 # How a run works
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by:
 
 ## Question
