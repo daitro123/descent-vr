@@ -42,7 +42,45 @@ A written **spec for Oakvale as a playable, single-player starting zone**, ready
 ## Not yet specified
 
 - **Triangle budget:** Oakvale seen from the village is already about 250k to 300k triangles over both eyes, the rule-of-thumb limit, before NPCs and enemies are added. Interiors and the mine cost little: a few thousand triangles per room, and the outdoors is hidden while you're inside with the door shut or past the mine's first bend. The crest of the southern pass looking north over Oakvale is a new view to measure, with both zones loaded; Brackenmoor itself is bare and cheap. How to cut (chunk stand-ins, fewer trees) waits on a measurement on the headset. A character costs one draw call per eye: a human 630 to 900 triangles, a skeleton grunt about 1,050, the Warden 1,300. The four friendly characters add about 2,800, of which Hale, the smith and the farmer (about 2,100) are in view from the crossroads. A living zone adds chimney smoke (one draw call, about 120 triangles) and bark panels (one draw call each while shown), and its sounds cost CPU, to measure on the headset alongside. Getting around adds a handful of draw calls and a few hundred triangles: the quest arrow, the run's vignette (while you run), the map board and the signposts' names. The spec carries this into its Performance section, with the order of cuts to make if the headset measures too many; the measurement itself waits on the headset.
-- **Assembling the spec:** done. The spec is [spec.md](spec.md), written on 2026-09-28 by Claude on Tom's behalf from every decision above; the calls it made beyond the tickets are listed in its Further Notes. Breaking it into build tickets is next.
+- **Assembling the spec:** done. The spec is [spec.md](spec.md), written on 2026-09-28 by Claude on Tom's behalf from every decision above; the calls it made beyond the tickets are listed in its Further Notes. It was broken into build tickets on 2026-09-28: see Build tickets below.
+
+## Build tickets
+
+Written on 2026-09-28 from [spec.md](spec.md) with `/to-tickets`, **by Claude on Tom's behalf**. They are numbered on from the map's thirteen tickets in the same `issues/` folder, and built one at a time in number order: each lists the tickets that genuinely block it, and every blocker has a lower number, so the first open ticket whose blockers are all done is always the next one. Each ticket's `Status:` line says where it stands.
+
+1. [14: The World: shared light, sky, fog and ground](issues/14-the-world-shared-light-sky-fog-and-ground.md)
+2. [15: The Adventure at the plain URL, the arena at `?arena`](issues/15-the-adventure-at-the-plain-url-and-the-arena-at-arena.md)
+3. [16: The farm's camp](issues/16-the-farms-camp.md)
+4. [17: Levels and XP](issues/17-levels-and-xp.md)
+5. [18: Marshal Hale and Raiders in the Fields](issues/18-marshal-hale-and-raiders-in-the-fields.md)
+6. [19: Saving](issues/19-saving.md)
+7. [20: The human body](issues/20-the-human-body.md)
+8. [21: The Lumber Camp](issues/21-the-lumber-camp.md)
+9. [22: The patrol and the watchtower](issues/22-the-patrol-and-the-watchtower.md)
+10. [23: The inn](issues/23-the-inn.md)
+11. [24: The house by the well and the smithy](issues/24-the-house-by-the-well-and-the-smithy.md)
+12. [25: The old mine: the mouth to the gallery](issues/25-the-old-mine-mouth-to-gallery.md)
+13. [26: The old mine: down to the Warden's hall](issues/26-the-old-mine-down-to-the-wardens-hall.md)
+14. [27: The mine's undead](issues/27-the-mines-undead.md)
+15. [28: The Warden and What Lies Below](issues/28-the-warden-and-what-lies-below.md)
+16. [29: Villagers at work](issues/29-villagers-at-work.md)
+17. [30: Oakvale's ambience and places' sounds](issues/30-oakvales-ambience-and-places-sounds.md)
+18. [31: Sound that follows the light](issues/31-sound-that-follows-the-light.md)
+19. [32: Finding the way](issues/32-finding-the-way.md)
+20. [33: The run](issues/33-the-run.md)
+21. [34: Oakvale in streamed chunks](issues/34-oakvale-in-streamed-chunks.md)
+22. [35: Building chunks in a worker](issues/35-building-chunks-in-a-worker.md)
+23. [36: The pass and Brackenmoor's land](issues/36-the-pass-and-brackenmoors-land.md)
+24. [37: Crossing the seam](issues/37-crossing-the-seam.md)
+25. [38: The whole zone in one sitting](issues/38-the-whole-zone-in-one-sitting.md)
+
+`/to-tickets` would have asked Tom whether the granularity, the blocking edges and the splits were right. These were answered **on Tom's behalf**, for him to revisit:
+
+- **Granularity:** 25 tickets, each sized for one thread to build, test and merge. The big pieces are split where a thread would run out of room: the mine into its tunnels (two tickets), its undead and the Warden; sound into places and the mix; streaming into chunks and the worker; the seam into the land and the crossing.
+- **Order:** the spec's own: the World and the Adventure/Arena split first, then the first playable slice (the farm's camp, levels, Hale and Raiders in the Fields, saving), then the human body, the lumber camp, the interiors, the mine and the Warden, the living zone, getting around, streaming, Brackenmoor, and a last ticket that plays the whole zone through and measures the budget. Streaming comes before Brackenmoor so the second zone is written in the streamed shape from the start.
+- **Stand-ins:** skeletons stand in for bandits and the talk prototype's Hale for the real one until [20: The human body](issues/20-the-human-body.md); the village respawn point stands outside the inn's door until [23: The inn](issues/23-the-inn.md) opens it.
+- **The adventure state** takes the whole quest chain as data in ticket 18 and is tested in full there; each place's part of the world arrives with its own ticket, and later tickets add their answers (the orders, the Warden, the sword, the barks, the quest arrow).
+- **Smaller calls**, each marked on its ticket: `?duel`, `?wave` and `?showcase` on their own also open the arena; the mine's route ends at fallen rock after the gallery until the rest is dug; the Warden's hall is built by the same code as the arena's.
 
 ## Out of scope
 
