@@ -21,9 +21,10 @@ const _cam = new Vector3();
 
 let texture: CanvasTexture | null = null;
 
-/** Soft round falloff, drawn once. */
-function glowTexture(): CanvasTexture {
+/** Soft round falloff, drawn once. Null outside a browser (unit tests build zones in Node). */
+function glowTexture(): CanvasTexture | null {
   if (texture) return texture;
+  if (typeof document === 'undefined') return null;
   const size = 64;
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;

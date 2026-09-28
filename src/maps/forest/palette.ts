@@ -60,10 +60,10 @@ export const SKY = {
   zenith: 0x4f86c8,
   horizon: 0xbcd6e8,
   haze: 0xc8d8dc,
-  ground: 0x8aa06a,
   sun: 0xfff2c8,
-  cloud: 0xf6f4ee,
-  cloudShade: 0xd8dce4,
 } as const;
+
+/** The late-afternoon light: warm sun, a cool sky above and the grass's green bounced up from below. */
+export const LIGHT = { sun: 0xfff0d4, sky: 0xd4e4f4, ground: 0x5e6e3e } as const;
 
 export const WATER = { deep: 0x2e5a6e, shallow: 0x4a8090, foam: 0x9ac4c8 } as const;

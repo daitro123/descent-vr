@@ -7,6 +7,7 @@ export function buildCrypt(): GameMap {
   const arena = new Arena();
   const h = CONFIG.arena.halfSize;
   return {
+    kind: 'whole',
     id: 'crypt',
     root: arena.root,
     sky: { background: 0x0c0a0e, fog: { color: 0x0c0a0e, near: 6, far: h * 2.2 } },
