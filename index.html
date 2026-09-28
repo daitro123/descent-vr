@@ -8,20 +8,37 @@
   </head>
   <body>
     <div id="intro">
-      <h1>DESCENT VR — combat prototype</h1>
-      Warrior versus the crypt: seven waves and the Bone Warden. Put on a headset and press <b>Enter VR</b>.
-      <ul>
-        <li>Right hand: sword. Swing fast (the blade glows blue) to deal damage. Head hits crit.</li>
-        <li>Left hand: shield. Hold it where the blow will land; push it into the blow to parry. Punch enemies with it to bash.</li>
-        <li>Orange glow: blockable. Red glow: unblockable, get out of the way. Duck horizontal slashes.</li>
-        <li>Left stick: move. Right stick: snap turn. B / Y: dash.</li>
-        <li>A / X: War Cry (50 rage). Sword tip into the floor: Earthshaker (35 rage).</li>
-        <li>Touch red orbs to heal.</li>
-      </ul>
-      <a href="?inspect">Model inspector</a>: every enemy and its animations on a turntable.<br />
-      <a href="?fly">Map viewer</a>: fly freely through the maps.<br />
-      <a href="?map=forest">Walk the forest</a>: the outdoor map, no enemies.<br />
-      <a href="?duel">Duel</a>: practice against a duelist that blocks most swings.
+      <section data-game="adventure">
+        <h1>DESCENT VR — Oakvale</h1>
+        Oakvale, a forest valley and the first zone of a bigger world. You start at the crossroads with sword and shield.
+        Nothing fights you yet: the quests, the bandits and the old mine come next. Put on a headset and press <b>Enter VR</b>.
+        <ul>
+          <li>Left stick: walk, where you look. Right stick: snap turn. B / Y: dash.</li>
+          <li>Right hand: sword. Left hand: shield.</li>
+          <li>Look down at your belt for your health.</li>
+        </ul>
+        <p class="loading">Loading Oakvale…</p>
+      </section>
+      <section data-game="arena">
+        <h1>DESCENT VR — the arena</h1>
+        Warrior versus the crypt: seven waves and the Bone Warden. Put on a headset and press <b>Enter VR</b>.
+        <ul>
+          <li>Right hand: sword. Swing fast (the blade glows blue) to deal damage. Head hits crit.</li>
+          <li>Left hand: shield. Hold it where the blow will land; push it into the blow to parry. Punch enemies with it to bash.</li>
+          <li>Orange glow: blockable. Red glow: unblockable, get out of the way. Duck horizontal slashes.</li>
+          <li>Left stick: move. Right stick: snap turn. B / Y: dash.</li>
+          <li>A / X: War Cry (50 rage). Sword tip into the floor: Earthshaker (35 rage).</li>
+          <li>Touch red orbs to heal.</li>
+        </ul>
+      </section>
+      <nav>
+        <a href="./">Oakvale</a>: the game.<br />
+        <a href="?arena">The arena</a>: the combat prototype, seven waves and the Bone Warden.<br />
+        <a href="?duel">Duel</a>: practice against a duelist that blocks most swings.<br />
+        <a href="?inspect">Model inspector</a>: every enemy and its animations on a turntable.<br />
+        <a href="?fly">Map viewer</a>: fly freely through the maps.<br />
+        <a href="?map=forest">Walk the forest</a>: Oakvale with nothing in it.
+      </nav>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

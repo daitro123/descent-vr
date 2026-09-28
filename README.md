@@ -1,6 +1,6 @@
 # Descent VR
 
-A Diablo-like action RPG for VR that runs in the browser (Three.js + WebXR). This is a **combat prototype**: one crypt hall, four enemy types including a boss, and a warrior with a sword and shield. It exists to prove the melee combat feel before content goes in.
+A single-player action RPG for VR that runs in the browser (Three.js + WebXR), growing into a WoW-style world of zones joined without loading screens. The plain URL is the **Adventure**: Oakvale, the starting zone, where you walk out from the crossroads with a sword and shield (its quests, camps and the old mine are being built, see `.scratch/oakvale-starting-zone/`). The **arena** at `?arena` is the combat prototype that came first: one crypt hall, four enemy types including a boss, seven waves.
 
 For why this stack, other options, and the pixel-art pipeline, see [docs/tech-research.md](docs/tech-research.md).
 
@@ -9,7 +9,7 @@ For why this stack, other options, and the pixel-art pipeline, see [docs/tech-re
 **https://daitro123.github.io/descent-vr/**
 
 - **On a Quest:** open the link in the Quest browser and press **Enter VR**. GitHub Pages serves over HTTPS, so WebXR works with no dev server and no certificate to accept.
-- **On a desktop:** the same link loads the IWER emulator (see below). The URL flags below work there too, for example `…/descent-vr/?wave=7`.
+- **On a desktop:** the same link loads the IWER emulator (see below). The URL flags below work there too, for example `…/descent-vr/?arena` for the arena.
 
 Every push to `main` rebuilds and publishes the site ([`.github/workflows/pages.yml`](.github/workflows/pages.yml)). Pull requests run the same typecheck, tests and build without deploying. This needs the repository's **Settings → Pages → Build and deployment → Source** set to **GitHub Actions**.
 
@@ -24,13 +24,16 @@ npm run dev          # http://localhost:5173
 - **On a Quest:** WebXR needs a secure origin. Use either option:
   - `npm run dev:quest`, then open `https://<your-LAN-IP>:5173` in the Quest browser and accept the self-signed certificate.
   - Or connect over USB with `adb reverse tcp:5173 tcp:5173` and open `http://localhost:5173` on the headset.
-- URL flags:
-  - `?emulate` forces the emulator even when a real headset is present. `?emulate&nodevui` runs it without the DevUI, so controller poses are driven only by code (for scripted tests).
-  - `?wave=N` starts the run at wave N (`?wave=7` goes straight to the boss).
-  - `?duel` fights practice duelists one at a time: grunts that block about nine swings in ten. After each one falls, a banner shows how many of your hits it blocked.
-  - `?showcase` pins the title-screen camera on the bestiary lineup, for reviewing models without a headset.
+- URL flags ([`src/route.ts`](src/route.ts) reads them):
+  - The plain URL is Oakvale. Before VR the page shows it from where you'll start, slowly turning behind the intro.
+  - `?arena` is the wave game in the crypt hall. Its flags work alone too, so older links still open it:
+    - `?wave=N` starts the run at wave N (`?wave=7` goes straight to the boss).
+    - `?duel` fights practice duelists one at a time: grunts that block about nine swings in ten. After each one falls, a banner shows how many of your hits it blocked.
+    - `?showcase` pins the title-screen camera on the bestiary lineup, for reviewing models without a headset.
+  - `?perf` adds a readout of the frame rate, draw calls, triangles and shader programs, low on the left of your view, over Oakvale or the arena.
+  - `?emulate` forces the emulator even when a real headset is present. `?emulate&nodevui` runs it without the DevUI, so controller poses are driven only by code (for scripted tests). `window.__descent` is the debug handle; in Oakvale it has `teleport(x, z, yaw)` and `step(seconds)`, which runs the game without waiting for frames.
   - `?fly` opens the map viewer: fly freely through any map, with no enemies and no walls in the way. `?fly=crypt` opens one map. Walk mode drops you to eye height with the player's collision. R (desktop) or Y (headset) steps through the map's start, its landmarks and an overview from above. On the desktop, click to look around, WASD to move, Q/E for down and up, shift to go fast, M for the next map, G to walk, F for fog. In the headset, the left stick moves where you look, the right stick turns and rises, grip goes fast, A is the next map, B walks or flies, and X toggles fog. The readout floats over your left controller. On a phone or tablet, a stick (bottom left) moves, dragging anywhere else looks around, ▲ ▼ go up and down, and buttons under the readout switch map, walk, fog, fast and spot.
-  - `?map=forest` walks the outdoor map with no enemies (`?map=crypt` for the crypt hall). Headset: left stick moves, right stick turns. Desktop: WASD or the arrow keys walk (Shift to hurry), dragging looks around.
+  - `?map=forest` walks Oakvale from its start with no enemies (`?map=crypt` for the crypt hall). Headset: left stick moves, right stick turns. Desktop: WASD or the arrow keys walk (Shift to hurry), dragging looks around.
 
 Other commands: `npm test` runs the unit tests, `npm run typecheck`, `npm run build`.
 
@@ -48,7 +51,7 @@ Other commands: `npm test` runs the unit tests, `npm run typecheck`, `npm run bu
 | Sword tip driven into the floor | **Earthshaker**: 35 rage for a shockwave where the tip lands |
 | Hand or feet | Touch a red orb to heal |
 
-The belt HUD (look down) shows health on the left orb and rage on the right orb, with pips for Earthshaker and War Cry beneath it. Between the orbs are the wave, the enemies left and the dash cooldown. Rage builds from hits, blocks, parries and bashes.
+The belt HUD (look down) shows health on the left orb and rage on the right orb, with pips for Earthshaker and War Cry beneath it. Between the orbs is the dash cooldown, and in the arena the wave and the enemies left. Rage builds from hits, blocks, parries and bashes.
 
 ### Reading enemies
 
@@ -71,9 +74,11 @@ A parried or bashed enemy flickers **blue** while it is *exposed* and takes 50% 
 ```
 src/
   config.ts          every gameplay number (enemy types, attacks, waves, abilities), for tuning
-  main.ts            renderer and XR settings, frame loop, emulator bootstrap, debug handle
-  game.ts            owns the systems; wave director, spawning, summons, death/victory
-  showcase.ts        title-screen bestiary (?showcase)
+  route.ts           what the page runs, from its query string (unit tested)
+  main.ts            renderer and XR settings, each mode's frame loop, emulator bootstrap, debug handles
+  adventure.ts       the plain URL: Oakvale in the World, the player, the belt
+  game.ts            the arena (?arena): owns its systems; wave director, spawning, summons, death/victory
+  showcase.ts        the arena's title-screen bestiary (?showcase)
   viewer/
     mapViewer.ts     ?fly: free flight through every map in maps/
     touchControls.ts on-screen stick, look and buttons for the viewer on phones
@@ -98,7 +103,8 @@ src/
     kinds.ts         per-type brains: grunt, archer, brute, the Warden
     poses.ts         keyframe poses; the arc between wind-up and strike is the blow
     tokens.ts        attack tokens: who may swing, and spacing between swings
-  world/             arena (merged geometry, colliders), glow sprites, blob shadows, pixel textures, orbs
+  world/             the World (one light rig, sky, fog and Ground for every zone), the arena's crypt hall
+                     (merged geometry, colliders), glow sprites, blob shadows, pixel textures, orbs
   maps/
     types.ts         GameMap: what gameplay and the map viewer need from any map (scene, sky, ground height, collision)
     registry.ts      finds every map folder (src/maps/<id>/index.ts); add a map by adding a folder
@@ -107,7 +113,7 @@ src/
     forest/          Oakvale, the outdoor map: layout.ts is the plan (heights, roads, what stands where,
                      colliders, unit tested); terrain, nature, buildings and sky turn it into chunked meshes
   fx/                particles, sword trail, shockwaves, floating text, spatial synthesised SFX
-  ui/                belt HUD and vignette, enemy health bars, debug text panel
+  ui/                belt HUD and vignette, enemy health bars, debug text panel, ?perf readout
 ```
 
 ## How the combat works

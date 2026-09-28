@@ -200,6 +200,12 @@ export class Player {
     this.frenzy = 0;
     this.dashCooldown = this.dashTime = this.dodgeTime = 0;
     this.shield.numb = 0;
+    this.place(x, z, yaw);
+  }
+
+  /** Stand at (x, z) on the ground, facing `yaw` (0 looks down −Z), and stop any dash. */
+  place(x: number, z: number, yaw: number): void {
+    this.dashTime = 0;
     this.rig.position.set(x, this.ground.heightAt(x, z), z);
     this.rig.rotation.set(0, yaw, 0);
   }

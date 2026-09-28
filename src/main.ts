@@ -1,21 +1,24 @@
 import { Color, Fog, PerspectiveCamera, Scene, Timer, WebGLRenderer } from 'three';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
+import { Adventure } from './adventure';
 import { combatStats } from './combat/combat';
 import { CONFIG } from './config';
 import { startAmbience, unlockAudio } from './fx/sfx';
 import { Game } from './game';
+import { findMap } from './maps/registry';
+import { type Route, route } from './route';
 import { buildShowcase, pinShowcaseCamera } from './showcase';
 import './style.css';
+import { PerfReadout } from './ui/perfReadout';
 import { useRadialFog } from './world/radialFog';
 
-const params = new URLSearchParams(location.search);
+const page = route(location.search);
 
 /** Emulate when asked to (?emulate), or when there's no real headset. */
 async function wantsEmulator(): Promise<boolean> {
-  if (params.has('emulate')) return true;
-  if (params.has('noemulate')) return false;
+  if (page.emulate !== 'ask') return page.emulate === 'yes';
   // On a phone the map viewer has touch controls; the emulator's DevUI is for mouse and keyboard.
-  if (params.has('fly') && matchMedia('(pointer: coarse)').matches) return false;
+  if (page.route.kind === 'fly' && matchMedia('(pointer: coarse)').matches) return false;
   try {
     return !(await navigator.xr?.isSessionSupported('immersive-vr'));
   } catch {
@@ -25,8 +28,10 @@ async function wantsEmulator(): Promise<boolean> {
 
 async function start(): Promise<void> {
   useRadialFog(); // before anything compiles
+  const intro = document.getElementById('intro');
+  if (intro) intro.dataset.game = page.route.kind;
   const device = (await wantsEmulator())
-    ? await (await import('./emulator')).installEmulator(!params.has('nodevui'))
+    ? await (await import('./emulator')).installEmulator(page.devUI)
     : null;
 
   const renderer = new WebGLRenderer({ antialias: true });
@@ -37,12 +42,11 @@ async function start(): Promise<void> {
   // framebuffer at the browser's recommended size (lower to ~0.85 if GPU-bound).
   renderer.xr.setFoveation(1);
   renderer.xr.setFramebufferScaleFactor(1);
+  // Reading back every program's compile log stalls the first frames; keep it for development.
+  renderer.debug.checkShaderErrors = import.meta.env.DEV;
   document.body.appendChild(renderer.domElement);
 
   const scene = new Scene();
-  scene.background = new Color(0x0c0a0e);
-  scene.fog = new Fog(0x0c0a0e, 6, CONFIG.arena.halfSize * 2.2);
-
   const camera = new PerspectiveCamera(75, innerWidth / innerHeight, 0.05, 60);
   camera.position.set(0, 1.6, 0); // desktop preview; XR drives it once presenting
 
@@ -53,34 +57,111 @@ async function start(): Promise<void> {
     renderer.setSize(innerWidth, innerHeight);
   });
 
-  // ?inspect opens the model inspector instead of the game.
-  if (params.has('inspect')) return startInspector(renderer, scene, camera);
-  // ?fly opens the map viewer (?fly=<id> for one map) instead of the game.
-  if (params.has('fly')) return startMapViewer(renderer, scene, camera, device);
-  // ?map=<id> walks a map with no enemies (src/maps).
-  if (params.has('map')) return (await import('./maps/walk')).startWalk(renderer, scene, camera, params.get('map') || 'forest');
+  const r = page.route;
+  switch (r.kind) {
+    case 'inspect':
+      return startInspector(renderer, scene, camera);
+    case 'fly':
+      return startMapViewer(renderer, scene, camera, device, r.map);
+    case 'walk':
+      return (await import('./maps/walk')).startWalk(renderer, scene, camera, r.map);
+    case 'arena':
+      return startArena(renderer, scene, camera, device, r);
+    case 'adventure':
+      return startAdventure(renderer, scene, camera, device);
+  }
+}
 
-  // ?wave=N starts the run at wave N (7 is the Warden) for testing.
-  const firstWave = Math.max(1, Math.min(CONFIG.waves.list.length, Number(params.get('wave')) || 1));
-  // ?duel fights one practice duelist after another (CONFIG.duelist) instead.
-  const game = new Game(scene, camera, renderer, firstWave, params.has('duel'));
-  const showcase = buildShowcase();
-  scene.add(showcase.root);
-  const pinned = params.has('showcase');
-  if (pinned) pinShowcaseCamera(camera);
-
+/** On entering VR, whichever game: sound on, the intro away, and 72 fps. */
+function onEnterVR(renderer: WebGLRenderer, then?: () => void): void {
   const intro = document.getElementById('intro');
   renderer.xr.addEventListener('sessionstart', () => {
     unlockAudio();
-    startAmbience();
     // 72 fps is Meta's minimum and our target; the browser may default higher.
     const session = renderer.xr.getSession();
     if (session?.supportedFrameRates?.includes(72)) void session.updateTargetFrameRate?.(72).catch(() => {});
-    scene.remove(showcase.root);
     intro?.style.setProperty('display', 'none');
+    then?.();
   });
   renderer.xr.addEventListener('sessionend', () => intro?.style.removeProperty('display'));
   addEventListener('pointerdown', unlockAudio, { once: true });
+}
+
+/** The plain URL: Oakvale. */
+async function startAdventure(
+  renderer: WebGLRenderer,
+  scene: Scene,
+  camera: PerspectiveCamera,
+  device: unknown,
+): Promise<void> {
+  // Let the intro paint before the (synchronous) build.
+  await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+  const oakvale = await findMap('forest')!.load();
+  if (oakvale.kind !== 'zone') throw new Error('Oakvale should be a zone');
+  const adventure = new Adventure(scene, camera, renderer, oakvale);
+  document.querySelector('#intro .loading')?.remove();
+  const perf = page.perf ? new PerfReadout(renderer, camera) : null;
+  onEnterVR(renderer);
+
+  // Handle for poking at the game from the console and for scripted checks.
+  // `paused` stops XR frames stepping the game, so `step` alone moves it on.
+  const debug = {
+    adventure,
+    world: adventure.world,
+    player: adventure.player,
+    device,
+    renderer,
+    camera,
+    CONFIG,
+    paused: false,
+    /** Stand at (x, z) facing `yaw` (0 looks down −Z). */
+    teleport: (x: number, z: number, yaw = 0) => adventure.teleport(x, z, yaw),
+    /** Run the game for `seconds`, `dt` at a time, without waiting for frames. */
+    step: (seconds: number, dt = 1 / 72) => {
+      for (let left = seconds; left > 1e-9; left -= dt) adventure.update(Math.min(dt, left));
+    },
+  };
+  Object.assign(window, { __descent: debug });
+
+  const timer = new Timer();
+  renderer.setAnimationLoop((time) => {
+    timer.update(time);
+    const dt = timer.getDelta();
+    if (renderer.xr.isPresenting) {
+      // Pull this frame's head pose in before gameplay reads it.
+      renderer.xr.updateCamera(camera);
+      if (!debug.paused) adventure.update(dt);
+    } else {
+      camera.rotation.y += dt * 0.1; // Oakvale from the start, slowly turning behind the intro
+    }
+    adventure.world.update(dt, camera); // the sky, water and flames; billboards face this frame's head
+    renderer.render(scene, camera);
+    perf?.update(dt);
+  });
+}
+
+/** `?arena`: the wave game in the crypt hall, as the plain URL played before Oakvale. */
+function startArena(
+  renderer: WebGLRenderer,
+  scene: Scene,
+  camera: PerspectiveCamera,
+  device: unknown,
+  { firstWave, duel, showcase: pinned }: Extract<Route, { kind: 'arena' }>,
+): void {
+  scene.background = new Color(0x0c0a0e);
+  scene.fog = new Fog(0x0c0a0e, 6, CONFIG.arena.halfSize * 2.2);
+
+  // ?wave=N starts the run at wave N (7 is the Warden) for testing.
+  // ?duel fights one practice duelist after another (CONFIG.duelist) instead.
+  const game = new Game(scene, camera, renderer, firstWave, duel);
+  const showcase = buildShowcase();
+  scene.add(showcase.root);
+  if (pinned) pinShowcaseCamera(camera);
+  const perf = page.perf ? new PerfReadout(renderer, camera) : null;
+  onEnterVR(renderer, () => {
+    startAmbience();
+    scene.remove(showcase.root);
+  });
 
   // Handle for poking at the game from the console / automated smoke tests.
   // `paused` freezes gameplay (rendering continues) to inspect a moment.
@@ -100,6 +181,7 @@ async function start(): Promise<void> {
     }
     game.arena.update(dt, camera); // torch flicker; glows face this frame's head
     renderer.render(scene, camera);
+    perf?.update(dt);
   });
 }
 
@@ -129,9 +211,10 @@ async function startMapViewer(
   scene: Scene,
   camera: PerspectiveCamera,
   device: unknown,
+  map: string,
 ): Promise<void> {
   const { MapViewer } = await import('./viewer/mapViewer');
-  const viewer = new MapViewer(scene, camera, renderer, params.get('fly'));
+  const viewer = new MapViewer(scene, camera, renderer, map);
   document.getElementById('intro')?.style.setProperty('display', 'none');
   Object.assign(window, { __descent: { viewer, device, renderer } });
 

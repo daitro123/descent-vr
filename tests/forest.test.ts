@@ -1,7 +1,7 @@
 import { Vector3 } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
-import { buildLayout, FOREST, type ForestLayout, localToWorld } from '../src/maps/forest/layout';
+import { buildLayout, FOREST, type ForestLayout, HALE, localToWorld } from '../src/maps/forest/layout';
 import { MAPS } from '../src/maps/registry';
 
 let layout: ForestLayout;
@@ -21,6 +21,25 @@ describe('forest layout', () => {
     expect(layout.roadDistance.at(spawn.x, spawn.z)).toBeLessThan(0);
     expect(layout.heightAt(spawn.x, spawn.z)).toBeGreaterThan(FOREST.water + 0.3);
     expect(layout.colliders.blocked(spawn.x, spawn.z, CONFIG.player.bodyRadius)).toBe(false);
+  });
+
+  it("starts a new character at the crossroads, a few steps from Hale's spot and facing it", () => {
+    const { spawn } = layout;
+    expect(Math.hypot(spawn.x, spawn.z)).toBeLessThan(4);
+    const dx = HALE.x - spawn.x;
+    const dz = HALE.z - spawn.z;
+    const d = Math.hypot(dx, dz);
+    expect(d).toBeGreaterThan(3);
+    expect(d).toBeLessThan(4);
+    // Yaw 0 looks down −Z.
+    const facing = (-Math.sin(spawn.yaw) * dx - Math.cos(spawn.yaw) * dz) / d;
+    expect(facing).toBeGreaterThan(0.999);
+    // Nothing stands between you and Hale, and there's room for them.
+    const r = CONFIG.player.bodyRadius;
+    for (let t = 0; t <= 1; t += 0.05) {
+      expect(layout.colliders.blocked(spawn.x + dx * t, spawn.z + dz * t, r)).toBe(false);
+    }
+    expect(layout.roadDistance.at(HALE.x, HALE.z)).toBeLessThan(1);
   });
 
   it('keeps buildings off the roads', () => {

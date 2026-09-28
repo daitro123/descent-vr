@@ -42,6 +42,22 @@ canvas {
   pointer-events: auto;
 }
 
+/* The intro for the game the page runs (main.ts sets data-game from the URL). */
+#intro > section {
+  display: none;
+}
+
+#intro[data-game='adventure'] > section[data-game='adventure'],
+#intro[data-game='arena'] > section[data-game='arena'] {
+  display: block;
+  margin-bottom: 8px;
+}
+
+#intro .loading {
+  margin: 6px 0 0;
+  color: #e0b060;
+}
+
 #viewer-hud {
   position: absolute;
   top: 16px;
