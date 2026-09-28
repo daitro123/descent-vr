@@ -16,3 +16,5 @@ What is inside the old mine?
 ## Comments
 
 **2026-09-28:** [The quest chain](01-the-quest-chain.md) is resolved and ends in the mine, so the second bullet is updated to match. The final enemy stays dead once beaten.
+
+**2026-09-28:** [The zone's enemies](02-the-zones-enemies.md) is resolved. The mine holds the undead only, today's skeletons as they are: grunts and archers near the mouth, brutes deeper, the Warden at the bottom. The bandits who dug there are already dead. The Warden rises only while What Lies Below is active; before that, its chamber holds an empty throne. Dying or fleeing resets it, and the skeletons it raises crumble when it falls or resets. The mine's other undead refill like any camp. Counts and placement are this ticket's.

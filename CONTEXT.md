@@ -40,6 +40,10 @@ _Avoid_: kind, type, class, AI
 Who an enemy is, whatever its behaviour: the bandits or the undead. A bandit archer and an undead archer share a behaviour but not a family.
 _Avoid_: faction, race, type
 
+**Camp**:
+A group of enemies that lives at one place and refills some time after it is cleared: the bandits at the farm, at the lumber camp and at the watchtower, and the undead in the mine. A boss is never part of a camp. (The lumber camp is a place; the bandits there are its camp.)
+_Avoid_: spawn, pack, mob
+
 **Boss**:
 An enemy fought once, at the end of a quest chain, that stays dead once beaten. Oakvale has one: the Warden at the bottom of the mine.
 _Avoid_: elite, raid boss, mini-boss

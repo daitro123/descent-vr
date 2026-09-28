@@ -19,3 +19,5 @@ Decide by prototyping one camp (at the lumber camp, say) and playing it on the h
 ## Comments
 
 **2026-09-28:** [The quest chain](01-the-quest-chain.md) is resolved. The farm and the lumber camp are the chain's two bandit places and refill like any camp after their quest is handed in. Only enemies at a quest's own place count towards it. The mine's final enemy is the one thing that never respawns.
+
+**2026-09-28:** [The zone's enemies](02-the-zones-enemies.md) is resolved. The camps and their starting counts, to check against the budget: the farm 4 thugs; the lumber camp 4 thugs, 2 archers and the leader (brute behaviour); the watchtower 2 thugs and 1 archer. Every camp refills after it is cleared, the mine's undead included; only the Warden stays dead. Prototype the lumber camp with skeletons standing in for the bandits: their looks come from [Friendly characters](11-friendly-characters.md), and the camp's behaviour doesn't depend on them. Whether anything patrols the roads is still this ticket's call.
