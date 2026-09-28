@@ -37,6 +37,25 @@ describe('forest layout', () => {
     expect([...new Set(onRoad)]).toEqual([]);
   });
 
+  it('sets the watchtower and the mine on the ground, not hanging over it', () => {
+    const gaps: string[] = [];
+    const check = (what: string, x: number, z: number, y: number) => {
+      const gap = y - layout.heightAt(x, z);
+      if (Math.abs(gap) > 0.05) gaps.push(`${what} at (${x.toFixed(1)}, ${z.toFixed(1)}): ${gap.toFixed(2)} m`);
+    };
+    // All round the tower's base, out past its door step.
+    const tower = layout.structures.find((s) => s.kind === 'tower')!;
+    for (let a = 0; a < 2 * Math.PI; a += Math.PI / 16) {
+      for (const r of [3.8, 4.2]) check('tower', tower.x + Math.sin(a) * r, tower.z + Math.cos(a) * r, tower.y);
+    }
+    // Along the mine's rails, from its mouth to where they end.
+    const mine = layout.structures.find((s) => s.kind === 'mine')!;
+    for (let lz = mine.hd; lz <= mine.hd + 6.6; lz += 0.5) {
+      for (const lx of [-0.65, 0, 0.65]) check('mine rails', ...localToWorld(mine, lx, lz), mine.y);
+    }
+    expect(gaps).toEqual([]);
+  });
+
   it('keeps every road above the water, except where the bridge carries it', () => {
     const wet: string[] = [];
     for (const path of layout.paths) {

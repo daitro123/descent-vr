@@ -358,6 +358,12 @@ export function buildLayout(): ForestLayout {
   // The mine is dug into the ridge: its floor is level with the ground at its mouth.
   const mine = structures.find((s) => s.kind === 'mine')!;
   mine.y = ground.at(mine.x, mine.z + mine.hd + 0.5);
+  // Level a bed for the rails out of the mouth, so they don't hang over the dip in front.
+  levelRect(ground, mine, mine.y, -2.8, 2.8, mine.hd - 0.3, mine.hd + 9, 3);
+  // The watchtower's hilltop is levelled to its base, so the road climbs to its door
+  // instead of the door hanging over a cutting.
+  const tower = structures.find((s) => s.kind === 'tower')!;
+  levelRect(ground, tower, tower.y, -6.5, 6.5, -6.5, 6.5, 4);
 
   // The bridge spans the channel where the main road meets the stream.
   const main = paths[0];
@@ -513,6 +519,27 @@ function flattenAlong(ground: HeightField, path: Path): void {
     if (d > reach) return;
     const target = lerp(path.heights[i], path.heights[Math.min(i + 1, path.heights.length - 1)], t);
     ground.data[k] = lerp(ground.data[k], target, smoothstep(reach, path.width / 2 + 1.2, d));
+  });
+}
+
+/**
+ * Level the ground to `y` over a rectangle in `o`'s own frame (x from `x0` to `x1`,
+ * z from `z0` to `z1`), easing back to the terrain over `ease` metres outside it.
+ */
+function levelRect(
+  ground: HeightField,
+  o: { x: number; z: number; yaw: number },
+  y: number,
+  x0: number,
+  x1: number,
+  z0: number,
+  z1: number,
+  ease: number,
+): void {
+  ground.each((x, z, k) => {
+    const [lx, lz] = worldToLocal(o, x, z);
+    const d = Math.hypot(Math.max(x0 - lx, 0, lx - x1), Math.max(z0 - lz, 0, lz - z1));
+    if (d < ease) ground.data[k] = lerp(ground.data[k], y, smoothstep(ease, 0, d));
   });
 }
 
