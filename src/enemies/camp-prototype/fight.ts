@@ -1,6 +1,6 @@
 import { type PerspectiveCamera, type Scene, Vector3, type WebGLRenderer } from 'three';
 import { Combat } from '../../combat/combat';
-import { CONFIG } from '../../config';
+import { CONFIG, type EnemyConfig } from '../../config';
 import { FloatingText } from '../../fx/floatingText';
 import { Particles } from '../../fx/particles';
 import { sfx, updateListener } from '../../fx/sfx';
@@ -31,6 +31,12 @@ const _head = new Vector3();
 const _a = new Vector3();
 const _b = new Vector3();
 
+/** A kind's config with health and every attack's damage scaled by `k`. */
+function stronger(def: EnemyConfig, k: number): EnemyConfig {
+  if (k === 1) return def;
+  return { ...def, hp: Math.round(def.hp * k), attacks: def.attacks.map((a) => ({ ...a, damage: Math.round(a.damage * k) })) };
+}
+
 export class ZoneFight {
   readonly player: Player;
   readonly enemies: Enemy[] = [];
@@ -42,7 +48,7 @@ export class ZoneFight {
   private readonly shadows = new BlobShadows();
   private readonly orbs = new Orbs();
   readonly hud: BeltHud;
-  readonly meleeTokens = new AttackTokens(CONFIG.tokens.melee, CONFIG.tokens.meleeGap);
+  meleeTokens = new AttackTokens(CONFIG.tokens.melee, CONFIG.tokens.meleeGap);
   readonly rangedTokens = new AttackTokens(CONFIG.tokens.ranged, CONFIG.tokens.rangedGap);
   readonly ctx: EnemyContext;
   private readonly sword: PlayerSword = { base: new Vector3(), tip: new Vector3(), speed: 0, swing: 0 };
@@ -104,9 +110,14 @@ export class ZoneFight {
     };
   }
 
-  /** Raise an enemy at (x, z), waiting at `post`. */
-  add(kind: EnemyKind, x: number, z: number, post: EnemyPost): Enemy {
-    const enemy = createEnemy(kind, x, z, Math.floor(Math.random() * 6));
+  /** How many enemies may swing at you at once (2 in the arena). */
+  setMeleeAttackers(n: number): void {
+    this.meleeTokens = this.ctx.meleeTokens = new AttackTokens(n, CONFIG.tokens.meleeGap);
+  }
+
+  /** Raise an enemy at (x, z), waiting at `post`, with `strength` times today's health and damage. */
+  add(kind: EnemyKind, x: number, z: number, post: EnemyPost, strength = 1): Enemy {
+    const enemy = createEnemy(kind, x, z, Math.floor(Math.random() * 6), stronger(CONFIG.enemies[kind], strength));
     enemy.post = post;
     enemy.position.y = this.ground.heightAt(x, z);
     enemy.root.rotation.y = post.yaw;

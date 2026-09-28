@@ -183,10 +183,10 @@ export function createEnemy(kind: EnemyKind, x: number, z: number, variant = 0, 
     case 'grunt':
       return new Grunt(kind, x, z, variant, def);
     case 'archer':
-      return new Archer(kind, x, z, variant);
+      return new Archer(kind, x, z, variant, def);
     case 'brute':
-      return new Brute(kind, x, z, variant);
+      return new Brute(kind, x, z, variant, def);
     case 'warden':
-      return new Warden(kind, x, z, variant);
+      return new Warden(kind, x, z, variant, def);
   }
 }

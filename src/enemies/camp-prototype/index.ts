@@ -22,45 +22,64 @@ import { zoneGround } from './zoneGround';
 
 // PROTOTYPE: `?camp` answers the Oakvale map's "Enemies in the open" ticket
 // (.scratch/oakvale-starting-zone/issues/07-…). The lumber camp's bandits
-// (skeletons stand in for them) wait round their fire, and two more walk the
-// camp road as a patrol. Three ways for them to notice you, call the others
-// and give up the chase, switchable in the headset with a left-stick click
-// (`?camp=A|B|C` to start on one). Throwaway: the winner gets rebuilt
+// (skeletons stand in for them) are spread round their clearing, and two more
+// walk the camp road as a patrol. Round two: they pull the WoW way (A), and
+// three ways to make the camp harder switch in the headset with a left-stick
+// click (`?camp=1|2|3` to start on one). Throwaway: the winner gets rebuilt
 // properly and this folder goes.
 
 /** You start (and wake after dying) on the main road where the camp road leaves it. */
 const START = { x: -4.5, z: -41.5, face: [-20, -47] as [number, number] };
 const FIRE: [number, number] = [-48, -41];
 
-/** The lumber camp as Oakvale's enemies ticket counts it: 4 thugs, 2 archers, the leader. */
+/**
+ * Round two's lumber camp: five instead of seven (3 thugs, an archer, the
+ * leader), spread round the clearing 8 to 12 m apart, so a pull brings two or
+ * three rather than the lot.
+ */
 const LUMBER_CAMP: CampSpec = {
   name: 'Lumber camp',
   centre: { x: -48, z: -42 },
   ring: 12,
   posts: [
-    { kind: 'grunt', x: -46.2, z: -39.6, face: FIRE },
-    { kind: 'grunt', x: -50.2, z: -39.2, face: FIRE },
-    { kind: 'grunt', x: -45.4, z: -42.8, face: FIRE },
-    { kind: 'grunt', x: -53.2, z: -40.6, face: [-55, -38] },
-    { kind: 'archer', x: -41.8, z: -43.6, face: [-30, -45.5] },
-    { kind: 'archer', x: -43.2, z: -47.4, face: [-32, -47] },
-    { kind: 'brute', x: -49.6, z: -43.6, face: [-44, -41] },
+    { kind: 'grunt', x: -38.5, z: -43, face: [-30, -45.5] }, // where the camp road comes in
+    { kind: 'grunt', x: -47.5, z: -39.3, face: FIRE },
+    { kind: 'grunt', x: -54.5, z: -35.2, face: [-55, -38] }, // at the log pile
+    { kind: 'archer', x: -46, z: -49.5, face: [-38, -53] }, // watching the woods to the south
+    { kind: 'brute', x: -50, z: -44.3, face: [-44, -41] }, // the leader, before the tent
   ],
 };
 
-/** The same camp twice over, the second lot on a ring facing out: for the performance budget. */
+/** The same camp twice over, the second lot further out among the trees: for the performance budget. */
 const DOUBLED: CampSpec = {
   ...LUMBER_CAMP,
   posts: [
     ...LUMBER_CAMP.posts,
-    ...(['grunt', 'archer', 'grunt', 'brute', 'grunt', 'archer', 'grunt'] as EnemyKind[]).map((kind, i) => {
-      const a = (i / 7) * Math.PI * 2 + 0.3;
-      const x = -48 + Math.cos(a) * 7.5;
-      const z = -42 + Math.sin(a) * 7.5;
+    ...(['grunt', 'archer', 'grunt', 'brute', 'grunt'] as EnemyKind[]).map((kind, i) => {
+      const a = (i / 5) * Math.PI * 2 + 0.9;
+      const x = -48 + Math.cos(a) * 12;
+      const z = -42 + Math.sin(a) * 12;
       return { kind, x, z, face: [x + Math.cos(a), z + Math.sin(a)] as [number, number] };
     }),
   ],
 };
+
+/** What round two compares: ways to make the camp harder. */
+interface Setup {
+  key: string;
+  name: string;
+  how: string;
+  /** Health and damage, times today's. */
+  strength: number;
+  /** How many may swing at you at once. */
+  melee: number;
+}
+
+const SETUPS: readonly Setup[] = [
+  { key: '1', name: 'Stronger', how: 'Every enemy has 40% more health and hits 40% harder. Two swing at you at a time, as now.', strength: 1.4, melee: 2 },
+  { key: '2', name: 'More at once', how: "Today's strength, but three swing at you at a time instead of two.", strength: 1, melee: 3 },
+  { key: '3', name: 'Both', how: '40% more health and damage, and three swing at you at a time.', strength: 1.4, melee: 3 },
+];
 
 /** Two thugs walking the camp road between the camp's edge and the main road. */
 const PATROL: CampSpec = {
@@ -86,8 +105,8 @@ const MARK: Partial<Record<Mind, { glyph: string; color: string }>> = {
 };
 
 const HELP = [
-  'Left stick click: next way (starts over)',
-  'Right stick click: double the camp (7 or 14)',
+  'Left stick click: next setting (starts over)',
+  'Right stick click: double the camp (5 or 10)',
   'Hold left grip: this readout',
 ];
 
@@ -123,8 +142,11 @@ export async function startCampPrototype(
     ground.resolve(_v, 0.6);
     post.x = _v.x;
     post.z = _v.z;
-    return fight.add(kind, post.x, post.z, post);
+    return fight.add(kind, post.x, post.z, post, setup.strength);
   };
+  const rules: Rules = RULES[0];
+  let setup: Setup = SETUPS.find((s) => s.key === params.get('camp')) ?? SETUPS[0];
+  fight.setMeleeAttackers(setup.melee);
   let doubled = params.has('double');
   const lumber = new Camp(doubled ? DOUBLED : LUMBER_CAMP, spawn);
   const patrol = new Camp(PATROL, spawn);
@@ -136,27 +158,32 @@ export async function startCampPrototype(
     clearLine: (from) => ground.lineOfSight(from, fight.ctx.playerFeet),
   };
 
-  let rules: Rules = RULES.find((r) => r.key === (params.get('camp') || 'A').toUpperCase()) ?? RULES[0];
-
   /** Everyone back at their posts and you back at the start. */
   function restart(): void {
     for (const c of camps) {
       for (const m of c.members) if (m.enemy) fight.remove(m.enemy);
     }
+    fight.setMeleeAttackers(setup.melee);
     lumber.fill(doubled ? DOUBLED : LUMBER_CAMP);
     patrol.fill();
     fight.respawn(START.x, START.z, startYaw);
     const query = new URLSearchParams(location.search);
-    query.set('camp', rules.key);
+    query.set('camp', setup.key);
     if (doubled) query.set('double', '');
     else query.delete('double');
     history.replaceState(null, '', `?${query.toString().replace(/=(?=&|$)/g, '')}${location.hash}`);
-    bar.label.textContent = `${rules.key} · ${rules.name}${doubled ? ' · 14' : ''}`;
+    bar.label.textContent = label();
     showCard();
   }
-  function nextRules(step: number): void {
-    rules = RULES[(RULES.indexOf(rules) + step + RULES.length) % RULES.length];
+  function nextSetup(step: number): void {
+    setup = SETUPS[(SETUPS.indexOf(setup) + step + SETUPS.length) % SETUPS.length];
     restart();
+  }
+  function label(): string {
+    return `${setup.key} · ${setup.name}${doubled ? ' · 10' : ''}`;
+  }
+  function heading(): string {
+    return `${setup.key} · ${setup.name}   (${SETUPS.indexOf(setup) + 1} of ${SETUPS.length})`;
   }
   function toggleDouble(): void {
     doubled = !doubled;
@@ -168,8 +195,7 @@ export async function startCampPrototype(
   scene.add(card.mesh);
   let cardTime = 0;
   function showCard(): void {
-    const i = RULES.indexOf(rules);
-    card.draw([`${rules.key} · ${rules.name}   (${i + 1} of ${RULES.length})`, ...wrap(rules.how, 46), '', ...HELP]);
+    card.draw([heading(), ...wrap(setup.how, 46), '', ...HELP]);
     cardTime = renderer.xr.isPresenting ? 8 : 0;
     camera.localToWorld(card.mesh.position.set(0, 0.15, -1.8));
     card.mesh.lookAt(camera.getWorldPosition(_v));
@@ -183,13 +209,12 @@ export async function startCampPrototype(
     'position:fixed;left:16px;bottom:16px;z-index:10;margin:0;padding:10px 14px;border-radius:10px;' +
     'background:#111d;color:#e0d6c0;font:13px/1.45 ui-monospace,Menlo,monospace;pointer-events:none';
   document.body.appendChild(page);
-  const bar = switcherBar(() => nextRules(1), () => nextRules(-1), toggleDouble);
-  bar.label.textContent = `${rules.key} · ${rules.name}${doubled ? ' · 14' : ''}`;
+  const bar = switcherBar(() => nextSetup(1), () => nextSetup(-1), toggleDouble);
+  bar.label.textContent = label();
 
   const perf = { frames: 0, time: 0, fps: 0, calls: 0, triangles: 0 };
   function readout(): string[] {
-    const i = RULES.indexOf(rules);
-    const lines = [`${rules.key} · ${rules.name}   (${i + 1} of ${RULES.length})`];
+    const lines = [heading()];
     for (const c of camps) {
       const parts: string[] = [];
       const fighting = c.count('fight') + c.count('alert');
@@ -212,12 +237,13 @@ export async function startCampPrototype(
   if (intro) {
     intro.innerHTML =
       '<h1>Oakvale: the lumber camp</h1>' +
-      "A throwaway prototype: enemies living in the open instead of arriving in waves. The lumber camp's bandits wait round their fire " +
+      "A throwaway prototype, round two: enemies living in the open instead of arriving in waves. The lumber camp's five bandits are spread round their clearing " +
       '(skeletons stand in for them) and two more walk the camp road. You start on the main road where the camp road leaves it, heading west.<br>' +
-      RULES.map((r) => `<b>${r.key} · ${r.name}</b>: ${r.how}`).join('<br>') +
+      `They pull the WoW way: ${rules.how}<br>Three settings make the camp harder:<br>` +
+      SETUPS.map((s) => `<b>${s.key} · ${s.name}</b>: ${s.how}`).join('<br>') +
       '<br>Over their heads: <b>?</b> noticed you, <b>!</b> after you, <b>home</b> giving up (untouchable). ' +
       'A cleared camp refills after a minute once you are 30 m off. Your health refills after 5 s out of the fight; die and you wake back at the start.<br>' +
-      'In the headset: click the left stick for the next way, click the right stick to double the camp (7 or 14, for the frame rate), hold the left grip for the readout.';
+      'In the headset: click the left stick for the next setting, click the right stick to double the camp (5 or 10, for the frame rate), hold the left grip for the readout.';
   }
   renderer.xr.addEventListener('sessionstart', () => {
     intro?.style.setProperty('display', 'none');
@@ -230,7 +256,7 @@ export async function startCampPrototype(
   renderer.xr.addEventListener('sessionend', () => intro?.style.removeProperty('display'));
   addEventListener('pointerdown', unlockAudio, { once: true });
   addEventListener('keydown', (e) => {
-    if (e.code === 'KeyV') nextRules(1);
+    if (e.code === 'KeyV') nextSetup(1);
     if (e.code === 'KeyC') toggleDouble();
   });
 
@@ -247,10 +273,10 @@ export async function startCampPrototype(
       readout,
       restart,
       simulate,
-      nextRules,
+      nextSetup,
       toggleDouble,
-      get rules() {
-        return rules;
+      get setup() {
+        return setup;
       },
       /** Stand at (x, z) without healing. */
       teleport: (x: number, z: number) => {
@@ -284,7 +310,7 @@ export async function startCampPrototype(
       const { left, right } = fight.player.input.hands;
       const l = !!left.source?.gamepad?.buttons[3]?.pressed;
       const r = !!right.source?.gamepad?.buttons[3]?.pressed;
-      if (l && !clicks.left) nextRules(1);
+      if (l && !clicks.left) nextSetup(1);
       if (r && !clicks.right) toggleDouble();
       clicks.left = l;
       clicks.right = r;

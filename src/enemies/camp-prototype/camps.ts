@@ -6,8 +6,9 @@ import type { Enemy, EnemyPost } from '../enemy';
 // enemies at one place, each with a post it waits at; the camp decides when
 // each one notices you, who comes with it, when it gives up and walks home,
 // and when a cleared camp fills again. A patrol is a camp whose posts walk a
-// road. The three ways of deciding (`RULES`) are what `?camp` switches
-// between; everything else is shared.
+// road. Round one compared three ways of deciding; Tom picked A (the
+// WoW-style pull), so `RULES` now holds only that one. B and C are in the
+// history at merge 7195835.
 
 /** What an enemy in a camp is doing: the marker over its head says so. */
 export type Mind = 'idle' | 'alert' | 'fight' | 'home' | 'dead';
@@ -61,51 +62,16 @@ export const REFILL_AWAY = 30;
 
 const flat = (a: { x: number; z: number }, b: { x: number; z: number }) => Math.hypot(a.x - b.x, a.z - b.z);
 
-/** Angle (radians) between where an enemy faces and the direction to you. */
-function offFacing(e: Enemy, p: Vector3): number {
-  const want = Math.atan2(p.x - e.position.x, p.z - e.position.z);
-  const d = want - e.root.rotation.y;
-  return Math.abs(Math.atan2(Math.sin(d), Math.cos(d)));
-}
-
 export const RULES: readonly Rules[] = [
   {
     key: 'A',
     name: 'One at a time',
-    how: 'Each enemy notices you within 8 m and brings anyone within 6 m of it. It chases until it is 30 m from its post, then walks home untouchable and heals.',
+    how: 'Each enemy notices you within 8 m and brings anyone within 10 m of it. It chases until it is 30 m from its post, then walks home untouchable and heals.',
     leash: 'each gives up 30 m from its post',
     notices: (m, _c, s) => flat(m.enemy!.position, s.player) < 8,
     alertTime: 0,
-    joins: (from, other) => flat(from.enemy!.position, other.enemy!.position) < 6,
+    joins: (from, other) => flat(from.enemy!.position, other.enemy!.position) < 10,
     givesUp: (m) => flat(m.enemy!.position, m.post) > 30,
-  },
-  {
-    key: 'B',
-    name: 'The whole camp',
-    how: "Step into the camp's clearing (or hurt anyone) and the whole camp comes. Get 24 m clear of it and they all walk home together, untouchable, and heal.",
-    leash: 'all give up when you are 24 m out',
-    notices: (_m, c, s) =>
-      c.route
-        ? c.members.some((o) => o.enemy?.alive && flat(o.enemy.position, s.player) < 8)
-        : flat(c.centre, s.player) < c.ring,
-    alertTime: 0,
-    joins: () => true,
-    givesUp: (_m, c, s) => flat(c.anchor, s.player) > 24,
-  },
-  {
-    key: 'C',
-    name: 'Sight and alarm',
-    how: "Each enemy sees 16 m ahead in a wide cone, but not through trees or behind it; it hears you within 3 m. It stops (?), then shouts (!) and everyone within 15 m comes. Lose them for 6 s and they walk home.",
-    leash: 'each gives up 6 s after losing you',
-    notices: (m, _c, s) => {
-      const e = m.enemy!;
-      const d = flat(e.position, s.player);
-      if (d < 3) return true;
-      return d < 16 && offFacing(e, s.player) < Math.PI / 3 && s.clearLine(e.position);
-    },
-    alertTime: 0.8,
-    joins: (from, other) => flat(from.enemy!.position, other.enemy!.position) < 15,
-    givesUp: (m) => m.unseen > 6 || flat(m.enemy!.position, m.post) > 40,
   },
 ];
 
