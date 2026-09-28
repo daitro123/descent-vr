@@ -20,7 +20,7 @@
 
 ## Built
 
-Built on 2026-09-28 by Claude, in autonomous mode (Tom asked for the rest of Oakvale to run without his input).
+Built on 2026-09-28 by Claude in PR #32, in autonomous mode (Tom asked for the rest of Oakvale to run without his input).
 
 - **The World** (`src/world/world.ts`) owns the light rig (one hemisphere light, one sun from `CONFIG.world.sunDirection`, a pool of 4 point lights at zero), the sky dome (`src/world/sky.ts`), one `Fog`, the scene's background and the camera's far plane. Zones are loaded into it with `load(zone)`; `apply(atmosphere)` only sets colours, intensities, distances and the pool's places. It implements `Ground` by asking the zone underfoot, with the camp prototype's sight lines, steering and arrows.
 - **Atmospheres** (`src/world/atmosphere.ts`): Oakvale's is `OAKVALE_ATMOSPHERE` in `src/maps/forest/forest.ts`, today's numbers. `blendAtmospheres(a, b, t)` is pure and tested.
