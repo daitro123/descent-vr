@@ -16,3 +16,5 @@ What makes Oakvale feel lived in beyond its quests and enemies?
 ## Comments
 
 **2026-09-28:** graduated from the map's "A living zone" fog once [The quest chain](01-the-quest-chain.md) and [Interiors](08-interiors.md) were resolved. The open interiors are the inn and the house by the well, and the smithy is walk-in; each has a spot a villager could fill.
+
+**2026-09-28:** [The mine inside](09-the-mine-inside.md) is resolved (by Claude on Tom's behalf). The mine has three parts with their own feel: the timbered old mine with its rails and lanterns, the bandits' rough dig, and the ancient crypt at the bottom. Past the adit's bend the sun fades and the outdoors is hidden, as indoors, so that's the place for the sound to change too. Nobody friendly lives in the mine.
