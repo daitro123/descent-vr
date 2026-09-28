@@ -39,6 +39,8 @@ export class World implements Ground {
   readonly pool: readonly PointLight[];
   private readonly sky: Sky;
   private readonly zones: Zone[] = [];
+  /** People standing about, whom nothing walks through: circles on the floor plane. */
+  private readonly bodies: { readonly x: number; readonly z: number; readonly r: number }[] = [];
   private camera: PerspectiveCamera | null = null;
   private atmosphere: Atmosphere | null = null;
   /** While the fog is lifted, how far you see; null under the atmosphere's own fog. */
@@ -70,6 +72,11 @@ export class World implements Ground {
     if (scene.fog === this.fog) scene.fog = null;
     if (scene.background === this.background) scene.background = null;
     this.camera = null;
+  }
+
+  /** Stand someone at (x, z) whom nothing walks through, `r` metres round (a friendly character). */
+  addBody(body: { readonly x: number; readonly z: number; readonly r: number }): void {
+    this.bodies.push(body);
   }
 
   /** Add a zone (once) and make its atmosphere the World's. */
@@ -155,7 +162,19 @@ export class World implements Ground {
   }
 
   resolve(p: Vector3, radius: number): boolean {
-    return this.zoneAt(p.x, p.z)?.resolve(p, radius) ?? false;
+    let moved = this.zoneAt(p.x, p.z)?.resolve(p, radius) ?? false;
+    for (const b of this.bodies) {
+      const dx = p.x - b.x;
+      const dz = p.z - b.z;
+      const min = b.r + radius;
+      const d2 = dx * dx + dz * dz;
+      if (d2 >= min * min) continue;
+      const d = Math.sqrt(d2) || 1e-6;
+      p.x = b.x + (dx / d) * min;
+      p.z = b.z + (dz / d) * min;
+      moved = true;
+    }
+    return moved;
   }
 
   /** Would a body of `radius` at (x, z) be pushed out of something? */

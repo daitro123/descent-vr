@@ -326,6 +326,8 @@ export interface ForestLayout {
   spawn: { x: number; z: number; yaw: number };
   /** Where you wake after a death (yaw as `spawn`'s). */
   respawns: { village: Spot };
+  /** Where Marshal Hale stands, facing the crossroads' centre (yaw as a model turns: 0 faces +Z). */
+  hale: Spot;
   camps: CampPlan[];
   landmarks: { label: string; x: number; z: number }[];
   /** Ground height, including the bridge and dock decks. */
@@ -500,6 +502,7 @@ export function buildLayout(): ForestLayout {
   const inn = at('inn');
   const [rx, rz] = localToWorld(inn, 0, inn.hd + INN_DOOR_STEP);
   const respawns = { village: { x: rx, z: rz, yaw: Math.atan2(rx, rz) } };
+  const hale = { ...HALE, yaw: facing(HALE.x, HALE.z, 0, 0) };
   const camps: CampPlan[] = CAMPS.map((c) => {
     const clearing = CLEARINGS.find((cl) => cl.id === c.clearing)!;
     return {
@@ -536,6 +539,7 @@ export function buildLayout(): ForestLayout {
     roadDistance,
     spawn,
     respawns,
+    hale,
     camps,
     landmarks,
     heightAt,

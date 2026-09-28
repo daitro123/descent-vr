@@ -66,6 +66,8 @@ export interface Zone extends MapBase {
   readonly camps: readonly CampPlan[];
   /** Where you wake after a death. */
   readonly respawns: { readonly village: Spot };
+  /** Where Marshal Hale, the quest giver, stands (yaw as a model turns: 0 faces +Z). */
+  readonly hale: Spot;
 }
 
 /** A map built whole, lights and all: the crypt hall. */

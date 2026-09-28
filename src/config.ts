@@ -275,6 +275,53 @@ export const CONFIG = {
     levelUp: { banner: 3.5, lines: 5 }, // s that "LEVEL N", and the lines on what it brought, stay in view
   },
 
+  // Marshal Hale's quest chain (quests.ts): what each quest asks and pays.
+  quests: {
+    raiders: { bandits: 3, xp: 80 }, // Raiders in the Fields: defeat this many of the farm's camp
+    lumber: { bandits: 5, xp: 120 }, // The Lumber Camp: this many of the lumber camp's camp, and the leader's orders
+    below: { xp: 300 }, // What Lies Below: the Warden, for this and Hale's old longsword
+  },
+
+  // Marshal Hale at the crossroads (people/hale.ts).
+  hale: {
+    radius: 0.3, // m round them: they're solid, so you can't walk through them
+    turnWithin: 8, // m: they turn to face you this close, and back to the crossroads when you go
+    turnRate: 3, // per s: how fast they ease round
+    waveWithin: 6, // m: they wave as you walk up this close…
+    waveAgain: 10, // …and again once you've been this far away and come back
+    waveTime: 1.8, // s the wave lasts
+    marker: 0.5, // m over their head the "!" or "?" floats
+  },
+
+  // Talking to Hale on a board that unfolds beside them: the talk prototype's
+  // variant A (in history at merge 19ce545).
+  talk: {
+    open: 2.3, // m from Hale (on the floor): the board unfolds this close…
+    facing: 50, // °: …while their head is within this of where you look
+    close: 3.6, // m: it folds this far off; once folded it opens again only after you've been this far away
+    board: { out: 0.6, side: 0.55, height: 1.2 }, // m from Hale towards you and to your right, and its middle's height
+    unfold: 0.2, // s it takes to unfold, or fold away
+    arming: 0.4, // s after it unfolds before a button takes a press…
+    rearm: 0.6, // …and after each press
+    buzz: { intensity: 0.8, ms: 50 }, // in the hand that pressed
+  },
+
+  // The quest tracker at the top left of your view: the talk prototype's variant C.
+  tracker: {
+    direction: [-0.4, 0.24, -1], // where it sits from your eyes (x right, y up, −z ahead)…
+    distance: 1.1, // …this far out (m)
+    lag: 3, // per s: how quickly it catches up as you turn your head, so it drifts rather than sticks
+    flash: 1.5, // s it flashes when you take a quest, make progress or finish
+  },
+
+  // A hand-in's reward floats over Hale with a fanfare.
+  handIn: {
+    height: 0.9, // m over Hale's head, above the marker: "+N XP"…
+    levelAfter: 0.6, // s: …then "LEVEL N", if it lands one…
+    levelHeight: 0.3, // m: …this much higher
+    time: 2.6, // s each floats
+  },
+
   // The Adventure's health out of a fight (the arena has none).
   healing: {
     calm: 5, // s without taking or dealing damage…

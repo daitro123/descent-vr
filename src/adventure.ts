@@ -1,5 +1,5 @@
 import { type PerspectiveCamera, type Scene, Vector3, type WebGLRenderer } from 'three';
-import { type Ability, AdventureState, type Effect } from './adventureState';
+import { type Ability, type AdventureEvent, AdventureState, type Effect } from './adventureState';
 import { Combat } from './combat/combat';
 import { CONFIG } from './config';
 import { type Camp, Camps, type Member, type You } from './enemies/camps';
@@ -9,15 +9,21 @@ import { sfx, updateListener } from './fx/sfx';
 import { Shockwaves } from './fx/shockwave';
 import { SwordTrail } from './fx/trail';
 import type { Spot, Zone } from './maps/types';
+import { Hale } from './people/hale';
 import { Player } from './player/player';
 import { BeltHud } from './ui/beltHud';
 import { Fade } from './ui/fade';
+import { QuestTracker } from './ui/questTracker';
+import { type Probe, TalkBoard } from './ui/talkBoard';
 import { Orbs } from './world/orbs';
 import { BlobShadows } from './world/shadows';
 import { World } from './world/world';
 
 const _a = new Vector3();
 const _b = new Vector3();
+const _gaze = new Vector3();
+const _haleHead = new Vector3();
+const _float = new Vector3();
 
 /** What a level-up says about each ability it brings. */
 const UNLOCKED: Record<Ability, string> = {
@@ -29,10 +35,12 @@ const UNLOCKED: Record<Ability, string> = {
  * The game at the plain URL: Oakvale, loaded into the World, with the
  * warrior's sword, shield, walk, snap turn and dash on its hills, and its
  * camps waiting to be pulled. It owns and steps everything in it, one
- * `update(dt)` per XR frame, as the arena's `Game` does for the waves. Kills
- * pay XP into the adventure state, whose levels set your health, damage and
- * abilities. Out of a fight your health comes back; a death fades to black
- * and wakes you in the village. Quests and saving join it ticket by ticket
+ * `update(dt)` per XR frame, as the arena's `Game` does for the waves.
+ * Marshal Hale stands at the crossroads with the quest chain: walk up and
+ * their board unfolds, and the tracker shows the quest you're on. Kills and
+ * the board's buttons go into the adventure state, whose levels set your
+ * health, damage and abilities. Out of a fight your health comes back; a
+ * death fades to black and wakes you in the village. Saving joins it next
  * (.scratch/oakvale-starting-zone/).
  */
 export class Adventure {
@@ -42,6 +50,12 @@ export class Adventure {
   readonly player: Player;
   readonly camps: Camps;
   readonly combat: Combat;
+  /** Marshal Hale, the quest giver, at the crossroads. */
+  readonly hale: Hale;
+  /** Hale's board, which unfolds as you walk up to them. */
+  readonly board = new TalkBoard();
+  /** The quest you're on, top left of your view. */
+  readonly tracker = new QuestTracker();
   private readonly hud: BeltHud;
   private readonly trail: SwordTrail;
   private readonly text: FloatingText;
@@ -61,6 +75,11 @@ export class Adventure {
   /** Seconds since you woke, while the view fades back in; null otherwise. */
   private wakingFor: number | null = null;
   private readonly respawn: Spot;
+  /** What can press the board's buttons: your left fist, your right fist and your sword's tip, in that order. */
+  private readonly probes: (Probe | null)[] = [null, null, null];
+  private readonly probePoints = [new Vector3(), new Vector3(), new Vector3()];
+  /** A level a hand-in landed, floating over Hale a moment after its XP. */
+  private handInLevel: { level: number; unlocks: readonly Ability[]; in: number } | null = null;
 
   constructor(
     scene: Scene,
@@ -112,6 +131,10 @@ export class Adventure {
     );
     scene.add(this.camps.root);
 
+    this.hale = new Hale(zone.hale, this.world, this.state.hale.marker);
+    this.world.addBody(this.hale.body);
+    scene.add(this.hale.root, this.board.root, this.tracker.mesh);
+
     // A new character, at the zone's start and facing Hale.
     const { x, z, yaw } = zone.spawn;
     this.player.stats = this.state.stats;
@@ -155,6 +178,9 @@ export class Adventure {
       this.trail.update(dt, _a, _b, sword.hot, player.frenzy > 0);
     }
     this.orbs.update(dt, player);
+    this.talk(dt);
+    this.updateHandIn(dt);
+    this.tracker.update(dt, player.camera, this.state.tracker);
     this.text.update(dt);
     this.particles.update(dt);
     this.shockwaves.update(dt);
@@ -163,43 +189,133 @@ export class Adventure {
     this.hud.update(dt);
   }
 
-  /** A camp's member fell: it pays XP into the adventure state. */
+  /** A camp's member fell: it pays XP into the adventure state, and may count for your quest. */
   private onKill(camp: Camp, member: Member): void {
     const { enemy, plan } = member;
-    const effects = this.state.apply({ kind: 'kill', camp: camp.plan.id, level: enemy.level, role: plan.role ?? 'ordinary' });
-    this.show(effects, enemy.position);
+    this.apply({ kind: 'kill', camp: camp.plan.id, level: enemy.level, role: plan.role ?? 'ordinary' }, enemy.position);
   }
 
   /**
-   * What the adventure state did: the XP floats where it was earned, and a
-   * level reached is a moment. A kill that passes two levels at once shows the
-   * higher, with every ability both brought.
+   * Hale turns to you and waves as you walk up, showing what they have for
+   * you; their board unfolds, and a press on it goes to the adventure state.
    */
-  private show(effects: readonly Effect[], at: Vector3): void {
-    const { xpFloat } = CONFIG.levels;
+  private talk(dt: number): void {
+    const { player, hale, you, state } = this;
+    player.camera.getWorldDirection(_gaze);
+    hale.update(dt, you.head, state.hale.marker);
+    hale.head(_haleHead);
+    const press = this.board.update(dt, { head: you.head, gaze: _gaze }, { feet: hale.position, head: _haleHead }, this.touching(), state.hale);
+    if (!press) return;
+    const { intensity, ms } = CONFIG.talk.buzz;
+    player.input.pulse(press.hand, intensity, ms);
+    switch (press.button) {
+      case 'accept':
+        this.board.fold();
+        this.apply({ kind: 'accept' }, hale.position);
+        break;
+      case 'handIn':
+        // The talk goes on: Hale offers the next quest, or sees you off after the last.
+        this.apply({ kind: 'handIn' }, _haleHead);
+        this.board.show(state.hale);
+        break;
+      case 'notNow':
+      case 'goodbye':
+        this.board.fold();
+    }
+  }
+
+  /** Where each fist and the sword's tip are, while tracked and you're standing. */
+  private touching(): readonly (Probe | null)[] {
+    const { player, probes, probePoints: p } = this;
+    const { left, right } = player.input.hands;
+    const up = player.alive;
+    probes[0] = up && left.grip.visible ? { at: left.grip.getWorldPosition(p[0]), hand: 'left' } : null;
+    probes[1] = up && right.grip.visible ? { at: right.grip.getWorldPosition(p[1]), hand: 'right' } : null;
+    probes[2] = up && player.sword.tip.valid ? { at: player.sword.tip.worldNow(player.rig, p[2]), hand: 'right' } : null;
+    return probes;
+  }
+
+  /** Something happened: into the adventure state, and show what it did at `at`. */
+  private apply(event: AdventureEvent, at: Vector3): void {
+    this.show(this.state.apply(event), at, event.kind === 'handIn');
+  }
+
+  /**
+   * What the adventure state did. A kill's XP floats where it was earned, and
+   * a level reached is a moment. A hand-in's reward floats over Hale (`at`)
+   * with a fanfare: the XP, then the level a moment later. Taking a quest,
+   * progress and finishing flash the tracker. A kill that passes two levels
+   * at once shows the higher, with every ability both brought.
+   */
+  private show(effects: readonly Effect[], at: Vector3, handIn: boolean): void {
     const unlocks: Ability[] = [];
     let reached = 0;
     for (const e of effects) {
-      if (e.kind === 'xp') {
-        _a.copy(at).setY(at.y + xpFloat.height);
-        this.text.spawn(`+${e.amount} XP`, _a, { color: '#ffd23a', scale: 0.24, life: xpFloat.time, rise: 0.5 });
-      } else {
-        reached = e.level;
-        unlocks.push(...e.unlocks);
+      switch (e.kind) {
+        case 'xp':
+          if (handIn) this.floatOver(at, CONFIG.handIn.height, `+${e.amount} XP`, '#ffd23a');
+          else {
+            const { height, time } = CONFIG.levels.xpFloat;
+            _a.copy(at).setY(at.y + height);
+            this.text.spawn(`+${e.amount} XP`, _a, { color: '#ffd23a', scale: 0.24, life: time, rise: 0.5 });
+          }
+          break;
+        case 'level':
+          reached = e.level;
+          unlocks.push(...e.unlocks);
+          break;
+        case 'progress':
+          this.tracker.flash();
+          break;
+        case 'quest':
+          if (e.stage === 'active' || e.stage === 'ready') this.tracker.flash();
+          if (e.stage === 'handedIn') sfx.fanfare();
+          break;
+        case 'sword':
+          // Hale's old longsword comes into your hand with What Lies Below (ticket 28).
+          break;
       }
     }
-    if (reached) this.levelUp(reached, unlocks);
+    if (!reached) return;
+    this.gainLevel();
+    if (handIn) this.handInLevel = { level: reached, unlocks, in: CONFIG.handIn.levelAfter };
+    else this.announceLevel(reached, unlocks);
   }
 
-  /** "LEVEL N" with a sound and a line per ability it brings; your new numbers, and full health. */
-  private levelUp(level: number, unlocks: readonly Ability[]): void {
-    const { player, text } = this;
+  /** Your new level's numbers, and full health. */
+  private gainLevel(): void {
+    const { player } = this;
     player.stats = this.state.stats;
     if (player.alive) player.hp = player.maxHp;
-    sfx.levelUp();
+  }
+
+  /**
+   * "LEVEL N", and a line per ability it brings: in view with a sound after a
+   * kill, or over Hale after a hand-in (whose fanfare is its sound).
+   */
+  private announceLevel(level: number, unlocks: readonly Ability[], overHale = false): void {
+    const { player, text } = this;
     const { banner, lines } = CONFIG.levels.levelUp;
-    text.banner(player.camera, `LEVEL ${level}`, '#ffd23a', 0.34, 0.3, banner);
+    if (overHale) this.floatOver(this.hale.head(_haleHead), CONFIG.handIn.height + CONFIG.handIn.levelHeight, `LEVEL ${level}`, '#ffffff');
+    else {
+      sfx.levelUp();
+      text.banner(player.camera, `LEVEL ${level}`, '#ffd23a', 0.34, 0.3, banner);
+    }
     unlocks.forEach((a, i) => text.banner(player.camera, UNLOCKED[a], '#f0e0b0', 0.09, 0.08 - i * 0.12, lines));
+  }
+
+  /** A hand-in's words, `height` metres over `head`. */
+  private floatOver(head: Vector3, height: number, words: string, color: string): void {
+    _float.copy(head).setY(head.y + height);
+    this.text.spawn(words, _float, { color, scale: 0.2, life: CONFIG.handIn.time, rise: 0.3 });
+  }
+
+  /** The level a hand-in landed floats over Hale a moment after its XP. */
+  private updateHandIn(dt: number): void {
+    const pending = this.handInLevel;
+    if (!pending || (pending.in -= dt) > 0) return;
+    this.handInLevel = null;
+    this.announceLevel(pending.level, pending.unlocks, true);
   }
 
   /** Out of a fight for a while, your health comes back. */

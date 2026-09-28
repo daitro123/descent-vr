@@ -1,0 +1,355 @@
+import { describe, expect, it } from 'vitest';
+import { type AdventureEvent, AdventureState, type Effect, type Role } from '../src/adventureState';
+
+// Marshal Hale's quest chain, at the adventure-state seam: events in (accept,
+// hand in, kills, the orders picked up), and what a player would notice out:
+// what Hale shows (the marker over their head, the board's line and buttons),
+// the tracker, XP, levels and the sword. The lumber camp, its patrol, the mine
+// and the Warden aren't built yet; their kills are events like any other.
+
+const kill = (camp: string | null, level: number, role: Role = 'ordinary'): AdventureEvent => ({ kind: 'kill', camp, level, role });
+const ACCEPT: AdventureEvent = { kind: 'accept' };
+const HAND_IN: AdventureEvent = { kind: 'handIn' };
+const ORDERS: AdventureEvent = { kind: 'pickup', item: 'orders' };
+
+// The places' camps on the plain route (spec, "Camps" and "The adventure state").
+const FARM = kill('farm', 1);
+const THUG = kill('lumberCamp', 2);
+const ARCHER = kill('lumberCamp', 2);
+const LEADER = kill('lumberCamp', 2, 'leader');
+const PATROL = kill('patrol', 2);
+const MINE = kill('mine', 3);
+const DIG_BRUTE = kill('mine', 4, 'deepBrute');
+const WARDEN = kill(null, 5, 'warden');
+
+function play(state: AdventureState, ...events: AdventureEvent[]): Effect[] {
+  return events.flatMap((e) => state.apply(e));
+}
+
+const times = (n: number, event: AdventureEvent) => Array.from({ length: n }, () => event);
+
+/** Take and finish Raiders in the Fields, then hand it in. */
+const RAIDERS = [ACCEPT, ...times(3, FARM), HAND_IN];
+/** Take and finish The Lumber Camp, then hand it in. */
+const LUMBER = [ACCEPT, THUG, THUG, THUG, ARCHER, LEADER, ORDERS, HAND_IN];
+
+const OFFERED = [
+  'Bandits in red masks are raiding the farm east of the village. The farmer barely got out. Drive them off. Three of them down should send the rest a message.',
+  'The same gang holds the lumber camp across the bridge. Clear them out, and bring me whatever their leader keeps in that tent.',
+  'Something stirs under that hill. The dead are walking in the old mine. Go down, find what woke them, and put it back to rest.',
+];
+
+describe('a new character', () => {
+  it('finds Hale offering Raiders in the Fields: a gold "!", their line, Accept and Not now', () => {
+    const state = new AdventureState();
+    expect(state.hale).toEqual({ marker: 'offered', line: OFFERED[0], buttons: ['accept', 'notNow'] });
+  });
+
+  it('has no quest to track', () => {
+    expect(new AdventureState().tracker).toBeNull();
+  });
+});
+
+describe('Raiders in the Fields', () => {
+  it('once accepted is under way: a grey "?", a reminder and Goodbye, and the tracker at 0/3', () => {
+    const state = new AdventureState();
+    expect(state.apply(ACCEPT)).toEqual([{ kind: 'quest', quest: 'raiders', stage: 'active' }]);
+    expect(state.hale).toEqual({
+      marker: 'active',
+      line: "The farm's east along the road. Three of those bandits, then come back to me.",
+      buttons: ['goodbye'],
+    });
+    expect(state.tracker).toEqual({ title: 'Raiders in the Fields', lines: ['Bandits defeated at the farm: 0/3'] });
+  });
+
+  it("counts the farm's bandits as they fall", () => {
+    const state = new AdventureState();
+    play(state, ACCEPT);
+    expect(state.apply(FARM)).toEqual([
+      { kind: 'xp', amount: 10 },
+      { kind: 'progress', quest: 'raiders', objective: 0, count: 1 },
+    ]);
+    play(state, FARM);
+    expect(state.tracker?.lines).toEqual(['Bandits defeated at the farm: 2/3']);
+  });
+
+  it('is ready with the third: a gold "?", Hand in, and "Return to Marshal Hale"', () => {
+    const state = new AdventureState();
+    const effects = play(state, ACCEPT, FARM, FARM, FARM);
+    expect(effects.slice(-2)).toEqual([
+      { kind: 'progress', quest: 'raiders', objective: 0, count: 3 },
+      { kind: 'quest', quest: 'raiders', stage: 'ready' },
+    ]);
+    expect(state.hale).toEqual({ marker: 'ready', line: "The farm's quieter already. Well done.", buttons: ['handIn'] });
+    expect(state.tracker).toEqual({ title: 'Raiders in the Fields', lines: ['Return to Marshal Hale'] });
+  });
+
+  it('counts no more once ready: a fourth bandit pays its XP and nothing else', () => {
+    const state = new AdventureState();
+    play(state, ACCEPT, FARM, FARM, FARM);
+    expect(state.apply(FARM)).toEqual([{ kind: 'xp', amount: 10 }]);
+  });
+
+  it('hands in for 80 XP and level 2, and Hale offers The Lumber Camp', () => {
+    const state = new AdventureState();
+    play(state, ACCEPT, FARM, FARM, FARM);
+    expect(state.apply(HAND_IN)).toEqual([
+      { kind: 'quest', quest: 'raiders', stage: 'handedIn' },
+      { kind: 'xp', amount: 80 },
+      { kind: 'level', level: 2, unlocks: ['warCry'] },
+      { kind: 'quest', quest: 'lumber', stage: 'offered' },
+    ]);
+    expect(state.xp).toBe(110);
+    expect(state.hale).toEqual({ marker: 'offered', line: OFFERED[1], buttons: ['accept', 'notNow'] });
+    expect(state.tracker).toBeNull();
+  });
+});
+
+describe('kill credit', () => {
+  it("doesn't count the farm's bandits killed before the quest was taken", () => {
+    const state = new AdventureState();
+    play(state, FARM, FARM, FARM, ACCEPT);
+    expect(state.tracker?.lines).toEqual(['Bandits defeated at the farm: 0/3']);
+    expect(state.xp).toBe(30);
+  });
+
+  it("counts only the quest's own camp", () => {
+    const state = new AdventureState();
+    play(state, ACCEPT, THUG, PATROL, MINE, kill('watchtower', 2), WARDEN);
+    expect(state.tracker?.lines).toEqual(['Bandits defeated at the farm: 0/3']);
+  });
+
+  it("doesn't count the lumber camp's bandits for The Lumber Camp before it's taken", () => {
+    const state = new AdventureState();
+    play(state, ...RAIDERS, THUG, THUG, THUG, ARCHER, LEADER, ACCEPT);
+    expect(state.tracker?.lines).toEqual(['Bandits defeated at the lumber camp: 0/5', "Leader's orders taken: 0/1"]);
+  });
+
+  it("doesn't count the lumber camp's patrol, which is its own camp", () => {
+    const state = new AdventureState();
+    play(state, ...RAIDERS, ACCEPT, PATROL, PATROL, THUG);
+    expect(state.tracker?.lines[0]).toBe('Bandits defeated at the lumber camp: 1/5');
+  });
+
+  it("doesn't count the Warden before What Lies Below is taken", () => {
+    const state = new AdventureState();
+    play(state, ...RAIDERS, ...LUMBER, WARDEN, ACCEPT);
+    expect(state.tracker?.lines).toEqual(['What woke the dead defeated: 0/1']);
+  });
+
+  it("counts nothing for the skeletons the Warden raises", () => {
+    const state = new AdventureState();
+    play(state, ...RAIDERS, ...LUMBER, ACCEPT, kill(null, 5, 'raised'));
+    expect(state.tracker?.lines).toEqual(['What woke the dead defeated: 0/1']);
+  });
+});
+
+describe('The Lumber Camp', () => {
+  it('asks for the five bandits of the lumber camp and the leader\'s orders', () => {
+    const state = new AdventureState();
+    play(state, ...RAIDERS);
+    expect(state.apply(ACCEPT)).toEqual([{ kind: 'quest', quest: 'lumber', stage: 'active' }]);
+    expect(state.hale).toEqual({
+      marker: 'active',
+      line: 'The lumber camp is west off the north road, past the bridge. Mind their leader.',
+      buttons: ['goodbye'],
+    });
+    expect(state.tracker).toEqual({
+      title: 'The Lumber Camp',
+      lines: ['Bandits defeated at the lumber camp: 0/5', "Leader's orders taken: 0/1"],
+    });
+  });
+
+  it('takes the orders only while it is under way', () => {
+    const state = new AdventureState();
+    expect(state.apply(ORDERS)).toEqual([]);
+    play(state, ACCEPT);
+    expect(state.apply(ORDERS)).toEqual([]);
+    play(state, FARM, FARM, FARM, HAND_IN);
+    expect(state.apply(ORDERS)).toEqual([]);
+    play(state, ACCEPT);
+    expect(state.apply(ORDERS)).toEqual([{ kind: 'progress', quest: 'lumber', objective: 1, count: 1 }]);
+    expect(state.tracker?.lines[1]).toBe("Leader's orders taken: 1/1");
+  });
+
+  it('takes the orders once: they are gone for good', () => {
+    const state = new AdventureState();
+    play(state, ...RAIDERS, ACCEPT, ORDERS);
+    expect(state.apply(ORDERS)).toEqual([]);
+  });
+
+  it('is ready with the bandits first and the orders last', () => {
+    const state = new AdventureState();
+    play(state, ...RAIDERS, ACCEPT, THUG, THUG, THUG, ARCHER, LEADER);
+    expect(state.hale.marker).toBe('active');
+    expect(state.tracker?.lines).toEqual(['Bandits defeated at the lumber camp: 5/5', "Leader's orders taken: 0/1"]);
+    expect(state.apply(ORDERS)).toEqual([
+      { kind: 'progress', quest: 'lumber', objective: 1, count: 1 },
+      { kind: 'quest', quest: 'lumber', stage: 'ready' },
+    ]);
+    expect(state.tracker?.lines).toEqual(['Return to Marshal Hale']);
+  });
+
+  it('is ready with the orders first and the bandits last', () => {
+    const state = new AdventureState();
+    play(state, ...RAIDERS, ACCEPT, ORDERS, THUG, THUG, THUG, ARCHER);
+    expect(state.hale.marker).toBe('active');
+    expect(state.apply(LEADER).slice(-2)).toEqual([
+      { kind: 'progress', quest: 'lumber', objective: 0, count: 5 },
+      { kind: 'quest', quest: 'lumber', stage: 'ready' },
+    ]);
+    expect(state.hale).toEqual({
+      marker: 'ready',
+      line: "Orders... they're digging for silver in the old mine. Fools. That hill was left alone for a reason.",
+      buttons: ['handIn'],
+    });
+  });
+
+  it('hands in for 120 XP, and Hale offers What Lies Below', () => {
+    const state = new AdventureState();
+    play(state, ...RAIDERS, ACCEPT, THUG, THUG, THUG, ARCHER, LEADER, ORDERS);
+    expect(state.apply(HAND_IN)).toEqual([
+      { kind: 'quest', quest: 'lumber', stage: 'handedIn' },
+      { kind: 'xp', amount: 120 },
+      { kind: 'level', level: 3, unlocks: ['earthshaker'] },
+      { kind: 'quest', quest: 'below', stage: 'offered' },
+    ]);
+    expect(state.hale).toEqual({ marker: 'offered', line: OFFERED[2], buttons: ['accept', 'notNow'] });
+  });
+});
+
+describe('What Lies Below', () => {
+  it('asks for whatever woke the dead', () => {
+    const state = new AdventureState();
+    play(state, ...RAIDERS, ...LUMBER, ACCEPT);
+    expect(state.hale).toEqual({
+      marker: 'active',
+      line: "The mine's at the end of the north road. Whatever's down there, end it.",
+      buttons: ['goodbye'],
+    });
+    expect(state.tracker).toEqual({ title: 'What Lies Below', lines: ['What woke the dead defeated: 0/1'] });
+  });
+
+  it('is ready once the Warden falls', () => {
+    const state = new AdventureState();
+    play(state, ...RAIDERS, ...LUMBER, ACCEPT);
+    expect(state.apply(WARDEN).slice(-2)).toEqual([
+      { kind: 'progress', quest: 'below', objective: 0, count: 1 },
+      { kind: 'quest', quest: 'below', stage: 'ready' },
+    ]);
+    expect(state.hale).toEqual({
+      marker: 'ready',
+      line: "So it's done. Take my old sword. It served me well; it'll serve you better.",
+      buttons: ['handIn'],
+    });
+    expect(state.tracker).toEqual({ title: 'What Lies Below', lines: ['Return to Marshal Hale'] });
+  });
+
+  it("hands in for 300 XP and Hale's old longsword, and ends the chain", () => {
+    const state = new AdventureState();
+    play(state, ...RAIDERS, ...LUMBER, ACCEPT, WARDEN);
+    expect(state.sword).toBe('plain');
+    const effects = state.apply(HAND_IN);
+    expect(effects[0]).toEqual({ kind: 'quest', quest: 'below', stage: 'handedIn' });
+    expect(effects).toContainEqual({ kind: 'sword', sword: 'hale' });
+    expect(effects.some((e) => e.kind === 'quest' && e.stage === 'offered')).toBe(false);
+    expect(state.sword).toBe('hale');
+  });
+});
+
+describe('after the chain', () => {
+  const done = () => {
+    const state = new AdventureState();
+    play(state, ...RAIDERS, ...LUMBER, ACCEPT, WARDEN, HAND_IN);
+    return state;
+  };
+
+  it('Hale shows no marker, points you south to Brackenmoor, and says goodbye', () => {
+    expect(done().hale).toEqual({
+      marker: null,
+      line: "Oakvale's safe, thanks to you. There's more of the world south through the pass: Brackenmoor, and the roads beyond it.",
+      buttons: ['goodbye'],
+    });
+  });
+
+  it('there is nothing to track, take or hand in: kills pay their XP and nothing more', () => {
+    const state = done();
+    expect(state.tracker).toBeNull();
+    expect(play(state, ACCEPT, HAND_IN, ORDERS, WARDEN, FARM)).toEqual([
+      { kind: 'xp', amount: 150 },
+      { kind: 'xp', amount: 10 },
+    ]);
+  });
+});
+
+describe('the chain moves one way', () => {
+  it('takes one quest at a time: accepting again does nothing', () => {
+    const state = new AdventureState();
+    play(state, ACCEPT);
+    expect(state.apply(ACCEPT)).toEqual([]);
+    expect(state.tracker?.title).toBe('Raiders in the Fields');
+  });
+
+  it("won't hand in a quest that isn't ready, or with nothing taken", () => {
+    const state = new AdventureState();
+    expect(state.apply(HAND_IN)).toEqual([]);
+    play(state, ACCEPT, FARM, FARM);
+    expect(state.apply(HAND_IN)).toEqual([]);
+    expect(state.hale.marker).toBe('active');
+    expect(state.xp).toBe(20);
+  });
+
+  it("hands each in once: a second hand-in doesn't pay again or repeat it", () => {
+    const state = new AdventureState();
+    play(state, ...RAIDERS);
+    expect(state.apply(HAND_IN)).toEqual([]);
+    expect(state.xp).toBe(110);
+    expect(state.hale.line).toBe(OFFERED[1]);
+  });
+
+  it('offers each quest in turn, only once the one before is handed in', () => {
+    const state = new AdventureState();
+    const offered: string[] = [];
+    for (const event of [...RAIDERS, ...LUMBER, ACCEPT, WARDEN, HAND_IN]) {
+      for (const e of state.apply(event)) if (e.kind === 'quest' && e.stage === 'offered') offered.push(e.quest);
+    }
+    expect(offered).toEqual(['lumber', 'below']);
+  });
+});
+
+describe('the plain route', () => {
+  it('lands level 2 at the first hand-in, 3 at the second, 4 at the dig\'s brute, and 5 with the sword at the last', () => {
+    const state = new AdventureState();
+    const seen: Record<string, [number, number]> = {};
+    const at = (name: string) => (seen[name] = [state.xp, state.level]);
+
+    play(state, ACCEPT, FARM, FARM, FARM);
+    at('farm');
+    play(state, HAND_IN);
+    at('first hand-in');
+    play(state, ACCEPT, THUG, THUG, THUG, ARCHER, LEADER, ORDERS);
+    at('lumber camp');
+    play(state, HAND_IN);
+    at('second hand-in');
+    play(state, ACCEPT, ...times(5, MINE));
+    at('cart hall and gallery');
+    play(state, DIG_BRUTE);
+    at("dig's brute");
+    play(state, DIG_BRUTE, WARDEN);
+    at('Warden');
+    play(state, HAND_IN);
+    at('last hand-in');
+
+    expect(seen).toEqual({
+      farm: [30, 1],
+      'first hand-in': [110, 2],
+      'lumber camp': [250, 2],
+      'second hand-in': [370, 3],
+      'cart hall and gallery': [520, 3],
+      "dig's brute": [640, 4],
+      Warden: [910, 4],
+      'last hand-in': [1000, 5],
+    });
+    expect(state.sword).toBe('hale');
+  });
+});
