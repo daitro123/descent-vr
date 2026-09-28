@@ -17,3 +17,5 @@ Build a rough Marshal Hale and the three bandits in the model inspector (`?inspe
 ## Comments
 
 **2026-09-28:** [The zone's enemies](02-the-zones-enemies.md) is resolved and folds the bandit looks into this ticket, so the question now covers the thug, the archer and the leader as well as Marshal Hale. [Enemies in the open](07-enemies-in-the-open.md) prototypes with skeletons standing in, so it doesn't wait on this one.
+
+**2026-09-28:** [Talking to NPCs and tracking quests in VR](06-talking-to-npcs-and-tracking-quests.md) is resolved. A gold "!" or "?" floats about half a metre over Marshal Hale's head, and a board unfolds beside them on your right when you walk up, so Hale needs room around them by the signpost. The prototype's stand-in Hale (mail, a blue tabard, a sword at the hip, one draw call, turning to face you and waving) is in history at merge commit `19ce545`, `src/ui/talk-prototype/actors.ts`, if a starting point helps.
