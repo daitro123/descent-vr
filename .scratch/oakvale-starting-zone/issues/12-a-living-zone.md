@@ -1,7 +1,7 @@
 # A living zone
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 11
 
 ## Question
