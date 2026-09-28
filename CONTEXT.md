@@ -28,6 +28,10 @@ _Avoid_: NPC (too broad: every friendly character is an NPC), questgiver
 A friendly character who lives in a zone and gives no quests. Oakvale has three: the innkeeper, the smith and the farmer.
 _Avoid_: NPC (too broad), townsfolk, civilian
 
+**Bark**:
+A short line a friendly character says unasked as you walk near, shown as text over their head. It isn't a conversation, and what it says can change as the quest chain moves on.
+_Avoid_: greeting, gossip, chatter, speech bubble
+
 **Quest chain**:
 A run of quests where handing one in unlocks the next.
 _Avoid_: storyline, questline
@@ -79,3 +83,7 @@ _Avoid_: graveyard, checkpoint, spawn
 **Interior**:
 The inside of a building or a mine you can walk into, part of its zone and entered through its door or mouth without a loading screen. In Oakvale: the inn, the house by the well, and the old mine.
 _Avoid_: instance, dungeon (in WoW, a separate copy for a group), room, indoor zone, cell
+
+**Ambience**:
+The steady sound of a place that plays under everything else: wind, birds, water, fire. Each zone and each interior has its own, and it changes as you step indoors, go down the mine or cross a seam.
+_Avoid_: soundscape, background music, ambient noise
