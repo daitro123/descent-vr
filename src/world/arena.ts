@@ -16,10 +16,12 @@ import { CONFIG } from '../config';
 import { ModelBuilder, type PartOpts } from '../models/kit';
 import { sharedModelMaterial } from '../models/materials';
 import { PAL } from '../models/palette';
+import type { Ground } from './ground';
 import { Glows } from './glows';
 import { brickWallTexture, stoneFloorTexture } from './pixelTexture';
 
 const PI = Math.PI;
+const _p = new Vector3();
 
 /**
  * The crypt hall: a square room with three gates, the Warden's throne on the
@@ -31,7 +33,7 @@ const PI = Math.PI;
  * count is fixed at four point lights plus the hemisphere. Braziers and the
  * rune circle fake their light with glow sprites.
  */
-export class Arena {
+export class Arena implements Ground {
   readonly root = new Group();
   private readonly lights: { light: PointLight; base: number; seed: number }[] = [];
   private readonly glows: Glows;
@@ -85,6 +87,11 @@ export class Arena {
     this.glows.update(this.time, camera);
   }
 
+  /** The room's floor is flat, at 0. */
+  heightAt(): number {
+    return 0;
+  }
+
   /**
    * Push a point on the floor plane out of walls, pillars and props.
    * `radius` is the body radius of whatever is being resolved.
@@ -105,6 +112,34 @@ export class Arena {
       if (px * px + pz * pz < (c.r + 0.1) ** 2) return false;
     }
     return true;
+  }
+
+  /** Slide round pillars and props: bend towards the side already favoured. */
+  steer(from: Vector3, dir: Vector3, radius: number): void {
+    for (const o of [...CONFIG.arena.pillars, ...CONFIG.arena.obstacles]) {
+      const dx = from.x - o.x;
+      const dz = from.z - o.z;
+      const d = Math.hypot(dx, dz);
+      const clear = o.r + radius + 0.5;
+      if (d > clear || d < 1e-4) continue;
+      // Heading into it? Slide round the side we're already favouring.
+      const towards = -(dx * dir.x + dz * dir.z) / d;
+      if (towards <= 0) continue;
+      const side = dx * dir.z - dz * dir.x >= 0 ? 1 : -1;
+      const w = towards * (1 - (d - o.r - radius) / 0.5);
+      dir.x += (-dz / d) * side * w * 1.5;
+      dir.z += (dx / d) * side * w * 1.5;
+    }
+    dir.setY(0).normalize();
+  }
+
+  /** The floor, the walls and the pillars catch arrows. */
+  arrowStops(p: Vector3): boolean {
+    const half = CONFIG.arena.halfSize;
+    if (p.y <= 0.02 || Math.abs(p.x) >= half - 0.02 || Math.abs(p.z) >= half - 0.02) return true;
+    if (p.y >= CONFIG.arena.wallHeight) return false;
+    _p.copy(p);
+    return CONFIG.arena.pillars.some((c) => pushOutOfCircle(_p, c.x, c.z, c.r));
   }
 }
 

@@ -6,7 +6,8 @@ import type { Enemy, EnemyContext, PlayerSword } from '../src/enemies/enemy';
 import { Archer, Brute, DUELIST, Grunt, Warden } from '../src/enemies/kinds';
 import type { GuardSide } from '../src/enemies/poses';
 import { AttackTokens } from '../src/enemies/tokens';
-import type { Arena } from '../src/world/arena';
+import { Arena } from '../src/world/arena';
+import type { Ground } from '../src/world/ground';
 
 // Enemies that guard raise their weapon on the side your blade comes from.
 // These drive real enemies (rig, guard poses, timings) against a simulated
@@ -14,7 +15,7 @@ import type { Arena } from '../src/world/arena';
 
 const DT = 1 / 72;
 const DIST = 1.2; // player stands this far in front of the enemy (which faces +Z)
-const openArena = { resolve: () => false, lineOfSight: () => true } as unknown as Arena;
+const openGround: Ground = { resolve: () => false, lineOfSight: () => true, heightAt: () => 0, steer: Arena.prototype.steer, arrowStops: () => false };
 
 // Out of the grave and standing its ground: no walking or attacking, so only the guard moves it.
 class TestGrunt extends Grunt {
@@ -63,7 +64,7 @@ function context(sword: PlayerSword | null): EnemyContext {
     playerFeet: new Vector3(0, 0, DIST),
     playerHead: new Vector3(0, 1.6, DIST),
     playerSword: sword,
-    arena: openArena,
+    ground: openGround,
     meleeTokens: new AttackTokens(9),
     rangedTokens: new AttackTokens(9),
     sweep: () => null,

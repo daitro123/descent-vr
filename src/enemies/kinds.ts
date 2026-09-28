@@ -32,7 +32,7 @@ abstract class MeleeEnemy extends Enemy {
         this.cooldown = 1;
         return;
       }
-      this.approach(ctx.playerFeet, d.speed, dt, ctx);
+      this.approach(ctx.playerFeet, this.closingSpeed(dist), dt, ctx);
       return;
     }
     if (this.cooldown <= 0 && dist < d.holdDistance + 1.2 && this.acquire(ctx.meleeTokens)) {
@@ -40,7 +40,7 @@ abstract class MeleeEnemy extends Enemy {
       return;
     }
     // Waiting for a turn: hold at a respectful distance and circle.
-    if (dist > d.holdDistance + 0.6) this.approach(ctx.playerFeet, d.speed, dt, ctx);
+    if (dist > d.holdDistance + 0.6) this.approach(ctx.playerFeet, this.closingSpeed(dist), dt, ctx);
     else this.circle(ctx, d.holdDistance, dt);
   }
 
@@ -83,7 +83,7 @@ export class Brute extends MeleeEnemy {
 export class Archer extends Enemy {
   protected think(dt: number, ctx: EnemyContext, dist: number): void {
     const d = this.def;
-    const clear = ctx.arena.lineOfSight(this.position, ctx.playerFeet);
+    const clear = ctx.ground.lineOfSight(this.position, ctx.playerFeet);
     _dir.subVectors(ctx.playerFeet, this.position).setY(0).normalize();
     if (dist < 3.2) {
       // Too close: back-pedal.
@@ -92,7 +92,7 @@ export class Archer extends Enemy {
       // A pillar is in the way: side-step to find a shot.
       this.walk(_dir.set(-_dir.z * this.strafeSign, 0, _dir.x * this.strafeSign), d.speed * 0.7, dt, ctx);
     } else if (dist > d.holdDistance + 1.5) {
-      this.walk(_dir, d.speed, dt, ctx);
+      this.walk(_dir, this.closingSpeed(dist), dt, ctx);
     } else {
       this.circle(ctx, d.holdDistance, dt);
     }

@@ -5,7 +5,8 @@ import { type AttackConfig, CONFIG } from '../src/config';
 import type { Enemy, EnemyContext } from '../src/enemies/enemy';
 import { Archer, Brute, Grunt, Warden } from '../src/enemies/kinds';
 import { AttackTokens } from '../src/enemies/tokens';
-import type { Arena } from '../src/world/arena';
+import { Arena } from '../src/world/arena';
+import type { Ground } from '../src/world/ground';
 
 // These drive real enemies (rig, poses, aim calibration, attack timeline)
 // through their attacks against a simulated player, so a pose tweak that makes
@@ -58,7 +59,7 @@ class TestArcher extends Archer implements Drivable {
   }
 }
 
-const openArena = { resolve: () => false, lineOfSight: () => true } as unknown as Arena;
+const openGround: Ground = { resolve: () => false, lineOfSight: () => true, heightAt: () => 0, steer: Arena.prototype.steer, arrowStops: () => false };
 
 interface Shield {
   at: [number, number, number];
@@ -111,7 +112,7 @@ function run(enemy: Enemy & Drivable, attack: AttackConfig, d: Defender, dist: n
     playerFeet: new Vector3(0, 0, dist),
     playerHead: new Vector3(0, headY, dist),
     playerSword: null,
-    arena: openArena,
+    ground: openGround,
     meleeTokens: new AttackTokens(9),
     rangedTokens: new AttackTokens(9),
     sweep: (e, a, pb, pt, b, t) => {
@@ -255,7 +256,7 @@ describe('archer aim', () => {
       playerFeet: head.clone().setY(0),
       playerHead: head.clone(),
       playerSword: null,
-      arena: openArena,
+      ground: openGround,
       meleeTokens: new AttackTokens(9),
       rangedTokens: new AttackTokens(9),
       sweep: () => null,
@@ -313,7 +314,7 @@ describe('pose constants', () => {
       playerFeet: new Vector3(0, 0, 3),
       playerHead: new Vector3(0, 1.6, 3),
       playerSword: null,
-      arena: openArena,
+      ground: openGround,
       meleeTokens: new AttackTokens(2),
       rangedTokens: new AttackTokens(2),
       sweep: () => null,

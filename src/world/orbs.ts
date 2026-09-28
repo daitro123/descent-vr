@@ -6,6 +6,8 @@ import type { Player } from '../player/player';
 interface Orb {
   mesh: Mesh;
   age: number;
+  /** Height it bobs about: a hand's reach above where it dropped. */
+  y: number;
 }
 
 const geo = new IcosahedronGeometry(0.08, 0);
@@ -20,9 +22,9 @@ export class Orbs {
 
   drop(at: Vector3): void {
     const mesh = new Mesh(geo, mat);
-    mesh.position.set(at.x, 1.0, at.z);
+    mesh.position.set(at.x, at.y + 1.0, at.z);
     this.root.add(mesh);
-    this.orbs.push({ mesh, age: 0 });
+    this.orbs.push({ mesh, age: 0, y: at.y + 1.0 });
   }
 
   update(dt: number, player: Player): void {
@@ -30,7 +32,7 @@ export class Orbs {
     for (let i = this.orbs.length - 1; i >= 0; i--) {
       const orb = this.orbs[i];
       orb.age += dt;
-      orb.mesh.position.y = 1.0 + Math.sin(orb.age * 3) * 0.05;
+      orb.mesh.position.y = orb.y + Math.sin(orb.age * 3) * 0.05;
       orb.mesh.rotation.y += dt * 2;
 
       const touched =

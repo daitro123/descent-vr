@@ -1,7 +1,7 @@
 import { Group, type PerspectiveCamera, Vector3, type WebGLRenderer } from 'three';
 import { CONFIG } from '../config';
 import { sfx } from '../fx/sfx';
-import type { Arena } from '../world/arena';
+import type { Ground } from '../world/ground';
 import { XRInput } from './input';
 import { Shield, Sword } from './weapons';
 
@@ -35,7 +35,8 @@ export class Player {
   constructor(
     readonly camera: PerspectiveCamera,
     renderer: WebGLRenderer,
-    private readonly arena: Arena,
+    /** What you stand on and bump into: the arena, or a zone. */
+    readonly ground: Ground,
   ) {
     this.rig.name = 'player-rig';
     this.rig.add(camera);
@@ -58,10 +59,10 @@ export class Player {
     return this.camera.getWorldPosition(out);
   }
 
-  /** Head position projected to the floor. */
+  /** Head position projected to the ground. */
   feetPosition(out: Vector3): Vector3 {
     this.headPosition(out);
-    out.y = 0;
+    out.y = this.ground.heightAt(out.x, out.z);
     return out;
   }
 
@@ -72,7 +73,7 @@ export class Player {
     outTop.copy(outHead);
     outTop.y -= B.torsoTop;
     outBottom.copy(outHead);
-    outBottom.y = Math.max(0.2, outHead.y - B.torsoBottom);
+    outBottom.y = Math.max(this.ground.heightAt(outHead.x, outHead.z) + 0.2, outHead.y - B.torsoBottom);
     outHead.y -= B.headDrop;
   }
 
@@ -90,7 +91,7 @@ export class Player {
       this.snapTurn();
       this.dash(dt);
     }
-    this.collide();
+    this.collide(dt);
     this.rig.updateMatrixWorld(true);
     this.sword.update(this.rig, dt);
     this.shield.update(this.rig, dt);
@@ -162,15 +163,20 @@ export class Player {
     this.rig.rotation.y += angle;
   }
 
-  /** Keep the head's floor projection out of walls and pillars (covers room-scale walking too). */
-  private collide(): void {
+  /**
+   * Keep the head's floor projection out of walls and pillars (covers
+   * room-scale walking too), and the feet on the ground, eased for comfort.
+   */
+  private collide(dt: number): void {
     this.rig.updateMatrixWorld(true);
     this.feetPosition(_head);
     _resolved.copy(_head);
-    if (this.arena.resolve(_resolved, CONFIG.player.bodyRadius)) {
+    if (this.ground.resolve(_resolved, CONFIG.player.bodyRadius)) {
       this.rig.position.x += _resolved.x - _head.x;
       this.rig.position.z += _resolved.z - _head.z;
     }
+    const floor = this.ground.heightAt(_resolved.x, _resolved.z);
+    this.rig.position.y += (floor - this.rig.position.y) * Math.min(1, dt * 10);
   }
 
   damage(amount: number): void {
@@ -187,13 +193,14 @@ export class Player {
     this.rage = Math.min(CONFIG.player.maxRage, this.rage + amount);
   }
 
-  reset(): void {
+  /** Back to full health and nothing charged, standing at (x, z) facing `yaw`. */
+  reset(x = 0, z = 0, yaw = 0): void {
     this.hp = CONFIG.player.maxHp;
     this.rage = 0;
     this.frenzy = 0;
     this.dashCooldown = this.dashTime = this.dodgeTime = 0;
     this.shield.numb = 0;
-    this.rig.position.set(0, 0, 0);
-    this.rig.rotation.set(0, 0, 0);
+    this.rig.position.set(x, this.ground.heightAt(x, z), z);
+    this.rig.rotation.set(0, yaw, 0);
   }
 }

@@ -104,7 +104,7 @@ export class Game {
       playerFeet: new Vector3(),
       playerHead: new Vector3(),
       playerSword: null,
-      arena: this.arena,
+      ground: this.arena,
       meleeTokens: this.meleeTokens,
       rangedTokens: this.rangedTokens,
       sweep: (e, a, pb, pt, b, t) => this.combat.sweep(e, a, pb, pt, b, t),
@@ -204,11 +204,12 @@ export class Game {
 
   private updateShadows(): void {
     this.shadows.begin();
-    this.shadows.add(this.ctx.playerFeet.x, this.ctx.playerFeet.z, 0.26);
+    const feet = this.ctx.playerFeet;
+    this.shadows.add(feet.x, feet.y, feet.z, 0.26);
     for (const e of this.enemies) {
       if (e.state === 'dead' && e.stateTime > 1) continue;
       const scale = e.state === 'rising' ? Math.min(1, e.stateTime * 1.5) : 1;
-      this.shadows.add(e.position.x, e.position.z, e.def.radius * 1.1 * scale);
+      this.shadows.add(e.position.x, e.position.y, e.position.z, e.def.radius * 1.1 * scale);
     }
     this.shadows.end();
   }

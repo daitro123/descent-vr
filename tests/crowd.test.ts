@@ -6,7 +6,7 @@ import type { EnemyContext } from '../src/enemies/enemy';
 import { Grunt } from '../src/enemies/kinds';
 import { AttackTokens } from '../src/enemies/tokens';
 import { waveRoster } from '../src/game';
-import type { Arena } from '../src/world/arena';
+import { Arena } from '../src/world/arena';
 
 describe('AttackTokens', () => {
   it('caps holders and hands tokens back', () => {
@@ -42,7 +42,7 @@ describe('a crowd of grunts', () => {
       playerFeet: new Vector3(0, 0, 0),
       playerHead: new Vector3(0, 1.6, 0),
       playerSword: null,
-      arena: { resolve: () => false, lineOfSight: () => true } as unknown as Arena,
+      ground: { resolve: () => false, lineOfSight: () => true, heightAt: () => 0, steer: Arena.prototype.steer, arrowStops: () => false },
       meleeTokens: new AttackTokens(CONFIG.tokens.melee, CONFIG.tokens.meleeGap),
       rangedTokens: new AttackTokens(CONFIG.tokens.ranged, CONFIG.tokens.rangedGap),
       sweep: () => null,
