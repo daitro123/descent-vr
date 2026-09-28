@@ -271,6 +271,8 @@ export const CONFIG = {
     killXp: 10, // a kill pays this per enemy level…
     roles: { ordinary: 1, leader: 3, deepBrute: 3, warden: 3, raised: 0 } satisfies Record<Role, number>, // …times this, by what it was
     unlocks: { warCry: 2, earthshaker: 3 } satisfies Record<Ability, number>, // the level each ability arrives at; rage comes with the War Cry
+    xpFloat: { height: 1.9, time: 1.6 }, // "+N XP" floats this high over where an enemy fell, for this long (s)
+    levelUp: { banner: 3.5, lines: 5 }, // s that "LEVEL N", and the lines on what it brought, stay in view
   },
 
   // The Adventure's health out of a fight (the arena has none).

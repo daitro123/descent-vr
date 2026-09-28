@@ -12,11 +12,15 @@ export type Ability = 'warCry' | 'earthshaker';
 /** What a slain enemy was, for the XP it pays. */
 export type Role = 'ordinary' | 'leader' | 'deepBrute' | 'warden' | 'raised';
 
+/** Every ability, in the order the levels bring them. */
+export const ABILITIES = Object.keys(CONFIG.levels.unlocks) as Ability[];
+
 /** Something that happened in the world that progress may care about. */
 export type AdventureEvent = {
   readonly kind: 'kill';
-  /** The camp it belonged to, or null for none (the Warden, what it raises). */
+  /** The id of the camp it belonged to, or null for none (the Warden, what it raises). */
   readonly camp: string | null;
+  /** The enemy's own level. */
   readonly level: number;
   readonly role: Role;
 };
@@ -36,14 +40,16 @@ export interface Stats {
   readonly abilities: readonly Ability[];
 }
 
+/** The step a level brings, to your damage and to an enemy's health and damage: 1 at level 1. */
+const stepAt = (level: number) => 1 + CONFIG.levels.step * (level - 1);
+
 /** Your numbers at `level`. */
 export function statsAt(level: number): Stats {
   const L = CONFIG.levels;
-  const above = level - 1;
   return {
-    maxHp: CONFIG.player.maxHp + L.health * above,
-    damage: 1 + L.step * above,
-    abilities: (Object.keys(L.unlocks) as Ability[]).filter((a) => L.unlocks[a] <= level),
+    maxHp: CONFIG.player.maxHp + L.health * (level - 1),
+    damage: stepAt(level),
+    abilities: ABILITIES.filter((a) => L.unlocks[a] <= level),
   };
 }
 
@@ -52,8 +58,8 @@ export function statsAt(level: number): Stats {
  * damage take the same step per level as yours, and a camp's members take
  * `CONFIG.camps.strength` on top. Level 1 out of a camp is the arena's.
  */
-export function enemyNumbers(def: EnemyConfig, level: number, camp: boolean): EnemyConfig {
-  const k = (1 + CONFIG.levels.step * (level - 1)) * (camp ? CONFIG.camps.strength : 1);
+export function enemyNumbers(def: EnemyConfig, level: number, inCamp: boolean): EnemyConfig {
+  const k = stepAt(level) * (inCamp ? CONFIG.camps.strength : 1);
   return { ...def, hp: Math.round(def.hp * k), attacks: def.attacks.map((a) => ({ ...a, damage: Math.round(a.damage * k) })) };
 }
 
@@ -63,7 +69,7 @@ export class AdventureState {
   private total = 0;
 
   get level(): number {
-    return 1 + CONFIG.levels.xp.filter((at) => at <= this.total).length;
+    return 1 + this.reached.length;
   }
 
   /** XP in all, since level 1. */
@@ -73,17 +79,26 @@ export class AdventureState {
 
   /** XP still needed for the next level: 0 at the cap. */
   get xpToNext(): number {
-    const next = CONFIG.levels.xp.find((at) => at > this.total);
+    const next = this.next;
     return next === undefined ? 0 : next - this.total;
   }
 
   /** How far through this level you are, 0 to 1: full at the cap. */
   get progress(): number {
-    const L = CONFIG.levels.xp;
-    const next = L.find((at) => at > this.total);
+    const next = this.next;
     if (next === undefined) return 1;
-    const from = L.filter((at) => at <= this.total).pop() ?? 0;
+    const from = this.reached.at(-1) ?? 0;
     return (this.total - from) / (next - from);
+  }
+
+  /** The XP totals of the levels you've reached above 1. */
+  private get reached(): readonly number[] {
+    return CONFIG.levels.xp.filter((at) => at <= this.total);
+  }
+
+  /** The XP total of the next level, or undefined at the cap. */
+  private get next(): number | undefined {
+    return CONFIG.levels.xp.find((at) => at > this.total);
   }
 
   get stats(): Stats {

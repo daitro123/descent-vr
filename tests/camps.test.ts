@@ -286,6 +286,7 @@ describe('camp enemies', () => {
   it("take their camp's level on top: a level-2 camp's are 1.2 times stronger again", () => {
     const { camps } = world([{ ...camp('lumber', [thug(0, 0), archer(5, 0)]), level: 2 }], 0, 60);
     const [grunt, bowman] = camps.camps[0].members.map((m) => m.enemy);
+    expect([grunt.level, bowman.level]).toEqual([2, 2]);
     expect(grunt.maxHp).toBe(76); // 45 × 1.2 × 1.4 = 75.6
     expect(grunt.def.attacks.map((a) => a.damage)).toEqual([24, 20, 20]);
     expect(bowman.maxHp).toBe(47); // 28 × 1.68 = 47.04

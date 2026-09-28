@@ -1,5 +1,5 @@
 import { Group, type PerspectiveCamera, Vector3, type WebGLRenderer } from 'three';
-import { type Ability, type Stats, statsAt } from '../adventureState';
+import { ABILITIES, type Ability, type Stats, statsAt } from '../adventureState';
 import { CONFIG } from '../config';
 import { sfx } from '../fx/sfx';
 import type { Ground } from '../world/ground';
@@ -13,7 +13,7 @@ const _right = new Vector3();
 const _resolved = new Vector3();
 
 /** The arena's numbers: level 1, with every ability. */
-const ARENA: Stats = { ...statsAt(1), abilities: ['warCry', 'earthshaker'] };
+const ARENA: Stats = { ...statsAt(1), abilities: ABILITIES };
 
 /**
  * The warrior: XR rig (camera + controllers), locomotion, collision and the

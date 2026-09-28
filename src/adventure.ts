@@ -159,24 +159,31 @@ export class Adventure {
     this.particles.update(dt);
     this.shockwaves.update(dt);
     this.hud.status.level = this.state.level;
-    this.hud.status.xp = this.state.progress;
+    this.hud.status.progress = this.state.progress;
     this.hud.update(dt);
   }
 
   /** A camp's member fell: it pays XP into the adventure state. */
   private onKill(camp: Camp, member: Member): void {
-    const role = member.plan.role ?? 'ordinary';
-    const effects = this.state.apply({ kind: 'kill', camp: camp.plan.id, level: camp.plan.level, role });
-    this.show(effects, member.enemy.position);
+    const { enemy, plan } = member;
+    const effects = this.state.apply({ kind: 'kill', camp: camp.plan.id, level: enemy.level, role: plan.role ?? 'ordinary' });
+    this.show(effects, enemy.position);
   }
 
-  /** What the adventure state did: the XP floats where it was earned, and a level reached is a moment. */
+  /**
+   * What the adventure state did: the XP floats where it was earned, and a
+   * level reached is a moment. A kill that passes two levels at once shows the
+   * higher, with every ability both brought.
+   */
   private show(effects: readonly Effect[], at: Vector3): void {
+    const { xpFloat } = CONFIG.levels;
     const unlocks: Ability[] = [];
     let reached = 0;
     for (const e of effects) {
-      if (e.kind === 'xp') this.text.spawn(`+${e.amount} XP`, _a.copy(at).setY(at.y + 1.9), { color: '#ffd23a', scale: 0.24, life: 1.6, rise: 0.5 });
-      else {
+      if (e.kind === 'xp') {
+        _a.copy(at).setY(at.y + xpFloat.height);
+        this.text.spawn(`+${e.amount} XP`, _a, { color: '#ffd23a', scale: 0.24, life: xpFloat.time, rise: 0.5 });
+      } else {
         reached = e.level;
         unlocks.push(...e.unlocks);
       }
@@ -190,8 +197,9 @@ export class Adventure {
     player.stats = this.state.stats;
     if (player.alive) player.hp = player.maxHp;
     sfx.levelUp();
-    text.banner(player.camera, `LEVEL ${level}`, '#ffd23a', 0.34, 0.3, 3.5);
-    unlocks.forEach((a, i) => text.banner(player.camera, UNLOCKED[a], '#f0e0b0', 0.09, 0.08 - i * 0.12, 5));
+    const { banner, lines } = CONFIG.levels.levelUp;
+    text.banner(player.camera, `LEVEL ${level}`, '#ffd23a', 0.34, 0.3, banner);
+    unlocks.forEach((a, i) => text.banner(player.camera, UNLOCKED[a], '#f0e0b0', 0.09, 0.08 - i * 0.12, lines));
   }
 
   /** Out of a fight for a while, your health comes back. */

@@ -213,7 +213,7 @@ export class Camps {
 
   /** A member's body at its post, at its camp's level and with a camp's strength, running to keep up once it fights. */
   private raise(level: number, plan: PostPlan, post: EnemyPost): Enemy {
-    const enemy = createEnemy(plan.behaviour, post.x, post.z, { level, camp: true, variant: Math.floor(Math.random() * 6) });
+    const enemy = createEnemy(plan.behaviour, post.x, post.z, { level, inCamp: true, variant: Math.floor(Math.random() * 6) });
     enemy.post = post;
     enemy.chaseSpeed = CONFIG.camps.chaseSpeed;
     enemy.position.y = this.ctx.ground.heightAt(post.x, post.z);

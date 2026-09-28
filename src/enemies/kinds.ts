@@ -180,11 +180,11 @@ export class Warden extends Enemy {
 export const DUELIST: EnemyConfig = { ...CONFIG.enemies.grunt, ...CONFIG.duelist };
 
 /** How an enemy is made, besides its behaviour and where it stands. */
-export interface EnemyMaking {
+export interface EnemyOptions {
   /** Its level: health and damage take a step per level above 1. */
   level?: number;
   /** In a camp, it's stronger again (`CONFIG.camps.strength`). */
-  camp?: boolean;
+  inCamp?: boolean;
   /** Which of its behaviour's looks. */
   variant?: number;
   /** Its behaviour's level-1 numbers, if not the usual ones (the `?duel` duelist). */
@@ -192,20 +192,21 @@ export interface EnemyMaking {
 }
 
 /**
- * An enemy of `kind` at (x, z), at its level and in a camp or not. The arena's
- * are level 1 and in none, so they play with the numbers in CONFIG as they are.
+ * An enemy with the behaviour `kind`, standing at (x, z), at its level and in a
+ * camp or not. The arena's are level 1 and in none, so they play with the
+ * numbers in CONFIG as they are.
  */
-export function createEnemy(kind: EnemyKind, x: number, z: number, making: EnemyMaking = {}): Enemy {
-  const { level = 1, camp = false, variant = 0 } = making;
-  const def = enemyNumbers(making.def ?? CONFIG.enemies[kind], level, camp);
+export function createEnemy(kind: EnemyKind, x: number, z: number, options: EnemyOptions = {}): Enemy {
+  const { level = 1, inCamp = false, variant = 0 } = options;
+  const def = enemyNumbers(options.def ?? CONFIG.enemies[kind], level, inCamp);
   switch (kind) {
     case 'grunt':
-      return new Grunt(kind, x, z, variant, def);
+      return new Grunt(kind, x, z, variant, def, level);
     case 'archer':
-      return new Archer(kind, x, z, variant, def);
+      return new Archer(kind, x, z, variant, def, level);
     case 'brute':
-      return new Brute(kind, x, z, variant, def);
+      return new Brute(kind, x, z, variant, def, level);
     case 'warden':
-      return new Warden(kind, x, z, variant, def);
+      return new Warden(kind, x, z, variant, def, level);
   }
 }

@@ -205,6 +205,8 @@ export abstract class Enemy {
     z: number,
     variant = 0,
     def: EnemyConfig = CONFIG.enemies[kind],
+    /** Its level, which `def`'s numbers were made at (createEnemy): what its kill pays for. */
+    readonly level = 1,
   ) {
     this.def = def;
     this.hp = this.maxHp = this.def.hp;

@@ -50,7 +50,7 @@ export interface HudStatus {
   /** Your level, in the Adventure… */
   level: number;
   /** …and how far through it you are, 0 to 1. */
-  xp: number;
+  progress: number;
 }
 
 /**
@@ -75,7 +75,7 @@ export class BeltHud {
   private dashTimer = 0;
   private time = 0;
   private yaw = 0;
-  readonly status: HudStatus = { wave: 0, enemiesLeft: 0, boss: false, level: 1, xp: 0 };
+  readonly status: HudStatus = { wave: 0, enemiesLeft: 0, boss: false, level: 1, progress: 0 };
   private readonly waves: boolean;
 
   constructor(
@@ -196,7 +196,7 @@ export class BeltHud {
       s.enemiesLeft,
       s.boss,
       s.level,
-      Math.round(s.xp * 20),
+      Math.round(s.progress * 20),
       canCry,
       canSlam,
     ].join(':');
@@ -225,7 +225,7 @@ export class BeltHud {
       c.fillStyle = '#3a3020';
       c.fillRect(22, 12, 20, 1);
       c.fillStyle = '#ffd23a';
-      c.fillRect(22, 12, Math.round(20 * Math.min(1, s.xp)), 1);
+      c.fillRect(22, 12, Math.round(20 * Math.min(1, s.progress)), 1);
     }
     // Dash cooldown bar.
     c.fillStyle = '#2a2622';
