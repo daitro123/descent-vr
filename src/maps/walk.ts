@@ -17,10 +17,10 @@ const _fwd = new Vector3();
 const _right = new Vector3();
 const _p = new Vector3();
 
-class Walker {
+export class Walker {
   readonly rig = new Group();
-  private readonly input: XRInput;
-  private readonly sword = new Sword();
+  readonly input: XRInput;
+  readonly sword = new Sword();
   private readonly shield = new Shield();
   private snapLatched = false;
   private readonly keys = new Set<string>();
