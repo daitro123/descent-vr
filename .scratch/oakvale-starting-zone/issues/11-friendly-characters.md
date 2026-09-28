@@ -1,7 +1,7 @@
 # Friendly characters
 
 Type: prototype
-Status: open
+Status: claimed
 Blocked by: 
 
 ## Question
