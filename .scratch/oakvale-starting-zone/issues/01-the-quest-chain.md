@@ -1,7 +1,7 @@
 # The quest chain
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 
 
 ## Question
