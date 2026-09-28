@@ -65,5 +65,9 @@ How strong a character or an enemy is. Each level adds the same step of health a
 _Avoid_: rank, tier, difficulty
 
 **Respawn point**:
-Where you wake after dying, at full health, with nothing lost. Oakvale has two: the village, and just outside the old mine for a death inside it.
+Where you wake after dying, at full health, with nothing lost. Oakvale has two: the inn's hearth in the village, and just outside the old mine for a death inside it.
 _Avoid_: graveyard, checkpoint, spawn
+
+**Interior**:
+The inside of a building you can walk into, part of its zone and entered through its door without a loading screen. In Oakvale, the inn and the house by the well.
+_Avoid_: instance, room, indoor zone, cell
