@@ -123,7 +123,8 @@ export class World implements Ground {
     this.fog.near = this.liftedTo === null ? atmosphere.fog.near : far;
     this.fog.far = this.liftedTo === null ? atmosphere.fog.far : far * 2;
     // The sky dome must sit inside the far plane or it's clipped away.
-    this.sky.root.scale.setScalar(Math.min(1, (0.9 * far) / CONFIG.world.sky.radius));
+    const { radius, farShare } = CONFIG.world.sky;
+    this.sky.root.scale.setScalar(Math.min(1, (farShare * far) / radius));
     if (this.camera) {
       this.camera.far = far;
       this.camera.updateProjectionMatrix();

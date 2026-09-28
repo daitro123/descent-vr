@@ -2,7 +2,7 @@
 // in headless Chromium, against a running dev server:
 //
 //   npx vite --port 5173
-//   node .scratch/oakvale-starting-zone/checks/world.mjs [http://localhost:5173]
+//   node .scratch/oakvale-starting-zone/checks/world.mjs [http://localhost:5173] [shots/]
 //
 // 1. Shader programs after loading Oakvale at ?map=forest, on the page and in
 //    VR with the IWER emulator, and at ?fly=forest after visiting every spot
@@ -11,12 +11,20 @@
 // 2. Radial fog: the same spot of the valley, seen straight ahead and then
 //    near the edge of view without moving, keeps its colour. With the old
 //    depth fog it cleared towards the edge (by 32 of 255 at 44dc7f9; now 1).
+// 3. With a folder given, a screenshot from each of the viewer's spots at
+//    ?fly=forest, to compare with the same run against an older build. At
+//    44dc7f9 against the World, the spots on the ground differed by 0.3 to 1.5
+//    of 255 on average (fog at the edges of view and the wider haze band);
+//    the overview (no fog) and the mine were the same.
 //
 // Playwright is the global install; Chromium is the pre-installed one.
 
+import { mkdirSync } from 'node:fs';
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:5173';
+const shots = process.argv[3];
+if (shots) mkdirSync(shots, { recursive: true });
 const browser = await chromium.launch({
   executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
   args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
@@ -104,11 +112,13 @@ console.log(`?map=forest in VR programs: ${await programs()}`);
 // 1c. ?fly=forest, every viewer spot.
 await page.goto(`${base}/?fly=forest&noemulate`);
 await page.waitForFunction(() => window.__descent?.viewer?.map, null, { timeout: 120000 });
+await page.addStyleTag({ content: '#viewer-hud { display: none !important; }' });
 await frames(3);
-const spots = await page.evaluate(() => window.__descent.viewer.spots.length);
-for (let i = 0; i < spots; i++) {
+const spots = await page.evaluate(() => window.__descent.viewer.spots.map((s) => s.label));
+for (let i = 0; i < spots.length; i++) {
   await page.evaluate((i) => window.__descent.viewer.goTo(i), i);
-  await frames(2);
+  await frames(shots ? 4 : 2);
+  if (shots) await page.screenshot({ path: `${shots}/fly-${String(i).padStart(2, '0')}-${spots[i].replace(/\W+/g, '-')}.png` });
 }
 console.log(`?fly=forest programs after every spot: ${await programs()}`);
 

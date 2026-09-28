@@ -111,6 +111,7 @@ export const CONFIG = {
     pool: { size: 4, color: 0xff9a3c, intensity: 7, distance: 10, decay: 1.5 },
     sky: {
       radius: 180, // m; the World shrinks it inside a nearer far plane
+      farShare: 0.9, // …to this share of the far plane
       // Sine of the elevation below which the dome is pure haze, the fog's
       // colour. Oakvale's ridges past the far plane rise to about 0.17; fully
       // fogged ones (past the fog's far edge) to about 0.25, inside the blend.
