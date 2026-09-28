@@ -229,7 +229,8 @@ export class MapViewer {
     const b = map.bounds;
     const size = Math.max(b.maxX - b.minX, b.maxZ - b.minZ);
     if (map.kind === 'zone') {
-      this.world.clearView(this.fog ? null : Math.max(map.atmosphere.farPlane, size * 3));
+      if (this.fog) this.world.restoreFog();
+      else this.world.liftFog(Math.max(map.atmosphere.farPlane, size * 3));
       return;
     }
     const { sky, viewDistance } = map;

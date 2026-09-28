@@ -6,7 +6,7 @@ A single-player action RPG for VR in the browser, growing into a WoW-style world
 
 **Zone**:
 A hand-built outdoor region of the world, joined to its neighbours so the player walks from one into the next.
-_Avoid_: map, level (in the code, a zone is a `GameMap` under `src/maps/`)
+_Avoid_: map, level (in the code, a zone is a `Zone` under `src/maps/`, loaded into the `World`)
 
 **Starting zone**:
 The zone a new character begins in and levels up through first. Oakvale is the starting zone.

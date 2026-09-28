@@ -41,8 +41,8 @@ export class World implements Ground {
   private readonly zones: Zone[] = [];
   private camera: PerspectiveCamera | null = null;
   private atmosphere: Atmosphere | null = null;
-  /** The far plane for a fog-free look over everything, or null for the atmosphere's own. */
-  private clearFar: number | null = null;
+  /** While the fog is lifted, how far you see; null under the atmosphere's own fog. */
+  private liftedTo: number | null = null;
 
   constructor() {
     this.root.name = 'world';
@@ -101,21 +101,27 @@ export class World implements Ground {
   }
 
   /**
-   * Look over everything with no fog out to `far` metres (the map viewer's
-   * overview), or back to the atmosphere's fog and far plane with null. The
-   * fog stays on, pushed past the far plane, so no program changes.
+   * See everything out to `far` metres with no fog (the map viewer's
+   * overview). The fog stays on, pushed past the far plane, so no program
+   * changes.
    */
-  clearView(far: number | null): void {
-    this.clearFar = far;
+  liftFog(far: number): void {
+    this.liftedTo = far;
+    this.applyView();
+  }
+
+  /** Back to the atmosphere's own fog and far plane. */
+  restoreFog(): void {
+    this.liftedTo = null;
     this.applyView();
   }
 
   private applyView(): void {
     const atmosphere = this.atmosphere;
     if (!atmosphere) return;
-    const far = this.clearFar ?? atmosphere.farPlane;
-    this.fog.near = this.clearFar === null ? atmosphere.fog.near : far;
-    this.fog.far = this.clearFar === null ? atmosphere.fog.far : far * 2;
+    const far = this.liftedTo ?? atmosphere.farPlane;
+    this.fog.near = this.liftedTo === null ? atmosphere.fog.near : far;
+    this.fog.far = this.liftedTo === null ? atmosphere.fog.far : far * 2;
     // The sky dome must sit inside the far plane or it's clipped away.
     this.sky.root.scale.setScalar(Math.min(1, (0.9 * far) / CONFIG.world.sky.radius));
     if (this.camera) {
@@ -158,7 +164,7 @@ export class World implements Ground {
 
   /** Eye to eye: trunks, walls and the lie of the land in between all block it. */
   lineOfSight(a: Vector3, b: Vector3): boolean {
-    const { eyeHeight, sightStep, bodyClearance } = CONFIG.world.ground;
+    const { eyeHeight, sightStep, bodyClearance, sightWidth } = CONFIG.world.ground;
     const dx = b.x - a.x;
     const dz = b.z - a.z;
     const len = Math.hypot(dx, dz);
@@ -172,7 +178,7 @@ export class World implements Ground {
       if (this.heightAt(x, z) > ya + (yb - ya) * t) return false;
       // The two bodies stand at the ends; only what's between them counts.
       if (t * len < bodyClearance || (1 - t) * len < bodyClearance) continue;
-      if (this.blocked(x, z, 0.05)) return false;
+      if (this.blocked(x, z, sightWidth)) return false;
     }
     return true;
   }
@@ -211,8 +217,9 @@ export class World implements Ground {
 
   /** The ground catches arrows, and so do trunks and walls up to about their height. */
   arrowStops(p: Vector3): boolean {
+    const { propHeight, arrowWidth } = CONFIG.world.ground;
     const floor = this.heightAt(p.x, p.z);
-    if (p.y <= floor + 0.02) return true;
-    return p.y < floor + CONFIG.world.ground.propHeight && this.blocked(p.x, p.z, 0.02);
+    if (p.y <= floor + arrowWidth) return true;
+    return p.y < floor + propHeight && this.blocked(p.x, p.z, arrowWidth);
   }
 }

@@ -105,8 +105,8 @@ export const CONFIG = {
     /**
      * Point lights that sit on the nearest flames indoors. Always exactly this
      * many in the scene (a different count recompiles every lit shader), and
-     * dark outdoors, where glows fake every flame. A flame's light is the
-     * arena's torch.
+     * dark outdoors, where glows fake every flame. The arena's torches give
+     * the same light.
      */
     pool: { size: 4, color: 0xff9a3c, intensity: 7, distance: 10, decay: 1.5 },
     sky: {
@@ -125,9 +125,11 @@ export const CONFIG = {
       eyeHeight: 1.4, // m above the ground at each end of a sight line
       sightStep: 0.5, // m between samples along a sight line
       bodyClearance: 0.8, // m at each end of a sight line where the bodies themselves stand
+      sightWidth: 0.05, // m: how thin a trunk or post may be and still block a sight line
       lookAhead: 1, // m beyond a body's radius that steering probes for what's ahead
       turns: [0.4, 0.8, 1.2, 1.6, 2.0], // rad either side that steering tries, nearest first
       propHeight: 3, // m: arrows fly over trunks, tents and walls above this
+      arrowWidth: 0.02, // m: an arrow stops this close to the ground or to a trunk or wall
     },
   },
 

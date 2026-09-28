@@ -69,10 +69,11 @@ export class Arena implements Ground {
     // Four real lights, one per pillar torch. Never add or remove lights at
     // runtime: that recompiles every lit shader.
     for (const p of CONFIG.arena.pillars) {
-      const light = new PointLight(0xff9a3c, 7, 10, 1.5);
+      const { color, intensity, distance, decay } = CONFIG.world.pool;
+      const light = new PointLight(color, intensity, distance, decay);
       light.position.copy(torchPosition(p)).add(toCentre(p).multiplyScalar(0.25));
       this.root.add(light);
-      this.lights.push({ light, base: 7, seed: Math.random() * 100 });
+      this.lights.push({ light, base: intensity, seed: Math.random() * 100 });
     }
     this.root.add(new HemisphereLight(0x6a78a8, 0x2a1c14, 0.9));
   }
