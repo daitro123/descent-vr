@@ -1,0 +1,46 @@
+# Map: Oakvale, the starting zone
+
+Label: wayfinder:map
+
+## Destination
+
+A written **spec for Oakvale as a playable, single-player starting zone**, ready to hand off as build tickets: building and mine interiors, a quest giver with a couple of quests, and enemies that fit the zone. It also covers a **small, bare second zone** joined to Oakvale without a loading screen, which proves the seamless crossing and the loading. The long-term vision is a WoW-style world of many joined zones; this map only has to make Oakvale ready for it.
+
+## Notes
+
+- **Domain:** a browser VR action RPG (Three.js + WebXR). Oakvale is the outdoor forest map in `src/maps/forest/` (`?map=forest` to walk it, `?fly=forest` to fly through it), inspired by WoW's Elwynn Forest. The glossary is `CONTEXT.md`: say **zone**, not "map", for a region of the world.
+- **What exists:** a 168 m square play area ringed by mountains. A road runs north from the southern pass through a crossroads village (inn, three houses, smithy), over a stone bridge to the old mine in the northern ridge. Side roads lead to a farm, a pond, a lumber camp and a watchtower. No building can be entered yet. Walk mode has no enemies.
+- **Combat** is a viable prototype (Tom, 2026-09-28) and is not reopened here. Enemies, though, were built for a flat arena with waves (`ctx.arena`, `CONFIG.arena`), so putting them in a zone is in scope.
+- **Hardware and testing:** Tom tests alone on his Quest 3. The live site is `main` on GitHub Pages. The performance budget is `docs/quest-3-browser-performance-budget.md`: 72 fps, about 300 draw calls, at most 4 point lights.
+- **Skills:** grilling tickets call `grilling` and `domain-modeling`. Prototype tickets call `prototype`. Research tickets call `research`, with findings in `.scratch/oakvale-starting-zone/research/`.
+- **Standing preferences** (from charting, 2026-09-28):
+  - Single-player. The WoW-style world is the model, not online play.
+  - Light progression: quests pay XP and an item, and Oakvale covers the first few levels.
+  - Progress and the character are saved in the browser.
+  - NPC dialogue is text only.
+  - Humanoid enemies only, on the existing humanoid rig.
+  - The second zone stays small and bare: just enough terrain to cross the seam and watch the loading.
+
+## Decisions so far
+
+<!-- one line per resolved ticket: [title](link): gist -->
+
+- [Saving in the Quest browser](issues/05-saving-in-the-quest-browser.md): IndexedDB, one `descent-vr` record written with strict durability, versioned with migrations. Survives deploys and browser updates; lost only if site data is cleared or a full headset evicts it.
+- [Joining zones without a loading screen](issues/04-joining-zones-without-a-loading-screen.md): feasible. Build zones in a worker in 40 m chunks, upload one chunk per frame before it's seen, keep lights, sky and fog at world level so no shader recompiles, and stream by chunk distance. The seam is a line with a 40 m blend, best in a pass. Triangles, not draw calls, are the tight limit.
+
+## Not yet specified
+
+- **Friendly characters:** the quest giver and villagers need models that aren't skeletons, on the same rig and in the same style. How many, and how varied.
+- **Loot beyond quest rewards:** whether enemies drop anything, once progression and the roster are decided.
+- **Getting around:** whether walking a 168 m zone with the stick is enough, or it needs a sprint, a map or markers to find your way.
+- **A living zone:** ambient sound, villagers going about their day, time of day. Sharpens once the quests and interiors are known.
+- **Triangle budget:** Oakvale seen from the village is already about 250k to 300k triangles over both eyes, the rule-of-thumb limit, before interiors, NPCs and enemies are added. How to cut (chunk stand-ins, fewer trees) waits on a measurement on the headset.
+- **Assembling the spec:** once the decisions are in, write the Oakvale spec and break it into build tickets.
+
+## Out of scope
+
+- Online play: servers, accounts and netcode. It is the long-term vision, and a separate effort.
+- Voiced dialogue.
+- Four-legged creatures (wolves, boars). They need a new rig.
+- Fleshing out the second zone with quests, enemies or landmarks.
+- Changing how combat feels. Tweaks come later, outside this map.
