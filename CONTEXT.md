@@ -31,3 +31,15 @@ _Avoid_: turn in, complete
 **Objective**:
 One thing a quest asks before it can be handed in: defeat enemies at a place, or find something and pick it up by hand.
 _Avoid_: task, goal, requirement
+
+**Behaviour**:
+How an enemy fights, and so what it tests in the player: the grunt (reading a swing), the archer (ranged pressure), the brute (an unblockable slam) or the Warden (a boss fight). One behaviour can wear many looks.
+_Avoid_: kind, type, class, AI
+
+**Family**:
+Who an enemy is, whatever its behaviour: the bandits or the undead. A bandit archer and an undead archer share a behaviour but not a family.
+_Avoid_: faction (reserved for sides the player could join), race, type
+
+**Boss**:
+An enemy fought once, at the end of a quest chain, that stays dead once beaten. Oakvale has one: the Warden at the bottom of the mine.
+_Avoid_: elite, raid boss, mini-boss
