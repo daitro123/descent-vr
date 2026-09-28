@@ -1,7 +1,7 @@
 import { type PerspectiveCamera, type Scene, Vector3, type WebGLRenderer } from 'three';
 import { Combat, combatStats, resetCombatStats } from './combat/combat';
 import { CONFIG } from './config';
-import type { Enemy, EnemyContext, PlayerSword } from './enemies/enemy';
+import { type Enemy, type EnemyContext, keepApart, type PlayerSword } from './enemies/enemy';
 import { createEnemy, DUELIST } from './enemies/kinds';
 import { AttackTokens } from './enemies/tokens';
 import { FloatingText } from './fx/floatingText';
@@ -18,8 +18,6 @@ import { BlobShadows } from './world/shadows';
 
 type Phase = 'intermission' | 'fighting' | 'dead' | 'victory';
 
-const _head = new Vector3();
-const _sep = new Vector3();
 const _fwd = new Vector3();
 const _a = new Vector3();
 const _b = new Vector3();
@@ -152,10 +150,10 @@ export class Game {
         this.enemies.splice(i, 1);
       }
     }
-    this.separate();
+    keepApart(this.enemies, this.ctx.playerFeet, this.arena);
     this.combat.projectiles.render();
 
-    this.updateShadows();
+    this.shadows.cast(this.ctx.playerFeet, this.enemies);
     if (sword.tip.valid) {
       sword.segment(rig, _a, _b);
       this.trail.update(dt, _a, _b, sword.hot, this.player.frenzy > 0);
@@ -175,43 +173,6 @@ export class Game {
       if (e.kind === 'warden') hud.boss = true;
     }
     this.hud.update(dt);
-  }
-
-  /** Keep enemies apart, out of walls, and out of the player's face. */
-  private separate(): void {
-    const feet = this.ctx.playerFeet;
-    for (let i = 0; i < this.enemies.length; i++) {
-      const a = this.enemies[i];
-      if (!a.alive) continue;
-      for (let j = i + 1; j < this.enemies.length; j++) {
-        const b = this.enemies[j];
-        if (!b.alive) continue;
-        _sep.subVectors(a.position, b.position).setY(0);
-        const d = _sep.length();
-        const min = a.def.radius + b.def.radius + 0.15;
-        if (d >= min || d < 1e-6) continue;
-        _sep.multiplyScalar((min - d) / d / 2);
-        a.position.add(_sep);
-        b.position.sub(_sep);
-      }
-      _sep.subVectors(a.position, feet).setY(0);
-      const d = _sep.length();
-      const minD = a.def.radius + CONFIG.player.bodyRadius;
-      if (d < minD && d > 1e-6) a.position.addScaledVector(_sep, (minD - d) / d);
-      this.arena.resolve(a.position, a.def.radius);
-    }
-  }
-
-  private updateShadows(): void {
-    this.shadows.begin();
-    const feet = this.ctx.playerFeet;
-    this.shadows.add(feet.x, feet.y, feet.z, 0.26);
-    for (const e of this.enemies) {
-      if (e.state === 'dead' && e.stateTime > 1) continue;
-      const scale = e.state === 'rising' ? Math.min(1, e.stateTime * 1.5) : 1;
-      this.shadows.add(e.position.x, e.position.y, e.position.z, e.def.radius * 1.1 * scale);
-    }
-    this.shadows.end();
   }
 
   // ---------------------------------------------------------------- waves
@@ -355,16 +316,8 @@ export class Game {
   }
 
   /** Big text floating in front of the player. */
-  private banner(text: string, color: string, scale = 0.3, lift = 0.2, life = 2.2): void {
-    const cam = this.player.camera;
-    cam.getWorldPosition(_head);
-    const fwd = cam.getWorldDirection(new Vector3()).setY(0).normalize();
-    this.text.spawn(text, _head.clone().addScaledVector(fwd, 2).setY(_head.y + lift), {
-      color,
-      scale,
-      life,
-      rise: 0.2,
-    });
+  private banner(text: string, color: string, scale?: number, lift?: number, life?: number): void {
+    this.text.banner(this.player.camera, text, color, scale, lift, life);
   }
 
   /** The run in numbers, under the banner. */

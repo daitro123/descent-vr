@@ -110,6 +110,7 @@ async function startAdventure(
     adventure,
     world: adventure.world,
     player: adventure.player,
+    camps: adventure.camps,
     device,
     renderer,
     camera,

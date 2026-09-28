@@ -1,3 +1,4 @@
+import type { CampPlan, PostPlan, Spot } from '../types';
 import { Colliders } from './colliders';
 import { fbm, lerp, mulberry32, nearestOnPolyline, type P2, sampleCurve, smoothstep, valueNoise } from './noise';
 
@@ -53,6 +54,39 @@ export const HALE = { x: 1.5, z: 4.8 } as const;
 
 /** Where a new character starts: on the road about 3.5 m from Hale, facing them. */
 const START: P2 = [0.2, 1.5];
+
+/**
+ * The camps, each at a clearing. The farm's raiders stand in two pairs: one
+ * in the yard eyeing the farmhouse, a few steps past where the road comes in
+ * (and clear of the hay bales, which trap anyone walking home through them),
+ * and one by the windmill at the wheat field's corner. Each pair is within a
+ * pull of itself and out of the other's, so you can take them a pair at a time.
+ */
+const CAMPS: {
+  id: string;
+  clearing: string;
+  level: number;
+  posts: (Omit<PostPlan, 'yaw'> & { face: P2 })[];
+}[] = [
+  {
+    id: 'farm',
+    clearing: 'farm',
+    level: 1,
+    posts: [
+      { behaviour: 'grunt', family: 'bandit', x: 60, z: 33, face: [44, 37] },
+      { behaviour: 'grunt', family: 'bandit', x: 57.5, z: 37.5, face: [44, 37] },
+      { behaviour: 'grunt', family: 'bandit', x: 67.5, z: 43, face: [58, 48] },
+      { behaviour: 'grunt', family: 'bandit', x: 72, z: 45.5, face: [58, 48] },
+    ],
+  },
+];
+
+/**
+ * Where you wake after dying outside the mine: in front of the inn's door,
+ * facing the crossroads, until the inn opens and its hearth takes over
+ * (ticket 23). Metres out from the door along the inn's front.
+ */
+const INN_DOOR_STEP = 2;
 
 export interface Clearing {
   id: string;
@@ -290,6 +324,9 @@ export interface ForestLayout {
   roadDistance: DistanceField;
   /** Where a new character starts, and where `?map` and `?fly` begin: the crossroads, facing Hale's spot. */
   spawn: { x: number; z: number; yaw: number };
+  /** Where you wake after a death (yaw as `spawn`'s). */
+  respawns: { village: Spot };
+  camps: CampPlan[];
   landmarks: { label: string; x: number; z: number }[];
   /** Ground height, including the bridge and dock decks. */
   heightAt(x: number, z: number): number;
@@ -460,6 +497,18 @@ export function buildLayout(): ForestLayout {
   const south = main.line[main.line.findIndex(([, z]) => z < 70)];
 
   const at = (kind: StructureKind) => structures.find((st) => st.kind === kind)!;
+  const inn = at('inn');
+  const [rx, rz] = localToWorld(inn, 0, inn.hd + INN_DOOR_STEP);
+  const respawns = { village: { x: rx, z: rz, yaw: Math.atan2(rx, rz) } };
+  const camps: CampPlan[] = CAMPS.map((c) => {
+    const clearing = CLEARINGS.find((cl) => cl.id === c.clearing)!;
+    return {
+      id: c.id,
+      place: { x: clearing.x, z: clearing.z, r: clearing.r },
+      level: c.level,
+      posts: c.posts.map(({ face, ...p }) => ({ ...p, yaw: facing(p.x, p.z, face[0], face[1]) })),
+    };
+  });
   const landmarks = [
     { label: 'Southern road', x: south[0], z: south[1] },
     { label: 'Inn', x: at('inn').x, z: at('inn').z },
@@ -486,6 +535,8 @@ export function buildLayout(): ForestLayout {
     colliders,
     roadDistance,
     spawn,
+    respawns,
+    camps,
     landmarks,
     heightAt,
   };

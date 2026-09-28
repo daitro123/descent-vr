@@ -15,7 +15,7 @@ const mat = new MeshBasicMaterial({ color: 0xff3030 });
 const _p = new Vector3();
 const _feet = new Vector3();
 
-/** Health orbs dropped by enemies. Grab with either hand, or walk over them. */
+/** Health orbs dropped by enemies, each worth a share of your health. Grab with either hand, or walk over them. */
 export class Orbs {
   readonly root = new Group();
   private readonly orbs: Orb[] = [];
@@ -41,7 +41,7 @@ export class Orbs {
         Math.hypot(_feet.x - orb.mesh.position.x, _feet.z - orb.mesh.position.z) < CONFIG.orb.walkRadius;
 
       if (touched && player.alive) {
-        player.heal(CONFIG.orb.heal);
+        player.heal(player.maxHp * CONFIG.orb.heal);
         sfx.pickup();
       }
       if (touched || orb.age > CONFIG.orb.lifetime) {

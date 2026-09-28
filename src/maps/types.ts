@@ -1,4 +1,5 @@
 import type { Camera, Object3D, Vector3 } from 'three';
+import type { EnemyKind } from '../models/characters';
 import type { Atmosphere } from '../world/atmosphere';
 
 // A map is a place the game can put you. A zone (Oakvale) is loaded into the
@@ -23,6 +24,34 @@ interface MapBase {
   update(dt: number, camera: Camera): void;
 }
 
+/** A spot to stand on the floor plane, facing `yaw` (radians about +Y, 0 looks down −Z). */
+export interface Spot {
+  readonly x: number;
+  readonly z: number;
+  readonly yaw: number;
+}
+
+/** One enemy's place in a camp: what it is, where it waits and which way it faces there. */
+export interface PostPlan {
+  /** How it fights: the thug is a grunt, the bandit leader a brute. */
+  readonly behaviour: Exclude<EnemyKind, 'warden'>;
+  /** Bandits wear today's skeletons until the human body lands (ticket 20). */
+  readonly family: 'bandit' | 'undead';
+  readonly x: number;
+  readonly z: number;
+  /** As a model turns about +Y: its front faces (sin yaw, cos yaw), so 0 faces +Z. */
+  readonly yaw: number;
+}
+
+/** A group of enemies waiting at one place, pulled a few at a time (enemies/camps.ts). */
+export interface CampPlan {
+  readonly id: string;
+  /** Its clearing: a cleared camp refills only while you're well away from it. */
+  readonly place: { readonly x: number; readonly z: number; readonly r: number };
+  readonly level: number;
+  readonly posts: readonly PostPlan[];
+}
+
 /** An outdoor region of the world, loaded into the World. */
 export interface Zone extends MapBase {
   readonly kind: 'zone';
@@ -30,6 +59,10 @@ export interface Zone extends MapBase {
   readonly root: Object3D;
   /** Its fog, sky colours and light, which the World applies. */
   readonly atmosphere: Atmosphere;
+  /** Its enemies, camp by camp. */
+  readonly camps: readonly CampPlan[];
+  /** Where you wake after a death. */
+  readonly respawns: { readonly village: Spot };
 }
 
 /** A map built whole, lights and all: the crypt hall. */
