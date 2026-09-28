@@ -27,3 +27,7 @@ _Avoid_: storyline, questline
 **Hand in**:
 Returning a finished quest to its quest giver, which completes it and pays its reward.
 _Avoid_: turn in, complete
+
+**Objective**:
+One thing a quest asks before it can be handed in: defeat enemies at a place, or find something and pick it up by hand.
+_Avoid_: task, goal, requirement
