@@ -4,6 +4,14 @@ A single-player action RPG for VR in the browser, growing into a WoW-style world
 
 ## Language
 
+**Adventure**:
+The game at the plain URL: Oakvale and the zones beyond it, with one character that levels up and is saved.
+_Avoid_: campaign, story mode, main game
+
+**Arena**:
+The wave game in the crypt hall at `?arena`, the combat prototype kept for practising fights. It never touches the Adventure's save.
+_Avoid_: practice mode, wave mode, the crypt (the crypt hall is the arena's room)
+
 **Zone**:
 A hand-built outdoor region of the world, joined to its neighbours so the player walks from one into the next.
 _Avoid_: map, level (in the code, a zone is a `Zone` under `src/maps/`, loaded into the `World`)

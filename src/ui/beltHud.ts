@@ -50,7 +50,8 @@ export interface HudStatus {
 /**
  * Diablo's health and resource orbs, body-locked at belt height: glance down
  * to read them. Follows head yaw only, so it does not swim when you look around.
- * Between the orbs: the wave, enemies left, the dash cooldown and frenzy.
+ * Between the orbs: the dash cooldown and frenzy, and in the arena the wave
+ * and the enemies left.
  *
  * Also owns the head-locked vignette: red when hurt (and pulsing at low HP),
  * dark during a dash to cut peripheral motion.
@@ -68,11 +69,15 @@ export class BeltHud {
   private time = 0;
   private yaw = 0;
   readonly status: HudStatus = { wave: 0, enemiesLeft: 0, boss: false };
+  private readonly waves: boolean;
 
   constructor(
     private readonly player: Player,
     camera: PerspectiveCamera,
+    /** `waves`: the arena's wave and enemies left; the Adventure has neither. */
+    { waves = true } = {},
   ) {
+    this.waves = waves;
     this.canvas.width = W;
     this.canvas.height = H;
     this.ctx = this.canvas.getContext('2d')!;
@@ -188,17 +193,20 @@ export class BeltHud {
     const c = this.ctx;
     c.clearRect(0, 0, W, H);
     c.fillStyle = 'rgba(10,8,8,0.55)';
-    c.fillRect(20, 2, 24, 20);
+    if (this.waves) c.fillRect(20, 2, 24, 20);
+    else c.fillRect(20, 15, 24, 7);
     this.orb(10, hp, '#c81e1e', '#3a0c0c');
     const warCry = rage >= CONFIG.warCry.cost / CONFIG.player.maxRage;
     const slam = rage >= CONFIG.groundSlam.cost / CONFIG.player.maxRage;
     this.orb(W - 11, rage, p.frenzy > 0 ? '#ff5a10' : warCry ? '#ffb020' : '#b86a10', '#2e1a06');
 
-    // Wave (or BOSS), then a skull and the enemies left.
-    const top = s.boss ? 'BOSS' : `W${s.wave}`;
-    this.text(top, Math.round(32 - (this.textWidth(top) - 1) / 2), 4, '#e0c080');
-    this.skull(24, 11);
-    this.text(String(Math.min(99, s.enemiesLeft)), 31, 11, '#d0c8b8');
+    if (this.waves) {
+      // Wave (or BOSS), then a skull and the enemies left.
+      const top = s.boss ? 'BOSS' : `W${s.wave}`;
+      this.text(top, Math.round(32 - (this.textWidth(top) - 1) / 2), 4, '#e0c080');
+      this.skull(24, 11);
+      this.text(String(Math.min(99, s.enemiesLeft)), 31, 11, '#d0c8b8');
+    }
     // Dash cooldown bar.
     c.fillStyle = '#2a2622';
     c.fillRect(22, 18, 20, 2);

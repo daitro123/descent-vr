@@ -45,6 +45,15 @@ const STREAM_HALF = 2.6;
 
 export const POND = { x: -50, z: 30, r: 12 } as const;
 
+/**
+ * Marshal Hale's spot: the crossroads' south-east corner, at the main road's
+ * edge just west of the signpost. They face north, towards the crossroads.
+ */
+export const HALE = { x: 1.5, z: 4.8 } as const;
+
+/** Where a new character starts: on the road about 3.5 m from Hale, facing them. */
+const START: P2 = [0.2, 1.5];
+
 export interface Clearing {
   id: string;
   x: number;
@@ -279,6 +288,7 @@ export interface ForestLayout {
   colliders: Colliders;
   /** Distance to the nearest path's edge (negative on it), within a few metres of one. */
   roadDistance: DistanceField;
+  /** Where a new character starts, and where `?map` and `?fly` begin: the crossroads, facing Hale's spot. */
   spawn: { x: number; z: number; yaw: number };
   landmarks: { label: string; x: number; z: number }[];
   /** Ground height, including the bridge and dock decks. */
@@ -444,16 +454,14 @@ export function buildLayout(): ForestLayout {
     if (r) colliders.addCircle({ x: p.x, z: p.z, r: r * p.scale });
   }
 
-  // Start on the southern road, looking north up it.
-  const s = main.line.findIndex(([, z]) => z < 70);
-  const [sx, sz] = main.line[s];
-  const [nx, nz] = main.line[s + 4];
-  const spawn = { x: sx, z: sz, yaw: Math.atan2(-(nx - sx), -(nz - sz)) };
+  // A new character starts at the crossroads, looking at Hale.
+  const [sx, sz] = START;
+  const spawn = { x: sx, z: sz, yaw: Math.atan2(-(HALE.x - sx), -(HALE.z - sz)) };
+  const south = main.line[main.line.findIndex(([, z]) => z < 70)];
 
   const at = (kind: StructureKind) => structures.find((st) => st.kind === kind)!;
   const landmarks = [
-    { label: 'Southern road', x: spawn.x, z: spawn.z },
-    { label: 'Crossroads', x: 0, z: 0 },
+    { label: 'Southern road', x: south[0], z: south[1] },
     { label: 'Inn', x: at('inn').x, z: at('inn').z },
     { label: 'Stone bridge', x: bridge.x, z: bridge.z },
     { label: 'Farm', x: 54, z: 28 },
