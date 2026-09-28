@@ -108,6 +108,7 @@ async function startAdventure(
   // `paused` stops XR frames stepping the game, so `step` alone moves it on.
   const debug = {
     adventure,
+    state: adventure.state,
     world: adventure.world,
     player: adventure.player,
     camps: adventure.camps,

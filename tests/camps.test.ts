@@ -272,7 +272,7 @@ describe('the pools', () => {
 });
 
 describe('camp enemies', () => {
-  it('have 1.4 times the health and damage of the same behaviour in the arena', () => {
+  it('have 1.4 times the health and damage of the same behaviour in the arena at level 1', () => {
     const { camps } = world([camp('farm', [thug(0, 0), archer(5, 0), { ...thug(10, 0), behaviour: 'brute' }])], 0, 60);
     const [grunt, bowman, brute] = camps.camps[0].members.map((m) => m.enemy);
     expect(grunt.maxHp).toBe(63); // 45
@@ -281,6 +281,15 @@ describe('camp enemies', () => {
     expect(bowman.def.attacks[0].damage).toBe(14); // 10
     expect(brute.maxHp).toBe(238); // 170
     expect(brute.def.attacks.map((a) => a.damage)).toEqual([31, 42]); // 22, 30
+  });
+
+  it("take their camp's level on top: a level-2 camp's are 1.2 times stronger again", () => {
+    const { camps } = world([{ ...camp('lumber', [thug(0, 0), archer(5, 0)]), level: 2 }], 0, 60);
+    const [grunt, bowman] = camps.camps[0].members.map((m) => m.enemy);
+    expect(grunt.maxHp).toBe(76); // 45 × 1.2 × 1.4 = 75.6
+    expect(grunt.def.attacks.map((a) => a.damage)).toEqual([24, 20, 20]);
+    expect(bowman.maxHp).toBe(47); // 28 × 1.68 = 47.04
+    expect(bowman.def.attacks[0].damage).toBe(17); // 10 × 1.68
   });
 
   it("stand and chase at the ground's real height", () => {

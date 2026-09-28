@@ -180,7 +180,7 @@ export class Combat implements ArrowResolver {
       }
       _p.copy(res.point);
       const crit = res.zone === 'head';
-      let damage = base;
+      let damage = base * this.player.stats.damage;
       if (crit) damage *= enemy.def.critMultiplier;
       if (enemy.exposed > 0) damage *= S.exposedMultiplier;
       if (this.player.frenzy > 0) damage *= S.frenzyMultiplier;
@@ -287,7 +287,7 @@ export class Combat implements ArrowResolver {
         combatStats.guardBreaks++;
       }
       _push.copy(_to).multiplyScalar(S.bashKnockback);
-      const killed = enemy.takeHit(S.bashDamage, _push, { from: _p, ignorePoise: enemy.kind !== 'warden' });
+      const killed = enemy.takeHit(Math.round(S.bashDamage * this.player.stats.damage), _push, { from: _p, ignorePoise: enemy.kind !== 'warden' });
       // A steady brute (just out of a stagger) shrugs the bash off and keeps swinging.
       const interrupted = windingUp && !killed && !enemy.attacking;
       if (!killed && broke) enemy.expose(enemy.def.exposedTime * 0.7);
@@ -305,11 +305,11 @@ export class Combat implements ArrowResolver {
     }
   }
 
-  /** Earthshaker: drive the sword tip into the floor, fast, with enough rage. */
+  /** Earthshaker: drive the sword tip into the floor, fast, with enough rage, once your level has brought it. */
   private updateGroundSlam(enemies: Enemy[]): void {
     const G = CONFIG.groundSlam;
     const { sword, rig } = this.player;
-    if (!sword.tip.valid || !this.player.alive || this.slamCooldown > 0 || this.player.rage < G.cost) return;
+    if (!this.player.can('earthshaker') || !sword.tip.valid || !this.player.alive || this.slamCooldown > 0 || this.player.rage < G.cost) return;
     sword.tip.worldNow(rig, _p);
     _vel.copy(sword.tip.velocity).applyQuaternion(rig.quaternion);
     const floor = this.player.ground.heightAt(_p.x, _p.z);
@@ -330,7 +330,7 @@ export class Combat implements ArrowResolver {
       }
       const falloff = 1 - 0.5 * Math.min(1, d / G.radius);
       _push.normalize().multiplyScalar(G.knockback * falloff);
-      const damage = Math.round(G.damage * falloff * (this.player.frenzy > 0 ? CONFIG.sword.frenzyMultiplier : 1));
+      const damage = Math.round(G.damage * falloff * this.player.stats.damage * (this.player.frenzy > 0 ? CONFIG.sword.frenzyMultiplier : 1));
       const killed = enemy.takeHit(damage, _push, { from: _p, ignorePoise: enemy.kind !== 'warden' });
       if (!killed) enemy.stagger(G.stagger);
       this.fx.text.spawn(`${damage}`, enemy.position.clone().setY(enemy.position.y + 1.7), { color: '#ffb020' });
@@ -347,11 +347,12 @@ export class Combat implements ArrowResolver {
     this.events.hitStop(0.1);
   }
 
-  /** War Cry: spend rage, blast nearby enemies back and stagger them, then fight in a frenzy. */
+  /** War Cry: spend rage, blast nearby enemies back and stagger them, then fight in a frenzy. Once your level has brought it. */
   warCry(enemies: Enemy[]): boolean {
     const A = CONFIG.warCry;
     const player = this.player;
-    if (!player.alive || player.rage < A.cost) return false;
+    if (!player.can('warCry') || !player.alive || player.rage < A.cost) return false;
+    const damage = Math.round(A.damage * player.stats.damage);
     player.rage -= A.cost;
     player.frenzy = A.frenzyTime;
     player.feetPosition(_feet);
@@ -365,9 +366,9 @@ export class Combat implements ArrowResolver {
         continue;
       }
       _push.normalize().multiplyScalar(A.knockback * (1 - (d / A.radius) * 0.5));
-      const killed = enemy.takeHit(A.damage, _push, { from: _feet });
+      const killed = enemy.takeHit(damage, _push, { from: _feet });
       if (!killed) enemy.stagger(A.stagger);
-      this.fx.text.spawn(`${A.damage}`, enemy.position.clone().setY(enemy.position.y + 1.7), { color: '#ffb020' });
+      this.fx.text.spawn(`${damage}`, enemy.position.clone().setY(enemy.position.y + 1.7), { color: '#ffb020' });
       this.events.onEnemyHit(enemy, killed);
       if (killed) this.onKill(enemy);
     }
@@ -587,9 +588,10 @@ export class Combat implements ArrowResolver {
         return enemy;
       }
       _push.subVectors(pos, prev).setY(0).normalize().multiplyScalar(2);
-      const killed = enemy.takeHit(CONFIG.arrow.reflectDamage, _push, { from: prev, ignorePoise: enemy.kind !== 'warden' });
+      const damage = Math.round(CONFIG.arrow.reflectDamage * this.player.stats.damage);
+      const killed = enemy.takeHit(damage, _push, { from: prev, ignorePoise: enemy.kind !== 'warden' });
       if (!killed) enemy.expose(enemy.def.exposedTime);
-      this.fx.text.spawn(`${CONFIG.arrow.reflectDamage}!`, _hit.pointB, { color: '#7fd4ff', scale: 0.26 });
+      this.fx.text.spawn(`${damage}!`, _hit.pointB, { color: '#7fd4ff', scale: 0.26 });
       this.impactFx(enemy, _hit.pointB, _push, true);
       sfx.hit(true, _hit.pointB);
       this.events.onEnemyHit(enemy, killed);

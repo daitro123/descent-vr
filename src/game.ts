@@ -245,7 +245,7 @@ export class Game {
   }
 
   private addEnemy(kind: EnemyKind, p: Vector3): Enemy {
-    const enemy = createEnemy(kind, p.x, p.z, Math.floor(Math.random() * 6), this.duel ? DUELIST : undefined);
+    const enemy = createEnemy(kind, p.x, p.z, { variant: Math.floor(Math.random() * 6), def: this.duel ? DUELIST : undefined });
     // Face the player from the first frame.
     enemy.root.rotation.y = Math.atan2(this.ctx.playerFeet.x - p.x, this.ctx.playerFeet.z - p.z);
     this.enemies.push(enemy);

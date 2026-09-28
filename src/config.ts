@@ -1,6 +1,7 @@
 // Every tunable in one place. White-boxing is mostly turning these knobs,
 // so keep gameplay numbers here rather than scattered through systems.
 
+import type { Ability, Role } from './adventureState';
 import type { EnemyKind } from './models/characters';
 
 /** Which keyframe pair (enemies/poses.ts) an attack animates between. */
@@ -257,6 +258,19 @@ export const CONFIG = {
     strength: 1.4, // health and damage, on top of its level
     // One pool for the player across every camp: three may swing, two shoot.
     tokens: { melee: 3, ranged: 2 },
+  },
+
+  // Levels (adventureState.ts): the Adventure's character climbs from 1 to the
+  // cap, and every level adds the same step to it and to an enemy of that
+  // level, so a fight against your own level plays like the arena at any level.
+  // The arena is level 1 with every ability.
+  levels: {
+    xp: [100, 300, 600, 1000], // XP in all to reach levels 2, 3, 4 and 5, the cap; XP past it is dropped
+    health: 20, // your maximum health (player.maxHp at level 1) grows this much per level above 1
+    step: 0.2, // your damage, and an enemy's health and damage, times 1 + this per level above 1
+    killXp: 10, // a kill pays this per enemy level…
+    roles: { ordinary: 1, leader: 3, deepBrute: 3, warden: 3, raised: 0 } satisfies Record<Role, number>, // …times this, by what it was
+    unlocks: { warCry: 2, earthshaker: 3 } satisfies Record<Ability, number>, // the level each ability arrives at; rage comes with the War Cry
   },
 
   // The Adventure's health out of a fight (the arena has none).
