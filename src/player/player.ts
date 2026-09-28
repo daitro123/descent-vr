@@ -21,7 +21,7 @@ export class Player {
   readonly sword = new Sword();
   readonly shield = new Shield();
   /** Full health. */
-  maxHp: number = CONFIG.player.maxHp;
+  readonly maxHp: number = CONFIG.player.maxHp;
   hp: number = this.maxHp;
   rage = 0;
   /** Seconds of War Cry frenzy left (bonus damage, burning blade). */

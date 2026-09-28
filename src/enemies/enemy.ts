@@ -1026,6 +1026,30 @@ export abstract class Enemy {
   }
 }
 
+/** Keep enemies apart, out of walls and props, and out of the player's face (feet at `feet`). */
+export function keepApart(enemies: readonly Enemy[], feet: Vector3, ground: Ground): void {
+  for (let i = 0; i < enemies.length; i++) {
+    const a = enemies[i];
+    if (!a.alive) continue;
+    for (let j = i + 1; j < enemies.length; j++) {
+      const b = enemies[j];
+      if (!b.alive) continue;
+      _v.subVectors(a.position, b.position).setY(0);
+      const d = _v.length();
+      const min = a.def.radius + b.def.radius + 0.15;
+      if (d >= min || d < 1e-6) continue;
+      _v.multiplyScalar((min - d) / d / 2);
+      a.position.add(_v);
+      b.position.sub(_v);
+    }
+    _v.subVectors(a.position, feet).setY(0);
+    const d = _v.length();
+    const minD = a.def.radius + CONFIG.player.bodyRadius;
+    if (d < minD && d > 1e-6) a.position.addScaledVector(_v, (minD - d) / d);
+    ground.resolve(a.position, a.def.radius);
+  }
+}
+
 function copyPose(src: Pose, out: MutablePose): void {
   for (const k of Object.keys(out)) delete out[k];
   for (const [k, v] of Object.entries(src)) out[k] = [v![0], v![1], v![2]];

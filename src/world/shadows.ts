@@ -1,3 +1,4 @@
+import type { Enemy } from '../enemies/enemy';
 import {
   CanvasTexture,
   DynamicDrawUsage,
@@ -63,5 +64,17 @@ export class BlobShadows {
   end(): void {
     this.mesh.count = this.n;
     this.mesh.instanceMatrix.needsUpdate = true;
+  }
+
+  /** This frame's blobs: one under your feet and one under each enemy, growing as it rises, gone once it has fallen. */
+  cast(feet: Vector3, enemies: readonly Enemy[]): void {
+    this.begin();
+    this.add(feet.x, feet.y, feet.z, 0.26);
+    for (const e of enemies) {
+      if (e.state === 'dead' && e.stateTime > 1) continue;
+      const scale = e.state === 'rising' ? Math.min(1, e.stateTime * 1.5) : 1;
+      this.add(e.position.x, e.position.y, e.position.z, e.def.radius * 1.1 * scale);
+    }
+    this.end();
   }
 }

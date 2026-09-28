@@ -24,7 +24,7 @@ const hill: Ground = {
 };
 
 /** Enemy blows and arrows land nowhere: these tests are about who fights, not who wins. */
-const hooks: CampHooks = { sweep: () => null, slam: () => {}, shoot: () => {}, nock: () => {}, summon: () => {}, telegraph: () => {} };
+const hooks: CampHooks = { sweep: () => null, slam: () => {}, shoot: () => {}, nock: () => {}, telegraph: () => {} };
 
 const thug = (x: number, z: number): PostPlan => ({ behaviour: 'grunt', family: 'bandit', x, z, yaw: 0 });
 const archer = (x: number, z: number): PostPlan => ({ behaviour: 'archer', family: 'bandit', x, z, yaw: 0 });
@@ -35,10 +35,10 @@ function camp(id: string, posts: PostPlan[], r = 8): CampPlan {
   return { id, place: { x, z, r }, level: 1, posts };
 }
 
-/** A world of camps and you in it, on the hill. */
-function world(plans: CampPlan[], x: number, z: number) {
+/** A world of camps and you in it, on the hill (or `ground`). */
+function world(plans: CampPlan[], x: number, z: number, ground = hill) {
   const kills: string[] = [];
-  const camps = new Camps(plans, hill, hooks, { onKill: (c) => kills.push(c.plan.id) });
+  const camps = new Camps(plans, ground, hooks, { onKill: (c) => kills.push(c.plan.id) });
   const you: You = { feet: new Vector3(), head: new Vector3(), sword: null, alive: true };
   const stand = (nx: number, nz: number) => {
     you.feet.set(nx, hill.heightAt(nx, nz), nz);
@@ -272,7 +272,7 @@ describe('the pools', () => {
 });
 
 describe('camp enemies', () => {
-  it('have 1.4 times the health and damage of the same kind in the arena', () => {
+  it('have 1.4 times the health and damage of the same behaviour in the arena', () => {
     const { camps } = world([camp('farm', [thug(0, 0), archer(5, 0), { ...thug(10, 0), behaviour: 'brute' }])], 0, 60);
     const [grunt, bowman, brute] = camps.camps[0].members.map((m) => m.enemy);
     expect(grunt.maxHp).toBe(63); // 45
@@ -307,24 +307,19 @@ describe('getting home', () => {
         return true;
       },
     };
-    const camps = new Camps([camp('farm', [thug(0, 0)])], ground, hooks);
-    const you: You = { feet: new Vector3(0, 0, -5), head: new Vector3(0, 1.6, -5), sword: null, alive: true };
+    const { camps, stand, step } = world([camp('farm', [thug(0, 0)])], 0, -5, ground);
     const [farm] = camps.camps;
     const member = farm.members[0];
-    for (let t = 0; t < 2; t += DT) camps.update(DT, you);
     hit(farm, 0, 20);
-    for (let t = 0; t < 30 && member.mind !== 'home'; t += DT) {
-      you.feet.z -= 2.4 * DT;
-      you.head.z = you.feet.z;
-      camps.update(DT, you);
-    }
+    let z = -5;
+    for (let t = 0; t < 30 && member.mind !== 'home'; t += DT) step(DT, () => stand(0, (z -= 2.4 * DT)));
     expect(member.mind).toBe('home');
     // It walks up to the wall, some 20 m on, and stops there.
     walled = true;
-    for (let t = 0; t < 10; t += DT) camps.update(DT, you);
+    step(10);
     expect(member.mind).toBe('home');
     expect(member.enemy.position.z).toBeCloseTo(-10, 0);
-    for (let t = 0; t < C.stuck.time + 0.5; t += DT) camps.update(DT, you);
+    step(C.stuck.time + 0.5);
     expect(member.mind).toBe('idle');
     expect(flat(member.enemy.position, member.post)).toBeLessThan(C.home);
     expect(member.enemy.hp).toBe(member.enemy.maxHp);

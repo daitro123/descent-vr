@@ -2,7 +2,7 @@ import { Group, Vector3 } from 'three';
 import { CONFIG, type EnemyConfig } from '../config';
 import type { CampPlan, PostPlan } from '../maps/types';
 import type { Ground } from '../world/ground';
-import type { Enemy, EnemyContext, EnemyPost, PlayerSword } from './enemy';
+import { type Enemy, type EnemyContext, type EnemyPost, keepApart, type PlayerSword } from './enemy';
 import { createEnemy } from './kinds';
 import { AttackTokens } from './tokens';
 
@@ -26,9 +26,10 @@ export interface Member {
   mind: Mind;
   /** Its health last frame, to tell when it's been hurt. */
   hp: number;
-  /** Walking home: the nearest it has come to its post, and seconds since it last got nearer. */
+  /** Walking home: the nearest it has come to its post… */
   nearest: number;
-  lost: number;
+  /** …and seconds since it last got nearer. */
+  stalled: number;
 }
 
 /** You, as the camps sense you each frame. */
@@ -40,19 +41,17 @@ export interface You {
   alive: boolean;
 }
 
-/** The fight's side of `EnemyContext`: where enemies' blows, slams and arrows land (Combat, in the game). */
-export type CampHooks = Pick<EnemyContext, 'sweep' | 'slam' | 'shoot' | 'nock' | 'summon' | 'telegraph'>;
+/** The fight's side of `EnemyContext`: where enemies' blows, slams and arrows land (Combat, in the game). No summons: a camp never holds a boss. */
+export type CampHooks = Pick<EnemyContext, 'sweep' | 'slam' | 'shoot' | 'nock' | 'telegraph'>;
 
 export interface CampEvents {
   /** One of a camp's members fell. */
   onKill?(camp: Camp, member: Member): void;
 }
 
-const _sep = new Vector3();
-
 const flat = (a: { x: number; z: number }, b: { x: number; z: number }) => Math.hypot(a.x - b.x, a.z - b.z);
 
-/** A kind's numbers in a camp: `CONFIG.camps.strength` times the health and every attack's damage. */
+/** A behaviour's numbers in a camp: `CONFIG.camps.strength` times the health and every attack's damage. */
 export function campStrength(def: EnemyConfig): EnemyConfig {
   const k = CONFIG.camps.strength;
   return { ...def, hp: Math.round(def.hp * k), attacks: def.attacks.map((a) => ({ ...a, damage: Math.round(a.damage * k) })) };
@@ -62,7 +61,7 @@ export function campStrength(def: EnemyConfig): EnemyConfig {
 export class Camp {
   readonly members: Member[] = [];
   /** Seconds until it refills, once every member has fallen; null while any stands. */
-  refillIn: number | null = null;
+  private refillIn: number | null = null;
 
   constructor(
     readonly plan: CampPlan,
@@ -85,7 +84,7 @@ export class Camp {
     for (const plan of this.plan.posts) {
       const post: EnemyPost = { x: plan.x, z: plan.z, yaw: plan.yaw, evading: false };
       const enemy = this.raise(plan, post);
-      this.members.push({ plan, post, enemy, mind: 'idle', hp: enemy.hp, nearest: 0, lost: 0 });
+      this.members.push({ plan, post, enemy, mind: 'idle', hp: enemy.hp, nearest: 0, stalled: 0 });
     }
   }
 
@@ -113,11 +112,11 @@ export class Camp {
           const d = flat(e.position, m.post);
           if (d < m.nearest - stuck.progress) {
             m.nearest = d;
-            m.lost = 0;
-          } else m.lost += dt;
+            m.stalled = 0;
+          } else m.stalled += dt;
           // No navmesh: one that can't find its way round something is put back.
-          if (m.lost > stuck.time) e.position.set(m.post.x, e.position.y, m.post.z);
-          if (d < home || m.lost > stuck.time) {
+          if (m.stalled > stuck.time) e.position.set(m.post.x, e.position.y, m.post.z);
+          if (d < home || m.stalled > stuck.time) {
             e.hp = m.hp = e.maxHp;
             m.post.evading = false;
             m.mind = 'idle';
@@ -145,7 +144,7 @@ export class Camp {
   private sendHome(m: Member): void {
     m.mind = 'home';
     m.nearest = flat(m.enemy.position, m.post);
-    m.lost = 0;
+    m.stalled = 0;
     m.post.evading = true;
     m.enemy.standDown(m.post);
   }
@@ -185,6 +184,7 @@ export class Camps {
       playerFeet: new Vector3(),
       playerHead: new Vector3(),
       playerSword: null,
+      summon: () => {},
       ground,
       meleeTokens: this.meleeTokens,
       rangedTokens: this.rangedTokens,
@@ -212,7 +212,7 @@ export class Camps {
         this.enemies.splice(i, 1);
       }
     }
-    this.separate();
+    keepApart(this.enemies, ctx.playerFeet, ctx.ground);
   }
 
   /** A member's body at its post, with a camp's numbers, running to keep up once it fights. */
@@ -226,31 +226,5 @@ export class Camps {
     this.enemies.push(enemy);
     this.root.add(enemy.root);
     return enemy;
-  }
-
-  /** Keep enemies apart, out of trunks and walls, and out of your face. */
-  private separate(): void {
-    const { playerFeet: feet, ground } = this.ctx;
-    const enemies = this.enemies;
-    for (let i = 0; i < enemies.length; i++) {
-      const a = enemies[i];
-      if (!a.alive) continue;
-      for (let j = i + 1; j < enemies.length; j++) {
-        const b = enemies[j];
-        if (!b.alive) continue;
-        _sep.subVectors(a.position, b.position).setY(0);
-        const d = _sep.length();
-        const min = a.def.radius + b.def.radius + 0.15;
-        if (d >= min || d < 1e-6) continue;
-        _sep.multiplyScalar((min - d) / d / 2);
-        a.position.add(_sep);
-        b.position.sub(_sep);
-      }
-      _sep.subVectors(a.position, feet).setY(0);
-      const d = _sep.length();
-      const minD = a.def.radius + CONFIG.player.bodyRadius;
-      if (d < minD && d > 1e-6) a.position.addScaledVector(_sep, (minD - d) / d);
-      ground.resolve(a.position, a.def.radius);
-    }
   }
 }

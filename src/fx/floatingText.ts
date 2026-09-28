@@ -1,12 +1,16 @@
 import {
+  type Camera,
   CanvasTexture,
   NearestFilter,
   type Object3D,
   SRGBColorSpace,
   Sprite,
   SpriteMaterial,
-  type Vector3,
+  Vector3,
 } from 'three';
+
+const _head = new Vector3();
+const _fwd = new Vector3();
 
 interface Floater {
   sprite: Sprite;
@@ -56,6 +60,13 @@ export class FloatingText {
     sprite.position.copy(at);
     this.parent.add(sprite);
     this.active.push({ sprite, age: 0, life, rise });
+  }
+
+  /** Big text 2 m in front of `camera`, `lift` metres above eye height. */
+  banner(camera: Camera, text: string, color: string, scale = 0.3, lift = 0.2, life = 2.2): void {
+    camera.getWorldPosition(_head);
+    camera.getWorldDirection(_fwd).setY(0).normalize();
+    this.spawn(text, _head.clone().addScaledVector(_fwd, 2).setY(_head.y + lift), { color, scale, life, rise: 0.2 });
   }
 
   update(dt: number): void {

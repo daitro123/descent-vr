@@ -17,7 +17,6 @@ import { World } from './world/world';
 
 const _a = new Vector3();
 const _b = new Vector3();
-const _head = new Vector3();
 
 /**
  * The game at the plain URL: Oakvale, loaded into the World, with the
@@ -91,7 +90,6 @@ export class Adventure {
       slam: (e, a, at) => this.combat.slam(e, a, at),
       shoot: (e, from, damage) => this.combat.shoot(e, from, damage),
       nock: (e, from, to) => this.combat.projectiles.nock(e, from, to),
-      summon: () => {},
       telegraph: (e, a) => {
         e.weaponSegment(_a, _b);
         sfx.windup(_b, a.blockable);
@@ -135,7 +133,7 @@ export class Adventure {
     this.heal(dt);
     this.updateDeath(dt);
 
-    this.updateShadows();
+    this.shadows.cast(you.feet, this.camps.enemies);
     if (sword.tip.valid) {
       sword.segment(rig, _a, _b);
       this.trail.update(dt, _a, _b, sword.hot, player.frenzy > 0);
@@ -167,7 +165,7 @@ export class Adventure {
     if (this.player.alive) return;
     if (this.deadFor === null) {
       this.deadFor = 0;
-      this.banner('YOU DIED', '#c81e1e');
+      this.text.banner(this.player.camera, 'YOU DIED', '#c81e1e');
     } else this.deadFor += dt;
     this.fade.level = (this.deadFor - D.linger) / D.fadeOut;
     if (this.deadFor >= D.linger + D.fadeOut + D.dark) this.wake();
@@ -181,25 +179,5 @@ export class Adventure {
     this.combat.projectiles.clear();
     this.deadFor = null;
     this.wakingFor = 0;
-  }
-
-  private updateShadows(): void {
-    this.shadows.begin();
-    const feet = this.you.feet;
-    this.shadows.add(feet.x, feet.y, feet.z, 0.26);
-    for (const e of this.camps.enemies) {
-      if (e.state === 'dead' && e.stateTime > 1) continue;
-      const scale = e.state === 'rising' ? Math.min(1, e.stateTime * 1.5) : 1;
-      this.shadows.add(e.position.x, e.position.y, e.position.z, e.def.radius * 1.1 * scale);
-    }
-    this.shadows.end();
-  }
-
-  /** Big text floating in front of you. */
-  private banner(text: string, color: string, scale = 0.3, lift = 0.2, life = 2.2): void {
-    const cam = this.player.camera;
-    cam.getWorldPosition(_head);
-    const fwd = cam.getWorldDirection(new Vector3()).setY(0).normalize();
-    this.text.spawn(text, _head.clone().addScaledVector(fwd, 2).setY(_head.y + lift), { color, scale, life, rise: 0.2 });
   }
 }
