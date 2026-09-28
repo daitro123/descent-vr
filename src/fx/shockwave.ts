@@ -32,7 +32,7 @@ export class Shockwaves {
 
   trigger(at: Vector3, radius: number, color: number, time = 0.4): void {
     const ring = this.rings.reduce((a, b) => (b.age > a.age ? b : a));
-    ring.mesh.position.set(at.x, 0.04, at.z);
+    ring.mesh.position.set(at.x, at.y + 0.04, at.z);
     ring.mat.color.setHex(color);
     ring.age = 0;
     ring.radius = radius;

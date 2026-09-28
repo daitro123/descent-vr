@@ -7,7 +7,7 @@ import { buildCharacter, type EnemyKind, type WeaponSpec } from '../models/chara
 import { createModelMaterial, type ModelMaterial } from '../models/materials';
 import { BONES, type BoneName, blendPoses, type Pose, type Rig } from '../models/rig';
 import { HealthBar } from '../ui/healthBar';
-import type { Arena } from '../world/arena';
+import type { Ground } from '../world/ground';
 import { ATTACK_POSES, GUARD, type GuardSide, IDLE, KNEEL, KNEEL_DROP, RISE, STAGGER, walkOffsets } from './poses';
 import type { AttackTokens } from './tokens';
 
@@ -32,7 +32,8 @@ export interface EnemyContext {
   playerHead: Vector3;
   /** Null when the sword isn't tracked or the player is down. Guards react to it. */
   playerSword: PlayerSword | null;
-  arena: Arena;
+  /** The floor it walks on: the arena, or a zone. */
+  ground: Ground;
   meleeTokens: AttackTokens;
   rangedTokens: AttackTokens;
   /** One frame of a melee swing: returns what the weapon struck, if anything. */
@@ -50,6 +51,16 @@ export interface EnemyContext {
 
 type MutablePose = Record<string, [number, number, number]>;
 
+/** Where an enemy waits when it isn't fighting (see Enemy.post). */
+export interface EnemyPost {
+  x: number;
+  z: number;
+  /** Which way it faces while it waits. */
+  yaw: number;
+  /** Walking home after giving up a chase: it can't be hurt. */
+  evading: boolean;
+}
+
 const RISE_DEPTH = 1.9;
 const UP = new Vector3(0, 1, 0);
 const _to = new Vector3();
@@ -59,6 +70,8 @@ const _b = new Vector3();
 const _q = new Quaternion();
 const _q2 = new Quaternion();
 const _e = new Euler(0, 0, 0, 'YXZ');
+const _home = new Vector3();
+const _way = new Vector3();
 const _hit: SegmentHit = { distance: 0, pointA: new Vector3(), pointB: new Vector3() };
 const _telegraphBlock = new Color(1.0, 0.45, 0.05);
 const _telegraphUnblock = new Color(1.0, 0.05, 0.02);
@@ -139,6 +152,18 @@ export abstract class Enemy {
   protected strafeSign = Math.random() < 0.5 ? 1 : -1;
   protected strafeTimer = rand(1.5, 3);
   protected readonly visual = new Group();
+  /**
+   * Where it waits when it isn't fighting. The arena's enemies have none and
+   * always fight; in a zone, the camp an enemy belongs to gives it a post and
+   * decides when it fights (standDown).
+   */
+  post: EnemyPost | null = null;
+  /**
+   * m/s it runs at to catch up when the player is well out of reach, so a
+   * zone's enemies don't lose anyone who simply walks off. 0 (the arena): it
+   * never runs.
+   */
+  chaseSpeed = 0;
 
   private readonly pose: MutablePose = {};
   private readonly snapshot: MutablePose = {};
@@ -148,6 +173,7 @@ export abstract class Enemy {
   private hipDrop = 0;
   private walkPhase = 0;
   private moveAmount = 0;
+  private stride = 1; // walk-cycle speed-up while running
   private flash = 0;
   private flinch = 0;
   private staggerDuration = 0;
@@ -208,7 +234,7 @@ export abstract class Enemy {
 
   /** Can the sword damage it right now? */
   get hittable(): boolean {
-    return this.state !== 'dead' && this.state !== 'rising';
+    return this.state !== 'dead' && this.state !== 'rising' && !this.post?.evading;
   }
 
   get attacking(): boolean {
@@ -237,7 +263,7 @@ export abstract class Enemy {
   /** Hurt capsule axis (feet to neck), world space. Follows lean and kneel. */
   capsule(outBottom: Vector3, outTop: Vector3): void {
     const r = this.def.radius;
-    outBottom.set(this.position.x, r, this.position.z);
+    outBottom.set(this.position.x, this.position.y + r, this.position.z);
     this.rig.bones.head.getWorldPosition(outTop);
     outTop.y = Math.max(outBottom.y + 0.1, outTop.y - 0.05);
   }
@@ -400,7 +426,7 @@ export abstract class Enemy {
     const cal = this.calibrate(attack);
     const dist = Math.max(0.4, _to.subVectors(ctx.playerFeet, this.position).setY(0).length());
     const targetY = ctx.playerHead.y - 0.25;
-    const wanted = Math.atan2(targetY - cal.shoulderY, dist);
+    const wanted = Math.atan2(targetY - this.position.y - cal.shoulderY, dist);
     const delta = Math.max(-0.6, Math.min(1.0, cal.angle - wanted));
     for (const p of [this.windupPose, this.strikePose]) {
       const arm = p.upperArmR;
@@ -609,7 +635,7 @@ export abstract class Enemy {
     const a = this.attack!;
     if (a.kind === 'slam') {
       this.weaponSegment(_a, _b);
-      _b.y = 0;
+      _b.y = ctx.ground.heightAt(_b.x, _b.z);
       ctx.slam(this, a, _b);
     } else if (a.kind === 'summon') {
       ctx.summon(this, CONFIG.warden.summonCount);
@@ -728,11 +754,12 @@ export abstract class Enemy {
       // Stuck: side-step along the detour for a moment instead.
       this.detour -= dt;
       _v.copy(this.detourDir);
-    } else this.avoidObstacles(_v);
+    } else ctx.ground.steer(this.position, _v, this.def.radius);
     _a.copy(this.position);
     this.position.addScaledVector(_v, speed * dt);
-    ctx.arena.resolve(this.position, this.def.radius);
+    ctx.ground.resolve(this.position, this.def.radius);
     this.moveAmount = Math.min(1, speed / this.def.speed);
+    this.stride = Math.max(1, speed / this.def.speed);
 
     // Safety net for local traps (walls, props, other enemies): if we keep
     // trying to walk but barely move, detour sideways for a second.
@@ -746,26 +773,6 @@ export abstract class Enemy {
     }
   }
 
-  private avoidObstacles(dir: Vector3): void {
-    const r = this.def.radius;
-    const all = [...CONFIG.arena.pillars, ...CONFIG.arena.obstacles];
-    for (const o of all) {
-      const dx = this.position.x - o.x;
-      const dz = this.position.z - o.z;
-      const d = Math.hypot(dx, dz);
-      const clear = o.r + r + 0.5;
-      if (d > clear || d < 1e-4) continue;
-      // Heading into it? Slide round the side we're already favouring.
-      const towards = -(dx * dir.x + dz * dir.z) / d;
-      if (towards <= 0) continue;
-      const side = dx * dir.z - dz * dir.x >= 0 ? 1 : -1;
-      const w = towards * (1 - (d - o.r - r) / 0.5);
-      dir.x += (-dz / d) * side * w * 1.5;
-      dir.z += (dx / d) * side * w * 1.5;
-    }
-    dir.setY(0).normalize();
-  }
-
   protected faceToward(target: Vector3, dt: number, rate = 1): void {
     _to.subVectors(target, this.position).setY(0);
     if (_to.lengthSq() < 1e-6) return;
@@ -774,6 +781,39 @@ export abstract class Enemy {
     delta = Math.atan2(Math.sin(delta), Math.cos(delta));
     const maxStep = this.def.turnSpeed * rate * dt;
     this.root.rotation.y += Math.max(-maxStep, Math.min(maxStep, delta));
+  }
+
+  /** How fast to close in from `dist` away: its walk, or a run (chaseSpeed) when far behind. */
+  protected closingSpeed(dist: number): number {
+    return dist > this.def.holdDistance + 2.5 ? Math.max(this.def.speed, this.chaseSpeed) : this.def.speed;
+  }
+
+  /** Stop fighting and go to `post` (see `post`); null sends it back into the fight. */
+  standDown(post: EnemyPost | null): void {
+    this.post = post;
+    if (!post) return;
+    this.endAttack();
+    this.releaseTokens();
+    if (this.state === 'attack' || this.state === 'guard') this.enter('move');
+  }
+
+  /** Not fighting: walk back to the post, then stand there facing its way. */
+  private holdPost(dt: number, ctx: EnemyContext): void {
+    const p = this.post!;
+    _home.set(p.x, 0, p.z);
+    _way.subVectors(_home, this.position).setY(0);
+    const d = _way.length();
+    if (d > 0.3) {
+      const speed = p.evading ? Math.max(this.def.speed, this.chaseSpeed) : this.def.speed * 0.6;
+      this.walk(_way.divideScalar(d), speed * Math.min(1, 0.3 + d), dt, ctx);
+      this.faceToward(_home, dt);
+    } else this.faceToward(this.postFacing(_home), dt, 0.5);
+  }
+
+  /** A point straight ahead of the post, the way it faces. */
+  private postFacing(out: Vector3): Vector3 {
+    const p = this.post!;
+    return out.set(this.position.x + Math.sin(p.yaw), 0, this.position.z + Math.cos(p.yaw));
   }
 
   /** Circle the player at `radius`, drifting sideways; returns the direction walked. */
@@ -821,7 +861,7 @@ export abstract class Enemy {
       // Knockback slides the body; decays quickly.
       this.position.addScaledVector(this.knockback, dt);
       this.knockback.multiplyScalar(Math.exp(-8 * dt));
-      ctx.arena.resolve(this.position, this.def.radius);
+      ctx.ground.resolve(this.position, this.def.radius);
     }
 
     const dist = _to.subVectors(ctx.playerFeet, this.position).setY(0).length();
@@ -833,12 +873,16 @@ export abstract class Enemy {
       case 'rising': {
         const k = Math.min(1, this.stateTime / this.riseTime);
         this.visual.position.y = -RISE_DEPTH * this.heightScale * (1 - easeOut(k));
-        this.faceToward(ctx.playerFeet, dt, 0.5);
+        this.faceToward(this.post ? this.postFacing(_home) : ctx.playerFeet, dt, 0.5);
         target = k < 0.7 ? RISE : idle;
         if (k >= 1) this.enter('move');
         break;
       }
       case 'move':
+        if (this.post) {
+          this.holdPost(dt, ctx);
+          break;
+        }
         if (this.considerGuard(ctx)) {
           target = GUARD[this.guardSide];
           break;
@@ -881,7 +925,7 @@ export abstract class Enemy {
       const walkPose = this.scratch;
       for (const k of Object.keys(walkPose)) delete walkPose[k];
       if (this.moveAmount > 0.01 && (this.state === 'move' || this.state === 'rising')) {
-        this.walkPhase += dt * 7 * this.moveAmount * (this.def.speed / Math.max(0.8, this.heightScale));
+        this.walkPhase += dt * 7 * this.moveAmount * this.stride * (this.def.speed / Math.max(0.8, this.heightScale));
         walkOffsets(this.walkPhase, this.moveAmount, walkPose);
       }
       const ease = this.state === 'stagger' ? 18 : this.state === 'guard' ? CONFIG.guard.raiseRate : 10;
@@ -898,6 +942,7 @@ export abstract class Enemy {
       }
     }
 
+    this.position.y = ctx.ground.heightAt(this.position.x, this.position.z);
     this.rig.apply(this.pose);
     if (this.flinch > 0) this.rig.bones.spine.rotation.x -= this.flinch * 0.6;
     const bob = this.state === 'move' ? -Math.abs(Math.sin(this.walkPhase)) * 0.03 * this.moveAmount : 0;

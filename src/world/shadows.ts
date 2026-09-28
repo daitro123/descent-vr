@@ -53,9 +53,10 @@ export class BlobShadows {
     this.n = 0;
   }
 
-  add(x: number, z: number, radius: number): void {
+  /** A blob on the ground at (x, y, z). */
+  add(x: number, y: number, z: number, radius: number): void {
     if (this.n >= MAX) return;
-    _m.compose(_p.set(x, 0.012, z), _q, _s.set(radius * 2.4, radius * 2.4, 1));
+    _m.compose(_p.set(x, y + 0.012, z), _q, _s.set(radius * 2.4, radius * 2.4, 1));
     this.mesh.setMatrixAt(this.n++, _m);
   }
 

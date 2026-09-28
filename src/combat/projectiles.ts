@@ -11,7 +11,7 @@ import type { Enemy } from '../enemies/enemy';
 import { ModelBuilder } from '../models/kit';
 import { sharedModelMaterial } from '../models/materials';
 import { PAL } from '../models/palette';
-import { pushOutOfCircle } from './geometry';
+import type { Ground } from '../world/ground';
 
 /** What an enemy arrow met on the player this frame. `glanced`: stopped by a still blade, and gone. */
 export type ArrowContact = 'blocked' | 'parried' | 'deflected' | 'glanced' | 'hit' | 'dodged';
@@ -62,7 +62,10 @@ export class Projectiles {
   private readonly arrows: Arrow[] = [];
   private readonly nocked = new Map<Enemy, { from: Vector3; to: Vector3 }>();
 
-  constructor(parent: Object3D) {
+  constructor(
+    parent: Object3D,
+    private readonly ground: Ground,
+  ) {
     this.mesh = new InstancedMesh(arrowGeometry(), sharedModelMaterial(), MAX);
     this.mesh.instanceMatrix.setUsage(DynamicDrawUsage);
     this.mesh.frustumCulled = false;
@@ -121,7 +124,6 @@ export class Projectiles {
   }
 
   update(dt: number, resolver: ArrowResolver): void {
-    const half = CONFIG.arena.halfSize;
     for (let i = this.arrows.length - 1; i >= 0; i--) {
       const a = this.arrows[i];
       if (a.stuck > 0) {
@@ -145,14 +147,9 @@ export class Projectiles {
         continue;
       }
 
-      // The room: floor, walls and pillars catch arrows.
-      let env = a.pos.y <= 0.02 || Math.abs(a.pos.x) >= half - 0.02 || Math.abs(a.pos.z) >= half - 0.02;
-      for (const c of CONFIG.arena.pillars) {
-        _p.copy(a.pos);
-        if (a.pos.y < CONFIG.arena.wallHeight && pushOutOfCircle(_p, c.x, c.z, c.r)) env = true;
-      }
-      if (env) {
-        a.pos.y = Math.max(0.02, a.pos.y);
+      // The floor, walls and props catch arrows.
+      if (this.ground.arrowStops(a.pos)) {
+        a.pos.y = Math.max(this.ground.heightAt(a.pos.x, a.pos.z) + 0.02, a.pos.y);
         a.stuck = CONFIG.arrow.stickTime;
         continue;
       }

@@ -5,7 +5,7 @@ import { CONFIG } from '../src/config';
 import type { EnemyContext } from '../src/enemies/enemy';
 import { Brute } from '../src/enemies/kinds';
 import { AttackTokens } from '../src/enemies/tokens';
-import type { Arena } from '../src/world/arena';
+import { Arena } from '../src/world/arena';
 
 // The brute is armoured: hitting it should hurt it, not switch it off. These
 // drive a real brute (its own think, tokens and attack timings) while the
@@ -27,7 +27,7 @@ function context(): EnemyContext {
     playerFeet: new Vector3(0, 0, DIST),
     playerHead: new Vector3(0, 1.6, DIST),
     playerSword: null,
-    arena: { resolve: () => false, lineOfSight: () => true } as unknown as Arena,
+    ground: { resolve: () => false, lineOfSight: () => true, heightAt: () => 0, steer: Arena.prototype.steer, arrowStops: () => false },
     meleeTokens: new AttackTokens(CONFIG.tokens.melee, CONFIG.tokens.meleeGap),
     rangedTokens: new AttackTokens(CONFIG.tokens.ranged, CONFIG.tokens.rangedGap),
     sweep: () => null,

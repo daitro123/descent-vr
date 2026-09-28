@@ -55,6 +55,8 @@ async function start(): Promise<void> {
   if (params.has('inspect')) return startInspector(renderer, scene, camera);
   // ?fly opens the map viewer (?fly=<id> for one map) instead of the game.
   if (params.has('fly')) return startMapViewer(renderer, scene, camera, device);
+  // ?camp: PROTOTYPE of enemies living in camps in Oakvale instead of arriving in waves.
+  if (params.has('camp')) return (await import('./enemies/camp-prototype')).startCampPrototype(renderer, scene, camera, device);
   // ?map=<id> walks a map with no enemies (src/maps).
   if (params.has('map')) return (await import('./maps/walk')).startWalk(renderer, scene, camera, params.get('map') || 'forest');
 

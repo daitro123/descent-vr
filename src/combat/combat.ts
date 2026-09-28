@@ -91,7 +91,7 @@ export class Combat implements ArrowResolver {
     private readonly events: CombatEvents,
     parent: Object3D,
   ) {
-    this.projectiles = new Projectiles(parent);
+    this.projectiles = new Projectiles(parent, player.ground);
     const B = CONFIG.player.body;
     const S = CONFIG.shield;
     this.defender = {
@@ -298,12 +298,13 @@ export class Combat implements ArrowResolver {
     if (!sword.tip.valid || !this.player.alive || this.slamCooldown > 0 || this.player.rage < G.cost) return;
     sword.tip.worldNow(rig, _p);
     _vel.copy(sword.tip.velocity).applyQuaternion(rig.quaternion);
-    if (_p.y > G.floorY || _vel.y > -G.minDownSpeed) return;
+    const floor = this.player.ground.heightAt(_p.x, _p.z);
+    if (_p.y - floor > G.floorY || _vel.y > -G.minDownSpeed) return;
 
     this.slamCooldown = G.cooldown;
     this.player.rage -= G.cost;
     combatStats.slams++;
-    _p.y = 0;
+    _p.y = floor;
     for (const enemy of enemies) {
       if (!enemy.hittable) continue;
       _push.subVectors(enemy.position, _p).setY(0);
@@ -314,15 +315,15 @@ export class Combat implements ArrowResolver {
       const damage = Math.round(G.damage * falloff * (this.player.frenzy > 0 ? CONFIG.sword.frenzyMultiplier : 1));
       const killed = enemy.takeHit(damage, _push, { from: _p, ignorePoise: enemy.kind !== 'warden' });
       if (!killed) enemy.stagger(G.stagger);
-      this.fx.text.spawn(`${damage}`, enemy.position.clone().setY(1.7), { color: '#ffb020' });
+      this.fx.text.spawn(`${damage}`, enemy.position.clone().setY(enemy.position.y + 1.7), { color: '#ffb020' });
       this.events.onEnemyHit(enemy, killed);
       if (killed) this.onKill(enemy);
     }
     this.fx.shockwaves.trigger(_p, G.radius, 0xff9a30, 0.35);
     this.fx.particles.burst('dust', _p, 18);
     this.fx.particles.burst('embers', _p, 24);
-    this.fx.particles.burst('sparks', _p.clone().setY(0.05), 16);
-    this.fx.text.spawn('EARTHSHAKER', _p.clone().setY(1.2), { color: '#ffb020', scale: 0.2 });
+    this.fx.particles.burst('sparks', _p.clone().setY(_p.y + 0.05), 16);
+    this.fx.text.spawn('EARTHSHAKER', _p.clone().setY(_p.y + 1.2), { color: '#ffb020', scale: 0.2 });
     sfx.groundSlam(_p);
     this.player.input.pulse('right', 1, 220);
     this.events.hitStop(0.1);
@@ -344,7 +345,7 @@ export class Combat implements ArrowResolver {
       _push.normalize().multiplyScalar(A.knockback * (1 - (d / A.radius) * 0.5));
       const killed = enemy.takeHit(A.damage, _push, { from: _feet });
       if (!killed) enemy.stagger(A.stagger);
-      this.fx.text.spawn(`${A.damage}`, enemy.position.clone().setY(1.7), { color: '#ffb020' });
+      this.fx.text.spawn(`${A.damage}`, enemy.position.clone().setY(enemy.position.y + 1.7), { color: '#ffb020' });
       this.events.onEnemyHit(enemy, killed);
       if (killed) this.onKill(enemy);
     }
@@ -435,7 +436,7 @@ export class Combat implements ArrowResolver {
     const r = attack.radius ?? 1.5;
     this.fx.shockwaves.trigger(at, r, 0xff3a10, 0.45);
     this.fx.particles.burst('dust', at, 22, undefined, 0x5a5048);
-    this.fx.particles.burst('sparks', at.clone().setY(0.1), 10, undefined, 0xff6020);
+    this.fx.particles.burst('sparks', at.clone().setY(at.y + 0.1), 10, undefined, 0xff6020);
     sfx.slam(at);
     const player = this.player;
     player.feetPosition(_feet);
@@ -449,7 +450,7 @@ export class Combat implements ArrowResolver {
     if (!player.alive || d > r) return;
     if (player.invulnerable) {
       combatStats.dodges++;
-      this.fx.text.spawn('dodge', _feet.clone().setY(1.2), { color: '#9a9a9a', scale: 0.14 });
+      this.fx.text.spawn('dodge', _feet.clone().setY(_feet.y + 1.2), { color: '#9a9a9a', scale: 0.14 });
       return;
     }
     this.hurtPlayer(attack.damage);
