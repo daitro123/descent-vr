@@ -1,7 +1,7 @@
 # Interiors
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 01, 04
 
 ## Question
