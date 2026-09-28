@@ -31,7 +31,7 @@ async function start(): Promise<void> {
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.setSize(innerWidth, innerHeight);
   renderer.xr.enabled = true;
-  // Quest budget (see .scratch/vertical-slice/research): foveation explicit,
+  // Quest budget (see docs/quest-3-browser-performance-budget.md): foveation explicit,
   // framebuffer at the browser's recommended size (lower to ~0.85 if GPU-bound).
   renderer.xr.setFoveation(1);
   renderer.xr.setFramebufferScaleFactor(1);
