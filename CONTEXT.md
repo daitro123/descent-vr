@@ -44,6 +44,18 @@ _Avoid_: faction, race, type
 A group of enemies that lives at one place and refills some time after it is cleared: the bandits at the farm, at the lumber camp and at the watchtower, and the undead in the mine. A boss is never part of a camp. (The lumber camp is a place; the bandits there are its camp.)
 _Avoid_: spawn, pack, mob
 
+**Patrol**:
+A small camp that walks a road back and forth instead of waiting at one place.
+_Avoid_: roamer, wanderer
+
+**Pull**:
+Drawing enemies into a fight: one notices you or is hurt, and brings the rest of its camp that stand near it.
+_Avoid_: aggro, agro
+
+**Leash**:
+How far a fighting enemy follows you from its post before it gives up, walks home untouchable and heals.
+_Avoid_: tether, reset range
+
 **Boss**:
 An enemy fought once, at the end of a quest chain, that stays dead once beaten. Oakvale has one: the Warden at the bottom of the mine.
 _Avoid_: elite, raid boss, mini-boss
