@@ -1,7 +1,7 @@
 # Enemies in the open
 
 Type: prototype
-Status: claimed
+Status: resolved
 Blocked by: 02
 
 ## Question
@@ -15,6 +15,21 @@ Decide by prototyping one camp (at the lumber camp, say) and playing it on the h
 - Respawn: how long before a cleared camp fills again.
 - Ground: walking and striking on slopes and among trees, and whether steering around colliders is enough or the zone needs a navmesh.
 - Attack tokens (at most 2 melee and 2 ranged today) when two camps are close together.
+
+## Answer
+
+Tom played both rounds of the `?camp` prototype on the Quest on 2026-09-28 and picked **A, the WoW-style pull, with round two's spread-out camp and its third setting (Both)**. The prototype is out of `main` again; its code stays in history at merge commit `1135338` (`src/enemies/camp-prototype/`), with round one's B and C at `7195835`. The numbers are the prototype's, as starting points.
+
+- **Fewer, spread out:** the lumber camp holds 5, not the 7 from [The zone's enemies](02-the-zones-enemies.md): 3 thugs, an archer and the leader, spread round the clearing 5 to 18 m apart (a thug where the camp road comes in, one at the fire, one at the log pile, the archer to the south, the leader before the tent). Seven stood too close together. The farm's 4 thugs and the watchtower's 3 keep their counts but spread out the same way.
+- **A patrol:** two thugs walk the lumber camp road in single file between the camp and the main road, pausing 3 s at each end. They are a small camp of their own. Only the lumber camp has one.
+- **Pulling (A):** each enemy notices you within 8 m, or when you hurt it, and brings anyone of its camp within 10 m of it. Walking up the camp road pulls three of the five; the leader waits. You can pull a camp's edge and take it a few at a time.
+- **Chasing and the leash:** a fighting enemy runs at your walking pace (2.2 m/s) when it's more than a few metres off, so walking away doesn't lose it. Each gives up once it's 30 m from its post, then walks home untouchable and heals to full when it gets there. When you die, everyone fighting you walks home the same way.
+- **Harder (Both):** every camp's enemies, the mine's undead included, have 40% more health and damage than today's numbers, on top of their level from [Progression, death and saving](03-progression-death-and-saving.md). And in a zone three enemies may swing at you at once instead of two; the arena keeps two. The Warden is never part of a camp and keeps its numbers.
+- **Attack tokens:** one pool for the player across every camp, so pulling two camps together, or a camp and the patrol, still lets only three swing and two shoot at once.
+- **Refill:** a camp refills only once all of it is dead, 3 minutes after the last one falls, and only while you're at least 30 m from it, so nobody appears in front of you. (The prototype used 1 minute to test it.)
+- **Ground:** enemies stand, walk and strike at the ground's real height, and steer round trunks, tents and fences by looking a stride ahead. No navmesh: Tom didn't see anyone stuck at the lumber camp. The mine's tunnels are the place to check it again.
+- **Budget:** in the emulator, 7 skeletons cost about 14k triangles and 30 draw calls, so the lumber camp's 5 and its patrol fit easily. The terrain and trees are most of the scene's ~200k.
+- **Kept in `main`:** the fight code now runs on any ground. `src/world/ground.ts` (`Ground`: height, colliders, sight lines, steering, arrows) is implemented by the arena with its flat floor. `Enemy` has a `post` to wait at and walk home to, `standDown` and `chaseSpeed` for a camp to drive, which the arena doesn't use, and `createEnemy` takes tuned numbers for every kind. The camp brain (`camps.ts`) and a zone's ground (`zoneGround.ts`) are in history with the prototype.
 
 ## Comments
 
@@ -38,3 +53,4 @@ A "?", "!" or "home" over a head shows what it's doing; holding the left grip sh
 - **2 · More at once:** today's strength, but three swing at you at a time.
 - **3 · Both.**
 
+**2026-09-28 (Tom, after round two on the Quest):** Both.
