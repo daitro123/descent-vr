@@ -1,7 +1,7 @@
 # Progression, death and saving
 
 Type: grilling
-Status: claimed
+Status: resolved
 Blocked by: 05
 
 ## Question
@@ -13,6 +13,22 @@ How far does Oakvale take a character, and what happens when you die?
 - What an item reward is, given that loot stays light: a better sword or shield, or something else.
 - Death in an open zone: respawn in the village, walk back from a graveyard as in WoW, or restart at the last camp? What is lost?
 - What the save holds (level, items, quest progress, position) and when it saves.
+
+## Answer
+
+Settled with Tom over three rounds on 2026-09-28; the rounds are under Comments. The numbers are starting points, to tune on the headset.
+
+- **Levels 1 to 5.** A new character starts at level 1, at the crossroads a few steps from Marshal Hale and facing them. Level 5 is Oakvale's cap until a later zone raises it; XP past it is dropped.
+- **What a level gives:** 20 more health (100 at level 1, 180 at 5) and 20% more of all the damage you deal. Enemy levels use the same step for their health and damage, so a fight against an enemy of your own level feels like today's arena. The War Cry unlocks at level 2 and the ground slam at 3; the rage orb stays hidden until level 2. Levels 4 and 5 bring only health and damage.
+- **Enemy levels:** the farm 1, the lumber camp and the watchtower 2, the mine 3 near its mouth and 4 deeper in, the Warden 5 (and the skeletons it raises). The Warden's level-1 health drops from 1100 to 600, about 1100 at level 5.
+- **XP** comes from quests and kills. Levels 2, 3, 4 and 5 need 100, 200, 300 and 400 more (1000 in all). A kill pays 10 XP per enemy level, triple for the leader, the mine's brutes and the Warden, and nothing for the skeletons the Warden raises. The quests pay 80, 120 and 300. On the plain route that lands level 2 at the first hand-in, 3 at the second, 4 inside the mine, and 5 at the last hand-in with the sword; recheck once [The mine inside](09-the-mine-inside.md) sets its counts.
+- **The item:** What Lies Below pays Marshal Hale's own old longsword (a placeholder name), with a darker blade and a gilded guard. It deals 20% more damage and handles exactly like today's sword. It replaces your sword on the spot: no inventory, no equipping.
+- **No other loot.** Enemies drop only healing orbs, as today. Loot can come back with a later zone that needs it.
+- **Healing:** after 5 s without taking or dealing damage, health refills to full over about 10 s. Each orb heals a quarter of your health. Levelling up fills your health too.
+- **Death:** the view fades to black and you wake at a **respawn point** with full health and no rage: in the village, or just outside the mine's mouth if you died inside the mine. Nothing is lost (no XP, no sword, no quest progress); the walk back is the price. Enemies that were fighting you go back to their places at full health, and the ones you killed stay dead until their camp refills. The Warden resets as [The zone's enemies](02-the-zones-enemies.md) says.
+- **The save** (IndexedDB, per [Saving in the Quest browser](05-saving-in-the-quest-browser.md)) holds the level, XP, which sword you carry, each quest's state (kills counted, the orders picked up, whether the Warden is beaten) and where you stand. Health, rage and the camps aren't saved: you load where you last stood with full health, no rage, and every camp full. It saves on every quest change, level-up, new sword and zone crossing, every 30 s, and when the page is hidden or you leave VR.
+- **One character, one save.** Oakvale becomes the game at the plain URL, and `?newgame` wipes the save after you confirm. The arena moves to `?arena` (with `?duel` and `?wave`) as a practice mode that never touches the save. A "start over" button can join a menu once quest tracking brings one.
+- **Seeing it:** the belt gains your level number and a thin XP bar between the health and rage orbs. Each kill floats "+20 XP" where the enemy fell. Levelling up shows "LEVEL 3" with a sound and names anything it unlocked ("War Cry: press A or X").
 
 ## Comments
 
@@ -39,3 +55,7 @@ How far does Oakvale take a character, and what happens when you die?
 - The save holds the level, XP, which sword you carry, each quest's state (kills counted, the orders picked up, whether the Warden is beaten) and where you stand. Health, rage and the camps aren't saved: you load where you last stood with full health, no rage, and every camp full. It saves on every quest change, level-up, new sword and zone crossing, every 30 s, and when the page is hidden or you leave VR.
 - One character, one save. Oakvale becomes the game at the plain URL; `?newgame` wipes the save after you confirm. The arena moves to `?arena` (with `?duel` and `?wave`) as a practice mode that never touches the save. A "start over" button can join a menu once quest tracking brings one.
 - Seeing it: the belt gains your level number and a thin XP bar between the health and rage orbs. Each kill floats "+20 XP" where the enemy fell. Levelling up shows "LEVEL 3" with a sound, fills your health, and names anything it unlocked ("War Cry: press A or X").
+
+**2026-09-28, round 3 (Tom took the recommendation):**
+
+- A new character starts at the crossroads, a few steps from Marshal Hale and facing them, not on the southern road where walk mode starts today. The first quest is right there, the village is also where you wake after dying, and the south stays unseen until the marshal's last line sends you that way.
