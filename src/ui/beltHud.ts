@@ -155,7 +155,7 @@ export class BeltHud {
   private updateVignette(dt: number): void {
     this.hurtTimer = Math.max(0, this.hurtTimer - dt);
     this.dashTimer = Math.max(0, this.dashTimer - dt);
-    const hp = this.player.hp / CONFIG.player.maxHp;
+    const hp = this.player.hp / this.player.maxHp;
     const low = this.player.alive && hp < 0.3 ? 0.25 + 0.15 * Math.sin(this.time * 5) : 0;
     const hurt = Math.max(this.hurtTimer * 2, low);
     const u = this.vignette.uniforms;
@@ -173,7 +173,7 @@ export class BeltHud {
 
   private redraw(): void {
     const p = this.player;
-    const hp = p.hp / CONFIG.player.maxHp;
+    const hp = p.hp / p.maxHp;
     const rage = p.rage / CONFIG.player.maxRage;
     const dash = 1 - p.dashCooldown / CONFIG.dash.cooldown;
     const s = this.status;

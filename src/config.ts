@@ -236,8 +236,41 @@ export const CONFIG = {
   },
 
   // Attack tokens: how many enemies may be mid-attack at once, per type of
-  // threat, and the minimum spacing (s) between two attacks starting.
+  // threat, and the minimum spacing (s) between two attacks starting. The
+  // arena's; the Adventure's camps share their own pools (CONFIG.camps).
   tokens: { melee: 2, ranged: 2, meleeGap: 0.9, rangedGap: 0.6 },
+
+  // The Adventure's camps (enemies/camps.ts): the WoW-style pull Tom picked
+  // in the `?camp` prototype. You take a camp a few at a time from its edge.
+  camps: {
+    notice: 8, // m: an idle member fights you this close, or once you hurt it…
+    pull: 10, // m: …and brings every idle member of its own camp this close to it
+    leash: 30, // m from its post: it gives up, walks home untouchable and heals
+    chaseSpeed: 2.2, // m/s, your walking pace: it runs when well out of reach
+    home: 0.5, // m from its post counts as home
+    // Walking home, one that hasn't come `progress` m nearer in `time` s is
+    // stuck behind something (there's no navmesh) and is put back at its post.
+    stuck: { progress: 1, time: 3 },
+    refillTime: 180, // s after the last member falls, the camp refills whole…
+    refillAway: 30, // m: …but only while you're this far from its clearing
+    strength: 1.4, // health and damage, on top of its level
+    // One pool for the player across every camp: three may swing, two shoot.
+    tokens: { melee: 3, ranged: 2 },
+  },
+
+  // The Adventure's health out of a fight (the arena has none).
+  healing: {
+    calm: 5, // s without taking or dealing damage…
+    refill: 10, // …then health refills from empty to full over this long
+  },
+
+  // A death in the Adventure: the view fades to black and you wake in the village.
+  death: {
+    linger: 1.5, // s you see where you fell before it darkens
+    fadeOut: 1, // s to black
+    dark: 0.5, // s of black, while you're moved to the respawn point
+    fadeIn: 1, // s back to the view
+  },
 
   enemies: {
     grunt: {
@@ -394,7 +427,7 @@ export const CONFIG = {
   },
 
   orb: {
-    heal: 25,
+    heal: 0.25, // of your maximum health
     pickupRadius: 0.25, // hand touch
     walkRadius: 0.45, // or walk over it
     lifetime: 20,

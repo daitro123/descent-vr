@@ -99,6 +99,8 @@ export function buildForest(): Zone {
     root,
     atmosphere: OAKVALE_ATMOSPHERE,
     spawn: layout.spawn,
+    camps: layout.camps,
+    respawns: layout.respawns,
     bounds: { minX: -play, maxX: play, minZ: -play, maxZ: play },
     landmarks: layout.landmarks,
     heightAt: layout.heightAt,

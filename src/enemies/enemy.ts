@@ -237,6 +237,11 @@ export abstract class Enemy {
     return this.state !== 'dead' && this.state !== 'rising' && !this.post?.evading;
   }
 
+  /** Walking home after giving up a chase: blows do nothing ("Evade"). */
+  get evading(): boolean {
+    return this.state !== 'dead' && this.post?.evading === true;
+  }
+
   get attacking(): boolean {
     return this.state === 'attack';
   }

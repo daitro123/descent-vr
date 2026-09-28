@@ -164,9 +164,14 @@ export class Combat implements ArrowResolver {
     sword.tip.worldNow(rig, _curTip);
 
     for (const enemy of enemies) {
-      if (!enemy.hittable || enemy.hitCooldown > 0) continue;
+      if ((!enemy.hittable && !enemy.evading) || enemy.hitCooldown > 0) continue;
       const res = sweepBlade(_prevBase, _prevTip, _curBase, _curTip, S.bladeHalfWidth, S.sweepSamples, enemy.bladeTarget(_target), _blade);
       if (!res) continue;
+      if (enemy.evading) {
+        enemy.hitCooldown = S.perEnemyCooldown;
+        this.evade(res.point);
+        continue;
+      }
       const { damage: base, power } = swingDamage(speed);
       _vel.copy(sword.tip.velocity).applyQuaternion(rig.quaternion);
       if (res.zone === 'guard' || enemy.guardCovers(res.point, _vel)) {
@@ -222,6 +227,11 @@ export class Combat implements ArrowResolver {
     this.events.hitStop(0.04);
   }
 
+  /** A blow landed on an enemy walking home: nothing happens, and it says so. */
+  private evade(at: Vector3): void {
+    this.fx.text.spawn('Evade', at.clone().setY(at.y + 0.2), { color: '#c0c0c0', scale: 0.16 });
+  }
+
   /** Bone chips from skeletons, dark ichor from the brute; sparks on crits. */
   private impactFx(enemy: Enemy, at: Vector3, dir: Vector3, bright: boolean): void {
     _vel.copy(dir).normalize();
@@ -256,7 +266,7 @@ export class Combat implements ArrowResolver {
     if (_vel.length() < S.bashSpeed) return;
     shield.centre.worldNow(rig, _p);
     for (const enemy of enemies) {
-      if (!enemy.hittable || enemy.bashCooldown > 0) continue;
+      if ((!enemy.hittable && !enemy.evading) || enemy.bashCooldown > 0) continue;
       enemy.capsule(_capA, _capB);
       closestPointOnSegment(_p, _capA, _capB, _a);
       const d = _a.distanceTo(_p);
@@ -265,6 +275,10 @@ export class Combat implements ArrowResolver {
       if (_vel.dot(_to) < S.bashSpeed) continue;
 
       enemy.bashCooldown = S.bashCooldown;
+      if (enemy.evading) {
+        this.evade(_a);
+        continue;
+      }
       const windingUp = enemy.attacking && enemy.phase === 'windup';
       // Bashing a raised guard knocks it aside and leaves the enemy open, even the Warden.
       const broke = enemy.guarding;
@@ -306,10 +320,14 @@ export class Combat implements ArrowResolver {
     combatStats.slams++;
     _p.y = floor;
     for (const enemy of enemies) {
-      if (!enemy.hittable) continue;
+      if (!enemy.hittable && !enemy.evading) continue;
       _push.subVectors(enemy.position, _p).setY(0);
       const d = _push.length();
       if (d > G.radius + enemy.def.radius) continue;
+      if (enemy.evading) {
+        this.evade(_a.copy(enemy.position).setY(enemy.position.y + 1.5));
+        continue;
+      }
       const falloff = 1 - 0.5 * Math.min(1, d / G.radius);
       _push.normalize().multiplyScalar(G.knockback * falloff);
       const damage = Math.round(G.damage * falloff * (this.player.frenzy > 0 ? CONFIG.sword.frenzyMultiplier : 1));
@@ -338,10 +356,14 @@ export class Combat implements ArrowResolver {
     player.frenzy = A.frenzyTime;
     player.feetPosition(_feet);
     for (const enemy of enemies) {
-      if (!enemy.hittable) continue;
+      if (!enemy.hittable && !enemy.evading) continue;
       _push.subVectors(enemy.position, _feet).setY(0);
       const d = _push.length();
       if (d > A.radius) continue;
+      if (enemy.evading) {
+        this.evade(_a.copy(enemy.position).setY(enemy.position.y + 1.5));
+        continue;
+      }
       _push.normalize().multiplyScalar(A.knockback * (1 - (d / A.radius) * 0.5));
       const killed = enemy.takeHit(A.damage, _push, { from: _feet });
       if (!killed) enemy.stagger(A.stagger);

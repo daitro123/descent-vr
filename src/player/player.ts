@@ -20,7 +20,9 @@ export class Player {
   readonly input: XRInput;
   readonly sword = new Sword();
   readonly shield = new Shield();
-  hp: number = CONFIG.player.maxHp;
+  /** Full health. */
+  maxHp: number = CONFIG.player.maxHp;
+  hp: number = this.maxHp;
   rage = 0;
   /** Seconds of War Cry frenzy left (bonus damage, burning blade). */
   frenzy = 0;
@@ -186,7 +188,7 @@ export class Player {
   }
 
   heal(amount: number): void {
-    this.hp = Math.min(CONFIG.player.maxHp, this.hp + amount);
+    this.hp = Math.min(this.maxHp, this.hp + amount);
   }
 
   addRage(amount: number): void {
@@ -195,7 +197,7 @@ export class Player {
 
   /** Back to full health and nothing charged, standing at (x, z) facing `yaw`. */
   reset(x = 0, z = 0, yaw = 0): void {
-    this.hp = CONFIG.player.maxHp;
+    this.hp = this.maxHp;
     this.rage = 0;
     this.frenzy = 0;
     this.dashCooldown = this.dashTime = this.dodgeTime = 0;
