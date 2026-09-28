@@ -43,3 +43,5 @@ Tom tried the three variants of the `?talk` prototype on the Quest on 2026-09-28
 - **C · Talk:** no markers or windows. Hale waves and calls out when they have something for you; walk up and look at them and they speak a line at a time in a bubble over their head. Nod to accept, shake your head to decline (A and B work too); handing in happens as you talk. The quest floats in the top left of your view.
 
 **2026-09-28 (Tom, after trying it on the Quest):** A, but probably C for the tracker. A complete overhaul comes after this map is specced and its tickets are built.
+
+**2026-09-28:** [Getting around](13-getting-around.md) is resolved (by Claude on Tom's behalf) and adds a quest arrow to the tracker: a small gold arrow at the left of the objective you're working on, pointing the way to its place as the crow flies (up means straight ahead). It points at the farm, the lumber camp or the old mine's mouth, then at Hale for "Return to Marshal Hale", and hides at the place, near Hale, indoors and inside the mine. No distance, no compass and no map in view.

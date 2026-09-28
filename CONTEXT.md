@@ -36,6 +36,10 @@ _Avoid_: greeting, gossip, chatter, speech bubble
 A run of quests where handing one in unlocks the next.
 _Avoid_: storyline, questline
 
+**Quest arrow**:
+The small arrow beside the objective you're working on that points the way to where it is, as the crow flies.
+_Avoid_: waypoint, compass, marker (a marker is the "!" or "?" over a quest giver)
+
 **Hand in**:
 Returning a finished quest to its quest giver, which completes it and pays its reward.
 _Avoid_: turn in, complete
@@ -59,6 +63,10 @@ _Avoid_: spawn, pack, mob
 **Patrol**:
 A small camp that walks a road back and forth instead of waiting at one place.
 _Avoid_: roamer, wanderer
+
+**Run**:
+Moving at a jog instead of a walk, which you start yourself and only while nothing is fighting you. A pull ends it.
+_Avoid_: sprint, dash (the dash is combat's quick dodge step)
 
 **Pull**:
 Drawing enemies into a fight: one notices you or is hurt, and brings the rest of its camp that stand near it.
