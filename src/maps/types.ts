@@ -1,4 +1,5 @@
 import type { Camera, Object3D, Vector3 } from 'three';
+import type { Role } from '../adventureState';
 import type { EnemyKind } from '../models/characters';
 import type { Atmosphere } from '../world/atmosphere';
 
@@ -35,6 +36,8 @@ export interface Spot {
 export interface PostPlan {
   /** How it fights: the thug is a grunt, the bandit leader a brute. */
   readonly behaviour: Exclude<EnemyKind, 'warden'>;
+  /** What its kill pays for, if not an ordinary member: the bandit leader or one of the mine's deep brutes. */
+  readonly role?: Extract<Role, 'leader' | 'deepBrute'>;
   /** Bandits wear today's skeletons until the human body lands (ticket 20). */
   readonly family: 'bandit' | 'undead';
   readonly x: number;

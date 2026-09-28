@@ -1,5 +1,5 @@
 import { Group, Vector3 } from 'three';
-import { CONFIG, type EnemyConfig } from '../config';
+import { CONFIG } from '../config';
 import type { CampPlan, PostPlan } from '../maps/types';
 import type { Ground } from '../world/ground';
 import { type Enemy, type EnemyContext, type EnemyPost, keepApart, type PlayerSword } from './enemy';
@@ -50,12 +50,6 @@ export interface CampEvents {
 }
 
 const flat = (a: { x: number; z: number }, b: { x: number; z: number }) => Math.hypot(a.x - b.x, a.z - b.z);
-
-/** A behaviour's numbers in a camp: `CONFIG.camps.strength` times the health and every attack's damage. */
-export function campStrength(def: EnemyConfig): EnemyConfig {
-  const k = CONFIG.camps.strength;
-  return { ...def, hp: Math.round(def.hp * k), attacks: def.attacks.map((a) => ({ ...a, damage: Math.round(a.damage * k) })) };
-}
 
 /** One camp: its plan and its members' minds. `Camps` raises and steps their bodies. */
 export class Camp {
@@ -191,7 +185,7 @@ export class Camps {
       meleeTokens: this.meleeTokens,
       rangedTokens: this.rangedTokens,
     };
-    this.camps = plans.map((plan) => new Camp(plan, (post, at) => this.raise(post, at), events));
+    this.camps = plans.map((plan) => new Camp(plan, (post, at) => this.raise(plan.level, post, at), events));
   }
 
   /** Is anything fighting you? (Enemies walking home don't count.) */
@@ -217,10 +211,9 @@ export class Camps {
     keepApart(this.enemies, ctx.playerFeet, ctx.ground);
   }
 
-  /** A member's body at its post, with a camp's numbers, running to keep up once it fights. */
-  private raise(plan: PostPlan, post: EnemyPost): Enemy {
-    const kind = plan.behaviour;
-    const enemy = createEnemy(kind, post.x, post.z, Math.floor(Math.random() * 6), campStrength(CONFIG.enemies[kind]));
+  /** A member's body at its post, at its camp's level and with a camp's strength, running to keep up once it fights. */
+  private raise(level: number, plan: PostPlan, post: EnemyPost): Enemy {
+    const enemy = createEnemy(plan.behaviour, post.x, post.z, { level, inCamp: true, variant: Math.floor(Math.random() * 6) });
     enemy.post = post;
     enemy.chaseSpeed = CONFIG.camps.chaseSpeed;
     enemy.position.y = this.ctx.ground.heightAt(post.x, post.z);

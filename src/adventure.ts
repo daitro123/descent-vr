@@ -1,7 +1,8 @@
 import { type PerspectiveCamera, type Scene, Vector3, type WebGLRenderer } from 'three';
+import { type Ability, AdventureState, type Effect } from './adventureState';
 import { Combat } from './combat/combat';
 import { CONFIG } from './config';
-import { Camps, type You } from './enemies/camps';
+import { type Camp, Camps, type Member, type You } from './enemies/camps';
 import { FloatingText } from './fx/floatingText';
 import { Particles } from './fx/particles';
 import { sfx, updateListener } from './fx/sfx';
@@ -18,17 +19,26 @@ import { World } from './world/world';
 const _a = new Vector3();
 const _b = new Vector3();
 
+/** What a level-up says about each ability it brings. */
+const UNLOCKED: Record<Ability, string> = {
+  warCry: 'War Cry: press A or X',
+  earthshaker: "Earthshaker: drive your sword's tip into the ground",
+};
+
 /**
  * The game at the plain URL: Oakvale, loaded into the World, with the
  * warrior's sword, shield, walk, snap turn and dash on its hills, and its
  * camps waiting to be pulled. It owns and steps everything in it, one
- * `update(dt)` per XR frame, as the arena's `Game` does for the waves. Out of
- * a fight your health comes back; a death fades to black and wakes you in the
- * village. Quests, levels and saving join it ticket by ticket
+ * `update(dt)` per XR frame, as the arena's `Game` does for the waves. Kills
+ * pay XP into the adventure state, whose levels set your health, damage and
+ * abilities. Out of a fight your health comes back; a death fades to black
+ * and wakes you in the village. Quests and saving join it ticket by ticket
  * (.scratch/oakvale-starting-zone/).
  */
 export class Adventure {
   readonly world = new World();
+  /** Your progress: level and XP. */
+  readonly state = new AdventureState();
   readonly player: Player;
   readonly camps: Camps;
   readonly combat: Combat;
@@ -85,20 +95,26 @@ export class Adventure {
       },
       scene,
     );
-    this.camps = new Camps(zone.camps, this.world, {
-      sweep: (e, a, pb, pt, b, t) => this.combat.sweep(e, a, pb, pt, b, t),
-      slam: (e, a, at) => this.combat.slam(e, a, at),
-      shoot: (e, from, damage) => this.combat.shoot(e, from, damage),
-      nock: (e, from, to) => this.combat.projectiles.nock(e, from, to),
-      telegraph: (e, a) => {
-        e.weaponSegment(_a, _b);
-        sfx.windup(_b, a.blockable);
+    this.camps = new Camps(
+      zone.camps,
+      this.world,
+      {
+        sweep: (e, a, pb, pt, b, t) => this.combat.sweep(e, a, pb, pt, b, t),
+        slam: (e, a, at) => this.combat.slam(e, a, at),
+        shoot: (e, from, damage) => this.combat.shoot(e, from, damage),
+        nock: (e, from, to) => this.combat.projectiles.nock(e, from, to),
+        telegraph: (e, a) => {
+          e.weaponSegment(_a, _b);
+          sfx.windup(_b, a.blockable);
+        },
       },
-    });
+      { onKill: (camp, member) => this.onKill(camp, member) },
+    );
     scene.add(this.camps.root);
 
     // A new character, at the zone's start and facing Hale.
     const { x, z, yaw } = zone.spawn;
+    this.player.stats = this.state.stats;
     this.player.reset(x, z, yaw);
     this.lastHp = this.player.hp;
   }
@@ -142,7 +158,48 @@ export class Adventure {
     this.text.update(dt);
     this.particles.update(dt);
     this.shockwaves.update(dt);
+    this.hud.status.level = this.state.level;
+    this.hud.status.progress = this.state.progress;
     this.hud.update(dt);
+  }
+
+  /** A camp's member fell: it pays XP into the adventure state. */
+  private onKill(camp: Camp, member: Member): void {
+    const { enemy, plan } = member;
+    const effects = this.state.apply({ kind: 'kill', camp: camp.plan.id, level: enemy.level, role: plan.role ?? 'ordinary' });
+    this.show(effects, enemy.position);
+  }
+
+  /**
+   * What the adventure state did: the XP floats where it was earned, and a
+   * level reached is a moment. A kill that passes two levels at once shows the
+   * higher, with every ability both brought.
+   */
+  private show(effects: readonly Effect[], at: Vector3): void {
+    const { xpFloat } = CONFIG.levels;
+    const unlocks: Ability[] = [];
+    let reached = 0;
+    for (const e of effects) {
+      if (e.kind === 'xp') {
+        _a.copy(at).setY(at.y + xpFloat.height);
+        this.text.spawn(`+${e.amount} XP`, _a, { color: '#ffd23a', scale: 0.24, life: xpFloat.time, rise: 0.5 });
+      } else {
+        reached = e.level;
+        unlocks.push(...e.unlocks);
+      }
+    }
+    if (reached) this.levelUp(reached, unlocks);
+  }
+
+  /** "LEVEL N" with a sound and a line per ability it brings; your new numbers, and full health. */
+  private levelUp(level: number, unlocks: readonly Ability[]): void {
+    const { player, text } = this;
+    player.stats = this.state.stats;
+    if (player.alive) player.hp = player.maxHp;
+    sfx.levelUp();
+    const { banner, lines } = CONFIG.levels.levelUp;
+    text.banner(player.camera, `LEVEL ${level}`, '#ffd23a', 0.34, 0.3, banner);
+    unlocks.forEach((a, i) => text.banner(player.camera, UNLOCKED[a], '#f0e0b0', 0.09, 0.08 - i * 0.12, lines));
   }
 
   /** Out of a fight for a while, your health comes back. */

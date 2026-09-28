@@ -202,6 +202,11 @@ export const sfx = {
     tone(110, 110, 0.8, 'triangle', 0.2);
     tone(165, 165, 0.8, 'triangle', 0.1, undefined, 0.15);
   },
+  /** You reached a level: a bright call rising over a held chime. */
+  levelUp() {
+    [392, 494, 587, 784].forEach((f, i) => tone(f, f, 0.6, 'triangle', 0.16, undefined, i * 0.09));
+    tone(1568, 1560, 1.4, 'sine', 0.06, undefined, 0.36);
+  },
   victory() {
     [262, 330, 392, 523].forEach((f, i) => tone(f, f, 0.9, 'triangle', 0.15, undefined, i * 0.18));
   },

@@ -9,8 +9,8 @@
 //    start, turning.
 // 2. The plain URL in VR: you stand at the crossroads, facing Hale's spot, on
 //    the ground. The left stick walks at 2.2 m/s, the right stick snap-turns
-//    45° and B dashes, on the World's ground and colliders; the belt shows no
-//    wave. Game time is stepped through the debug handle, not XR frames.
+//    45° and B dashes, on the World's ground and colliders; the belt shows
+//    your level, not the wave. Game time is stepped through the debug handle, not XR frames.
 // 3. `?perf` over the Adventure and over the arena.
 // 4. `?arena`, `?arena&duel`, `?wave=7` and `?showcase` play as the plain URL
 //    did before; `?map=forest` walks from Oakvale's start.
@@ -80,7 +80,7 @@ const stance = () =>
     };
   });
 const HALE = { x: 1.5, z: 4.8 };
-/** What the belt's canvas has drawn: pixels in the health orb, and where the wave and enemies left go. */
+/** What the belt's canvas has drawn: pixels in the health orb, where the wave (or the level) goes, and the arena's skull by the enemies left. */
 function beltPixels(owner) {
   const hud = window.__descent[owner].hud;
   const ctx = hud.canvas.getContext('2d');
@@ -90,7 +90,7 @@ function beltPixels(owner) {
     for (let i = 3; i < d.length; i += 4) if (d[i] > 200) n++;
     return n;
   };
-  return { health: count(1, 3, 18, 18), wave: count(21, 3, 22, 12) };
+  return { health: count(1, 3, 18, 18), wave: count(21, 3, 22, 12), skull: count(24, 13, 5, 3) };
 }
 const angle = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
 
@@ -142,7 +142,7 @@ await enterVR();
   await xrFrames(3);
   await shot('03-vr-belt');
   const belt = await page.evaluate(beltPixels, 'adventure');
-  check(belt.wave === 0 && belt.health > 0, `the belt shows health and no wave or enemies left (${JSON.stringify(belt)})`);
+  check(belt.skull === 0 && belt.wave > 0 && belt.health > 0, `the belt shows health and your level, and no enemies left (${JSON.stringify(belt)})`);
   await page.evaluate(() => window.__descent.device.quaternion.set(0, 0, 0, 1));
   await xrFrames(2);
 
@@ -250,7 +250,7 @@ async function arena(q, until, what) {
 await arena('?arena', "game.wave === 1 && kinds.length > 0 && !kinds.includes('warden')", 'wave 1 rises');
 {
   const belt = await page.evaluate(beltPixels, 'game');
-  check(belt.wave > 0 && belt.health > 0, `?arena: the belt still shows the wave and enemies left (${JSON.stringify(belt)})`);
+  check(belt.wave > 0 && belt.skull > 0 && belt.health > 0, `?arena: the belt still shows the wave and enemies left (${JSON.stringify(belt)})`);
 }
 await shot('06-arena');
 await arena('?arena&duel', "game.wave === 1 && kinds.length === 1 && game.enemies[0].def !== undefined && game.duel === true", 'one duelist');

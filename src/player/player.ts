@@ -1,4 +1,5 @@
 import { Group, type PerspectiveCamera, Vector3, type WebGLRenderer } from 'three';
+import { ABILITIES, type Ability, type Stats, statsAt } from '../adventureState';
 import { CONFIG } from '../config';
 import { sfx } from '../fx/sfx';
 import type { Ground } from '../world/ground';
@@ -11,6 +12,9 @@ const _fwd = new Vector3();
 const _right = new Vector3();
 const _resolved = new Vector3();
 
+/** The arena's numbers: level 1, with every ability. */
+const ARENA: Stats = { ...statsAt(1), abilities: ABILITIES };
+
 /**
  * The warrior: XR rig (camera + controllers), locomotion, collision and the
  * sword (right hand) / shield (left hand) loadout.
@@ -20,8 +24,8 @@ export class Player {
   readonly input: XRInput;
   readonly sword = new Sword();
   readonly shield = new Shield();
-  /** Full health. */
-  readonly maxHp: number = CONFIG.player.maxHp;
+  /** Your level's health, damage and abilities: the arena's, unless the Adventure sets them from your level. */
+  stats: Stats = ARENA;
   hp: number = this.maxHp;
   rage = 0;
   /** Seconds of War Cry frenzy left (bonus damage, burning blade). */
@@ -54,6 +58,16 @@ export class Player {
 
   get alive(): boolean {
     return this.hp > 0;
+  }
+
+  /** Full health. */
+  get maxHp(): number {
+    return this.stats.maxHp;
+  }
+
+  /** Has your level brought it? */
+  can(ability: Ability): boolean {
+    return this.stats.abilities.includes(ability);
   }
 
   /** Head position in world space. */
@@ -191,7 +205,9 @@ export class Player {
     this.hp = Math.min(this.maxHp, this.hp + amount);
   }
 
+  /** Rage builds only once the War Cry has come, which spends it. */
   addRage(amount: number): void {
+    if (!this.can('warCry')) return;
     this.rage = Math.min(CONFIG.player.maxRage, this.rage + amount);
   }
 

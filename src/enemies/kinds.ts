@@ -1,4 +1,5 @@
 import { Vector3 } from 'three';
+import { enemyNumbers } from '../adventureState';
 import { type AttackConfig, CONFIG, type EnemyConfig } from '../config';
 import type { EnemyKind } from '../models/characters';
 import { Enemy, type EnemyContext } from './enemy';
@@ -178,15 +179,34 @@ export class Warden extends Enemy {
 /** The ?duel practice enemy: a grunt with a guard that stops most swings (CONFIG.duelist). */
 export const DUELIST: EnemyConfig = { ...CONFIG.enemies.grunt, ...CONFIG.duelist };
 
-export function createEnemy(kind: EnemyKind, x: number, z: number, variant = 0, def?: EnemyConfig): Enemy {
+/** How an enemy is made, besides its behaviour and where it stands. */
+export interface EnemyOptions {
+  /** Its level: health and damage take a step per level above 1. */
+  level?: number;
+  /** In a camp, it's stronger again (`CONFIG.camps.strength`). */
+  inCamp?: boolean;
+  /** Which of its behaviour's looks. */
+  variant?: number;
+  /** Its behaviour's level-1 numbers, if not the usual ones (the `?duel` duelist). */
+  def?: EnemyConfig;
+}
+
+/**
+ * An enemy with the behaviour `kind`, standing at (x, z), at its level and in a
+ * camp or not. The arena's are level 1 and in none, so they play with the
+ * numbers in CONFIG as they are.
+ */
+export function createEnemy(kind: EnemyKind, x: number, z: number, options: EnemyOptions = {}): Enemy {
+  const { level = 1, inCamp = false, variant = 0 } = options;
+  const def = enemyNumbers(options.def ?? CONFIG.enemies[kind], level, inCamp);
   switch (kind) {
     case 'grunt':
-      return new Grunt(kind, x, z, variant, def);
+      return new Grunt(kind, x, z, variant, def, level);
     case 'archer':
-      return new Archer(kind, x, z, variant, def);
+      return new Archer(kind, x, z, variant, def, level);
     case 'brute':
-      return new Brute(kind, x, z, variant, def);
+      return new Brute(kind, x, z, variant, def, level);
     case 'warden':
-      return new Warden(kind, x, z, variant, def);
+      return new Warden(kind, x, z, variant, def, level);
   }
 }
