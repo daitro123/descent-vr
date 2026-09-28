@@ -1,7 +1,7 @@
 # The second zone and the seam
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 04
 
 ## Question
