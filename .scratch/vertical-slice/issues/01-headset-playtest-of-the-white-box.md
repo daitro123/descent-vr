@@ -1,7 +1,7 @@
 # Headset playtest of the white box
 
 Type: task
-Status: open
+Status: claimed
 Blocked by:
 Mode: HITL
 
@@ -36,3 +36,13 @@ Checklist for the dev:
 - **Brute and Warden:** is the red slam readable, and the punish window (stuck maul, kneeling boss) satisfying? How long does the boss fight last?
 - **Crowds:** do attack tokens (`CONFIG.tokens`) make groups readable, or too passive?
 - **Frame rate:** check `renderer.info.render.calls` in the console (`__descent.renderer.info`) with a full wave.
+
+**2026-09-28: what Quest 3 play has already shown** (gathered from the project's threads, 2026-09-27 to 2026-09-28; all fixes are merged on main):
+
+- **Models:** "they look decent".
+- **Archers:** the draw didn't aim at the player, though the arrow flew true. Fixed in PR #3.
+- **Sword edge:** skeleton slashes landed with the flat. Fixed in PR #4, which also added enemy guards and sword blocking. The player's sword angle on main is right.
+- **Sword too easy:** it went hot on small wiggles and slow drags, and could be swung wildly. Fixed over PRs #7, #10 and #11: about 20 cm of committed hand travel, a trailing tip (`tipLag`), and a stricter hot threshold (tip 2.8 m/s, hand 1.0 m/s).
+- **Grave brute:** head hits stun-locked it, which made it useless. Fixed in PR #8.
+- **Guarding:** a `?duel` duelist that blocks about 90% was added to test it (PR #10). Duels exposed open legs (PR #11), then open hips and endless stabs (PR #12).
+- **Verdict (Tom, 2026-09-28):** combat is a viable prototype. It will be tweaked later, but it is in a good state for now.
