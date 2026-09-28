@@ -80,6 +80,18 @@ const stance = () =>
     };
   });
 const HALE = { x: 1.5, z: 4.8 };
+/** What the belt's canvas has drawn: pixels in the health orb, and where the wave and enemies left go. */
+function beltPixels(owner) {
+  const hud = window.__descent[owner].hud;
+  const ctx = hud.canvas.getContext('2d');
+  const count = (x, y, w, h) => {
+    const d = ctx.getImageData(x, y, w, h).data;
+    let n = 0;
+    for (let i = 3; i < d.length; i += 4) if (d[i] > 200) n++;
+    return n;
+  };
+  return { health: count(1, 3, 18, 18), wave: count(21, 3, 22, 12) };
+}
 const angle = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
 
 // 1. The plain URL, before VR.
@@ -129,11 +141,8 @@ await enterVR();
   });
   await xrFrames(3);
   await shot('03-vr-belt');
-  const belt = await page.evaluate(() => {
-    const hud = window.__descent.adventure.hud;
-    return { waves: hud.waves, drawn: hud.lastKey };
-  });
-  check(belt.waves === false, `the belt has no wave or enemies left (${JSON.stringify(belt)})`);
+  const belt = await page.evaluate(beltPixels, 'adventure');
+  check(belt.wave === 0 && belt.health > 0, `the belt shows health and no wave or enemies left (${JSON.stringify(belt)})`);
   await page.evaluate(() => window.__descent.device.quaternion.set(0, 0, 0, 1));
   await xrFrames(2);
 
@@ -210,7 +219,7 @@ for (const q of ['?perf&emulate&nodevui', '?arena&perf&emulate&nodevui']) {
     const { renderer } = window.__descent;
     return { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, programs: renderer.info.programs.length };
   });
-  console.log(`     ${q}: ${info.calls} draw calls, ${(info.triangles / 1000).toFixed(1)}k triangles, ${info.programs} programs (both eyes)`);
+  console.log(`     ${q}: ${info.calls} draw calls, ${(info.triangles / 1000).toFixed(1)}k triangles, ${info.programs} programs (the emulator's view)`);
   await shot(q.includes('arena') ? '05-perf-arena' : '04-perf-adventure');
 }
 
@@ -239,6 +248,10 @@ async function arena(q, until, what) {
   await xrFrames(3);
 }
 await arena('?arena', "game.wave === 1 && kinds.length > 0 && !kinds.includes('warden')", 'wave 1 rises');
+{
+  const belt = await page.evaluate(beltPixels, 'game');
+  check(belt.wave > 0 && belt.health > 0, `?arena: the belt still shows the wave and enemies left (${JSON.stringify(belt)})`);
+}
 await shot('06-arena');
 await arena('?arena&duel', "game.wave === 1 && kinds.length === 1 && game.enemies[0].def !== undefined && game.duel === true", 'one duelist');
 await arena('?duel', 'game.duel === true && kinds.length === 1', '?duel alone opens the duel');

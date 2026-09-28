@@ -6,13 +6,13 @@ import { CONFIG } from './config';
 import { startAmbience, unlockAudio } from './fx/sfx';
 import { Game } from './game';
 import { findMap } from './maps/registry';
-import { type Route, route } from './route';
+import { readPage, type Route } from './route';
 import { buildShowcase, pinShowcaseCamera } from './showcase';
 import './style.css';
 import { PerfReadout } from './ui/perfReadout';
 import { useRadialFog } from './world/radialFog';
 
-const page = route(location.search);
+const page = readPage(location.search);
 
 /** Emulate when asked to (?emulate), or when there's no real headset. */
 async function wantsEmulator(): Promise<boolean> {
@@ -57,6 +57,7 @@ async function start(): Promise<void> {
     renderer.setSize(innerWidth, innerHeight);
   });
 
+  const perf = page.perf ? new PerfReadout(renderer, camera) : null;
   const r = page.route;
   switch (r.kind) {
     case 'inspect':
@@ -66,9 +67,9 @@ async function start(): Promise<void> {
     case 'walk':
       return (await import('./maps/walk')).startWalk(renderer, scene, camera, r.map);
     case 'arena':
-      return startArena(renderer, scene, camera, device, r);
+      return startArena(renderer, scene, camera, device, perf, r);
     case 'adventure':
-      return startAdventure(renderer, scene, camera, device);
+      return startAdventure(renderer, scene, camera, device, perf);
   }
 }
 
@@ -93,6 +94,7 @@ async function startAdventure(
   scene: Scene,
   camera: PerspectiveCamera,
   device: unknown,
+  perf: PerfReadout | null,
 ): Promise<void> {
   // Let the intro paint before the (synchronous) build.
   await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
@@ -100,7 +102,6 @@ async function startAdventure(
   if (oakvale.kind !== 'zone') throw new Error('Oakvale should be a zone');
   const adventure = new Adventure(scene, camera, renderer, oakvale);
   document.querySelector('#intro .loading')?.remove();
-  const perf = page.perf ? new PerfReadout(renderer, camera) : null;
   onEnterVR(renderer);
 
   // Handle for poking at the game from the console and for scripted checks.
@@ -114,8 +115,8 @@ async function startAdventure(
     camera,
     CONFIG,
     paused: false,
-    /** Stand at (x, z) facing `yaw` (0 looks down −Z). */
-    teleport: (x: number, z: number, yaw = 0) => adventure.teleport(x, z, yaw),
+    /** Stand at (x, z) facing `yaw` (0 looks down −Z), keeping health and rage. */
+    teleport: (x: number, z: number, yaw = 0) => adventure.player.place(x, z, yaw),
     /** Run the game for `seconds`, `dt` at a time, without waiting for frames. */
     step: (seconds: number, dt = 1 / 72) => {
       for (let left = seconds; left > 1e-9; left -= dt) adventure.update(Math.min(dt, left));
@@ -127,14 +128,12 @@ async function startAdventure(
   renderer.setAnimationLoop((time) => {
     timer.update(time);
     const dt = timer.getDelta();
-    if (renderer.xr.isPresenting) {
-      // Pull this frame's head pose in before gameplay reads it.
-      renderer.xr.updateCamera(camera);
-      if (!debug.paused) adventure.update(dt);
-    } else {
-      camera.rotation.y += dt * 0.1; // Oakvale from the start, slowly turning behind the intro
-    }
-    adventure.world.update(dt, camera); // the sky, water and flames; billboards face this frame's head
+    const xr = renderer.xr.isPresenting;
+    // Pull this frame's head pose in before gameplay reads it.
+    if (xr) renderer.xr.updateCamera(camera);
+    else camera.rotation.y += dt * 0.1; // Oakvale from the start, slowly turning behind the intro
+    if (xr && !debug.paused) adventure.update(dt);
+    else adventure.world.update(dt, camera); // the sky and water move on the page too
     renderer.render(scene, camera);
     perf?.update(dt);
   });
@@ -146,6 +145,7 @@ function startArena(
   scene: Scene,
   camera: PerspectiveCamera,
   device: unknown,
+  perf: PerfReadout | null,
   { firstWave, duel, showcase: pinned }: Extract<Route, { kind: 'arena' }>,
 ): void {
   scene.background = new Color(0x0c0a0e);
@@ -157,7 +157,6 @@ function startArena(
   const showcase = buildShowcase();
   scene.add(showcase.root);
   if (pinned) pinShowcaseCamera(camera);
-  const perf = page.perf ? new PerfReadout(renderer, camera) : null;
   onEnterVR(renderer, () => {
     startAmbience();
     scene.remove(showcase.root);

@@ -203,10 +203,12 @@ export class Player {
     this.place(x, z, yaw);
   }
 
-  /** Stand at (x, z) on the ground, facing `yaw` (0 looks down −Z), and stop any dash. */
+  /** Stand with your head over (x, z), facing `yaw` (0 looks down −Z), and stop any dash. */
   place(x: number, z: number, yaw: number): void {
     this.dashTime = 0;
-    this.rig.position.set(x, this.ground.heightAt(x, z), z);
     this.rig.rotation.set(0, yaw, 0);
+    // In the headset you may stand off the play space's centre; put the head, not the centre, there.
+    _head.copy(this.camera.position).setY(0).applyAxisAngle(UP, yaw);
+    this.rig.position.set(x - _head.x, this.ground.heightAt(x, z), z - _head.z);
   }
 }

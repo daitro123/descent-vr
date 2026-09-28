@@ -69,13 +69,15 @@ export class BeltHud {
   private time = 0;
   private yaw = 0;
   readonly status: HudStatus = { wave: 0, enemiesLeft: 0, boss: false };
+  private readonly waves: boolean;
 
   constructor(
     private readonly player: Player,
     camera: PerspectiveCamera,
-    /** The arena's wave and enemies left; the Adventure has neither. */
-    private readonly waves = true,
+    /** `waves`: the arena's wave and enemies left; the Adventure has neither. */
+    { waves = true } = {},
   ) {
+    this.waves = waves;
     this.canvas.width = W;
     this.canvas.height = H;
     this.ctx = this.canvas.getContext('2d')!;

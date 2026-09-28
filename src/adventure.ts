@@ -27,32 +27,24 @@ export class Adventure {
     camera: PerspectiveCamera,
     renderer: WebGLRenderer,
     /** Where a new character starts: Oakvale. */
-    private readonly zone: Zone,
+    zone: Zone,
   ) {
     this.world.attach(scene, camera);
     this.world.load(zone);
     this.player = new Player(camera, renderer, this.world);
     scene.add(this.player.rig);
     this.trail = new SwordTrail(scene);
-    this.hud = new BeltHud(this.player, camera, false);
+    this.hud = new BeltHud(this.player, camera, { waves: false });
     scene.add(this.hud.root);
-    this.start();
-  }
-
-  /** A new character: full health, at the zone's start, facing Hale. */
-  start(): void {
-    const { x, z, yaw } = this.zone.spawn;
+    // A new character, at the zone's start and facing Hale.
+    const { x, z, yaw } = zone.spawn;
     this.player.reset(x, z, yaw);
-  }
-
-  /** Stand at (x, z) facing `yaw` (0 looks down −Z), keeping health and rage. */
-  teleport(x: number, z: number, yaw = 0): void {
-    this.player.place(x, z, yaw);
   }
 
   update(dt: number): void {
     // Clamp: a dropped frame (or tab switch) shouldn't teleport anything.
     dt = Math.min(dt, 1 / 30);
+    this.world.update(dt, this.player.camera);
     this.player.update(dt);
     updateListener(this.player.camera);
     const { sword, rig } = this.player;

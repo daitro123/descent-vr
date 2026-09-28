@@ -28,17 +28,17 @@ export interface Page {
 
 const ARENA_FLAGS = ['arena', 'duel', 'wave', 'showcase'];
 
-export function route(search: string): Page {
+export function readPage(search: string): Page {
   const params = new URLSearchParams(search);
   return {
-    route: pick(params),
+    route: chooseRoute(params),
     perf: params.has('perf'),
     emulate: params.has('emulate') ? 'yes' : params.has('noemulate') ? 'no' : 'ask',
     devUI: !params.has('nodevui'),
   };
 }
 
-function pick(params: URLSearchParams): Route {
+function chooseRoute(params: URLSearchParams): Route {
   if (params.has('inspect')) return { kind: 'inspect' };
   if (params.has('fly')) return { kind: 'fly', map: params.get('fly') ?? '' };
   if (params.has('map')) return { kind: 'walk', map: params.get('map') || 'forest' };

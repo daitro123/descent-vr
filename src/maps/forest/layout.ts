@@ -462,7 +462,6 @@ export function buildLayout(): ForestLayout {
   const at = (kind: StructureKind) => structures.find((st) => st.kind === kind)!;
   const landmarks = [
     { label: 'Southern road', x: south[0], z: south[1] },
-    { label: 'Crossroads', x: 0, z: 0 },
     { label: 'Inn', x: at('inn').x, z: at('inn').z },
     { label: 'Stone bridge', x: bridge.x, z: bridge.z },
     { label: 'Farm', x: 54, z: 28 },
