@@ -47,3 +47,11 @@ _Avoid_: spawn, pack, mob
 **Boss**:
 An enemy fought once, at the end of a quest chain, that stays dead once beaten. Oakvale has one: the Warden at the bottom of the mine.
 _Avoid_: elite, raid boss, mini-boss
+
+**Level**:
+How strong a character or an enemy is. Each level adds the same step of health and damage to both, so a fight against an enemy of your own level feels the same at any level. Oakvale takes a character from level 1 to 5, its **level cap**.
+_Avoid_: rank, tier, difficulty
+
+**Respawn point**:
+Where you wake after dying, at full health, with nothing lost. Oakvale has two: the village, and just outside the old mine for a death inside it.
+_Avoid_: graveyard, checkpoint, spawn
