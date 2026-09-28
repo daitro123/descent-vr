@@ -20,3 +20,5 @@ Build a throwaway prototype with a placeholder NPC and one quest from the quest 
 ## Comments
 
 **2026-09-28:** [The quest chain](01-the-quest-chain.md) is resolved. The quest giver is Marshal Hale, standing outdoors at the crossroads by the signpost, and every quest is handed in to them. Raiders in the Fields (defeat 3 bandits at the farm) is the simplest quest to prototype with; The Lumber Camp adds the one hand pickup (the leader's orders in their tent), in case the prototype should try that too.
+
+**2026-09-28:** [The zone's enemies](02-the-zones-enemies.md) is resolved: no names or levels float over enemies in Oakvale. If enemy levels prove hard to judge on the headset, showing them can come back here with quest tracking.

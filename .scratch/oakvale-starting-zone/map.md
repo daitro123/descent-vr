@@ -28,10 +28,11 @@ A written **spec for Oakvale as a playable, single-player starting zone**, ready
 - [The quest chain](issues/01-the-quest-chain.md): Marshal Hale, outdoors at the crossroads, gives a chain of three: defeat bandits at the farm, clear the lumber camp and take the leader's orders by hand, then go down the old mine and defeat whatever woke the dead. Hand in at the marshal; every quest pays XP, the last also pays the item. The zone is open, and the marshal points you south once the chain is done.
 - [Saving in the Quest browser](issues/05-saving-in-the-quest-browser.md): IndexedDB, one `descent-vr` record written with strict durability, versioned with migrations. Survives deploys and browser updates; lost only if site data is cleared or a full headset evicts it.
 - [Joining zones without a loading screen](issues/04-joining-zones-without-a-loading-screen.md): feasible. Build zones in a worker in 40 m chunks, upload one chunk per frame before it's seen, keep lights, sky and fog at world level so no shader recompiles, and stream by chunk distance. The seam is a line with a 40 m blend, best in a pass. Triangles, not draw calls, are the tight limit.
+- [The zone's enemies](issues/02-the-zones-enemies.md): bandits outside (thugs, archers and a brute-behaviour leader at the lumber camp, plus a lookout at the watchtower) and today's skeletons in the mine, with no new behaviours. Each place adds one new test and a higher enemy level. The Warden is the one boss and rises only during the last quest; every camp refills, and no names or levels show over heads.
 
 ## Not yet specified
 
-- **Loot beyond quest rewards:** whether enemies drop anything, once progression and the roster are decided.
+- **Loot beyond quest rewards:** whether enemies drop anything, once progression is decided. The roster is settled: bandits outside, the undead in the mine.
 - **Getting around:** whether walking a 168 m zone with the stick is enough, or it needs a sprint, a map or markers to find your way. The quest chain walks you out and back three times between the marshal and the farm, the lumber camp and the mine: 60 to 90 m by road each way, 30 to 40 s at 2.2 m/s.
 - **A living zone:** ambient sound, villagers going about their day, time of day. Sharpens once the quests and interiors are known.
 - **Triangle budget:** Oakvale seen from the village is already about 250k to 300k triangles over both eyes, the rule-of-thumb limit, before interiors, NPCs and enemies are added. How to cut (chunk stand-ins, fewer trees) waits on a measurement on the headset.

@@ -17,3 +17,5 @@ How far does Oakvale take a character, and what happens when you die?
 ## Comments
 
 **2026-09-28:** [The quest chain](01-the-quest-chain.md) is resolved. All three quests pay XP and only the last one, What Lies Below, also pays the item. Only one quest is active at a time and none can be dropped or repeated, and the mine's final enemy stays dead once beaten, so the save needs that flag too.
+
+**2026-09-28:** [The zone's enemies](02-the-zones-enemies.md) is resolved. Each place has an enemy level that sets health and damage, rising from the farm, to the lumber camp and the watchtower, to the mine, with the Warden highest; this ticket sets the numbers. The Warden's health (1100) was tuned for the arena's last wave and needs retuning for the zone. Every camp refills after it is cleared, so kills are always on offer if they pay XP. No names or levels show over enemies.
