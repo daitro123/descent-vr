@@ -38,7 +38,7 @@ _Avoid_: kind, type, class, AI
 
 **Family**:
 Who an enemy is, whatever its behaviour: the bandits or the undead. A bandit archer and an undead archer share a behaviour but not a family.
-_Avoid_: faction (reserved for sides the player could join), race, type
+_Avoid_: faction, race, type
 
 **Boss**:
 An enemy fought once, at the end of a quest chain, that stays dead once beaten. Oakvale has one: the Warden at the bottom of the mine.
