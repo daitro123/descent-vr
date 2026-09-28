@@ -578,10 +578,14 @@ export class Combat implements ArrowResolver {
 
   enemyContact(prev: Vector3, pos: Vector3): Enemy | null {
     for (const enemy of this.enemies) {
-      if (!enemy.hittable) continue;
+      if (!enemy.hittable && !enemy.evading) continue;
       enemy.capsule(_a, _b);
       closestSegmentSegment(prev, pos, _a, _b, _hit);
       if (_hit.distance > enemy.def.radius + CONFIG.arrow.hitRadius) continue;
+      if (enemy.evading) {
+        this.evade(_hit.pointB);
+        return enemy;
+      }
       _push.subVectors(pos, prev).setY(0).normalize().multiplyScalar(2);
       const killed = enemy.takeHit(CONFIG.arrow.reflectDamage, _push, { from: prev, ignorePoise: enemy.kind !== 'warden' });
       if (!killed) enemy.expose(enemy.def.exposedTime);

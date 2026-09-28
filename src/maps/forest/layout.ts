@@ -74,7 +74,7 @@ const CAMPS: {
     level: 1,
     posts: [
       { behaviour: 'grunt', family: 'bandit', x: 60, z: 33, face: [44, 37] },
-      { behaviour: 'grunt', family: 'bandit', x: 55.5, z: 35.5, face: [44, 37] },
+      { behaviour: 'grunt', family: 'bandit', x: 57.5, z: 37.5, face: [44, 37] },
       { behaviour: 'grunt', family: 'bandit', x: 67.5, z: 43, face: [58, 48] },
       { behaviour: 'grunt', family: 'bandit', x: 72, z: 45.5, face: [58, 48] },
     ],

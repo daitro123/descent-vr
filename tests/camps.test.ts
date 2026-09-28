@@ -295,7 +295,7 @@ describe('camp enemies', () => {
 });
 
 describe('getting home', () => {
-  it("is put back at its post, whole, if it can't find its way there", () => {
+  it("is put back at its post, whole, if it can't find its way there, once you're well away from it", () => {
     // Once it has given up, a wall no body can pass goes up between it and home.
     let walled = false;
     const ground: Ground = {
@@ -319,7 +319,14 @@ describe('getting home', () => {
     step(10);
     expect(member.mind).toBe('home');
     expect(member.enemy.position.z).toBeCloseTo(-10, 0);
+    // Stand by it at the wall: it stays stuck there in front of you.
+    stand(2, -12);
     step(C.stuck.time + 0.5);
+    expect(member.mind).toBe('home');
+    expect(member.enemy.position.z).toBeCloseTo(-10, 0);
+    // Walk off, and it's gone home.
+    stand(2, -12 - C.stuck.away - 1);
+    step(DT);
     expect(member.mind).toBe('idle');
     expect(flat(member.enemy.position, member.post)).toBeLessThan(C.home);
     expect(member.enemy.hp).toBe(member.enemy.maxHp);

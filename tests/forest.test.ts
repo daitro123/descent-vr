@@ -201,21 +201,13 @@ describe("the farm's camp", () => {
     const { pull } = CONFIG.camps;
     for (const a of posts) {
       const others = posts.filter((b) => b !== a).map((b) => flat(a, b));
-      expect(Math.min(...others)).toBeGreaterThanOrEqual(5);
+      for (const d of others) {
+        expect(d).toBeGreaterThanOrEqual(5);
+        expect(d).toBeLessThanOrEqual(18);
+      }
       // Exactly one other post is within a pull of it: its partner.
       expect(others.filter((d) => d < pull)).toHaveLength(1);
     }
-    // Stepping from post to post, never more than 18 m at a time, reaches them all.
-    const reached = new Set([posts[0]]);
-    for (let grew = true; grew; ) {
-      grew = false;
-      for (const p of posts) {
-        if (reached.has(p) || ![...reached].some((q) => flat(p, q) <= 18)) continue;
-        reached.add(p);
-        grew = true;
-      }
-    }
-    expect(reached.size).toBe(posts.length);
   });
 
   it('keeps the farm out of reach from the east road until you come into the yard', () => {

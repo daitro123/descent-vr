@@ -249,8 +249,9 @@ export const CONFIG = {
     chaseSpeed: 2.2, // m/s, your walking pace: it runs when well out of reach
     home: 0.5, // m from its post counts as home
     // Walking home, one that hasn't come `progress` m nearer in `time` s is
-    // stuck behind something (there's no navmesh) and is put back at its post.
-    stuck: { progress: 1, time: 3 },
+    // stuck behind something (there's no navmesh) and is put back at its post,
+    // once you're at least `away` m from it, so it doesn't vanish under your nose.
+    stuck: { progress: 1, time: 3, away: 12 },
     refillTime: 180, // s after the last member falls, the camp refills whole…
     refillAway: 30, // m: …but only while you're this far from its clearing
     strength: 1.4, // health and damage, on top of its level

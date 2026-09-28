@@ -114,9 +114,11 @@ export class Camp {
             m.nearest = d;
             m.stalled = 0;
           } else m.stalled += dt;
-          // No navmesh: one that can't find its way round something is put back.
-          if (m.stalled > stuck.time) e.position.set(m.post.x, e.position.y, m.post.z);
-          if (d < home || m.stalled > stuck.time) {
+          // No navmesh: one that can't find its way round something is put
+          // back, once you're far enough off not to see it go.
+          const lost = m.stalled > stuck.time && flat(e.position, you.feet) > stuck.away;
+          if (lost) e.position.set(m.post.x, e.position.y, m.post.z);
+          if (d < home || lost) {
             e.hp = m.hp = e.maxHp;
             m.post.evading = false;
             m.mind = 'idle';
