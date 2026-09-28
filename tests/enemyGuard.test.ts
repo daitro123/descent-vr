@@ -240,6 +240,23 @@ function chop(e: Enemy): [PlayerSword, PlayerSword][] {
   return frames;
 }
 
+/**
+ * A stab from your hand at `hand` into the point `at` on the enemy's front:
+ * the blade slides along its own length, point first, to 0.1 m past `at`.
+ */
+function stab(at: Vector3, hand = new Vector3(0.25, 1.15, DIST)): [PlayerSword, PlayerSword][] {
+  const dir = at.clone().sub(hand).normalize();
+  const frames: [PlayerSword, PlayerSword][] = [];
+  let prev: PlayerSword | null = null;
+  for (let i = 0; i <= 12; i++) {
+    const tip = at.clone().addScaledVector(dir, -0.6 + (0.7 * i) / 12);
+    const cur = { base: tip.clone().addScaledVector(dir, -0.88), tip, speed: 4 };
+    if (prev) frames.push([prev, cur]);
+    prev = cur;
+  }
+  return frames;
+}
+
 describe.each([
   ['grunt', () => new TestGrunt('grunt', 0, 0)],
   ['warden', () => new TestWarden('warden', 0, 0)],
@@ -256,6 +273,7 @@ describe.each([
   }
   const chest = (e: Enemy) => 1.25 * (e.rig.proportions.hipY / 0.92);
   const legs = (e: Enemy) => 0.5 * (e.rig.proportions.hipY / 0.92);
+  const hips = (e: Enemy) => e.rig.proportions.hipY;
 
   it('an unguarded enemy takes the slash', () => {
     const e = spawn(make());
@@ -290,6 +308,16 @@ describe.each([
     expect(swing(e, slash('left', legs(e)))).toBe('guarded');
     expect(swing(e, slash('right', legs(e)))).toBe('guarded');
     expect(swing(e, slash('left', chest(e)))).toBe('body');
+  });
+
+  it('leaves no gap at the belt: the side and low guards both reach the hips', () => {
+    for (const side of ['left', 'low'] as GuardSide[]) {
+      const e = guarding(side);
+      const s = e.rig.proportions.hipY / 0.92;
+      for (const y of [hips(e) - 0.08 * s, hips(e), hips(e) + 0.08 * s]) {
+        expect(swing(e, slash('left', y)), `${side} guard, slash at ${y.toFixed(2)} m`).toBe('guarded');
+      }
+    }
   });
 
   it('a slash from behind gets past the guard on that side', () => {
@@ -384,6 +412,35 @@ describe('the duelist (?duel)', () => {
     run(e, context(WINDUP.low), 0.12);
     expect(e.guardSide).toBe('low');
     expect(swing(e, slash('left', 0.5))).toBe('guarded');
+  });
+
+  /** Stab it, a frame at a time, as it watches the point come in. */
+  function stabbed(e: Enemy, at: Vector3): ReturnType<typeof swing> {
+    const frames = stab(at);
+    e.update(DT, context(frames[0][0]));
+    for (const [from, to] of frames) {
+      const r = swing(e, [[from, to]]);
+      if (r) return r;
+      e.update(DT, context(to));
+    }
+    return null;
+  }
+
+  it.each([
+    ['the chest', 1.25],
+    ['the belly', 1.0],
+    ['the hips', 0.9],
+    ['a thigh', 0.7],
+  ])('stops a stab at %s', (_where, y) => {
+    alwaysGuard();
+    expect(stabbed(spawn(make()), new Vector3(0, y, 0.3))).toBe('guarded');
+  });
+
+  it('reads a stab by its point: from your right hand at its right side, it guards its right', () => {
+    alwaysGuard();
+    const e = spawn(make());
+    expect(stabbed(e, new Vector3(-0.15, 1.1, 0.3))).toBe('guarded');
+    expect(e.guardSide).toBe('right');
   });
 
   it('stops a slash from its left, then one from its right straight after', () => {

@@ -680,22 +680,27 @@ export abstract class Enemy {
     this.knockback.addScaledVector(push, this.knockbackScale());
   }
 
-  /** The guard that meets the blade where it is now: over its head, at its legs, or on its left or right. */
+  /**
+   * The guard that meets the blade where it is now: over its head if the
+   * blade is raised above it, else wherever the point is: at its legs, or on
+   * its left or right. The point, not the hilt: a stab from your right hand
+   * at its right side comes from its left, but lands on its right.
+   */
   private sideFacing(blade: PlayerSword): GuardSide {
     _v.addVectors(blade.base, blade.tip).multiplyScalar(0.5);
     const headR = this.headSphere(_a);
     if (_v.y > _a.y + headR) return 'high';
-    if (_v.y < this.rig.bones.hips.getWorldPosition(_a).y) return 'low';
-    return this.localX(_v) >= 0 ? 'left' : 'right';
+    if (blade.tip.y < this.rig.bones.hips.getWorldPosition(_a).y) return 'low';
+    return this.localX(blade.tip) >= 0 ? 'left' : 'right';
   }
 
   /**
    * Does the raised guard cover a blow landing at `point` (world) from a blade
    * moving along `motion`? The high guard takes chops at the head and
    * shoulders; the low guard anything at the legs, from either side; a side
-   * guard anything else on its half of the body, down to the guard's lower
-   * end. So: chop past a side guard, slash under or round a high one, go
-   * high over a low one, or go for the open side or the legs.
+   * guard anything else on its half of the body, down past the hips, where
+   * the low guard takes over. So: chop past a side guard, slash under or round
+   * a high one, go high over a low one, or go for the open side.
    */
   guardCovers(point: Vector3, motion: Vector3): boolean {
     if (!this.guarding || this.localZ(point) < 0) return false; // from behind: wide open
@@ -703,8 +708,11 @@ export abstract class Enemy {
     const chop = motion.y < -0.7 * motion.length();
     if (this.guardSide === 'high') return chop && point.y >= this.rig.bones.upperArmR.getWorldPosition(_a).y - 0.1;
     if (chop) return false;
+    // Down to the guard's lower end or the hips, whichever is lower: the side
+    // and low guards overlap, so there is no gap at the belt.
     this.weaponSegment(_a, _b);
-    if (point.y < Math.min(_a.y, _b.y) - 0.1) return false;
+    const hips = this.rig.bones.hips.getWorldPosition(_v).y;
+    if (point.y < Math.min(_a.y, _b.y, hips) - 0.1 * this.heightScale) return false;
     // The halves overlap a little, so a thrust at the middle is still covered.
     const x = this.localX(point);
     const overlap = 0.08 * this.heightScale;
