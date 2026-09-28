@@ -1,28 +1,40 @@
-import { type Camera, DirectionalLight, Group, HemisphereLight, Matrix4, Mesh, Quaternion, Vector3 } from 'three';
+import { type Camera, Group, Matrix4, Mesh, Quaternion, Vector3 } from 'three';
 import { ModelBuilder } from '../../models/kit';
 import { sharedModelMaterial } from '../../models/materials';
+import type { Atmosphere } from '../../world/atmosphere';
 import { Glows } from '../../world/glows';
-import type { GameMap } from '../types';
+import type { Zone } from '../types';
 import { buildFence, buildField, buildStructure } from './buildings';
 import { buildLayout, FOREST } from './layout';
 import { plantPrototypes } from './nature';
-import { SKY } from './palette';
-import { buildSky } from './sky';
+import { LIGHT, SKY } from './palette';
 import { addPaths, addPatches, addTerrain, buildWater, Chunks } from './terrain';
 
 const UP = new Vector3(0, 1, 0);
 
-/** Late-afternoon sun from the south-west, low enough to rake across the hills. */
-const SUN = new Vector3(-0.55, 0.62, 0.56).normalize();
+/**
+ * Oakvale's air and light under the World's late-afternoon sun: a pale blue
+ * haze, closing in from 45 m. No flames for the light pool: outdoors, glows
+ * fake every lantern and fire.
+ */
+export const OAKVALE_ATMOSPHERE: Atmosphere = {
+  background: SKY.haze,
+  fog: { color: SKY.haze, near: 45, far: 200 },
+  sky: { zenith: SKY.zenith, horizon: SKY.horizon, haze: SKY.haze, sun: SKY.sun },
+  sun: { color: LIGHT.sun, intensity: 2.3 },
+  hemisphere: { sky: LIGHT.sky, ground: LIGHT.ground, intensity: 1.5 },
+  farPlane: 240,
+  flames: [],
+};
 
 /**
- * Oakvale, the outdoor map (see layout.ts for what's where). Static geometry
- * is merged into 40 m chunks with the shared model material, so the frustum
- * culls whole chunks and each visible one is a single draw call. Lighting is
- * one sun and a sky/ground hemisphere; lanterns and fires fake their light
+ * Oakvale, the starting zone (see layout.ts for what's where). Static
+ * geometry is merged into 40 m chunks with the shared model material, so the
+ * frustum culls whole chunks and each visible one is a single draw call. The
+ * World lights it and gives it its sky; lanterns and fires fake their light
  * with glow billboards.
  */
-export function buildForest(): GameMap {
+export function buildForest(): Zone {
   const layout = buildLayout();
   const root = new Group();
   root.name = 'forest';
@@ -77,21 +89,15 @@ export function buildForest(): GameMap {
 
   root.add(...chunks.meshes(sharedModelMaterial()), ...spinners, glows.mesh);
   const water = buildWater(layout);
-  const sky = buildSky(SUN);
-  root.add(water.mesh, sky.root);
-
-  root.add(new HemisphereLight(0xd4e4f4, 0x5e6e3e, 1.5));
-  const sun = new DirectionalLight(0xfff0d4, 2.3);
-  sun.position.copy(SUN).multiplyScalar(100);
-  root.add(sun);
+  root.add(water.mesh);
 
   let time = 0;
   const { play } = FOREST;
   return {
+    kind: 'zone',
     id: 'forest',
     root,
-    sky: { background: SKY.haze, fog: { color: SKY.haze, near: 45, far: 200 } },
-    viewDistance: 240,
+    atmosphere: OAKVALE_ATMOSPHERE,
     spawn: layout.spawn,
     bounds: { minX: -play, maxX: play, minZ: -play, maxZ: play },
     landmarks: layout.landmarks,
@@ -100,7 +106,6 @@ export function buildForest(): GameMap {
     update(dt: number, camera: Camera) {
       time += dt;
       glows.update(time, camera);
-      sky.update(dt, camera);
       water.update(dt);
       for (const s of spinners) s.rotation.z -= dt * 0.35;
     },

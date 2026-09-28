@@ -1,14 +1,19 @@
-import { Color, Fog, Group, type PerspectiveCamera, type Scene, Timer, Vector3, type WebGLRenderer } from 'three';
+import { type Camera, Color, Fog, Group, type PerspectiveCamera, type Scene, Timer, Vector3, type WebGLRenderer } from 'three';
 import { CONFIG } from '../config';
 import { XRInput } from '../player/input';
 import { Shield, Sword } from '../player/weapons';
+import type { Ground } from '../world/ground';
+import { World } from '../world/world';
 import { findMap, MAPS } from './registry';
-import type { GameMap } from './types';
 
 // `?map=<id>`: walk a map with the warrior's locomotion and no enemies, to
-// judge scale and layout from the ground. In the headset: left stick moves
+// judge scale and layout from the ground. A zone is walked in the World, on
+// its ground; the crypt hall brings its own. In the headset: left stick moves
 // (head-relative), right stick snap-turns. On a desktop: WASD or the arrow
 // keys walk, dragging looks around.
+
+/** What walking needs of the ground underfoot. */
+type Floor = Pick<Ground, 'heightAt' | 'resolve'>;
 
 const UP = new Vector3(0, 1, 0);
 const EYE = 1.6;
@@ -32,14 +37,15 @@ class Walker {
   constructor(
     private readonly renderer: WebGLRenderer,
     private readonly camera: PerspectiveCamera,
-    private readonly map: GameMap,
+    private readonly floor: Floor,
+    spawn: { x: number; z: number; yaw: number },
   ) {
     this.rig.name = 'walker-rig';
     this.rig.add(camera);
     this.input = new XRInput(renderer, this.rig);
     this.input.onRemap = () => this.attachWeapons();
     this.attachWeapons();
-    this.teleport(map.spawn.x, map.spawn.z, map.spawn.yaw);
+    this.teleport(spawn.x, spawn.z, spawn.yaw);
 
     addEventListener('keydown', (e) => this.keys.add(e.code));
     addEventListener('keyup', (e) => this.keys.delete(e.code));
@@ -62,7 +68,7 @@ class Walker {
 
   /** Stand at (x, z) on the ground, facing `yaw`. */
   teleport(x: number, z: number, yaw: number): void {
-    this.rig.position.set(x, this.map.heightAt(x, z) + this.hover, z);
+    this.rig.position.set(x, this.floor.heightAt(x, z) + this.hover, z);
     this.rig.rotation.set(0, yaw, 0);
     this.yaw = 0;
     this.pitch = 0;
@@ -122,11 +128,11 @@ class Walker {
     this.rig.updateMatrixWorld(true);
     this.camera.getWorldPosition(_head);
     _p.set(_head.x, 0, _head.z);
-    if (this.map.resolve(_p, CONFIG.player.bodyRadius)) {
+    if (this.floor.resolve(_p, CONFIG.player.bodyRadius)) {
       this.rig.position.x += _p.x - _head.x;
       this.rig.position.z += _p.z - _head.z;
     }
-    const ground = this.map.heightAt(_p.x, _p.z) + this.hover;
+    const ground = this.floor.heightAt(_p.x, _p.z) + this.hover;
     this.rig.position.y += (ground - this.rig.position.y) * Math.min(1, dt * 10);
   }
 }
@@ -141,12 +147,25 @@ export async function startWalk(renderer: WebGLRenderer, scene: Scene, camera: P
   const map = await info.load();
   const buildMs = Math.round(performance.now() - t0);
 
-  scene.add(map.root);
-  scene.background = new Color(map.sky.background);
-  scene.fog = new Fog(map.sky.fog.color, map.sky.fog.near, map.sky.fog.far);
-  camera.far = map.viewDistance;
-  camera.updateProjectionMatrix();
-  const walker = new Walker(renderer, camera, map);
+  let floor: Floor;
+  let animate: (dt: number, camera: Camera) => void;
+  let world: World | null = null;
+  if (map.kind === 'zone') {
+    const w = new World();
+    w.attach(scene, camera);
+    w.load(map);
+    world = floor = w;
+    animate = (dt, c) => w.update(dt, c);
+  } else {
+    scene.add(map.root);
+    scene.background = new Color(map.sky.background);
+    scene.fog = new Fog(map.sky.fog.color, map.sky.fog.near, map.sky.fog.far);
+    camera.far = map.viewDistance;
+    camera.updateProjectionMatrix();
+    floor = map;
+    animate = (dt, c) => map.update(dt, c);
+  }
+  const walker = new Walker(renderer, camera, floor, map.spawn);
   scene.add(walker.rig);
 
   if (intro) {
@@ -161,7 +180,7 @@ export async function startWalk(renderer: WebGLRenderer, scene: Scene, camera: P
 
   // Handle for poking from the console and for scripted screenshots.
   const teleport = (x: number, z: number, yaw = 0) => walker.teleport(x, z, yaw);
-  Object.assign(window, { __descent: { map, walker, renderer, camera, teleport, buildMs } });
+  Object.assign(window, { __descent: { map, world, walker, renderer, camera, teleport, buildMs } });
 
   const timer = new Timer();
   renderer.setAnimationLoop((time) => {
@@ -169,7 +188,7 @@ export async function startWalk(renderer: WebGLRenderer, scene: Scene, camera: P
     const dt = Math.min(timer.getDelta(), 1 / 30);
     if (renderer.xr.isPresenting) renderer.xr.updateCamera(camera);
     walker.update(dt);
-    map.update(dt, camera);
+    animate(dt, camera);
     renderer.render(scene, camera);
   });
 }

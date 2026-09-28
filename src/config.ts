@@ -97,6 +97,40 @@ export const CONFIG = {
     ],
   },
 
+  // The World (world/world.ts): what every zone shares. Loading a zone never
+  // adds a light, a sky or a shader; a zone's atmosphere only changes values.
+  world: {
+    /** Towards the sun: a late afternoon from the south-west, the same hour in every zone. */
+    sunDirection: [-0.55, 0.62, 0.56],
+    /**
+     * Point lights that sit on the nearest flames indoors. Always exactly this
+     * many in the scene (a different count recompiles every lit shader), and
+     * dark outdoors, where glows fake every flame. A flame's light is the
+     * arena's torch.
+     */
+    pool: { size: 4, color: 0xff9a3c, intensity: 7, distance: 10, decay: 1.5 },
+    sky: {
+      radius: 180, // m; the World shrinks it inside a nearer far plane
+      // Sine of the elevation below which the dome is pure haze, the fog's
+      // colour. Oakvale's ridges past the far plane rise to about 0.17; fully
+      // fogged ones (past the fog's far edge) to about 0.25, inside the blend.
+      hazeTop: 0.18,
+      hazeBlend: 0.2, // over this much more it turns to the sky above
+      sunDiscDeg: 2, // angular radius of the sun's disc
+      sunHaloDeg: 3.9,
+    },
+    // How a zone's ground answers a fight (steering, sight lines, arrows):
+    // from the camp prototype's zone ground.
+    ground: {
+      eyeHeight: 1.4, // m above the ground at each end of a sight line
+      sightStep: 0.5, // m between samples along a sight line
+      bodyClearance: 0.8, // m at each end of a sight line where the bodies themselves stand
+      lookAhead: 1, // m beyond a body's radius that steering probes for what's ahead
+      turns: [0.4, 0.8, 1.2, 1.6, 2.0], // rad either side that steering tries, nearest first
+      propHeight: 3, // m: arrows fly over trunks, tents and walls above this
+    },
+  },
+
   player: {
     maxHp: 100,
     bodyRadius: 0.3, // for wall/pillar push-out around the head's floor projection

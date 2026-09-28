@@ -4,13 +4,16 @@ import { MAPS } from '../maps/registry';
 import type { GameMap } from '../maps/types';
 import { XRInput } from '../player/input';
 import { TextPanel } from '../ui/panel';
+import type { Ground } from '../world/ground';
+import { World } from '../world/world';
 import { TouchControls } from './touchControls';
 
 // `?fly`: fly freely through any map in src/maps to look it over, with no
-// enemies. `?fly=<id>` opens that map. Flying ignores walls; walk mode puts you
-// at eye height on the ground with the player's collision, to see the map at
-// the player's scale. Works in the headset, on the desktop page, and on phones
-// and tablets with on-screen touch controls.
+// enemies. `?fly=<id>` opens that map. Zones are shown in the World, lit by
+// its rig under its sky; the crypt hall brings its own lights. Flying ignores
+// walls; walk mode puts you at eye height on the ground with the player's
+// collision, to see the map at the player's scale. Works in the headset, on
+// the desktop page, and on phones and tablets with on-screen touch controls.
 
 const EYE = 1.6; // desktop camera height above the rig (the headset supplies its own)
 const SPEEDS = [0.5, 1, 2, 4, 8, 16]; // m/s
@@ -45,7 +48,7 @@ export interface Viewpoint {
 }
 
 /** Where Y / R takes you, in turn: the start, each landmark, then a view over the whole map. */
-export function viewpoints(map: GameMap): Viewpoint[] {
+export function viewpoints(map: Pick<GameMap, 'spawn' | 'bounds' | 'landmarks' | 'heightAt'>): Viewpoint[] {
   const { spawn, bounds: b } = map;
   const onGround = (label: string, x: number, z: number, yaw: number): Viewpoint => ({
     label,
@@ -83,6 +86,8 @@ const _feet = new Vector3();
 export class MapViewer {
   /** Moved and turned by the controls; the camera (the head, in VR) and hands ride in it. */
   readonly rig = new Group();
+  /** Lights, sky and ground for every zone shown. */
+  readonly world = new World();
   private readonly loaded = new Map<string, Promise<GameMap>>();
   private readonly input: XRInput;
   /** Readout floating over the left controller, for the headset. */
@@ -166,9 +171,15 @@ export class MapViewer {
     const map = await pending;
     if (ticket !== this.switches) return;
 
-    if (this.map) this.scene.remove(this.map.root);
+    if (this.map?.kind === 'whole') this.scene.remove(this.map.root);
     this.map = map;
-    this.scene.add(map.root);
+    if (map.kind === 'zone') {
+      this.world.load(map);
+      this.world.attach(this.scene, this.camera);
+    } else {
+      this.world.detach(this.scene);
+      this.scene.add(map.root);
+    }
     this.spots = viewpoints(map);
     this.fog = true;
     this.goTo(0);
@@ -212,14 +223,25 @@ export class MapViewer {
   }
 
   private applyAtmosphere(): void {
-    if (!this.map) return;
-    const { sky, viewDistance, bounds: b } = this.map;
+    const map = this.map;
+    if (!map) return;
+    // Without fog you can see the whole map, from the overview too.
+    const b = map.bounds;
+    const size = Math.max(b.maxX - b.minX, b.maxZ - b.minZ);
+    if (map.kind === 'zone') {
+      this.world.clearView(this.fog ? null : Math.max(map.atmosphere.farPlane, size * 3));
+      return;
+    }
+    const { sky, viewDistance } = map;
     this.scene.background = new Color(sky.background);
     this.scene.fog = this.fog ? new Fog(sky.fog.color, sky.fog.near, sky.fog.far) : null;
-    // Without fog you can see the whole map, from the overview too.
-    const size = Math.max(b.maxX - b.minX, b.maxZ - b.minZ);
     this.camera.far = this.fog ? viewDistance : Math.max(viewDistance, size * 3);
     this.camera.updateProjectionMatrix();
+  }
+
+  /** The ground to walk on: the World's for a zone, the map's own for the crypt. */
+  private ground(map: GameMap): Pick<Ground, 'heightAt' | 'resolve'> {
+    return map.kind === 'zone' ? this.world : map;
   }
 
   private placeDesktopCamera(): void {
@@ -293,14 +315,15 @@ export class MapViewer {
       return;
     }
     // Walking plays by the player's rules: blocked by walls and props, feet on the ground.
+    const ground = this.ground(map);
     this.rig.updateMatrixWorld(true);
     this.camera.getWorldPosition(_head).setY(0);
     _feet.copy(_head);
-    if (map.resolve(_feet, CONFIG.player.bodyRadius)) {
+    if (ground.resolve(_feet, CONFIG.player.bodyRadius)) {
       this.rig.position.x += _feet.x - _head.x;
       this.rig.position.z += _feet.z - _head.z;
     }
-    this.rig.position.y = map.heightAt(_feet.x, _feet.z);
+    this.rig.position.y = ground.heightAt(_feet.x, _feet.z);
   }
 
   /** Right stick: turn 45° about the head, not the rig origin, so you turn in place. */
@@ -323,7 +346,8 @@ export class MapViewer {
     const map = this.map;
     if (map) this.handleInput(map, dt);
     this.rig.updateMatrixWorld(true);
-    map?.update(dt, this.camera);
+    if (map?.kind === 'zone') this.world.update(dt, this.camera);
+    else map?.update(dt, this.camera);
     this.placePanel();
     const status = this.describe(map);
     this.panel.draw([...status, '', ...QUEST_HELP]);
@@ -351,7 +375,7 @@ export class MapViewer {
     this.camera.getWorldPosition(_head);
     this.camera.getWorldDirection(_fwd);
     const bearing = ((Math.atan2(_fwd.x, -_fwd.z) * 180) / Math.PI + 360) % 360;
-    const above = _head.y - map.heightAt(_head.x, _head.z);
+    const above = _head.y - this.ground(map).heightAt(_head.x, _head.z);
     const b = map.bounds;
     const inside = _head.x >= b.minX && _head.x <= b.maxX && _head.z >= b.minZ && _head.z <= b.maxZ;
     const f = (v: number) => v.toFixed(1);

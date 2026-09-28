@@ -5,6 +5,7 @@ import { viewpoints } from '../src/viewer/mapViewer';
 
 // A hillside: ground rises 0.1 m per metre east.
 const hill: GameMap = {
+  kind: 'whole',
   id: 'hill',
   root: new Group(),
   sky: { background: 0, fog: { color: 0, near: 10, far: 50 } },

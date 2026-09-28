@@ -6,6 +6,7 @@ import { startAmbience, unlockAudio } from './fx/sfx';
 import { Game } from './game';
 import { buildShowcase, pinShowcaseCamera } from './showcase';
 import './style.css';
+import { useRadialFog } from './world/radialFog';
 
 const params = new URLSearchParams(location.search);
 
@@ -23,6 +24,7 @@ async function wantsEmulator(): Promise<boolean> {
 }
 
 async function start(): Promise<void> {
+  useRadialFog(); // before anything compiles
   const device = (await wantsEmulator())
     ? await (await import('./emulator')).installEmulator(!params.has('nodevui'))
     : null;
