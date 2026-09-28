@@ -23,7 +23,7 @@
 
 ## Built
 
-Built on 2026-09-28 by Claude in PR #PR, in autonomous mode (Tom asked for the rest of Oakvale to run without his input).
+Built on 2026-09-28 by Claude in PR #33, in autonomous mode (Tom asked for the rest of Oakvale to run without his input).
 
 - **Routing** (`src/route.ts`): `readPage(search)` is a pure function of the query string, tested in `tests/route.test.ts`. `?inspect`, `?fly`, `?map=<id>` come first as before, then `?arena` (or `?duel`, `?wave`, `?showcase` alone), and anything else is the Adventure. `?perf`, `?emulate`, `?noemulate` and `?nodevui` are read alongside.
 - **The Adventure** (`src/adventure.ts`) owns the World (with Oakvale loaded), today's `Player` on the World's ground, the sword trail and a belt without the wave. It steps them in one `update(dt)` per XR frame. Before VR the page shows Oakvale from the start, turning at the arena's title speed, behind Oakvale's intro text; the arena's page keeps its own text and the bestiary.
