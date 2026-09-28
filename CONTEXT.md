@@ -13,8 +13,12 @@ The zone a new character begins in and levels up through first. Oakvale is the s
 _Avoid_: tutorial, hub
 
 **Seam**:
-The border where two zones meet, which the player crosses without a loading screen.
+The border where two zones meet: a line across a pass or a valley, which the player crosses without a loading screen. The land and light of the two zones blend into each other on either side of it.
 _Avoid_: portal, transition, loading zone
+
+**Current zone**:
+The zone the player is standing in. Neighbouring zones can be loaded and in view without being current; crossing a seam makes the neighbour current.
+_Avoid_: active zone, loaded zone
 
 **Quest giver**:
 A friendly character who hands out quests and takes them back when they're done.
