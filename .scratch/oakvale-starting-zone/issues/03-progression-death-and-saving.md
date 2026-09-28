@@ -59,3 +59,5 @@ Settled with Tom over three rounds on 2026-09-28; the rounds are under Comments.
 **2026-09-28, round 3 (Tom took the recommendation):**
 
 - A new character starts at the crossroads, a few steps from Marshal Hale and facing them, not on the southern road where walk mode starts today. The first quest is right there, the village is also where you wake after dying, and the south stays unseen until the marshal's last line sends you that way.
+
+**2026-09-28:** [Interiors](08-interiors.md) is resolved (by Claude on Tom's behalf). The village respawn point is now the inn's hearth: you wake by the fire inside the inn with the door shut, then walk out. A save made indoors loads you indoors. The respawn point by the mine and the new character's start by Marshal Hale are unchanged.
