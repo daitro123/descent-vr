@@ -25,13 +25,14 @@ npm run dev          # http://localhost:5173
   - `npm run dev:quest`, then open `https://<your-LAN-IP>:5173` in the Quest browser and accept the self-signed certificate.
   - Or connect over USB with `adb reverse tcp:5173 tcp:5173` and open `http://localhost:5173` on the headset.
 - URL flags ([`src/route.ts`](src/route.ts) reads them):
-  - The plain URL is Oakvale. Before VR the page shows it from where you'll start, slowly turning behind the intro.
+  - The plain URL is Oakvale. Before VR the page shows it from where you'll start (or where your save stands), slowly turning behind the intro.
+  - `?newgame` starts Oakvale over. If there's a save, a dialog on the page asks first: **Start over** deletes it and starts a new character at level 1, **Carry on** loads it as usual. Either way the flag drops from the address, so a reload doesn't ask again.
   - `?arena` is the wave game in the crypt hall. Its flags work alone too, so older links still open it:
     - `?wave=N` starts the run at wave N (`?wave=7` goes straight to the boss).
     - `?duel` fights practice duelists one at a time: grunts that block about nine swings in ten. After each one falls, a banner shows how many of your hits it blocked.
     - `?showcase` pins the title-screen camera on the bestiary lineup, for reviewing models without a headset.
   - `?perf` adds a readout of the frame rate, draw calls, triangles and shader programs, low on the left of your view, over Oakvale or the arena.
-  - `?emulate` forces the emulator even when a real headset is present. `?emulate&nodevui` runs it without the DevUI, so controller poses are driven only by code (for scripted tests). `window.__descent` is the debug handle; in Oakvale it has `camps`, `state` (your level and XP, and what Hale and the tracker show), `teleport(x, z, yaw)` and `step(seconds)`, which runs the game without waiting for frames.
+  - `?emulate` forces the emulator even when a real headset is present. `?emulate&nodevui` runs it without the DevUI, so controller poses are driven only by code (for scripted tests). `window.__descent` is the debug handle; in Oakvale it has `camps`, `state` (your level and XP, and what Hale and the tracker show), `saved()` (resolves once no save write is in flight), `teleport(x, z, yaw)` and `step(seconds)`, which runs the game without waiting for frames.
   - `?fly` opens the map viewer: fly freely through any map, with no enemies and no walls in the way. `?fly=crypt` opens one map. Walk mode drops you to eye height with the player's collision. R (desktop) or Y (headset) steps through the map's start, its landmarks and an overview from above. On the desktop, click to look around, WASD to move, Q/E for down and up, shift to go fast, M for the next map, G to walk, F for fog. In the headset, the left stick moves where you look, the right stick turns and rises, grip goes fast, A is the next map, B walks or flies, and X toggles fog. The readout floats over your left controller. On a phone or tablet, a stick (bottom left) moves, dragging anywhere else looks around, ▲ ▼ go up and down, and buttons under the readout switch map, walk, fog, fast and spot.
   - `?map=forest` walks Oakvale from its start with no enemies (`?map=crypt` for the crypt hall). Headset: left stick moves, right stick turns. Desktop: WASD or the arrow keys walk (Shift to hurry), dragging looks around.
 
@@ -56,6 +57,12 @@ The belt HUD (look down) shows health on the left orb and rage on the right orb,
 In Oakvale, you start facing Marshal Hale, with a gold "!" over their head. Walk up looking at them and a board unfolds beside them; press its buttons with either fist or your sword's tip. The quest you're on floats at the top left of your view with its counts, and a gold "?" over Hale says it's ready to hand in. Kills pay XP and hand-ins pay more, and each level adds health and damage (the War Cry comes at level 2, Earthshaker at 3).
 
 Enemies wait in camps. Come within 8 m of one, or hurt it, and it fights, bringing whoever of its camp stands near it; lead it 30 m from where it waited and it walks home untouchable ("Evade") and heals. A cleared camp fills again three minutes later, once you're well away. Out of a fight for 5 s, your health comes back. If you die, the view fades to black and you wake in the village in front of the inn, with nothing lost.
+
+### Saving
+
+Oakvale saves itself in the browser's IndexedDB (one database, `descent-vr`, holding one record). It writes at once when you take a quest, a count goes up, a quest is ready or handed in, you level up or get a new sword, and when you cross into another zone. It also writes every 30 s of play, when the page is hidden, when VR ends and when the headset is put down. Loading puts you where you stood, facing the way you faced, with your level, XP, sword and quests, at full health, with no rage and every camp full. Health, rage, the camps and the talk board aren't saved.
+
+The record carries a version. A new build that changes its shape bumps the version and adds a migration (`src/save/record.ts`), so older saves upgrade and a deploy never wipes a character. A page from an older build (a stale cache) that finds a newer record leaves it alone and plays unsaved. Where the browser won't store data (some private windows), the game plays anyway, keeping progress in memory, and the page says it won't be kept. `?newgame` starts over; the arena and `?map=` never read or write the save.
 
 ### Reading enemies
 
@@ -82,6 +89,11 @@ src/
   main.ts            renderer and XR settings, each mode's frame loop, emulator bootstrap, debug handles
   adventure.ts       the plain URL: Oakvale in the World, the player, its camps, Hale, healing and death, the belt
   adventureState.ts  levels, XP and Hale's quest chain: events in, effects and answers out (unit tested)
+  save/
+    record.ts        the save record, its version and the migrations that bring older ones up (unit tested)
+    store.ts         the save store port, its in-memory adapter, and opening the save with its fallback (unit tested)
+    indexedDb.ts     the browser's adapter: IndexedDB, one strict transaction per write
+    controller.ts    when to write: what's earned, zone changes, every 30 s, leaving; one write in flight (unit tested)
   quests.ts          the quest chain as data: objectives, rewards and what Hale says
   game.ts            the arena (?arena): owns its systems; wave director, spawning, summons, death/victory
   showcase.ts        the arena's title-screen bestiary (?showcase)
@@ -122,7 +134,7 @@ src/
                      colliders, unit tested); terrain, nature, buildings and sky turn it into chunked meshes
   fx/                particles, sword trail, shockwaves, floating text, spatial synthesised SFX
   ui/                belt HUD and vignette, enemy health bars, Hale's talk board, the quest tracker,
-                     debug text panel, ?perf readout
+                     debug text panel, ?perf readout, ?newgame's dialog
 ```
 
 ## How the combat works

@@ -4,10 +4,18 @@ import { readPage } from '../src/route';
 
 describe('reading the page from its URL', () => {
   it('starts the Adventure at the plain URL, and for any flag it does not know', () => {
-    expect(readPage('').route).toEqual({ kind: 'adventure' });
-    expect(readPage('?').route).toEqual({ kind: 'adventure' });
-    expect(readPage('?utm_source=quest').route).toEqual({ kind: 'adventure' });
-    expect(readPage('?talk').route).toEqual({ kind: 'adventure' });
+    expect(readPage('').route).toEqual({ kind: 'adventure', newGame: false });
+    expect(readPage('?').route).toEqual({ kind: 'adventure', newGame: false });
+    expect(readPage('?utm_source=quest').route).toEqual({ kind: 'adventure', newGame: false });
+    expect(readPage('?talk').route).toEqual({ kind: 'adventure', newGame: false });
+  });
+
+  it('asks to start the Adventure over at ?newgame, and nowhere else', () => {
+    expect(readPage('?newgame').route).toEqual({ kind: 'adventure', newGame: true });
+    expect(readPage('?newgame&perf').route).toEqual({ kind: 'adventure', newGame: true });
+    // The arena and walking a map never touch the save.
+    expect(readPage('?arena&newgame').route).toMatchObject({ kind: 'arena' });
+    expect(readPage('?map=forest&newgame').route).toEqual({ kind: 'walk', map: 'forest' });
   });
 
   it('opens the arena at ?arena, as the plain URL did before', () => {

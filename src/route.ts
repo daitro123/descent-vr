@@ -13,8 +13,8 @@ export type Route =
   | { kind: 'walk'; map: string }
   /** `?arena`: the wave game. `?duel`, `?wave=N` and `?showcase` alone open it too. */
   | { kind: 'arena'; firstWave: number; duel: boolean; showcase: boolean }
-  /** Anything else: Oakvale. */
-  | { kind: 'adventure' };
+  /** Anything else: Oakvale, with the save. `?newgame` asks to start over. */
+  | { kind: 'adventure'; newGame: boolean };
 
 export interface Page {
   route: Route;
@@ -52,5 +52,5 @@ function chooseRoute(params: URLSearchParams): Route {
       showcase: params.has('showcase'),
     };
   }
-  return { kind: 'adventure' };
+  return { kind: 'adventure', newGame: params.has('newgame') };
 }

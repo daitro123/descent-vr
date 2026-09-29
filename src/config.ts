@@ -337,6 +337,10 @@ export const CONFIG = {
     dark: 0.5, // s of black, while you're moved to the respawn point
     fadeIn: 1, // s back to the view
   },
+  save: {
+    every: 30, // s of play between writes when nothing else has written (where you stand is kept too)
+    openTimeout: 5, // s to wait for the browser's storage to open before playing unsaved
+  },
 
   enemies: {
     grunt: {

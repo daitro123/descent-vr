@@ -5,7 +5,7 @@ import { CHAIN, CHAIN_DONE, type Item, type Objective, type QuestId, RETURN_TO_H
 // The rules of progress in the Adventure, with no three.js in it: events in,
 // effects and answers out. The Adventure feeds it what happens in the world
 // and turns its effects into floats, sounds, your numbers and what Hale and
-// the tracker show; later the save stores it. Levels, XP and Marshal Hale's
+// the tracker show; the save keeps its snapshot. Levels, XP and Marshal Hale's
 // quest chain live here (.scratch/oakvale-starting-zone/spec.md, "The adventure state").
 
 /** What you can use besides the sword, the shield and the dash, once your level brings it. */
@@ -19,6 +19,27 @@ export const ABILITIES = Object.keys(CONFIG.levels.unlocks) as Ability[];
 
 /** Where a quest stands. Only one is ever offered, under way or ready at a time; none goes back a stage. */
 export type Stage = 'locked' | 'offered' | 'active' | 'ready' | 'handedIn';
+
+/** Every stage, in the order a quest goes through them. */
+export const STAGES: readonly Stage[] = ['locked', 'offered', 'active', 'ready', 'handedIn'];
+
+/** One quest of the chain, as the save keeps it. */
+export interface QuestProgress {
+  readonly stage: Stage;
+  /** Each objective's count, in the chain's order: The Lumber Camp's second is its orders, 1 once taken. */
+  readonly counts: readonly number[];
+}
+
+/** One character's progress, as the save keeps it: a snapshot of the state, and what restores it. */
+export interface Progress {
+  readonly level: number;
+  /** XP in all, since level 1. */
+  readonly xp: number;
+  readonly sword: Sword;
+  /** Each quest of the chain, by id. */
+  readonly quests: Readonly<Record<QuestId, QuestProgress>>;
+  readonly wardenBeaten: boolean;
+}
 
 /** Something that happened in the world that progress may care about. */
 export type AdventureEvent =
@@ -126,6 +147,41 @@ export class AdventureState {
   /** Each quest's objectives' counts. */
   private readonly counts: number[][] = CHAIN.map((q) => q.objectives.map(() => 0));
   private held: Sword = 'plain';
+  private beaten = false;
+
+  /** A new character, or one restored from a snapshot. */
+  constructor(saved?: Progress) {
+    if (saved) this.restore(saved);
+  }
+
+  /** Your progress, for the save. */
+  snapshot(): Progress {
+    const quests = {} as Record<QuestId, QuestProgress>;
+    CHAIN.forEach((q, i) => (quests[q.id] = { stage: this.stages[i], counts: [...this.counts[i]] }));
+    return { level: this.level, xp: this.total, sword: this.held, quests, wardenBeaten: this.beaten };
+  }
+
+  /**
+   * Take up a snapshot. A record from another build is taken as best it
+   * fits: a level it reached is kept even if levels now need more XP, counts
+   * stay within their objectives, and a quest added after the ones handed in
+   * is offered.
+   */
+  private restore(saved: Progress): void {
+    const L = CONFIG.levels;
+    const reached = L.xp[Math.min(saved.level, L.xp.length + 1) - 2] ?? 0;
+    this.total = Math.min(Math.max(saved.xp, reached), L.xp[L.xp.length - 1]);
+    this.held = saved.sword;
+    this.beaten = saved.wardenBeaten;
+    CHAIN.forEach((quest, i) => {
+      const kept = saved.quests[quest.id] as QuestProgress | undefined;
+      if (!kept) return;
+      this.stages[i] = kept.stage;
+      quest.objectives.forEach((o, k) => (this.counts[i][k] = Math.max(0, Math.min(o.need, kept.counts[k] ?? 0))));
+    });
+    const i = this.current;
+    if (i >= 0 && this.stages[i] === 'locked') this.stages[i] = 'offered';
+  }
 
   get level(): number {
     return 1 + this.reached.length;
@@ -169,6 +225,11 @@ export class AdventureState {
     return this.held;
   }
 
+  /** Has the Warden fallen? It stays beaten for good. */
+  get wardenBeaten(): boolean {
+    return this.beaten;
+  }
+
   /** The chain's quest Hale has for you (on offer, under way or ready), or -1 once it's all handed in. */
   private get current(): number {
     return this.stages.findIndex((s) => s !== 'handedIn');
@@ -196,6 +257,7 @@ export class AdventureState {
   apply(event: AdventureEvent): Effect[] {
     switch (event.kind) {
       case 'kill': {
+        if (event.role === 'warden') this.beaten = true;
         const L = CONFIG.levels;
         const xp = this.earn(L.killXp * event.level * L.roles[event.role]);
         return [...xp, ...this.count((o) => credits(o, event.camp, event.role))];
