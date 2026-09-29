@@ -5,7 +5,7 @@ import type { CampId, CampPlan, Pickup, PostPlan, Respawn, Spot } from '../types
 import { Colliders } from './colliders';
 import { HOUSE, planHouse } from './house';
 import { INN, planInn } from './inn';
-import { mineRespawn, mouthColliders, mouthOf, planMine } from './mine';
+import { mineCamp, mineRespawn, mouthColliders, mouthOf, planMine } from './mine';
 import { SMITHY, smithyColliders } from './smithy';
 import { fbm, lerp, mulberry32, nearestOnPolyline, type P2, sampleCurve, smoothstep, valueNoise } from './noise';
 
@@ -621,6 +621,8 @@ export function buildLayout(): ForestLayout {
     posts: Array.from({ length: PATROL.count }, (_, i) => ({ behaviour: 'grunt', family: 'bandit', ...walk.spot(i) }) as const),
     road,
   });
+  // The mine's undead, the last camp, down the mine.
+  camps.push(mineCamp(mouth));
   const tent = at('tent');
   const [ox, oz] = localToWorld(tent, TENT.orders.x, TENT.orders.z);
   const pickups: Pickup[] = [{ item: 'orders', x: ox, y: tent.y + TENT.crates.top, z: oz, yaw: tent.yaw }];

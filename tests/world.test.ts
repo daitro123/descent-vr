@@ -180,7 +180,7 @@ describe("the lumber camp's tent", () => {
     const tent = plan.structures.find((s) => s.kind === 'tent')!;
     const [x, z] = localToWorld(tent, 0, -tent.hd - 2.5);
     const feet = new Vector3(x, world.heightAt(x, z), z);
-    const you: You = { feet, head: feet.clone().setY(feet.y + 1.6), sword: null, alive: true, indoors: false };
+    const you: You = { feet, head: feet.clone().setY(feet.y + 1.6), sword: null, alive: true, interior: null };
     const leader = camps.camps[0].members.find((m) => m.plan.role === 'leader')!.enemy;
     let took = Infinity;
     for (let t = 0; t < 15 && took === Infinity; t += 1 / 72) {
@@ -937,6 +937,66 @@ describe('the old mine', () => {
     expect(w.interior).toBe(null);
     expect(w.sun.intensity).toBe(outdoorSun);
     expect(drawn()).toEqual(MINE.parts.map((_, i) => i === 0));
+  });
+
+  it("wakes only the cart hall as you walk in, draws its dead where you can see them, and they give up at the mouth as you walk out", () => {
+    const { w, eye, stand } = walkable();
+    const plans = oakvale.camps.filter((c) => c.interior === 'mine');
+    const camps = new Camps(plans, (plan) => (plan.interior === 'mine' ? w.mineGround! : w), { sweep: () => null, slam: () => {}, shoot: () => {}, nock: () => {}, telegraph: () => {} });
+    const [dead] = camps.camps;
+    const feet = new Vector3();
+    const you: You = { feet, head: new Vector3(), sword: null, alive: true, interior: null };
+    const where = (m: (typeof dead.members)[number]) => MINE.parts[w.mine!.partAt(m.enemy.position.x, m.enemy.position.z)];
+    /** Deepest any of them has come towards the mouth, in its frame (+z out along the rail bed). */
+    let furthest = -Infinity;
+    const frame = (lx: number, lz: number) => {
+      stand(lx, lz);
+      w.update(1 / 72, eye);
+      feet.set(eye.position.x, w.heightAt(eye.position.x, eye.position.z), eye.position.z);
+      you.head.copy(eye.position);
+      you.interior = w.interior;
+      camps.update(1 / 72, you);
+      for (const m of dead.members) furthest = Math.max(furthest, worldToLocal(mouth(), m.enemy.position.x, m.enemy.position.z)[1]);
+    };
+    /** Walk from point to point at a walk, a frame at a time. */
+    const walk = (pts: readonly (readonly [number, number])[]) => {
+      for (let k = 1; k < pts.length; k++) {
+        const [ax, az] = pts[k - 1];
+        const [bx, bz] = pts[k];
+        const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az) / (CONFIG.player.moveSpeed / 72)));
+        for (let i = 1; i <= n; i++) frame(ax + ((bx - ax) * i) / n, az + ((bz - az) * i) / n);
+      }
+    };
+    const hold = (lx: number, lz: number, seconds: number) => {
+      for (let t = 0; t < seconds; t += 1 / 72) frame(lx, lz);
+    };
+    // Up the rail bed and in through the mouth, round the bend and into the cart hall's doorway.
+    hold(0, 6, 2);
+    expect(dead.members.every((m) => m.mind === 'idle')).toBe(true);
+    walk([[0, 6], [0, -10], [-6, -10]]);
+    hold(-6, -10, 0.5);
+    expect(dead.members.map((m) => `${where(m)} ${m.mind}`)).toEqual([
+      'cart hall fight',
+      'cart hall fight',
+      'cart hall fight',
+      'gallery idle',
+      'gallery idle',
+      'dig idle',
+      'antechamber idle',
+    ]);
+    // Only the parts drawn show their dead: the cart hall's, and nobody deeper.
+    w.mine!.show(true, w.outdoorsShown, eye.position.x, eye.position.z);
+    const shown = dead.members.map((m) => w.mine!.drawn[w.mine!.partAt(m.enemy.position.x, m.enemy.position.z)]);
+    expect(shown).toEqual([true, true, true, true, true, false, false]);
+    // Back out the way you came and on down the rail bed: they follow as far as the mouth, and turn for home there.
+    walk([[-6, -10], [0, -10], [0, 8]]);
+    expect(you.interior).toBe(null);
+    expect(dead.members.slice(0, 3).every((m) => m.mind !== 'fight')).toBe(true);
+    hold(0, 8, 20);
+    expect(dead.members.every((m) => m.mind === 'idle')).toBe(true);
+    for (const m of dead.members) expect(Math.hypot(m.enemy.position.x - m.post.x, m.enemy.position.z - m.post.z)).toBeLessThan(CONFIG.camps.home);
+    // None ever set foot past the mouth's timbers.
+    expect(furthest).toBeLessThan(1);
   });
 
   it('settles in at once for a save made inside it, in the light of where you stood', () => {

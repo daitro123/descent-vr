@@ -1,6 +1,7 @@
 import { Group, Vector3 } from 'three';
 import { CONFIG } from '../config';
 import type { CampPlan, PostPlan } from '../maps/types';
+import type { Interior } from '../save/record';
 import type { Ground } from '../world/ground';
 import { type Enemy, type EnemyContext, type EnemyPost, keepApart, type PlayerSword } from './enemy';
 import { createEnemy } from './kinds';
@@ -42,10 +43,11 @@ export interface You {
   sword: PlayerSword | null;
   alive: boolean;
   /**
-   * In a building or the mine. The camps so far are all outdoors: none notices
-   * you or follows you in, since the ground and walls in there are yours alone.
+   * The building you're in, or the mine, if any. A camp fights you only where
+   * it is: none outdoors follows you in, and the mine's undead never follow
+   * you out of its mouth.
    */
-  indoors: boolean;
+  interior: Interior | null;
 }
 
 /** The fight's side of `EnemyContext`: where enemies' blows, slams and arrows land (Combat, in the game). No summons: a camp never holds a boss. */
@@ -61,6 +63,8 @@ const flat = (a: { x: number; z: number }, b: { x: number; z: number }) => Math.
 /** One camp: its plan and its members' minds. `Camps` raises and steps their bodies. */
 export class Camp {
   readonly members: Member[] = [];
+  /** Its members' bodies, standing or falling: shown or hidden with where it is. */
+  readonly root = new Group();
   /** Seconds until it refills, once every member has fallen; null while any stands. */
   private refillIn: number | null = null;
   /** A patrol's walk along its road; null for a camp that stands. */
@@ -71,7 +75,10 @@ export class Camp {
     /** Raise one member's body at its post. */
     private readonly raise: (post: PostPlan, at: EnemyPost) => Enemy,
     private readonly events: CampEvents,
+    /** The ground its members stand on: in the mine, rock blocks their noticing you and bringing each other. */
+    private readonly ground: Ground,
   ) {
+    this.root.name = plan.id;
     this.patrol = plan.road ? new PatrolWalk(plan.road, plan.posts.length) : null;
     this.fill();
   }
@@ -93,6 +100,7 @@ export class Camp {
         post.pace = CONFIG.camps.patrol.speed;
       }
       const enemy = this.raise(plan, post);
+      this.root.add(enemy.root);
       this.members.push({ plan, post, enemy, mind: 'idle', hp: enemy.hp, nearest: 0, stalled: 0 });
     }
   }
@@ -100,6 +108,8 @@ export class Camp {
   /** Decide who notices you, who comes along, who gives up, and whether it refills. */
   think(dt: number, you: You): void {
     const { notice, leash, home, stuck } = CONFIG.camps;
+    // It fights you only where it is: out of doors, or in the mine.
+    const here = you.alive && you.interior === (this.plan.interior ?? null);
     for (const m of this.members) {
       const e = m.enemy;
       if (m.mind === 'dead') continue;
@@ -112,10 +122,10 @@ export class Camp {
       m.hp = e.hp;
       switch (m.mind) {
         case 'idle':
-          if (you.alive && !you.indoors && (hurt || flat(e.position, you.feet) < notice)) this.engage(m);
+          if (here && (hurt || (flat(e.position, you.feet) < notice && this.sees(e.position, you.feet)))) this.engage(m);
           break;
         case 'fight':
-          if (!you.alive || you.indoors || flat(e.position, m.post) > leash) this.sendHome(m);
+          if (!here || flat(e.position, m.post) > leash) this.sendHome(m);
           break;
         case 'home': {
           const d = flat(e.position, m.post);
@@ -162,8 +172,13 @@ export class Camp {
   private engage(m: Member): void {
     this.fight(m);
     for (const o of this.members) {
-      if (o.mind === 'idle' && flat(m.enemy.position, o.enemy.position) < CONFIG.camps.pull) this.fight(o);
+      if (o.mind === 'idle' && flat(m.enemy.position, o.enemy.position) < CONFIG.camps.pull && this.sees(m.enemy.position, o.enemy.position)) this.fight(o);
     }
+  }
+
+  /** Is there a clear line from a to b? Outdoors it doesn't matter; in the mine, rock blocks it. */
+  private sees(a: Vector3, b: Vector3): boolean {
+    return !this.plan.interior || this.ground.lineOfSight(a, b);
   }
 
   private fight(m: Member): void {
@@ -193,39 +208,68 @@ export class Camp {
     this.refillIn = Math.max(0, (this.refillIn ?? refillTime) - dt);
     const { place, road } = this.plan;
     const away = road ? fromRoad(road, you.feet.x, you.feet.z) : flat(place, you.feet) - place.r;
-    if (this.refillIn <= 0 && away >= refillAway) this.fill();
+    // The mine's only once you've also left it.
+    const inside = this.plan.interior !== undefined && you.interior === this.plan.interior;
+    if (this.refillIn <= 0 && away >= refillAway && !inside) this.fill();
   }
+}
+
+/** The enemies standing on one ground, stepped through its own `EnemyContext`. */
+interface Floor {
+  readonly ctx: EnemyContext;
+  readonly enemies: Enemy[];
 }
 
 /**
  * Every camp in the Adventure and their enemies' bodies. It raises them,
- * steps them through one `EnemyContext` whose ground is the world's, and
- * keeps them apart. One pool of attack tokens spans every camp, so however
- * many camps you pull, only so many swing and shoot at once.
+ * steps them through an `EnemyContext` whose ground is theirs (the world's,
+ * or the mine's for its undead), and keeps them apart. One pool of attack
+ * tokens spans every camp, so however many camps you pull, only so many
+ * swing and shoot at once.
  */
 export class Camps {
-  /** The enemies' bodies: add it to the scene. */
+  /** The enemies' bodies, a group per camp: add it to the scene. */
   readonly root = new Group();
   readonly camps: readonly Camp[];
   /** Every body in the world: waiting, fighting, walking home, or falling. */
   readonly enemies: Enemy[] = [];
   readonly meleeTokens = new AttackTokens(CONFIG.camps.tokens.melee, CONFIG.tokens.meleeGap);
   readonly rangedTokens = new AttackTokens(CONFIG.camps.tokens.ranged, CONFIG.tokens.rangedGap);
-  private readonly ctx: EnemyContext;
+  /** The bodies by the ground they stand on, each with its context. */
+  private readonly floors = new Map<Ground, Floor>();
 
-  constructor(plans: readonly CampPlan[], ground: Ground, hooks: CampHooks, events: CampEvents = {}) {
+  constructor(
+    plans: readonly CampPlan[],
+    /** The ground every camp stands on, or each camp's own (the mine's undead stand on the mine's). */
+    ground: Ground | ((plan: CampPlan) => Ground),
+    hooks: CampHooks,
+    events: CampEvents = {},
+  ) {
     this.root.name = 'camps';
-    this.ctx = {
-      ...hooks,
-      playerFeet: new Vector3(),
-      playerHead: new Vector3(),
-      playerSword: null,
-      summon: () => {},
-      ground,
-      meleeTokens: this.meleeTokens,
-      rangedTokens: this.rangedTokens,
+    const floorOf = (g: Ground): Floor => {
+      let floor = this.floors.get(g);
+      if (!floor) {
+        const ctx: EnemyContext = {
+          ...hooks,
+          playerFeet: new Vector3(),
+          playerHead: new Vector3(),
+          playerSword: null,
+          summon: () => {},
+          ground: g,
+          meleeTokens: this.meleeTokens,
+          rangedTokens: this.rangedTokens,
+        };
+        floor = { ctx, enemies: [] };
+        this.floors.set(g, floor);
+      }
+      return floor;
     };
-    this.camps = plans.map((plan) => new Camp(plan, (post, at) => this.raise(plan.level, post, at), events));
+    this.camps = plans.map((plan) => {
+      const floor = floorOf(typeof ground === 'function' ? ground(plan) : ground);
+      const camp = new Camp(plan, (post, at) => this.raise(plan.level, post, at, floor), events, floor.ctx.ground);
+      this.root.add(camp.root);
+      return camp;
+    });
   }
 
   /** Is anything fighting you? (Enemies walking home don't count.) */
@@ -234,32 +278,36 @@ export class Camps {
   }
 
   update(dt: number, you: You): void {
-    const ctx = this.ctx;
-    ctx.playerFeet.copy(you.feet);
-    ctx.playerHead.copy(you.head);
-    ctx.playerSword = you.alive ? you.sword : null;
+    for (const { ctx } of this.floors.values()) {
+      ctx.playerFeet.copy(you.feet);
+      ctx.playerHead.copy(you.head);
+      ctx.playerSword = you.alive ? you.sword : null;
+    }
     for (const camp of this.camps) camp.think(dt, you);
     this.meleeTokens.update(dt);
     this.rangedTokens.update(dt);
-    for (let i = this.enemies.length - 1; i >= 0; i--) {
-      const enemy = this.enemies[i];
-      if (!enemy.update(dt, ctx)) {
-        this.root.remove(enemy.root);
-        this.enemies.splice(i, 1);
+    for (const { ctx, enemies } of this.floors.values()) {
+      for (let i = enemies.length - 1; i >= 0; i--) {
+        const enemy = enemies[i];
+        if (!enemy.update(dt, ctx)) {
+          enemy.root.removeFromParent();
+          enemies.splice(i, 1);
+          this.enemies.splice(this.enemies.indexOf(enemy), 1);
+        }
       }
+      keepApart(enemies, ctx.playerFeet, ctx.ground);
     }
-    keepApart(this.enemies, ctx.playerFeet, ctx.ground);
   }
 
-  /** A member's body at its post, in its family's looks, at its camp's level and with a camp's strength, running to keep up once it fights. */
-  private raise(level: number, plan: PostPlan, post: EnemyPost): Enemy {
-    const enemy = createEnemy(plan.behaviour, post.x, post.z, { level, inCamp: true, family: plan.family, variant: Math.floor(Math.random() * 6) });
+  /** A member's body at its post, in its family's looks, at its level (its camp's, unless its own) and with a camp's strength, running to keep up once it fights. */
+  private raise(level: number, plan: PostPlan, post: EnemyPost, floor: Floor): Enemy {
+    const enemy = createEnemy(plan.behaviour, post.x, post.z, { level: plan.level ?? level, inCamp: true, family: plan.family, variant: Math.floor(Math.random() * 6) });
     enemy.post = post;
     enemy.chaseSpeed = CONFIG.camps.chaseSpeed;
-    enemy.position.y = this.ctx.ground.heightAt(post.x, post.z);
+    enemy.position.y = floor.ctx.ground.heightAt(post.x, post.z);
     enemy.root.rotation.y = post.yaw;
     this.enemies.push(enemy);
-    this.root.add(enemy.root);
+    floor.enemies.push(enemy);
     return enemy;
   }
 }

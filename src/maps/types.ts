@@ -54,6 +54,8 @@ export interface PostPlan {
   readonly behaviour: Exclude<EnemyKind, 'warden'>;
   /** What its kill pays for, if not an ordinary member: the bandit leader or one of the mine's deep brutes. */
   readonly role?: Extract<Role, 'leader' | 'deepBrute'>;
+  /** Its level, if not its camp's (the mine's deep brutes). */
+  readonly level?: number;
   /** Who it is: bandits wear the human body, the undead are skeletons. */
   readonly family: Family;
   readonly x: number;
@@ -76,6 +78,12 @@ export interface CampPlan {
    * you're well away from the road rather than from its place.
    */
   readonly road?: readonly RoadPoint[];
+  /**
+   * Where it is, if not out of doors: the mine's undead. It notices you and
+   * fights you only while you're in there too, rock blocks its noticing you
+   * and bringing others, and it refills only once you've left.
+   */
+  readonly interior?: InteriorId;
 }
 
 /** Something lying in a zone to pick up by hand (the leader's orders): where, and which way it lies. */

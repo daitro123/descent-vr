@@ -84,7 +84,7 @@ export class Adventure {
   private readonly shadows = new BlobShadows();
   private readonly orbs = new Orbs();
   private readonly fade: Fade;
-  private readonly you: You = { feet: new Vector3(), head: new Vector3(), sword: null, alive: true, indoors: false };
+  private readonly you: You = { feet: new Vector3(), head: new Vector3(), sword: null, alive: true, interior: null };
   private readonly sword = { base: new Vector3(), tip: new Vector3(), speed: 0, swing: 0 };
   private hitStop = 0;
   /** Seconds since you last took or dealt damage. */
@@ -144,9 +144,11 @@ export class Adventure {
       },
       scene,
     );
+    // The mine's undead stand on the mine's own ground, whether or not you've come in.
+    const below = this.world.mineGround;
     this.camps = new Camps(
       zone.camps,
-      this.world,
+      (plan) => (plan.interior === 'mine' && below ? below : this.world),
       {
         sweep: (e, a, pb, pt, b, t) => this.combat.sweep(e, a, pb, pt, b, t),
         slam: (e, a, at) => this.combat.slam(e, a, at),
@@ -187,7 +189,8 @@ export class Adventure {
     this.world.update(dt, player.camera);
     // With a door shut behind you, what stands outside isn't drawn either.
     const outdoors = this.world.outdoorsShown;
-    this.camps.root.visible = this.pickups.root.visible = this.hale.root.visible = outdoors;
+    this.pickups.root.visible = this.hale.root.visible = outdoors;
+    this.showCamps(outdoors);
     player.update(dt);
     updateListener(player.camera);
     const { hands } = player.input;
@@ -199,7 +202,7 @@ export class Adventure {
     player.feetPosition(you.feet);
     player.headPosition(you.head);
     you.alive = player.alive;
-    you.indoors = this.world.interior !== null;
+    you.interior = this.world.interior;
     const { sword, rig } = player;
     if (sword.tip.valid && player.alive) {
       sword.segment(rig, this.sword.base, this.sword.tip);
@@ -232,6 +235,21 @@ export class Adventure {
     this.hud.update(dt);
     this.updateStanding();
     this.saves.update(dt);
+  }
+
+  /**
+   * The camps outside are drawn with the outdoors. The mine's undead are
+   * drawn where the mine is: each only in a part of it that's drawn.
+   */
+  private showCamps(outdoors: boolean): void {
+    const mine = this.world.mine;
+    for (const camp of this.camps.camps) {
+      if (camp.plan.interior !== 'mine' || !mine) {
+        camp.root.visible = outdoors;
+        continue;
+      }
+      for (const body of camp.root.children) body.visible = mine.drawn[mine.partAt(body.position.x, body.position.z)];
+    }
   }
 
   /** Where the save puts you: where your head is and the way you look, or where you'll wake while you're down. */

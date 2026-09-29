@@ -384,6 +384,10 @@ export const CONFIG = {
     near: 12, // m from the mouth's middle: the pool sits on the adit's lanterns
     fadeIn: 0.5, // s for the sun to fade and the mine's light to take over
     fadeOut: 0.2, // s for the sun to come back as you walk back to the bend
+    // Its undead (world/mineGround.ts): one that can't see you heads for the
+    // farthest point it can see up to `ahead` m on along the route's centre
+    // line towards you, trying back `step` m at a time.
+    way: { ahead: 4, step: 0.5 },
   },
 
   save: {

@@ -14,9 +14,10 @@ import { CONFIG } from '../config';
 import type { Zone } from '../maps/types';
 import type { Interior as InteriorId } from '../save/record';
 import { type Atmosphere, blendAtmospheres } from './atmosphere';
-import type { Ground } from './ground';
+import { type Ground, steerRound } from './ground';
 import { type Flame, type Interior, InteriorSwitch, toFrame } from './interiors';
-import { type Mine, type MinePlan, type MineStanding, MineSwitch } from './mine';
+import { type Mine, type MineStanding, MineSwitch } from './mine';
+import { MineGround } from './mineGround';
 import { buildSky, type Sky } from './sky';
 
 const _probe = new Vector3();
@@ -44,6 +45,8 @@ interface Held {
 interface HeldMine {
   readonly mine: Mine;
   readonly switch: MineSwitch;
+  /** Its own ground, for its undead. */
+  readonly ground: MineGround;
 }
 
 /**
@@ -84,6 +87,7 @@ export class World implements Ground {
   private underground: HeldMine | null = null;
   /** People standing about, whom nothing walks through: circles on the floor plane. */
   private readonly bodies: { readonly x: number; readonly z: number; readonly r: number }[] = [];
+  private readonly resolveFn = (p: Vector3, radius: number) => this.resolve(p, radius);
   private camera: PerspectiveCamera | null = null;
   /** The zone's own atmosphere, which an interior's blends from. */
   private atmosphere: Atmosphere | null = null;
@@ -144,7 +148,7 @@ export class World implements Ground {
         this.root.add(interior.root);
       }
       if (zone.mine && !this.underground) {
-        this.underground = { mine: zone.mine, switch: new MineSwitch() };
+        this.underground = { mine: zone.mine, switch: new MineSwitch(), ground: new MineGround(zone.mine, this) };
         this.root.add(zone.mine.root);
       }
     }
@@ -171,8 +175,17 @@ export class World implements Ground {
   }
 
   /** The mine, for its route's centre line and its sight test through rock, if a loaded zone has one. */
-  get mine(): MinePlan | null {
+  get mine(): Mine | null {
     return this.underground?.mine ?? null;
+  }
+
+  /**
+   * The mine's own ground, for those who live in it (its undead): theirs
+   * whether or not you've come in, where the World answers for wherever you
+   * stand. Out past its mouth it answers as the World does.
+   */
+  get mineGround(): Ground | null {
+    return this.underground?.ground ?? null;
   }
 
   /**
@@ -353,11 +366,11 @@ export class World implements Ground {
       const floor = interior.groundAt(x, z);
       if (floor !== null) return floor;
     }
-    return this.mineGround(x, z) ?? this.zoneAt(x, z)?.heightAt(x, z) ?? 0;
+    return this.mineFloor(x, z) ?? this.zoneAt(x, z)?.heightAt(x, z) ?? 0;
   }
 
   /** The mine's floor at (x, z), once you've come in by its mouth and while it reaches there; else null. */
-  private mineGround(x: number, z: number): number | null {
+  private mineFloor(x: number, z: number): number | null {
     const u = this.underground;
     return u?.switch.entered ? u.mine.groundAt(x, z) : null;
   }
@@ -365,7 +378,7 @@ export class World implements Ground {
   resolve(p: Vector3, radius: number): boolean {
     // In the mine its walls are all there is: the hillside's aren't.
     let moved =
-      this.mineGround(p.x, p.z) !== null ? this.underground!.mine.resolve(p, radius) : (this.zoneAt(p.x, p.z)?.resolve(p, radius) ?? false);
+      this.mineFloor(p.x, p.z) !== null ? this.underground!.mine.resolve(p, radius) : (this.zoneAt(p.x, p.z)?.resolve(p, radius) ?? false);
     for (const { interior } of this.interiors) if (interior.resolve(p, radius)) moved = true;
     for (const b of this.bodies) {
       const dx = p.x - b.x;
@@ -407,40 +420,16 @@ export class World implements Ground {
     return true;
   }
 
-  /**
-   * Local steering, no navmesh: look a stride ahead, and if something's
-   * there, turn towards the side it would push you, then the other, a little
-   * more each time.
-   */
+  /** Local steering, no navmesh: see `steerRound`. */
   steer(from: Vector3, dir: Vector3, radius: number): void {
-    const { lookAhead, turns } = CONFIG.world.ground;
-    const look = lookAhead + radius;
-    const ax = from.x + dir.x * look;
-    const az = from.z + dir.z * look;
-    _probe.set(ax, 0, az);
-    if (!this.resolve(_probe, radius)) return;
-    // Turning by +a swings dir towards (dir.z, -dir.x): start on the side the probe was pushed to.
-    const pushX = _probe.x - ax;
-    const pushZ = _probe.z - az;
-    const first = dir.z * pushX - dir.x * pushZ >= 0 ? 1 : -1;
-    const x0 = dir.x;
-    const z0 = dir.z;
-    for (const a of turns) {
-      for (const side of [first, -first]) {
-        const c = Math.cos(a * side);
-        const s = Math.sin(a * side);
-        const x = x0 * c + z0 * s;
-        const z = -x0 * s + z0 * c;
-        if (!this.blocked(from.x + x * look, from.z + z * look, radius)) {
-          dir.set(x, 0, z);
-          return;
-        }
-      }
-    }
+    steerRound(this.resolveFn, from, dir, radius);
   }
 
   /** The ground catches arrows, and so do trunks and walls up to about their height. */
   arrowStops(p: Vector3): boolean {
+    // In the mine its rock stops them: floor, walls and ceiling.
+    const underground = this.mineFloor(p.x, p.z) !== null ? this.underground!.mine.arrowStops(p) : null;
+    if (underground !== null) return underground;
     const { propHeight, arrowWidth } = CONFIG.world.ground;
     const floor = this.heightAt(p.x, p.z);
     if (p.y <= floor + arrowWidth) return true;
