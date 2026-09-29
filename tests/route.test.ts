@@ -41,6 +41,7 @@ describe('reading the page from its URL', () => {
   it('opens the tools as before, ahead of any game', () => {
     expect(readPage('?inspect').route).toEqual({ kind: 'inspect' });
     expect(readPage('?inspect&arena').route).toEqual({ kind: 'inspect' });
+    expect(readPage('?blender').route).toEqual({ kind: 'blender' });
     expect(readPage('?fly').route).toEqual({ kind: 'fly', map: '' });
     expect(readPage('?fly=crypt').route).toEqual({ kind: 'fly', map: 'crypt' });
     expect(readPage('?fly&map=forest').route).toEqual({ kind: 'fly', map: '' });

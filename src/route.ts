@@ -7,6 +7,8 @@ import { CONFIG } from './config';
 export type Route =
   /** `?inspect`: the model inspector. */
   | { kind: 'inspect' }
+  /** `?blender`: the Blender models beside today's (tools/blender/). */
+  | { kind: 'blender' }
   /** `?fly` (every map) or `?fly=<id>`: the map viewer. */
   | { kind: 'fly'; map: string }
   /** `?map=<id>`: walk a map with no enemies and no save. */
@@ -46,6 +48,7 @@ export function readPage(search: string): Page {
 
 function chooseRoute(params: URLSearchParams): Route {
   if (params.has('inspect')) return { kind: 'inspect' };
+  if (params.has('blender')) return { kind: 'blender' };
   if (params.has('fly')) return { kind: 'fly', map: params.get('fly') ?? '' };
   if (params.has('map')) return { kind: 'walk', map: params.get('map') || 'forest' };
   if (ARENA_FLAGS.some((f) => params.has(f))) {

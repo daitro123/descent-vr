@@ -210,7 +210,7 @@ export class ModelBuilder {
  * Planar UVs from each triangle's dominant axis, at a fixed texel density.
  * Keeps the grain texture's pixels the same size on a skull and on a wall.
  */
-function boxProjectUVs(g: BufferGeometry): void {
+export function boxProjectUVs(g: BufferGeometry): void {
   const pos = g.getAttribute('position');
   const uv = new Float32Array(pos.count * 2);
   const scale = TEXELS_PER_METRE / GRAIN_SIZE;

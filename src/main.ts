@@ -64,6 +64,8 @@ async function start(): Promise<void> {
   switch (r.kind) {
     case 'inspect':
       return startInspector(renderer, scene, camera);
+    case 'blender':
+      return startBlenderCompare(renderer, scene, camera);
     case 'fly':
       return startMapViewer(renderer, scene, camera, device, r.map);
     case 'walk':
@@ -235,6 +237,26 @@ async function startInspector(renderer: WebGLRenderer, scene: Scene, camera: Per
     timer.update(time);
     if (renderer.xr.isPresenting) renderer.xr.updateCamera(camera);
     inspector.update(timer.getDelta());
+    renderer.render(scene, camera);
+  });
+}
+
+async function startBlenderCompare(renderer: WebGLRenderer, scene: Scene, camera: PerspectiveCamera): Promise<void> {
+  const { BlenderCompare } = await import('./blender/compare');
+  const compare = new BlenderCompare(renderer);
+  scene.add(compare.root);
+  scene.fog = null;
+  scene.background = new Color(0x8aa2bc);
+  document.getElementById('intro')?.style.setProperty('display', 'none');
+  camera.position.set(0, 1.55, 0.6);
+  camera.lookAt(0, 1.3, -2.6);
+  Object.assign(window, { __descent: { compare, renderer, camera } });
+
+  const timer = new Timer();
+  renderer.setAnimationLoop((time) => {
+    timer.update(time);
+    if (renderer.xr.isPresenting) renderer.xr.updateCamera(camera);
+    compare.update(timer.getDelta());
     renderer.render(scene, camera);
   });
 }
