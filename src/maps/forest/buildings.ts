@@ -2,7 +2,7 @@ import { type BufferGeometry, IcosahedronGeometry } from 'three';
 import { ModelBuilder, type PartOpts, type Vec3 } from '../../models/kit';
 import { PAL } from '../../models/palette';
 import type { Deck, Field, ForestLayout, Structure } from './layout';
-import { localToWorld, standingStones } from './layout';
+import { localToWorld, standingStones, TENT } from './layout';
 import { mulberry32 } from './noise';
 import { stump } from './nature';
 import { BUILD, CROP, EARTH, GREEN, WATER } from './palette';
@@ -41,7 +41,7 @@ export function buildStructure(s: Structure, ctx: StructureContext): BufferGeome
     case 'trough': trough(b); break;
     case 'tower': tower(b, ctx); break;
     case 'mine': mine(b, ctx, rand); break;
-    case 'tent': tent(b); break;
+    case 'tent': tent(b, ctx); break;
     case 'campfire': campfire(b, ctx, rand); break;
     case 'logpile': logpile(b); break;
     case 'stones': stones(b, s, rand); break;
@@ -604,15 +604,48 @@ function mine(b: ModelBuilder, ctx: StructureContext, rand: () => number): void 
     .box(0.5, 0.1, 0.02, { at: [2.63, 1.45, front + 1.9], rot: [0, -0.2, -0.7], color: PAL.cloth, jitter: 0 });
 }
 
-function tent(b: ModelBuilder): void {
-  b.taper(3.0, 3.6, 0.08, 3.6, 2.1, { at: [0, 0, 0], color: BUILD.canvas, jitter: 0.06 })
-    .taper(1.5, 0.04, 0.05, 0.04, 1.5, { at: [0, 0, 1.81], color: 0x2a2420, jitter: 0 });
-  for (const z of [-1.85, 1.85]) b.box(0.08, 2.3, 0.08, { at: [0, 1.15, z], color: PAL.wood });
-  for (const [x, z] of [[-2.0, 2.3], [2.0, 2.3], [-2.0, -2.3], [2.0, -2.3]] as const) {
-    b.bar([0, 2.2, Math.sign(z) * 1.85], [x, 0.05, z], 0.02, 0.02, { color: BUILD.canvas });
+/**
+ * The lumber camp leader's ridge tent (layout's TENT): canvas down to the
+ * ground either side, its door flaps rolled back on two crates stacked just
+ * inside, where the leader keeps their orders, and behind them a bedroll and
+ * a lantern on the ridge pole. The canvas is slabs, so its inside shows
+ * through the door.
+ */
+function tent(b: ModelBuilder, ctx: StructureContext): void {
+  const { hw, hd, ridge, crates } = TENT;
+  const slope = Math.atan2(ridge, hw);
+  const len = Math.hypot(hw, ridge);
+  const canvas: PartOpts = { color: BUILD.canvas, jitter: 0.06 };
+  for (const side of [-1, 1]) {
+    b.box(len, 0.05, 2 * hd + 0.2, { ...canvas, at: [(side * hw) / 2, ridge / 2, 0.05], rot: [0, 0, -side * slope] });
+    // The door's flaps, rolled up along the front edges and tied.
+    b.bar([side * hw * 0.96, 0.08, hd + 0.12], [side * 0.14, ridge - 0.18, hd + 0.12], 0.13, 0.13, canvas);
+    b.box(0.03, 0.18, 0.18, { at: [side * hw * 0.5, ridge * 0.5, hd + 0.12], rot: [0, 0, -side * slope], color: PAL.woodDark, jitter: 0 });
+  }
+  b.taper(2 * hw, 0.05, 0.04, 0.05, ridge, { ...canvas, at: [0, 0, -hd] });
+  // The ridge pole, and the pole at the back.
+  b.box(0.08, 0.08, 2 * hd + 0.4, { at: [0, ridge - 0.02, 0.1], color: PAL.wood });
+  b.box(0.08, ridge, 0.08, { at: [0, ridge / 2, -hd + 0.06], color: PAL.wood });
+  // Guy ropes and pegs.
+  for (const [x, z] of [[-2.2, 2.7], [2.2, 2.7], [-2.2, -2.7], [2.2, -2.7]] as const) {
+    b.bar([0, ridge - 0.05, Math.sign(z) * (hd + 0.2)], [x, 0.05, z], 0.02, 0.02, { color: BUILD.canvas });
     b.box(0.06, 0.2, 0.06, { at: [x, 0.08, z], color: PAL.woodDark });
   }
-  b.box(0.8, 0.12, 1.8, { at: [-0.5, 0.06, -0.3], color: PAL.cloth });
+  for (const side of [-1, 1]) for (const z of [-hd + 0.3, 0, hd - 0.3]) b.box(0.06, 0.16, 0.06, { at: [side * (hw + 0.1), 0.06, z], color: PAL.woodDark });
+  // A lantern hanging from the ridge pole over the crates.
+  const lantern = 0.9;
+  b.bar([0, ridge - 0.05, lantern], [0, ridge - 0.35, lantern], 0.02, 0.02, { color: PAL.ironDark })
+    .box(0.16, 0.22, 0.16, { at: [0, ridge - 0.46, lantern], color: PAL.ironDark })
+    .box(0.1, 0.14, 0.1, { at: [0, ridge - 0.46, lantern], color: 0xffc060, glow: 1, jitter: 0 });
+  ctx.glow([0, ridge - 0.46, lantern], 0.8, 0xffb050);
+  // A bedroll under the canvas at the back, a blanket rolled at its head.
+  b.box(0.7, 0.1, 1.9, { at: [-0.6, 0.05, -0.6], color: PAL.cloth })
+    .cyl(0.12, 0.12, 0.7, 7, { at: [-0.6, 0.16, -1.45], rot: [0, 0, PI / 2], color: PAL.clothDark });
+  // The crates in the doorway: the orders lie on the top one (layout's TENT.orders).
+  const low = 2 * crates.half;
+  const high = crates.top - low;
+  crate(b, 0, crates.z, low, 0);
+  crate(b, 0, crates.z + crates.half - high / 2, high, 0.12, low);
 }
 
 function campfire(b: ModelBuilder, ctx: StructureContext, rand: () => number): void {

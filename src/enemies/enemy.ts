@@ -74,6 +74,8 @@ export interface EnemyPost {
 }
 
 const RISE_DEPTH = 1.9;
+/** Seconds of walking that get nowhere before an enemy detours sideways. */
+const STUCK_TIME = 0.8;
 const UP = new Vector3(0, 1, 0);
 const _to = new Vector3();
 const _v = new Vector3();
@@ -211,6 +213,10 @@ export abstract class Enemy {
   private lastSwing: number | undefined;
   private glint = 0; // weapon flash after a block
   private stuckFor = 0;
+  /** Seconds of walking one way (`walkedWay`) since `walkedFrom`: to tell steering that gets nowhere. */
+  private walkedFor = 0;
+  private readonly walkedFrom = new Vector3();
+  private readonly walkedWay = new Vector3();
   private detour = 0;
   private readonly detourDir = new Vector3();
   private shards: Shard[] | null = null;
@@ -796,7 +802,20 @@ export abstract class Enemy {
     // trying to walk but barely move, detour sideways for a second.
     const moved = _a.distanceTo(this.position);
     this.stuckFor = moved < speed * dt * 0.3 ? this.stuckFor + dt : Math.max(0, this.stuckFor - dt);
-    if (this.stuckFor > 0.8 && this.detour <= 0) {
+    // Steering can also flip-flop against a wall met square on, with the way
+    // on straight through it: moving every frame, getting nowhere, while it
+    // means to go one way (unlike circling, whose drift turns about).
+    if (this.walkedFor === 0 || dir.dot(this.walkedWay) < 0.9) {
+      this.walkedFor = 0;
+      this.walkedFrom.copy(_a);
+      this.walkedWay.copy(dir);
+    }
+    this.walkedFor += dt;
+    if (this.walkedFor >= STUCK_TIME) {
+      if (this.walkedFrom.distanceTo(this.position) < speed * STUCK_TIME * 0.3) this.stuckFor = STUCK_TIME + dt;
+      this.walkedFor = 0;
+    }
+    if (this.stuckFor > STUCK_TIME && this.detour <= 0) {
       this.stuckFor = 0;
       this.detour = 1;
       const side = Math.random() < 0.5 ? 1 : -1;

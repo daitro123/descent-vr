@@ -19,6 +19,7 @@ import { Fade } from './ui/fade';
 import { QuestTracker } from './ui/questTracker';
 import { type Probe, TalkBoard } from './ui/talkBoard';
 import { Orbs } from './world/orbs';
+import { Pickups } from './world/pickups';
 import { BlobShadows } from './world/shadows';
 import { World } from './world/world';
 
@@ -50,7 +51,8 @@ const UNLOCKED: Record<Ability, string> = {
  * Marshal Hale stands at the crossroads with the quest chain: walk up and
  * their board unfolds, and the tracker shows the quest you're on. Kills and
  * the board's buttons go into the adventure state, whose levels set your
- * health, damage and abilities. Out of a fight your health comes back; a
+ * health, damage and abilities. What a quest has you find (the leader's
+ * orders) lies where it's found while the state says so, taken with a touch. Out of a fight your health comes back; a
  * death fades to black and wakes you in the village. It saves itself as you
  * go, and loads where you stood with your level, XP, sword and quests, at full
  * health with every camp full (.scratch/oakvale-starting-zone/).
@@ -70,6 +72,8 @@ export class Adventure {
   readonly board = new TalkBoard();
   /** The quest you're on, top left of your view. */
   readonly tracker = new QuestTracker();
+  /** What lies about for a quest, to pick up by hand: the leader's orders. */
+  readonly pickups: Pickups;
   private readonly hud: BeltHud;
   private readonly trail: SwordTrail;
   private readonly text: FloatingText;
@@ -152,6 +156,9 @@ export class Adventure {
     );
     scene.add(this.camps.root);
 
+    this.pickups = new Pickups(zone.pickups);
+    scene.add(this.pickups.root);
+
     this.hale = new Hale(zone.hale, this.world, this.state.hale.marker);
     this.world.addBody(this.hale.body);
     scene.add(this.hale.root, this.board.root, this.tracker.mesh);
@@ -203,6 +210,7 @@ export class Adventure {
     }
     this.orbs.update(dt, player);
     this.talk(dt);
+    this.pickUp();
     this.updateHandIn(dt);
     this.tracker.update(dt, player.camera, this.state.tracker);
     this.text.update(dt);
@@ -260,6 +268,17 @@ export class Adventure {
       case 'goodbye':
         this.board.fold();
     }
+  }
+
+  /** A fist touches what lies there for your quest: it's yours, with a buzz in that hand. */
+  private pickUp(): void {
+    const [left, right] = this.touching();
+    const taken = this.pickups.update((item) => this.state.lies(item), left, right);
+    if (!taken) return;
+    const { intensity, ms } = CONFIG.pickups.buzz;
+    this.player.input.pulse(taken.hand, intensity, ms);
+    sfx.parchment(taken.at);
+    this.apply({ kind: 'pickup', item: taken.item }, taken.at);
   }
 
   /** Where each fist and the sword's tip are, while tracked and you're standing. */

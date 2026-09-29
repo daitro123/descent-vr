@@ -497,6 +497,12 @@ export const CONFIG = {
     perBash: 8,
   },
 
+  // Quest items lying in the world, picked up by hand (world/pickups.ts): the leader's orders.
+  pickups: {
+    reach: 0.25, // m from a fist to the item: a touch, as for an orb
+    buzz: { intensity: 0.8, ms: 70 }, // in the hand that took it
+  },
+
   orb: {
     heal: 0.25, // of your maximum health
     pickupRadius: 0.25, // hand touch

@@ -151,6 +151,7 @@ describe.each([
   ['bandit thug with a sword', () => new TestGrunt('grunt', 0, 0, { family: 'bandit' })],
   ['bandit thug with a hatchet', () => new TestGrunt('grunt', 0, 0, { family: 'bandit', variant: 1 })],
   ['brute', () => new TestBrute('brute', 0, 0)],
+  ['bandit leader', () => new TestBrute('brute', 0, 0, { family: 'bandit' })],
   ['warden', () => new TestWarden('warden', 0, 0)],
 ] as const)('%s melee', (_name, make) => {
   const probe = make();
@@ -239,6 +240,32 @@ describe('slams and shots', () => {
     expect(r.shots).toHaveLength(1);
     expect(r.shots[0].y).toBeGreaterThan(1.2);
     expect(r.shots[0].y).toBeLessThan(1.8);
+  });
+});
+
+// The brute's reach (its attack range and body radius) was set for the undead
+// brute's bigger body; the bandit leader fights with the same behaviour on the
+// human body's big build, swinging a felling axe.
+describe("the bandit leader's reach", () => {
+  const make = () => new TestBrute('brute', 0, 0, { family: 'bandit' });
+  const probe = make();
+  /** As close as you can get: its body against yours. */
+  const touching = probe.def.radius + CONFIG.player.bodyRadius;
+
+  it.each([touching, 1.2, probe.def.attackRange - 0.05])('its slash lands on a player %s m off', (dist) => {
+    for (const headY of [1.4, 1.6, 1.8]) {
+      const r = run(make(), attack(probe, 'slashR'), player(dist, headY), dist, headY);
+      expect(r.contacts[0], `head at ${headY} m`).toBe('body');
+    }
+  });
+
+  // The brute slams at anyone up to 2.3 m off (kinds.ts).
+  it.each([touching, 1.2, probe.def.attackRange, 2.3])('its slam catches a player %s m off', (dist) => {
+    const slam = attack(probe, 'slam');
+    const r = run(make(), slam, player(dist, 1.6), dist);
+    expect(r.slams).toHaveLength(1);
+    expect(r.slams[0].y).toBe(0);
+    expect(r.slams[0].distanceTo(new Vector3(0, 0, dist))).toBeLessThan(slam.radius!);
   });
 });
 

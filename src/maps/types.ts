@@ -1,5 +1,6 @@
 import type { Camera, Object3D, Vector3 } from 'three';
 import type { Role } from '../adventureState';
+import type { Item } from '../quests';
 import type { EnemyKind, Family } from '../models/characters';
 import type { Atmosphere } from '../world/atmosphere';
 
@@ -61,6 +62,17 @@ export interface CampPlan {
   readonly posts: readonly PostPlan[];
 }
 
+/** Something lying in a zone to pick up by hand (the leader's orders), and where. */
+export interface Pickup {
+  readonly item: Item;
+  readonly x: number;
+  /** The height of what it lies on. */
+  readonly y: number;
+  readonly z: number;
+  /** As a model turns about +Y: which way it lies. */
+  readonly yaw: number;
+}
+
 /** An outdoor region of the world, loaded into the World. */
 export interface Zone extends MapBase {
   readonly kind: 'zone';
@@ -74,6 +86,8 @@ export interface Zone extends MapBase {
   readonly respawns: { readonly village: Spot };
   /** Where Marshal Hale, the quest giver, stands (yaw as a model turns: 0 faces +Z). */
   readonly hale: Spot;
+  /** What lies about to be picked up by hand, shown while the adventure state says it lies there. */
+  readonly pickups: readonly Pickup[];
 }
 
 /** A map built whole, lights and all: the crypt hall. */

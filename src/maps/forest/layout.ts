@@ -1,4 +1,4 @@
-import type { CampId, CampPlan, PostPlan, Spot } from '../types';
+import type { CampId, CampPlan, Pickup, PostPlan, Spot } from '../types';
 import { Colliders } from './colliders';
 import { fbm, lerp, mulberry32, nearestOnPolyline, type P2, sampleCurve, smoothstep, valueNoise } from './noise';
 
@@ -61,6 +61,13 @@ const START: P2 = [0.2, 1.5];
  * (and clear of the hay bales, which trap anyone walking home through them),
  * and one by the windmill at the wheat field's corner. Each pair is within a
  * pull of itself and out of the other's, so you can take them a pair at a time.
+ *
+ * The lumber camp's gang is spread round its clearing much as round two of
+ * the `?camp` prototype placed them (merge 1135338): a thug where the camp
+ * road comes in, one at the fire, one on the log pile's dry side (the
+ * prototype's stood on the stream bank), the archer to the north watching the
+ * woods (the stream bank takes the south), and the leader before their tent's
+ * door. A pull brings two to four of them rather than the lot.
  */
 const CAMPS: {
   id: CampId;
@@ -79,7 +86,36 @@ const CAMPS: {
       { behaviour: 'grunt', family: 'bandit', x: 72, z: 45.5, face: [58, 48] },
     ],
   },
+  {
+    id: 'lumberCamp',
+    clearing: 'camp',
+    level: 2,
+    posts: [
+      { behaviour: 'grunt', family: 'bandit', x: -38.5, z: -43, face: [-30, -45.5] },
+      { behaviour: 'grunt', family: 'bandit', x: -47.5, z: -39.3, face: [-48, -41] },
+      { behaviour: 'grunt', family: 'bandit', x: -54.5, z: -40.5, face: [-55, -38] },
+      { behaviour: 'archer', family: 'bandit', x: -46, z: -49.5, face: [-38, -53] },
+      { behaviour: 'brute', role: 'leader', family: 'bandit', x: -50, z: -44.3, face: [-44, -41] },
+    ],
+  },
 ];
+
+/**
+ * The lumber camp leader's tent, in its own frame (its door faces +Z): a
+ * ridge tent, solid for everyone, its door flaps rolled back on two crates
+ * stacked just inside, with the leader's orders on top. You reach in from
+ * the doorway; you can't walk in (a tent you could would trap anyone chasing
+ * you inside it).
+ */
+export const TENT = {
+  hw: 1.7,
+  hd: 1.85,
+  ridge: 2.5,
+  /** The crates just inside the door, their front on its line: the stack's centre, its half width and depth, and the height of its top. */
+  crates: { z: 1.55, half: 0.3, top: 1.0 },
+  /** Where the orders lie on the top crate, near its front edge: a hand's reach from the doorway. */
+  orders: { x: 0, z: 1.75 },
+} as const;
 
 /**
  * Where you wake after dying outside the mine: in front of the inn's door,
@@ -161,7 +197,7 @@ const STRUCTURES: Spec[] = [
   { kind: 'scarecrow', x: 58, z: 47, yaw: facing(58, 47, 56, 36), hw: 0.3, hd: 0.3 },
   // Watchtower on its hill, lumber camp, the old mine, the standing stones.
   { kind: 'tower', x: 40, z: -58, yaw: facing(40, -58, 34, -58), hw: 3.4, hd: 3.4 },
-  { kind: 'tent', x: -51.5, z: -46, yaw: facing(-51.5, -46, -48, -41), hw: 1.7, hd: 1.9 },
+  { kind: 'tent', x: -51.95, z: -46.6, yaw: facing(-51.95, -46.6, -48, -41), hw: TENT.hw, hd: TENT.hd },
   { kind: 'campfire', x: -48, z: -41, yaw: 0, hw: 0.6, hd: 0.6 },
   { kind: 'logpile', x: -55, z: -38, yaw: 0.35, hw: 2.1, hd: 1 },
   { kind: 'mine', x: -14, z: -80.5, yaw: 0, hw: 4.5, hd: 2.5 },
@@ -329,6 +365,8 @@ export interface ForestLayout {
   /** Where Marshal Hale stands, facing the crossroads' centre (yaw as a model turns: 0 faces +Z). */
   hale: Spot;
   camps: CampPlan[];
+  /** What lies about to be picked up by hand: the leader's orders in their tent. */
+  pickups: Pickup[];
   landmarks: { label: string; x: number; z: number }[];
   /** Ground height, including the bridge and dock decks. */
   heightAt(x: number, z: number): number;
@@ -512,6 +550,9 @@ export function buildLayout(): ForestLayout {
       posts: c.posts.map(({ face, ...p }) => ({ ...p, yaw: facing(p.x, p.z, face[0], face[1]) })),
     };
   });
+  const tent = at('tent');
+  const [ox, oz] = localToWorld(tent, TENT.orders.x, TENT.orders.z);
+  const pickups: Pickup[] = [{ item: 'orders', x: ox, y: tent.y + TENT.crates.top, z: oz, yaw: tent.yaw }];
   const landmarks = [
     { label: 'Southern road', x: south[0], z: south[1] },
     { label: 'Inn', x: at('inn').x, z: at('inn').z },
@@ -541,6 +582,7 @@ export function buildLayout(): ForestLayout {
     respawns,
     hale,
     camps,
+    pickups,
     landmarks,
     heightAt,
   };

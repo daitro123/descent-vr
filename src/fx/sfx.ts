@@ -200,6 +200,12 @@ export const sfx = {
   pickup() {
     tone(500, 1000, 0.15, 'sine', 0.2);
   },
+  /** A quest item taken by hand: a crisp rustle of parchment and a soft chime. */
+  parchment(at?: Vector3) {
+    noise(0.09, 0.35, 3200, at, 'bandpass', 0, 1.5);
+    noise(0.12, 0.25, 2400, at, 'bandpass', 0.07, 1.5);
+    tone(880, 880, 0.35, 'sine', 0.08, undefined, 0.05);
+  },
   wave() {
     tone(110, 110, 0.8, 'triangle', 0.2);
     tone(165, 165, 0.8, 'triangle', 0.1, undefined, 0.15);
