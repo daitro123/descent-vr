@@ -390,6 +390,19 @@ describe('walking into the inn and out again', () => {
     expect(w.pool.every((l) => l.intensity === 0)).toBe(true);
   });
 
+  it("gives the sound's mix the switch's door and light as its cues: open at the door, up once it's shut behind you", () => {
+    const { w, walk, hold, inn } = walkable();
+    const cue = () => w.cues.rooms.find((r) => r.id === 'inn')!;
+    expect(w.cues.rooms.map((r) => r.id)).toEqual(oakvale.interiors.map((i) => i.id));
+    walk(inn.hd + 8, inn.hd + 1);
+    hold(1);
+    expect([cue().door, cue().light]).toEqual([1, 0]);
+    walk(inn.hd + 1, inn.hd - 3);
+    hold(1);
+    expect([cue().door, cue().light]).toEqual([0, 1]);
+    expect([w.cues.mine, w.cues.crypt]).toEqual([0, -Infinity]);
+  });
+
   it('settles inside at once, door shut and the room lit, for a save or a wake by the hearth', () => {
     const { w, eye, stand, room } = walkable();
     const { village } = oakvale.respawns;
@@ -998,6 +1011,40 @@ describe('the old mine', () => {
     for (const m of dead.members) expect(Math.hypot(m.enemy.position.x - m.post.x, m.enemy.position.z - m.post.z)).toBeLessThan(CONFIG.camps.home);
     // None ever set foot past the mouth's timbers.
     expect(furthest).toBeLessThan(1);
+  });
+
+  it("gives the sound's mix the mine's light and how far past the breach into the crypt you are", () => {
+    const { w, walk, stand } = walkable();
+    // Walking in from out in front, down the route to the hall's gate.
+    stand(0, 4);
+    const seen: { lx: number; lz: number; mine: number; crypt: number }[] = [];
+    walk([[0, 4], ...route()], CONFIG.player.moveSpeed, (lx, lz) => seen.push({ lx, lz, mine: w.cues.mine, crypt: w.cues.crypt }));
+    // Out in front of the mouth, out of the mine; in the adit, in it but in the outdoors' light.
+    expect(seen.filter((s) => s.lz > 0).every((s) => s.crypt === -Infinity && s.mine === 0)).toBe(true);
+    expect(seen.filter((s) => s.lz < -2 && s.lz > -9 && s.lx === 0).every((s) => s.mine === 0 && s.crypt < -50)).toBe(true);
+    // Deep in, the mine's light is up; the crypt's measure runs on, 0 at the breach (the route's point on the dig's side of it).
+    const breach = MINE.route[MINE.breach];
+    const at = seen.reduce((a, b) => (Math.hypot(b.lx - breach[0], b.lz - breach[1]) < Math.hypot(a.lx - breach[0], a.lz - breach[1]) ? b : a));
+    expect(at.mine).toBe(1);
+    expect(Math.abs(at.crypt)).toBeLessThan(0.2);
+    // In the dig it's short of the breach; down the carved passage past it; and it only grows along the way.
+    const last = seen[seen.length - 1];
+    expect(last.crypt).toBeGreaterThan(20);
+    for (let i = 1; i < seen.length; i++) if (seen[i].crypt > -Infinity && seen[i - 1].crypt > -Infinity) expect(seen[i].crypt).toBeGreaterThanOrEqual(seen[i - 1].crypt - 1e-9);
+  });
+
+  it("never puts you past the breach anywhere short of it: by the dig's east wall, the carved passage is through the rock", () => {
+    const { w, eye, walk, stand } = walkable();
+    stand(0, 4);
+    walk([[0, 4], ...route().slice(0, MINE.breach)], 6);
+    const breach = MINE.route[MINE.breach];
+    for (const { lx, lz } of spots(0.5)) {
+      const piece = hollow.pieceAt(lx, lz) as (typeof MINE.pieces)[number];
+      if (piece.finish === 'dressed' || piece.finish === 'hall') continue;
+      stand(lx, lz);
+      w.update(1 / 72, eye);
+      expect(w.cues.crypt, `at (${lx}, ${lz})`).toBeLessThanOrEqual(-Math.hypot(lx - breach[0], lz - breach[1]) + 1e-9);
+    }
   });
 
   it('settles in at once for a save made inside it, in the light of where you stood', () => {

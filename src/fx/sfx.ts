@@ -274,6 +274,18 @@ export const sfx = {
     }
     noise(dur, 0.12, 600, at, 'bandpass', 0, 4);
   },
+  /** A timber prop in the mine taking the rock's weight: a short, dry creak, higher and quicker than the windmill's. */
+  timber(at?: Where) {
+    const f = 150 + Math.random() * 110;
+    const dur = 0.25 + Math.random() * 0.35;
+    const steps = 4 + Math.floor(Math.random() * 5);
+    // A few rubs, each a little lower, as the prop settles.
+    for (let i = 0; i < steps; i++) {
+      const t = (i / steps) * dur;
+      tone(f * (1 - i * 0.025), f * (1 - i * 0.025) * 0.96, dur / steps + 0.02, 'sawtooth', 0.045, at, t);
+    }
+    noise(dur, 0.08, 900, at, 'bandpass', 0, 5);
+  },
   /** A drop of water into a puddle. */
   drip(at?: Where) {
     const f = 1300 + Math.random() * 900;

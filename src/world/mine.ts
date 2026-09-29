@@ -21,6 +21,8 @@ export interface MineStanding {
   readonly inMouth: boolean;
   /** How far on past the adit's bend along the route: negative before it. */
   readonly past: number;
+  /** How far on past the breach into the crypt along the route: negative short of it. */
+  readonly crypt: number;
   /** How far from the mouth's middle. */
   readonly fromMouth: number;
 }

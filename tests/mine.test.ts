@@ -16,7 +16,7 @@ const { inside, back, fadeIn, fadeOut, near } = CONFIG.mine;
  * out in front), with the bend `bend` m in. In the mouth's opening unless `off`.
  */
 function at(s: number, bend = 10, off = false): MineStanding {
-  return { ahead: s, inMouth: !off, past: Math.max(s, 0) - bend, fromMouth: Math.abs(s) };
+  return { ahead: s, inMouth: !off, past: Math.max(s, 0) - bend, crypt: -Infinity, fromMouth: Math.abs(s) };
 }
 
 function walk(sw: MineSwitch, from: number, to: number, speed: number = CONFIG.player.moveSpeed, each?: (s: number) => void): void {
