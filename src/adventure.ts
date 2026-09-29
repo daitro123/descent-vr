@@ -5,6 +5,7 @@ import { CONFIG } from './config';
 import { type Camp, type CampHooks, Camps, type Member, type You } from './enemies/camps';
 import type { Enemy } from './enemies/enemy';
 import { Throne } from './enemies/throne';
+import { Ambience } from './fx/ambience';
 import { FloatingText } from './fx/floatingText';
 import { Particles } from './fx/particles';
 import { sfx, updateListener } from './fx/sfx';
@@ -59,7 +60,8 @@ const UNLOCKED: Record<Ability, string> = {
  * `update(dt)` per XR frame, as the arena's `Game` does for the waves.
  * Marshal Hale stands at the crossroads with the quest chain: walk up and
  * their board unfolds, and the tracker shows the quest you're on. The
- * innkeeper, the smith and the farmer are at work, and bark as you pass. Kills and
+ * innkeeper, the smith and the farmer are at work, and bark as you pass; the
+ * wind blows, birds call from the trees and each place sounds where it is. Kills and
  * the board's buttons go into the adventure state, whose levels set your
  * health, damage and abilities. What a quest has you find (the leader's
  * orders) lies where it's found while the state says so, taken with a touch.
@@ -86,6 +88,8 @@ export class Adventure {
   readonly hale: Hale;
   /** The innkeeper, the smith and the farmer, at work. */
   readonly villagers: Villagers;
+  /** The wind, the birds in the trees and each place's sound where it is. */
+  readonly ambience: Ambience;
   /** Hale's board, which unfolds as you walk up to them. */
   readonly board = new TalkBoard();
   /** The quest you're on, top left of your view. */
@@ -209,6 +213,9 @@ export class Adventure {
     for (const v of this.villagers.all) this.world.addBody(v.body);
     scene.add(this.villagers.root);
     this.villagers.warm(renderer, camera, scene);
+    // The smith's hammer rings on the anvil with each blow of their work.
+    this.ambience = new Ambience(zone.sounds, zone.trees);
+    this.villagers.onStrike = () => this.ambience.strike('anvil');
 
     // A new character at the zone's start, facing Hale; or where the save stood,
     // facing the same way, at full health and with no rage. A save made inside
@@ -243,6 +250,7 @@ export class Adventure {
     this.hitStop = Math.max(0, this.hitStop - dt);
     player.feetPosition(you.feet);
     player.headPosition(you.head);
+    this.ambience.update(dt, you.head);
     you.alive = player.alive;
     you.interior = this.world.interior;
     const { sword, rig } = player;
