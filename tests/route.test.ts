@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
-import { readPage } from '../src/route';
+import { forgetNewGame, readPage } from '../src/route';
 
 describe('reading the page from its URL', () => {
   it('starts the Adventure at the plain URL, and for any flag it does not know', () => {
@@ -47,6 +47,13 @@ describe('reading the page from its URL', () => {
     expect(readPage('?map=crypt').route).toEqual({ kind: 'walk', map: 'crypt' });
     expect(readPage('?map').route).toEqual({ kind: 'walk', map: 'forest' });
     expect(readPage('?map=forest&arena').route).toEqual({ kind: 'walk', map: 'forest' });
+  });
+
+  it('forgets ?newgame once answered, keeping every other flag as it was written', () => {
+    expect(forgetNewGame('?newgame')).toBe('');
+    expect(forgetNewGame('?newgame&emulate&nodevui')).toBe('?emulate&nodevui');
+    expect(forgetNewGame('?perf&newgame=1')).toBe('?perf');
+    expect(forgetNewGame('')).toBe('');
   });
 
   it('reads ?perf over whichever game runs', () => {

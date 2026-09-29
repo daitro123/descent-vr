@@ -37,8 +37,6 @@ function askToPersist(): void {
 }
 
 class IndexedDbStore implements SaveStore {
-  readonly lasting = true;
-
   constructor(private readonly db: IDBDatabase) {}
 
   read(): Promise<unknown> {

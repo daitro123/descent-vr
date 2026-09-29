@@ -26,7 +26,8 @@
 //    flag leaves the address either way.
 // 7. The arena and `?map=forest` never read or write the save.
 // 8. Where IndexedDB won't open, the game plays and the page says progress
-//    won't be kept. A newer build's record is left alone, and the page says so.
+//    won't be kept. A newer build's record, and one this build can't read,
+//    are left alone, and the page says so; `?newgame` asks, then deletes it.
 //
 // Playwright is the global install; Chromium is the pre-installed one.
 
@@ -85,6 +86,20 @@ const record = () =>
       };
     });
   });
+/** Put `r` where the game keeps its record, as another build would. */
+const put = (r) =>
+  page.evaluate(
+    (r) =>
+      new Promise((done) => {
+        const open = indexedDB.open('descent-vr');
+        open.onsuccess = () => {
+          const tx = open.result.transaction('save', 'readwrite');
+          tx.objectStore('save').put(r, 'character');
+          tx.oncomplete = () => (open.result.close(), done());
+        };
+      }),
+    r,
+  );
 /** The record once every write in flight has landed. */
 const saved = async () => {
   await page.evaluate(() => window.__descent.saved());
@@ -292,18 +307,7 @@ await open('?emulate&nodevui');
 {
   const newer = { ...(await record()), version: 99 };
   await open('?emulate&nodevui');
-  await page.evaluate(
-    (r) =>
-      new Promise((done) => {
-        const open = indexedDB.open('descent-vr');
-        open.onsuccess = () => {
-          const tx = open.result.transaction('save', 'readwrite');
-          tx.objectStore('save').put(r, 'character');
-          tx.oncomplete = () => (open.result.close(), done());
-        };
-      }),
-    newer,
-  );
+  await put(newer);
   await open('?emulate&nodevui');
   const note = await page.locator('.save-note').innerText();
   const y = await you();
@@ -313,6 +317,26 @@ await open('?emulate&nodevui');
   await board('accept');
   await page.evaluate(() => window.__descent.saved());
   check((await record())?.version === 99, 'and the newer record is left as it was');
+
+  const unreadable = { version: 1, level: 'five' };
+  await put(unreadable);
+  await open('?emulate&nodevui');
+  const said = await page.locator('.save-note').innerText();
+  check(/couldn't be read/.test(said) && (await you()).level === 1, `a record this build can't read: a new character, and the page says "${said}"`);
+  await enterVR();
+  await board('accept');
+  await page.evaluate(() => window.__descent.saved());
+  check(JSON.stringify(await record()) === JSON.stringify(unreadable), 'and that record is left as it was');
+  await page.goto(`${base}/?newgame&emulate&nodevui`);
+  await page.waitForSelector('#new-game[open]', { timeout: 60000 });
+  const asks = (await page.locator('#new-game').innerText()).replace(/\s+/g, ' ').trim();
+  check(/can't read/.test(asks), `?newgame asks: "${asks}"`);
+  await page.click('#new-game button[value=yes]');
+  await page.waitForFunction(() => window.__descent?.adventure, null, { timeout: 120000 });
+  check((await record()) === null && (await page.locator('.save-note').count()) === 0, '"Start over" deletes it, and the note goes');
+  await enterVR();
+  await board('accept');
+  check((await saved())?.quests.raiders.stage === 'active', 'and the new character saves');
 
   const locked = await context.browser().newContext({ viewport: { width: 1200, height: 800 } });
   const other = await locked.newPage();
@@ -324,9 +348,9 @@ await open('?emulate&nodevui');
   other.on('pageerror', (e) => errors.push(e.message));
   await other.goto(`${base}/?emulate&nodevui`);
   await other.waitForFunction(() => window.__descent?.adventure, null, { timeout: 120000 });
-  const said = await other.locator('.save-note').innerText();
+  const offline = await other.locator('.save-note').innerText();
   const level = await other.evaluate(() => window.__descent.state.level);
-  check(/won't be kept/.test(said) && level === 1, `where IndexedDB won't open, the game plays (level ${level}) and the page says "${said}"`);
+  check(/won't be kept/.test(offline) && level === 1, `where IndexedDB won't open, the game plays (level ${level}) and the page says "${offline}"`);
   if (shots) await other.screenshot({ path: `${shots}/05-unsaved-note.png` });
   await locked.close();
 }

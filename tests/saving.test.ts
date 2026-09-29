@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { type AdventureEvent, AdventureState, type Effect, type Progress } from '../src/adventureState';
 import { CONFIG } from '../src/config';
 import { SaveController } from '../src/save/controller';
-import { type Migration, readSave, SAVE_VERSION, type SaveRecord } from '../src/save/record';
+import { type Migration, readSave, SAVE_VERSION, type SaveRecord, saveRecord } from '../src/save/record';
 import { MemoryStore, openSave, type SaveStore } from '../src/save/store';
 
 // Saving, at the save store's port: the record the adventure state snapshots
@@ -44,14 +44,7 @@ const answers = (s: AdventureState) => ({
 const stored = <T>(value: T): T => structuredClone(value);
 
 /** A record for a character with `progress`, standing at the start. */
-const recordOf = (progress: Progress, savedAt = 1): SaveRecord => ({
-  version: SAVE_VERSION,
-  savedAt,
-  ...progress,
-  position: { x: 0.2, z: 1.5 },
-  facing: 0,
-  interior: null,
-});
+const recordOf = (progress: Progress, savedAt = 1): SaveRecord => saveRecord(progress, { x: 0.2, z: 1.5, yaw: 0 }, savedAt);
 
 describe("the adventure state's snapshot", () => {
   it('restores to the same answers at every step of the chain', () => {
@@ -102,6 +95,35 @@ describe("the adventure state's snapshot", () => {
     const restored = new AdventureState({ ...state.snapshot(), xp: 60 });
     expect(restored.level).toBe(2);
     expect(restored.xp).toBe(CONFIG.levels.xp[0]);
+  });
+
+  it("keeps the chain's rules whatever a record says", () => {
+    const restored = new AdventureState({
+      ...new AdventureState().snapshot(),
+      xp: -50,
+      quests: {
+        raiders: { stage: 'active', counts: [2] },
+        lumber: { stage: 'active', counts: [7, 3] },
+        below: { stage: 'ready', counts: [1] },
+      },
+    });
+    expect(restored.xp).toBe(0);
+    expect(restored.tracker).toEqual({ title: 'Raiders in the Fields', lines: ['Bandits defeated at the farm: 2/3'] });
+    restored.apply(FARM);
+    restored.apply(HAND_IN);
+    // The Lumber Camp is offered afresh, as if the record had it locked.
+    expect(restored.hale.marker).toBe('offered');
+    restored.apply(ACCEPT);
+    expect(restored.tracker?.lines).toEqual(['Bandits defeated at the lumber camp: 0/5', "Leader's orders taken: 0/1"]);
+  });
+
+  it('makes a quest ready whose objectives a new build asks less of', () => {
+    const state = new AdventureState();
+    [ACCEPT, FARM, FARM].forEach((e) => state.apply(e));
+    const snapshot = state.snapshot();
+    const restored = new AdventureState({ ...snapshot, quests: { ...snapshot.quests, raiders: { stage: 'active', counts: [5] } } });
+    expect(restored.hale.marker).toBe('ready');
+    expect(restored.apply(HAND_IN)[0]).toEqual({ kind: 'quest', quest: 'raiders', stage: 'handedIn' });
   });
 
   it("offers a quest a new build adds after the ones you've handed in", () => {
@@ -218,52 +240,64 @@ describe('the in-memory store', () => {
 });
 
 describe('opening the save', () => {
-  const lasting = (inside?: unknown): SaveStore => Object.assign(new MemoryStore(inside), { lasting: true });
+  /** The browser's store, holding `inside`. */
+  const browser = (inside?: unknown) => new MemoryStore(inside);
+  const character = () => recordOf(new AdventureState().snapshot());
 
   it('loads the record the browser keeps, and says nothing on the page', async () => {
-    const record = recordOf(new AdventureState().snapshot());
-    const save = await openSave(async () => lasting(record));
-    expect(save.record).toEqual(record);
-    expect(save.store.lasting).toBe(true);
-    expect(save.note).toBeNull();
+    const record = character();
+    const kept = browser(record);
+    const save = await openSave(async () => kept);
+    expect(save).toMatchObject({ store: kept, record, held: true, note: null });
   });
 
-  it('starts a new character where nothing is saved', async () => {
-    const save = await openSave(async () => lasting());
-    expect(save.record).toBeNull();
-    expect(save.note).toBeNull();
+  it('starts a new character where nothing is saved, saving it in the browser', async () => {
+    const kept = browser();
+    const save = await openSave(async () => kept);
+    expect(save).toMatchObject({ store: kept, record: null, held: false, note: null });
   });
 
   it("plays unsaved where the browser won't store data, and says so", async () => {
     const save = await openSave(async () => {
       throw new Error('IndexedDB is not available');
     });
-    expect(save.record).toBeNull();
-    expect(save.store.lasting).toBe(false);
+    expect(save).toMatchObject({ record: null, held: false });
+    expect(save.store).toBeInstanceOf(MemoryStore);
     expect(save.note).toMatch(/won't be kept/);
   });
 
   it("plays unsaved over a newer build's record, leaving it alone, and says so", async () => {
-    const newer = { ...recordOf(new AdventureState().snapshot()), version: SAVE_VERSION + 1 };
-    const browser = lasting(newer);
-    const save = await openSave(async () => browser);
-    expect(save.record).toBeNull();
-    expect(save.store.lasting).toBe(false);
+    const newer = { ...character(), version: SAVE_VERSION + 1 };
+    const kept = browser(newer);
+    const save = await openSave(async () => kept);
+    expect(save).toMatchObject({ record: null, held: true });
     expect(save.note).toMatch(/newer/);
-    await save.store.write(recordOf(new AdventureState().snapshot()));
-    expect(await browser.read()).toEqual(newer);
+    await save.store.write(character());
+    expect(await kept.read()).toEqual(newer);
   });
 
-  it('starts a new character over an unreadable record', async () => {
-    const save = await openSave(async () => lasting({ version: SAVE_VERSION, level: 'five' }));
-    expect(save.record).toBeNull();
-    expect(save.store.lasting).toBe(true);
+  it('plays unsaved over a record it cannot read, leaving it alone, and says so', async () => {
+    const unreadable = { version: SAVE_VERSION, level: 'five' };
+    const kept = browser(unreadable);
+    const save = await openSave(async () => kept);
+    expect(save).toMatchObject({ record: null, held: true });
+    expect(save.note).toMatch(/couldn't be read/);
+    await save.store.write(character());
+    expect(await kept.read()).toEqual(unreadable);
+  });
+
+  it('starts over by deleting what the browser holds, and saves the new character there', async () => {
+    for (const inside of [character(), { ...character(), version: SAVE_VERSION + 1 }, { version: SAVE_VERSION }]) {
+      const kept = browser(inside);
+      const save = await (await openSave(async () => kept)).startOver();
+      expect(save).toMatchObject({ store: kept, record: null, held: false, note: null });
+      expect(await kept.read()).toBeUndefined();
+    }
   });
 });
 
 /** A store whose writes finish only when told to, counting how many are in flight at once. */
 class SlowStore implements SaveStore {
-  readonly lasting = true;
   readonly writes: SaveRecord[] = [];
   private readonly waiting: (() => void)[] = [];
   inFlight = 0;
@@ -320,15 +354,15 @@ describe('the save controller', () => {
   for (const [what, list] of Object.entries(effects)) {
     it(`writes on ${what}`, async () => {
       const { store, controller } = saving();
-      controller.took(list);
+      controller.onEffects(list);
       expect(store.writes).toHaveLength(1);
     });
   }
 
   it("doesn't write for XP alone, or for nothing", () => {
     const { store, controller } = saving();
-    controller.took([{ kind: 'xp', amount: 10 }]);
-    controller.took([]);
+    controller.onEffects([{ kind: 'xp', amount: 10 }]);
+    controller.onEffects([]);
     expect(store.writes).toHaveLength(0);
   });
 
@@ -339,16 +373,16 @@ describe('the save controller', () => {
     // The third bandit: its XP, a count and the quest ready.
     const third = state.apply(FARM);
     expect(third.map((e) => e.kind)).toEqual(['xp', 'progress', 'quest']);
-    controller.took(third);
+    controller.onEffects(third);
     expect(store.writes).toHaveLength(1);
   });
 
   it('writes on each change of current zone, not on the first it hears of', () => {
     const { store, controller } = saving();
-    controller.zone('forest');
-    controller.zone('forest');
+    controller.onZone('forest');
+    controller.onZone('forest');
     expect(store.writes).toHaveLength(0);
-    controller.zone('brackenmoor');
+    controller.onZone('brackenmoor');
     expect(store.writes).toHaveLength(1);
   });
 
@@ -360,7 +394,7 @@ describe('the save controller', () => {
     expect(store.writes).toHaveLength(1);
     await store.finishAll();
     controller.update(CONFIG.save.every / 2);
-    controller.took([{ kind: 'quest', quest: 'raiders', stage: 'active' }]);
+    controller.onEffects([{ kind: 'quest', quest: 'raiders', stage: 'active' }]);
     await store.finishAll();
     controller.update(CONFIG.save.every - 0.1);
     expect(store.writes).toHaveLength(2);
@@ -371,13 +405,13 @@ describe('the save controller', () => {
   it('writes when the page is hidden or VR ends, once the game has run', () => {
     const { store, controller } = saving();
     controller.update(1 / 72);
-    controller.leaving();
+    controller.onLeaving();
     expect(store.writes).toHaveLength(1);
   });
 
   it("doesn't write when a page left before VR is hidden, so it never overwrites a save from elsewhere", () => {
     const { store, controller } = saving();
-    controller.leaving();
+    controller.onLeaving();
     expect(store.writes).toHaveLength(0);
   });
 
@@ -385,11 +419,11 @@ describe('the save controller', () => {
     const { store, you, controller } = saving();
     controller.update(1 / 72);
     you.xp = 10;
-    controller.leaving();
+    controller.onLeaving();
     you.xp = 20;
-    controller.leaving();
+    controller.onLeaving();
     you.xp = 30;
-    controller.leaving();
+    controller.onLeaving();
     expect(store.writes.map((r) => r.xp)).toEqual([10]);
     await store.finish();
     expect(store.writes.map((r) => r.xp)).toEqual([10, 30]);
@@ -400,13 +434,16 @@ describe('the save controller', () => {
 
   it('carries on after a write fails', async () => {
     const store = new SlowStore();
-    const failing: SaveStore = { lasting: true, read: store.read, clear: store.clear, write: () => Promise.reject(new Error('quota')) };
-    const controller = new SaveController(failing, () => recordOf(new AdventureState().snapshot()), 30, () => {});
-    controller.update(30);
+    const failing: SaveStore = { read: store.read, clear: store.clear, write: () => Promise.reject(new Error('quota')) };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const controller = new SaveController(failing, () => recordOf(new AdventureState().snapshot()));
+    controller.update(CONFIG.save.every);
     await controller.settled();
+    expect(warn).toHaveBeenCalledOnce();
+    warn.mockRestore();
     const writes: SaveRecord[] = [];
     failing.write = async (r) => void writes.push(r);
-    controller.update(30);
+    controller.update(CONFIG.save.every);
     await controller.settled();
     expect(writes).toHaveLength(1);
   });

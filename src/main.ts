@@ -6,8 +6,8 @@ import { CONFIG } from './config';
 import { startAmbience, unlockAudio } from './fx/sfx';
 import { Game } from './game';
 import { findMap } from './maps/registry';
-import { readPage, type Route } from './route';
-import { openSave } from './save/store';
+import { forgetNewGame, readPage, type Route } from './route';
+import { openSave, type Save } from './save/store';
 import { buildShowcase, pinShowcaseCamera } from './showcase';
 import './style.css';
 import { askNewGame } from './ui/newGameDialog';
@@ -99,35 +99,21 @@ async function startAdventure(
   perf: PerfReadout | null,
   { newGame }: Extract<Route, { kind: 'adventure' }>,
 ): Promise<void> {
-  const save = await openSave();
-  if (save.note) {
-    const note = Object.assign(document.createElement('p'), { className: 'save-note', textContent: save.note });
-    document.querySelector('#intro .loading')?.before(note);
-  }
-  let { record } = save;
-  if (newGame) {
-    if (record && (await askNewGame(record))) {
-      await save.store.clear();
-      record = null;
-    }
-    // Answered: a reload carries on rather than asking again.
-    const rest = location.search.slice(1).split('&').filter((p) => p && p.split('=')[0] !== 'newgame');
-    history.replaceState(null, '', `${location.pathname}${rest.length ? `?${rest.join('&')}` : ''}${location.hash}`);
-  }
-
+  const save = await openCharacter(newGame);
   // Let the intro paint before the (synchronous) build.
   await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
   const oakvale = await findMap('forest')!.load();
   if (oakvale.kind !== 'zone') throw new Error('Oakvale should be a zone');
-  const adventure = new Adventure(scene, camera, renderer, oakvale, { store: save.store, record });
+  const adventure = new Adventure(scene, camera, renderer, oakvale, save);
   document.querySelector('#intro .loading')?.remove();
   // Keep where you stand when you go: the page hidden, VR ended, or the headset
   // put down or its menu opened (the session no longer visible).
-  document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && adventure.leaving());
-  renderer.xr.addEventListener('sessionend', () => adventure.leaving());
+  const { saves } = adventure;
+  document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && saves.onLeaving());
+  renderer.xr.addEventListener('sessionend', () => saves.onLeaving());
   onEnterVR(renderer, () => {
     const session = renderer.xr.getSession();
-    session?.addEventListener('visibilitychange', () => session.visibilityState !== 'visible' && adventure.leaving());
+    session?.addEventListener('visibilitychange', () => session.visibilityState !== 'visible' && saves.onLeaving());
   });
 
   // Handle for poking at the game from the console and for scripted checks.
@@ -167,6 +153,24 @@ async function startAdventure(
     renderer.render(scene, camera);
     perf?.update(dt);
   });
+}
+
+/**
+ * The character to load: the save's, with a note on the page if it can't be
+ * kept. At `?newgame`, a saved character is deleted once you say yes, and the
+ * flag leaves the address, so a reload carries on rather than asking again.
+ */
+async function openCharacter(newGame: boolean): Promise<Save> {
+  let save = await openSave();
+  if (newGame) {
+    if (save.held && (await askNewGame(save.record))) save = await save.startOver();
+    history.replaceState(null, '', `${location.pathname}${forgetNewGame(location.search)}${location.hash}`);
+  }
+  if (save.note) {
+    const note = Object.assign(document.createElement('p'), { className: 'save-note', textContent: save.note });
+    document.querySelector('#intro .loading')?.before(note);
+  }
+  return save;
 }
 
 /** `?arena`: the wave game in the crypt hall, as the plain URL played before Oakvale. */

@@ -1,5 +1,6 @@
 import { type Progress, type QuestProgress, STAGES } from '../adventureState';
-import type { Sword } from '../quests';
+import type { Spot } from '../maps/types';
+import { SWORDS } from '../quests';
 
 // The save record: what the browser keeps of one character between visits,
 // and how a record an older build wrote is brought up to date. A record is
@@ -9,8 +10,11 @@ import type { Sword } from '../quests';
 /** The record's version: bump it, and add a migration from the one before, whenever its shape changes. */
 export const SAVE_VERSION = 1;
 
-/** A building or the mine you can be inside. None are built yet: the inn, the house and the mine arrive with their tickets. */
-export type Interior = 'inn' | 'house' | 'mine';
+/** Every building and the mine you can be inside. None are built yet: the inn, the house and the mine arrive with their tickets. */
+export const INTERIORS = ['inn', 'house', 'mine'] as const;
+
+/** A building or the mine you're inside. */
+export type Interior = (typeof INTERIORS)[number];
 
 /** One character, as saved. */
 export interface SaveRecord extends Progress {
@@ -23,6 +27,11 @@ export interface SaveRecord extends Progress {
   readonly facing: number;
   /** The building or mine you were in, or null outdoors. */
   readonly interior: Interior | null;
+}
+
+/** The record for a character with `progress`, standing at `at` (outdoors: there are no interiors yet). */
+export function saveRecord(progress: Progress, at: Spot, savedAt = Date.now()): SaveRecord {
+  return { version: SAVE_VERSION, savedAt, ...progress, position: { x: at.x, z: at.z }, facing: at.yaw, interior: null };
 }
 
 /** A record as some version wrote it: nothing is known of it but its version. */
@@ -62,9 +71,6 @@ export function readSave(stored: unknown, migrations: readonly Migration[] = MIG
   }
   return isCurrent(record) ? { kind: 'saved', record } : { kind: 'unreadable' };
 }
-
-const SWORDS: readonly Sword[] = ['plain', 'hale'];
-const INTERIORS: readonly Interior[] = ['inn', 'house', 'mine'];
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);

@@ -17,11 +17,11 @@ export type Role = 'ordinary' | 'leader' | 'deepBrute' | 'warden' | 'raised';
 /** Every ability, in the order the levels bring them. */
 export const ABILITIES = Object.keys(CONFIG.levels.unlocks) as Ability[];
 
-/** Where a quest stands. Only one is ever offered, under way or ready at a time; none goes back a stage. */
-export type Stage = 'locked' | 'offered' | 'active' | 'ready' | 'handedIn';
-
 /** Every stage, in the order a quest goes through them. */
-export const STAGES: readonly Stage[] = ['locked', 'offered', 'active', 'ready', 'handedIn'];
+export const STAGES = ['locked', 'offered', 'active', 'ready', 'handedIn'] as const;
+
+/** Where a quest stands. Only one is ever offered, under way or ready at a time; none goes back a stage. */
+export type Stage = (typeof STAGES)[number];
 
 /** One quest of the chain, as the save keeps it. */
 export interface QuestProgress {
@@ -162,25 +162,33 @@ export class AdventureState {
   }
 
   /**
-   * Take up a snapshot. A record from another build is taken as best it
-   * fits: a level it reached is kept even if levels now need more XP, counts
-   * stay within their objectives, and a quest added after the ones handed in
-   * is offered.
+   * Take up a snapshot, keeping the chain's rules whatever it says. A record
+   * from another build is taken as best it fits: a level it reached is kept
+   * even if levels now need more XP, counts stay within their objectives, a
+   * quest under way with every objective done is ready, a quest added after
+   * the ones handed in is offered, and only the first quest not handed in can
+   * be offered, under way or ready, with nothing counted before it's taken.
    */
   private restore(saved: Progress): void {
     const L = CONFIG.levels;
-    const reached = L.xp[Math.min(saved.level, L.xp.length + 1) - 2] ?? 0;
-    this.total = Math.min(Math.max(saved.xp, reached), L.xp[L.xp.length - 1]);
+    const cap = L.xp[L.xp.length - 1];
+    // The XP its recorded level needs: L.xp[0] is level 2's.
+    const levelNeeds = L.xp[Math.min(saved.level, L.xp.length + 1) - 2] ?? 0;
+    this.total = Math.min(Math.max(saved.xp, levelNeeds, 0), cap);
     this.held = saved.sword;
     this.beaten = saved.wardenBeaten;
     CHAIN.forEach((quest, i) => {
       const kept = saved.quests[quest.id] as QuestProgress | undefined;
       if (!kept) return;
       this.stages[i] = kept.stage;
-      quest.objectives.forEach((o, k) => (this.counts[i][k] = Math.max(0, Math.min(o.need, kept.counts[k] ?? 0))));
+      quest.objectives.forEach((o, k) => (this.counts[i][k] = Math.max(0, Math.min(o.need, Math.floor(kept.counts[k] ?? 0)))));
     });
     const i = this.current;
-    if (i >= 0 && this.stages[i] === 'locked') this.stages[i] = 'offered';
+    if (i < 0) return;
+    if (this.stages[i] === 'locked') this.stages[i] = 'offered';
+    if (this.stages[i] === 'active' && CHAIN[i].objectives.every((o, k) => this.counts[i][k] >= o.need)) this.stages[i] = 'ready';
+    for (let k = i + 1; k < CHAIN.length; k++) this.stages[k] = 'locked';
+    this.stages.forEach((stage, k) => (stage === 'locked' || stage === 'offered') && this.counts[k].fill(0));
   }
 
   get level(): number {

@@ -6,8 +6,8 @@ import type { SaveStore } from './store';
 /**
  * When the Adventure writes its save: at once for anything earned (a quest
  * taken, a count going up, a quest ready or handed in, a level, a new sword)
- * and for a change of current zone; every 30 s of play, so where you stand is
- * kept too; and when the page is hidden or VR ends. One write is in flight at
+ * and for a change of current zone; every so often in play, so where you stand is
+ * kept too (`CONFIG.save.every`); and when the page is hidden or VR ends. One write is in flight at
  * a time: asking again meanwhile writes once more when it lands, with the
  * state as it is then, so the latest state wins.
  */
@@ -24,27 +24,25 @@ export class SaveController {
     private readonly store: SaveStore,
     /** The record as it would be written now. */
     private readonly snapshot: () => SaveRecord,
-    private readonly every = CONFIG.save.every,
-    private readonly warn: (...what: unknown[]) => void = console.warn,
   ) {}
 
   /** What the adventure state did: anything but XP alone is written at once. */
-  took(effects: readonly Effect[]): void {
+  onEffects(effects: readonly Effect[]): void {
     if (effects.some((e) => e.kind !== 'xp')) this.write();
   }
 
-  /** The current zone: written when it changes. */
-  zone(id: string): void {
+  /** The current zone, each frame: written when it changes. */
+  onZone(id: string): void {
     const was = this.zoneId;
     this.zoneId = id;
     if (was !== null && was !== id) this.write();
   }
 
-  /** Time played: a write once `every` seconds pass without one. */
+  /** Time played: a write once `CONFIG.save.every` seconds pass without one. */
   update(dt: number): void {
     this.running = true;
     this.since += dt;
-    if (this.since >= this.every) this.write();
+    if (this.since >= CONFIG.save.every) this.write();
   }
 
   /**
@@ -52,7 +50,7 @@ export class SaveController {
    * the game hasn't run, so a page left open before VR never overwrites a save
    * made since in another tab.
    */
-  leaving(): void {
+  onLeaving(): void {
     if (this.running) this.write();
   }
 
@@ -69,7 +67,7 @@ export class SaveController {
     }
     this.inFlight = this.store
       .write(this.snapshot())
-      .catch((e) => this.warn('Saving failed:', e))
+      .catch((e) => console.warn('Saving failed:', e))
       .then(() => {
         this.inFlight = null;
         if (!this.again) return;

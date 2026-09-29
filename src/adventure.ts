@@ -12,7 +12,7 @@ import type { Spot, Zone } from './maps/types';
 import { Hale } from './people/hale';
 import { Player } from './player/player';
 import { SaveController } from './save/controller';
-import { SAVE_VERSION, type SaveRecord } from './save/record';
+import { saveRecord } from './save/record';
 import type { Save } from './save/store';
 import { BeltHud } from './ui/beltHud';
 import { Fade } from './ui/fade';
@@ -94,8 +94,8 @@ export class Adventure {
   private readonly probePoints = [new Vector3(), new Vector3(), new Vector3()];
   /** A level a hand-in landed, floating over Hale a moment after its XP. */
   private handInLevel: { level: number; unlocks: readonly Ability[]; in: number } | null = null;
-  /** Where the save puts you: over the ground in world metres, facing as you look (0 looks down −Z). */
-  private readonly standing = { x: 0, z: 0, facing: 0 };
+  /** Where the save puts you: over the ground in world metres, facing as you look (a mutable `Spot`). */
+  private readonly standing = { x: 0, z: 0, yaw: 0 };
 
   constructor(
     scene: Scene,
@@ -108,7 +108,7 @@ export class Adventure {
   ) {
     const { record } = save;
     this.state = new AdventureState(record ?? undefined);
-    this.saves = new SaveController(save.store, () => this.record());
+    this.saves = new SaveController(save.store, () => saveRecord(this.state.snapshot(), this.standing));
     this.world.attach(scene, camera);
     this.world.load(zone);
     this.respawn = zone.respawns.village;
@@ -159,16 +159,11 @@ export class Adventure {
     // A new character at the zone's start, facing Hale; or where the save stood,
     // facing the same way, at full health and with no rage. (A save inside a
     // building or the mine will load inside it once they're built.)
-    const { x, z, yaw } = record ? { ...record.position, yaw: record.facing } : zone.spawn;
+    Object.assign(this.standing, record ? { ...record.position, yaw: record.facing } : zone.spawn);
+    const { x, z, yaw } = this.standing;
     this.player.stats = this.state.stats;
     this.player.reset(x, z, yaw);
-    Object.assign(this.standing, { x, z, facing: yaw });
     this.lastHp = this.player.hp;
-  }
-
-  /** You're leaving: the page hidden, VR ended or the headset put down. Keep where you stand. */
-  leaving(): void {
-    this.saves.leaving();
   }
 
   update(dt: number): void {
@@ -216,26 +211,20 @@ export class Adventure {
     this.hud.status.level = this.state.level;
     this.hud.status.progress = this.state.progress;
     this.hud.update(dt);
-    this.stand();
+    this.updateStanding();
     this.saves.update(dt);
   }
 
   /** Where the save puts you: where your head is and the way you look, or where you'll wake while you're down. */
-  private stand(): void {
+  private updateStanding(): void {
     const { player, standing } = this;
-    if (player.alive) {
-      standing.x = this.you.head.x;
-      standing.z = this.you.head.z;
-      standing.facing = _turn.setFromQuaternion(player.camera.getWorldQuaternion(_look), 'YXZ').y;
-    } else Object.assign(standing, { x: this.respawn.x, z: this.respawn.z, facing: this.respawn.yaw });
-    const zone = this.world.zoneAt(standing.x, standing.z);
-    if (zone) this.saves.zone(zone.id);
-  }
-
-  /** The save record as it would be written now. */
-  private record(): SaveRecord {
-    const { x, z, facing } = this.standing;
-    return { version: SAVE_VERSION, savedAt: Date.now(), ...this.state.snapshot(), position: { x, z }, facing, interior: null };
+    if (!player.alive) {
+      Object.assign(standing, this.respawn);
+      return;
+    }
+    standing.x = this.you.head.x;
+    standing.z = this.you.head.z;
+    standing.yaw = _turn.setFromQuaternion(player.camera.getWorldQuaternion(_look), 'YXZ').y;
   }
 
   /** A camp's member fell: it pays XP into the adventure state, and may count for your quest. */
@@ -287,7 +276,7 @@ export class Adventure {
   /** Something happened: into the adventure state, into the save if it earned anything, and show what it did at `at`. */
   private apply(event: AdventureEvent, at: Vector3): void {
     const effects = this.state.apply(event);
-    this.saves.took(effects);
+    this.saves.onEffects(effects);
     this.show(effects, at, event.kind === 'handIn');
   }
 
