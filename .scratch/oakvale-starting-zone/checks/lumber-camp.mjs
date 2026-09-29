@@ -17,7 +17,7 @@
 //    wakes the camp; the check waits for it to walk home before 3.)
 // 2. "Accept" with the left fist: the tracker shows "The Lumber Camp",
 //    "Bandits defeated at the lumber camp: 0/5" and "Leader's orders taken:
-//    0/1", and the orders now lie on the crates at the back of the tent.
+//    0/1", and the orders now lie on the crates just inside the tent's door.
 // 3. The camp holds three bandit thugs, a bandit archer and their leader
 //    (the big build, about 1.97 m, with a felling axe), at level 2.
 // 4. Stand square behind the tent: the leader comes round it and swings at
@@ -115,13 +115,13 @@ const HALE = await page.evaluate(() => {
 const START = await page.evaluate(() => window.__descent.world.zoneAt(0, 0).spawn);
 /** Where the orders lie (on the crates) and which way the tent faces. */
 const ORDERS = await page.evaluate(() => window.__descent.world.zoneAt(0, 0).pickups.find((p) => p.item === 'orders'));
-// The tent's frame (layout's TENT): the orders lie 1.75 m in front of its centre, just inside its door at 1.85 m.
-const TENT = { hw: 1.7, hd: 1.85, ordersZ: 1.75 };
+/** The tent's frame from the layout (the dev server serves its source): the orders lie `orders.z` in front of its centre, just inside its door at `hd`. */
+const TENT = await page.evaluate(async () => (await import('/src/maps/forest/layout.ts')).TENT);
 /** A point in the tent's own frame (door towards +z), in the world. */
 const inTent = (lx, lz) => {
   const c = Math.cos(ORDERS.yaw);
   const s = Math.sin(ORDERS.yaw);
-  const dz = lz - TENT.ordersZ;
+  const dz = lz - TENT.orders.z;
   return { x: ORDERS.x + lx * c + dz * s, z: ORDERS.z - lx * s + dz * c };
 };
 

@@ -626,10 +626,13 @@ function tent(b: ModelBuilder, ctx: StructureContext): void {
   // The ridge pole, and the pole at the back.
   b.box(0.08, 0.08, 2 * hd + 0.4, { at: [0, ridge - 0.02, 0.1], color: PAL.wood });
   b.box(0.08, ridge, 0.08, { at: [0, ridge / 2, -hd + 0.06], color: PAL.wood });
-  // Guy ropes and pegs.
-  for (const [x, z] of [[-2.2, 2.7], [2.2, 2.7], [-2.2, -2.7], [2.2, -2.7]] as const) {
-    b.bar([0, ridge - 0.05, Math.sign(z) * (hd + 0.2)], [x, 0.05, z], 0.02, 0.02, { color: BUILD.canvas });
-    b.box(0.06, 0.2, 0.06, { at: [x, 0.08, z], color: PAL.woodDark });
+  // Guy ropes from the ridge pole's ends, out to pegs off the corners.
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      const [x, z] = [sx * (hw + 0.5), sz * (hd + 0.85)];
+      b.bar([0, ridge - 0.05, sz * (hd + 0.2)], [x, 0.05, z], 0.02, 0.02, { color: BUILD.canvas });
+      b.box(0.06, 0.2, 0.06, { at: [x, 0.08, z], color: PAL.woodDark });
+    }
   }
   for (const side of [-1, 1]) for (const z of [-hd + 0.3, 0, hd - 0.3]) b.box(0.06, 0.16, 0.06, { at: [side * (hw + 0.1), 0.06, z], color: PAL.woodDark });
   // A lantern hanging from the ridge pole over the crates.

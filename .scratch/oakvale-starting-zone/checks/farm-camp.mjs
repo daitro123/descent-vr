@@ -233,11 +233,18 @@ await xrFrames(2);
   );
 
   // A control: the same swing lands on one that isn't walking home. (Standing
-  // close enough to swing, you're well inside 8 m, so it's fighting you.)
+  // close enough to swing, you're well inside 8 m, so it's fighting you.) A
+  // thug guards a third of swings, so a guarded one is swung again.
   const h = home[0];
   await standFacing(h.x - 1.1, h.z, h.x, h.z);
   const b = (await farm())[0];
-  const hurt = await swing();
+  let hurt = await swing();
+  for (let i = 0; i < 4 && hurt.includes('guarded'); i++) {
+    await step(2); // past its guard and the cooldown after it
+    const g = (await farm())[0];
+    await standFacing(g.x - 1.1, g.z, g.x, g.z);
+    hurt = await swing();
+  }
   const c = (await farm())[0];
   check(c.hp < b.hp && c.mind === 'fight', `the same swing hurts one that's fighting you (${b.hp} → ${c.hp}, ${hurt.join(', ')}, ${c.mind})`);
 }

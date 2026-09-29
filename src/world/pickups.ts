@@ -35,8 +35,8 @@ function orders(): Mesh {
 
 const MODELS: Record<Item, () => Mesh> = { orders };
 
-/** The fist, if it's touching `at`. */
-const touching = (fist: Probe | null, at: Vector3) => (fist && fist.at.distanceTo(at) < CONFIG.pickups.reach ? fist : null);
+/** The fist, if it's touching `at`, as close as you touch an orb. */
+const touching = (fist: Probe | null, at: Vector3) => (fist && fist.at.distanceTo(at) < CONFIG.orb.pickupRadius ? fist : null);
 
 export class Pickups {
   /** Everything lying about: add it to the scene. */

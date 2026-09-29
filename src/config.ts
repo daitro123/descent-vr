@@ -242,6 +242,13 @@ export const CONFIG = {
   // arena's; the Adventure's camps share their own pools (CONFIG.camps).
   tokens: { melee: 2, ranged: 2, meleeGap: 0.9, rangedGap: 0.6 },
 
+  // An enemy whose walking gets it nowhere (there's no navmesh) side-steps for
+  // `detour` s (enemies/enemy.ts walk()): once it has barely moved from frame
+  // to frame for `time` s, or has gone under `headway` of its pace over `time` s
+  // of meaning one way (every heading within `sameWay`, as a dot product, of
+  // the first), as when it flip-flops against a wall met square on.
+  unstick: { time: 0.8, headway: 0.3, sameWay: 0.9, detour: 1 },
+
   // The Adventure's camps (enemies/camps.ts): the WoW-style pull Tom picked
   // in the `?camp` prototype. You take a camp a few at a time from its edge.
   camps: {
@@ -497,9 +504,9 @@ export const CONFIG = {
     perBash: 8,
   },
 
-  // Quest items lying in the world, picked up by hand (world/pickups.ts): the leader's orders.
+  // Quest items lying in the world, picked up by hand as you touch an orb
+  // (world/pickups.ts, orb.pickupRadius): the leader's orders.
   pickups: {
-    reach: 0.25, // m from a fist to the item: a touch, as for an orb
     buzz: { intensity: 0.8, ms: 70 }, // in the hand that took it
   },
 

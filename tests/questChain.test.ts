@@ -195,7 +195,8 @@ describe('The Lumber Camp', () => {
     at('the orders picked up', ORDERS);
     at('The Lumber Camp handed in', HAND_IN);
     at('What Lies Below under way', ACCEPT);
-    at('the chain done', WARDEN, HAND_IN);
+    at('What Lies Below ready', WARDEN);
+    at('the chain done', HAND_IN);
     expect(lie).toEqual([
       ['a new character', false],
       ['Raiders in the Fields under way', false],
@@ -206,6 +207,7 @@ describe('The Lumber Camp', () => {
       ['the orders picked up', false],
       ['The Lumber Camp handed in', false],
       ['What Lies Below under way', false],
+      ['What Lies Below ready', false],
       ['the chain done', false],
     ]);
   });

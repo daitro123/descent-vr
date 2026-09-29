@@ -62,15 +62,11 @@ export interface CampPlan {
   readonly posts: readonly PostPlan[];
 }
 
-/** Something lying in a zone to pick up by hand (the leader's orders), and where. */
-export interface Pickup {
+/** Something lying in a zone to pick up by hand (the leader's orders): where, and which way it lies. */
+export interface Pickup extends Spot {
   readonly item: Item;
-  readonly x: number;
   /** The height of what it lies on. */
   readonly y: number;
-  readonly z: number;
-  /** As a model turns about +Y: which way it lies. */
-  readonly yaw: number;
 }
 
 /** An outdoor region of the world, loaded into the World. */

@@ -74,8 +74,6 @@ export interface EnemyPost {
 }
 
 const RISE_DEPTH = 1.9;
-/** Seconds of walking that get nowhere before an enemy detours sideways. */
-const STUCK_TIME = 0.8;
 const UP = new Vector3(0, 1, 0);
 const _to = new Vector3();
 const _v = new Vector3();
@@ -213,7 +211,9 @@ export abstract class Enemy {
   private lastSwing: number | undefined;
   private glint = 0; // weapon flash after a block
   private stuckFor = 0;
-  /** Seconds of walking one way (`walkedWay`) since `walkedFrom`: to tell steering that gets nowhere. */
+  /** Did it walk last frame? A stretch of walking one way ends when it stops. */
+  private walked = false;
+  /** Seconds of walking one way (`walkedWay`) since `walkedFrom`, 0 before a stretch starts: to tell steering that gets nowhere. */
   private walkedFor = 0;
   private readonly walkedFrom = new Vector3();
   private readonly walkedWay = new Vector3();
@@ -800,24 +800,27 @@ export abstract class Enemy {
 
     // Safety net for local traps (walls, props, other enemies): if we keep
     // trying to walk but barely move, detour sideways for a second.
+    const { time, headway, sameWay, detour } = CONFIG.unstick;
     const moved = _a.distanceTo(this.position);
-    this.stuckFor = moved < speed * dt * 0.3 ? this.stuckFor + dt : Math.max(0, this.stuckFor - dt);
+    this.stuckFor = moved < speed * dt * headway ? this.stuckFor + dt : Math.max(0, this.stuckFor - dt);
+    let stuck = this.stuckFor > time;
     // Steering can also flip-flop against a wall met square on, with the way
     // on straight through it: moving every frame, getting nowhere, while it
     // means to go one way (unlike circling, whose drift turns about).
-    if (this.walkedFor === 0 || dir.dot(this.walkedWay) < 0.9) {
+    this.walked = true;
+    if (this.walkedFor === 0 || dir.dot(this.walkedWay) < sameWay) {
       this.walkedFor = 0;
       this.walkedFrom.copy(_a);
       this.walkedWay.copy(dir);
     }
     this.walkedFor += dt;
-    if (this.walkedFor >= STUCK_TIME) {
-      if (this.walkedFrom.distanceTo(this.position) < speed * STUCK_TIME * 0.3) this.stuckFor = STUCK_TIME + dt;
+    if (this.walkedFor >= time) {
+      stuck ||= this.walkedFrom.distanceTo(this.position) < speed * time * headway;
       this.walkedFor = 0;
     }
-    if (this.stuckFor > STUCK_TIME && this.detour <= 0) {
+    if (stuck && this.detour <= 0) {
       this.stuckFor = 0;
-      this.detour = 1;
+      this.detour = detour;
       const side = Math.random() < 0.5 ? 1 : -1;
       this.detourDir.set(-dir.z * side, 0, dir.x * side).addScaledVector(dir, -0.3).normalize();
     }
@@ -906,6 +909,8 @@ export abstract class Enemy {
     if (!blade || blade.speed < CONFIG.guard.threatSpeed || blade.swing !== this.lastSwing) this.swingSeen = false;
     this.lastSwing = blade?.swing;
     this.moveAmount = Math.max(0, this.moveAmount - dt * 4);
+    if (!this.walked) this.walkedFor = 0;
+    this.walked = false;
 
     if (this.state !== 'dead') {
       // Knockback slides the body; decays quickly.

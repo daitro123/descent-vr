@@ -1,7 +1,7 @@
 import { Vector3 } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
-import { buildLayout, FOREST, type ForestLayout, HALE, localToWorld, TENT, worldToLocal } from '../src/maps/forest/layout';
+import { buildLayout, FOREST, type ForestLayout, HALE, localToWorld, type StructureKind, TENT, worldToLocal } from '../src/maps/forest/layout';
 import type { CampPlan } from '../src/maps/types';
 import { MAPS } from '../src/maps/registry';
 
@@ -228,7 +228,7 @@ describe("the farm's camp", () => {
 
 describe("the lumber camp's camp", () => {
   const lumber = () => layout.camps.find((c) => c.id === 'lumberCamp')!;
-  const structure = (kind: string) => layout.structures.find((s) => s.kind === kind)!;
+  const structure = (kind: StructureKind) => layout.structures.find((s) => s.kind === kind)!;
 
   it('holds three thugs, an archer and their leader at level 2, in the camp clearing', () => {
     const camp = lumber();
@@ -290,7 +290,7 @@ describe("the lumber camp's camp", () => {
       const [x, z] = localToWorld(tent, lx, lz);
       expect(layout.colliders.blocked(x, z, r), `(${lx}, ${lz}) in the tent`).toBe(true);
     }
-    for (const kind of ['logpile', 'campfire']) {
+    for (const kind of ['logpile', 'campfire'] as const) {
       const s = structure(kind);
       expect(layout.colliders.blocked(s.x, s.z, r)).toBe(true);
     }

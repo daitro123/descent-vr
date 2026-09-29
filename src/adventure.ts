@@ -52,10 +52,11 @@ const UNLOCKED: Record<Ability, string> = {
  * their board unfolds, and the tracker shows the quest you're on. Kills and
  * the board's buttons go into the adventure state, whose levels set your
  * health, damage and abilities. What a quest has you find (the leader's
- * orders) lies where it's found while the state says so, taken with a touch. Out of a fight your health comes back; a
- * death fades to black and wakes you in the village. It saves itself as you
- * go, and loads where you stood with your level, XP, sword and quests, at full
- * health with every camp full (.scratch/oakvale-starting-zone/).
+ * orders) lies where it's found while the state says so, taken with a touch.
+ * Out of a fight your health comes back; a death fades to black and wakes you
+ * in the village. It saves itself as you go, and loads where you stood with
+ * your level, XP, sword and quests, at full health with every camp full
+ * (.scratch/oakvale-starting-zone/).
  */
 export class Adventure {
   readonly world = new World();
