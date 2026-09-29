@@ -72,6 +72,8 @@ export class BlobShadows {
     this.add(feet.x, feet.y, feet.z, 0.26);
     for (const e of enemies) {
       if (e.state === 'dead' && e.stateTime > 1) continue;
+      // Not drawn (outdoors behind a shut door, or in a part of the mine that isn't): no blob either.
+      if (!e.root.visible || e.root.parent?.visible === false) continue;
       const scale = e.state === 'rising' ? Math.min(1, e.stateTime * 1.5) : 1;
       this.add(e.position.x, e.position.y, e.position.z, e.def.radius * 1.1 * scale);
     }

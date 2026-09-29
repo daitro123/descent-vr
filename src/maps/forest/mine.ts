@@ -1,12 +1,12 @@
-import type { Vector3 } from 'three';
+import { Vector3 } from 'three';
 import type { Atmosphere } from '../../world/atmosphere';
 import { type Flame, type Frame, toFrame } from '../../world/interiors';
 import type { MinePlan, MineStanding } from '../../world/mine';
-import type { Respawn } from '../types';
+import type { CampPlan, PostPlan, Respawn } from '../types';
 import { CONFIG } from '../../config';
 import { BRAZIER_FIRE, torchLight } from '../../world/hall';
 import { Colliders } from './colliders';
-import { Hollow, type Piece } from './hollow';
+import { floorOf, Hollow, type Piece } from './hollow';
 import { type Shapes, toWorld } from './interiorPlan';
 import { SKY } from './palette';
 
@@ -188,6 +188,26 @@ export const MINE = {
   },
   /** Where you wake after dying in the mine: on the rail bed this far out from the mouth, facing it. */
   wake: 3,
+  /**
+   * Its undead, one camp (level 3): two grunts and an archer in the cart
+   * hall, facing the way in from the adit; a grunt and an archer at the
+   * gallery's far end, facing back up it; and alone, at level 4, a brute in
+   * the dig facing the ramp and another before the hall's gate facing the
+   * way in from the passage. Each chamber's out of sight of the others, so
+   * each is its own pull.
+   */
+  camp: {
+    level: 3,
+    posts: [
+      { behaviour: 'grunt', x: -12, z: -11.5, face: [-6, -10] },
+      { behaviour: 'grunt', x: -13.5, z: -7.5, face: [-6, -10] },
+      { behaviour: 'archer', x: -16.5, z: -12, face: [-6, -10] },
+      { behaviour: 'grunt', x: -15, z: -30.5, face: [-15.5, -20] },
+      { behaviour: 'archer', x: -17.5, z: -33.5, face: [-15.5, -20] },
+      { behaviour: 'brute', role: 'deepBrute', level: 4, x: 4, z: -53, face: [2.75, -46.5] },
+      { behaviour: 'brute', role: 'deepBrute', level: 4, x: 22, z: -34, face: [15.5, -33] },
+    ] as readonly (Omit<PostPlan, 'family' | 'yaw'> & { readonly face: readonly [number, number] })[],
+  },
   /** A hillside triangle is dug out if it dips this close over a tunnel's ceiling. */
   cut: 0.3,
 } as const;
@@ -281,6 +301,27 @@ export function mouthOf(site: { x: number; z: number; yaw: number; y: number; hd
 export function mineRespawn(mouth: Frame): Respawn {
   const [x, z] = toWorld(mouth, 0, MINE.wake);
   return { x, z, yaw: mouth.yaw, interior: null };
+}
+
+const _arrow = new Vector3();
+
+/**
+ * The mine's undead, in the world: one camp, in the mine. Its place is the
+ * mouth, so it refills only once you're a leash from it (and out of the mine).
+ */
+export function mineCamp(mouth: Frame): CampPlan {
+  const { level, posts } = MINE.camp;
+  return {
+    id: 'mine',
+    place: { x: mouth.x, z: mouth.z, r: 0 },
+    level,
+    posts: posts.map(({ face, ...p }) => {
+      const [x, z] = toWorld(mouth, p.x, p.z);
+      const [fx, fz] = toWorld(mouth, face[0], face[1]);
+      return { ...p, family: 'undead', x, z, yaw: Math.atan2(fx - x, fz - z) };
+    }),
+    interior: 'mine',
+  };
 }
 
 /** The mine opening at `mouth`. */
@@ -381,6 +422,16 @@ export function planMine(mouth: Frame): MinePlan {
         if (hollow.resolve(local, radius)) back(p);
       }
       return moved;
+    },
+    arrowStops(p: Vector3) {
+      inMine(p.x, p.z);
+      if (local.z >= 0) return null;
+      if (!hollow.contains(local.x, local.z)) return true;
+      const piece = hollow.pieceAt(local.x, local.z);
+      const floor = mouth.y + floorOf(piece, local.x, local.z);
+      const { arrowWidth, propHeight } = CONFIG.world.ground;
+      if (p.y <= floor + arrowWidth || p.y >= floor + piece.height - arrowWidth) return true;
+      return p.y < floor + propHeight && props.resolve(_arrow.set(p.x, 0, p.z), arrowWidth);
     },
     cuts(tri) {
       let x0 = Infinity;

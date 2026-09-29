@@ -425,8 +425,8 @@ describe('the safe places', () => {
     }
   });
 
-  it("are Oakvale's every camp: the farm, the lumber camp, the watchtower and the lumber camp's patrol", () => {
-    expect(layout.camps.map((c) => c.id)).toEqual(['farm', 'lumberCamp', 'watchtower', 'patrol']);
+  it("are Oakvale's every camp: the farm, the lumber camp, the watchtower, the lumber camp's patrol and the mine's undead", () => {
+    expect(layout.camps.map((c) => c.id)).toEqual(['farm', 'lumberCamp', 'watchtower', 'patrol', 'mine']);
   });
 });
 

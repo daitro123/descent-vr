@@ -39,7 +39,7 @@ function camp(id: CampId, posts: PostPlan[], r = 8): CampPlan {
 function world(plans: CampPlan[], x: number, z: number, ground = hill) {
   const kills: string[] = [];
   const camps = new Camps(plans, ground, hooks, { onKill: (c) => kills.push(c.plan.id) });
-  const you: You = { feet: new Vector3(), head: new Vector3(), sword: null, alive: true, indoors: false };
+  const you: You = { feet: new Vector3(), head: new Vector3(), sword: null, alive: true, interior: null };
   const stand = (nx: number, nz: number) => {
     you.feet.set(nx, hill.heightAt(nx, nz), nz);
     you.head.copy(you.feet).setY(you.feet.y + 1.6);
@@ -191,7 +191,7 @@ describe('going indoors', () => {
     step(DT);
     expect(minds(farm)).toEqual(['fight', 'fight']);
     step(1);
-    you.indoors = true;
+    you.interior = 'inn';
     step(DT);
     expect(minds(farm)).toEqual(['home', 'home']);
     step(10);
@@ -202,7 +202,7 @@ describe('going indoors', () => {
     step(1);
     expect(minds(farm)).toEqual(['idle', 'idle']);
     // Out again, and the nearest notices you.
-    you.indoors = false;
+    you.interior = null;
     step(DT);
     expect(camps.fighting).toBe(true);
   });

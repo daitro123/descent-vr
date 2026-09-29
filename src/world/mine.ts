@@ -49,6 +49,11 @@ export interface MinePlan {
   groundAt(x: number, z: number): number | null;
   /** Push a point on the floor plane off its walls and out of its props. True if it moved. */
   resolve(p: Vector3, radius: number): boolean;
+  /**
+   * Has a flying arrow at `p` struck its floor, its ceiling, the rock round
+   * it or a prop? Null out past the mouth, where the mine has no say.
+   */
+  arrowStops(p: Vector3): boolean | null;
   /** Is this triangle of the hillside dug out for the mine, so the zone leaves it out? */
   cuts(tri: readonly (readonly [number, number, number])[]): boolean;
 }

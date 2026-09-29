@@ -86,6 +86,7 @@ const _q2 = new Quaternion();
 const _e = new Euler(0, 0, 0, 'YXZ');
 const _home = new Vector3();
 const _way = new Vector3();
+const _round = new Vector3();
 const _hit: SegmentHit = { distance: 0, pointA: new Vector3(), pointB: new Vector3() };
 const _telegraphBlock = new Color(1.0, 0.45, 0.05);
 const _telegraphUnblock = new Color(1.0, 0.05, 0.02);
@@ -852,17 +853,24 @@ export abstract class Enemy {
     if (this.state === 'attack' || this.state === 'guard') this.enter('move');
   }
 
-  /** Not fighting: walk back to the post, then stand there facing its way. */
+  /** Not fighting: walk back to the post (round the rock, in the mine), then stand there facing its way. */
   private holdPost(dt: number, ctx: EnemyContext): void {
     const p = this.post!;
     _home.set(p.x, 0, p.z);
-    _way.subVectors(_home, this.position).setY(0);
-    const d = _way.length();
+    const d = Math.hypot(p.x - this.position.x, p.z - this.position.z);
     if (d > 0.3) {
       const speed = p.evading ? Math.max(this.def.speed, this.chaseSpeed) : (p.pace ?? this.def.speed * 0.6);
-      this.walk(_way.divideScalar(d), speed * Math.min(1, 0.3 + d), dt, ctx);
-      this.faceToward(_home, dt);
+      this.headFor(ctx.ground.wayRound?.(this.position, _home, _round) ? _round : _home, speed * Math.min(1, 0.3 + d), dt, ctx);
     } else this.faceToward(this.postFacing(_home), dt, 0.5);
+  }
+
+  /** Walk towards `goal` at `speed`, facing it. */
+  private headFor(goal: Vector3, speed: number, dt: number, ctx: EnemyContext): void {
+    _way.subVectors(goal, this.position).setY(0);
+    const d = _way.length();
+    if (d < 1e-6) return;
+    this.walk(_way.divideScalar(d), speed, dt, ctx);
+    this.faceToward(goal, dt);
   }
 
   /** A point straight ahead of the post, the way it faces. */
@@ -942,6 +950,11 @@ export abstract class Enemy {
         }
         if (this.considerGuard(ctx)) {
           target = GUARD[this.guardSide];
+          break;
+        }
+        // Rock between you (the mine): it finds its way round to you instead.
+        if (ctx.ground.wayRound?.(this.position, ctx.playerFeet, _round)) {
+          this.headFor(_round, Math.max(this.def.speed, this.chaseSpeed), dt, ctx);
           break;
         }
         this.think(dt, ctx, dist);
