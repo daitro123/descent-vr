@@ -1,5 +1,7 @@
 import type { Camera, Object3D, Vector3 } from 'three';
 import { CONFIG } from '../config';
+import type { Seat } from '../enemies/enemy';
+import type { Spot } from '../maps/types';
 import type { Atmosphere } from './atmosphere';
 import type { Flame, Frame } from './interiors';
 
@@ -21,6 +23,20 @@ export interface MineStanding {
   readonly past: number;
   /** How far from the mouth's middle. */
   readonly fromMouth: number;
+}
+
+/** The Warden's hall at the mine's foot, for the Warden (enemies/throne.ts): its throne and its one way in. */
+export interface ThronePlan {
+  /** Where the Warden sits, slumped on its throne, facing the gate. */
+  readonly seat: Seat;
+  /** Where it stands up to, before the throne, and walks back to before it sits again. */
+  readonly front: Spot;
+  /** Is (x, z) in the hall, through its gate? */
+  through(x: number, z: number): boolean;
+  /** Is (x, z) out through the gate, back in the antechamber? */
+  outside(x: number, z: number): boolean;
+  /** Hold a body of `radius` at `p` in the hall, short of its gate: the Warden never leaves it. */
+  keepIn(p: Vector3, radius: number): void;
 }
 
 /** The mine's plan: where it opens, its ground, its route, its flames and its air. No meshes. */
@@ -56,6 +72,8 @@ export interface MinePlan {
   arrowStops(p: Vector3): boolean | null;
   /** Is this triangle of the hillside dug out for the mine, so the zone leaves it out? */
   cuts(tri: readonly (readonly [number, number, number])[]): boolean;
+  /** Its Warden's hall and throne. */
+  readonly throne: ThronePlan;
 }
 
 /** The mine, built: its plan and its parts' meshes. */

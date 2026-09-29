@@ -12,7 +12,7 @@ export class AttackTokens {
   private wait = 0;
 
   constructor(
-    readonly max: number,
+    public max: number,
     readonly gap = 0,
   ) {}
 

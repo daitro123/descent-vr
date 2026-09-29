@@ -1,7 +1,7 @@
 import { Vector3 } from 'three';
 import type { Atmosphere } from '../../world/atmosphere';
 import { type Flame, type Frame, toFrame } from '../../world/interiors';
-import type { MinePlan, MineStanding } from '../../world/mine';
+import type { MinePlan, MineStanding, ThronePlan } from '../../world/mine';
 import type { CampPlan, PostPlan, Respawn } from '../types';
 import { CONFIG } from '../../config';
 import { BRAZIER_FIRE, torchLight } from '../../world/hall';
@@ -377,8 +377,33 @@ export function planMine(mouth: Frame): MinePlan {
   };
 
   const { hw, height } = MINE.tunnel;
+  const { seat, front, rise, seatHeight } = CONFIG.warden.hall;
+  /** The hall's south wall, where its gate's inner mouth is, and the gate's outer mouth. */
+  const wall = HALL.z + HALL_HALF;
+  const [seatX, seatZ] = toWorld(mouth, HALL.x, HALL.z + seat);
+  const [frontX, frontZ] = toWorld(mouth, HALL.x, HALL.z + front);
+  const throne: ThronePlan = {
+    // Facing out along the hall's axis, at its gate: as the mouth faces.
+    seat: { x: seatX, z: seatZ, yaw: mouth.yaw, hip: seatHeight },
+    front: { x: frontX, z: frontZ, yaw: mouth.yaw },
+    through(x, z) {
+      inMine(x, z);
+      return local.z < wall - rise && Math.abs(local.x - HALL.x) < HALL_HALF;
+    },
+    outside(x, z) {
+      inMine(x, z);
+      return local.z > wall + HALL_GATE.depth;
+    },
+    keepIn(p, radius) {
+      inMine(p.x, p.z);
+      if (local.z <= wall - radius) return;
+      local.z = wall - radius;
+      back(p);
+    },
+  };
   return {
     id: 'mine',
+    throne,
     mouth,
     flames,
     atmosphere: { ...MINE_ATMOSPHERE_BASE, flames },

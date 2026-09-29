@@ -8,10 +8,10 @@ import { createModelMaterial, type ModelMaterial } from '../models/materials';
 import { BONES, type BoneName, blendPoses, type Pose, type Rig } from '../models/rig';
 import { HealthBar } from '../ui/healthBar';
 import type { Ground } from '../world/ground';
-import { ATTACK_POSES, GUARD, type GuardSide, IDLE, KNEEL, KNEEL_DROP, RISE, STAGGER, walkOffsets } from './poses';
+import { ATTACK_POSES, GUARD, type GuardSide, IDLE, KNEEL, KNEEL_DROP, RISE, SEATED, STAGGER, walkOffsets } from './poses';
 import type { AttackTokens } from './tokens';
 
-export type EnemyState = 'rising' | 'move' | 'attack' | 'guard' | 'stagger' | 'kneel' | 'dead';
+export type EnemyState = 'rising' | 'move' | 'attack' | 'guard' | 'stagger' | 'kneel' | 'seated' | 'sitting' | 'dead';
 export type AttackPhase = 'windup' | 'active' | 'recover';
 /** What one frame of a swing did. `dodged` = the player was in dodge frames. */
 export type StrikeOutcome = 'hit' | 'blocked' | 'parried' | 'dodged';
@@ -73,6 +73,14 @@ export interface EnemyPost {
   evading: boolean;
   /** m/s it walks after a post that moves on (a patrol's), rather than strolling back to it. */
   pace?: number;
+}
+
+/** A seat it sits on (the Warden's throne): where its feet go, the way it faces, and how high its hips are over the floor. */
+export interface Seat {
+  readonly x: number;
+  readonly z: number;
+  readonly yaw: number;
+  readonly hip: number;
 }
 
 const RISE_DEPTH = 1.9;
@@ -223,6 +231,12 @@ export abstract class Enemy {
   private detour = 0;
   private readonly detourDir = new Vector3();
   private shards: Shard[] | null = null;
+  /** The seat it sits on, is sitting down onto or standing up from; null otherwise. */
+  private seat: Seat | null = null;
+  /** Sitting down or standing up: from where, to where, over how long. */
+  private readonly seatFrom = new Vector3();
+  private readonly seatTo = new Vector3();
+  private seatTime = 1;
 
   constructor(
     /** Its behaviour: how it fights. */
@@ -269,7 +283,12 @@ export abstract class Enemy {
 
   /** Can the sword damage it right now? */
   get hittable(): boolean {
-    return this.state !== 'dead' && this.state !== 'rising' && !this.post?.evading;
+    return this.state !== 'dead' && this.state !== 'rising' && !this.seated && !this.post?.evading;
+  }
+
+  /** On its seat, sitting down onto it or standing up from it: it stays where it's put, and nothing shoves it. */
+  get seated(): boolean {
+    return this.seat !== null;
   }
 
   /** Walking home after giving up a chase: blows do nothing ("Evade"). */
@@ -383,6 +402,55 @@ export abstract class Enemy {
 
   expose(seconds: number): void {
     this.exposed = Math.max(this.exposed, seconds);
+  }
+
+  /** Back to full health, as it was before the fight. */
+  recover(): void {
+    this.hp = this.maxHp;
+    this.exposed = 0;
+  }
+
+  /** Fall apart where it stands, struck by nothing: what its master raised, once its master is gone. */
+  crumble(): void {
+    if (this.alive) this.die(_v.set(0, 0, 0));
+  }
+
+  /** Sit on `seat` at once: slumped there, still, and out of reach until it stands. */
+  sit(seat: Seat): void {
+    this.endAttack();
+    this.releaseTokens();
+    this.seat = seat;
+    this.position.set(seat.x, this.position.y, seat.z);
+    this.root.rotation.y = seat.yaw;
+    this.visual.position.y = 0;
+    this.hipDrop = this.seatDrop(seat);
+    copyPose(SEATED, this.pose);
+    this.enter('seated');
+  }
+
+  /** Sit down on `seat` from where it stands, over `seconds`. */
+  sitDown(seat: Seat, seconds: number): void {
+    this.endAttack();
+    this.releaseTokens();
+    this.seat = seat;
+    this.seatFrom.copy(this.position);
+    this.seatTo.set(seat.x, 0, seat.z);
+    this.seatTime = seconds;
+    this.enter('sitting');
+  }
+
+  /** Stand up off its seat and step out to `to` over `seconds`, then fight (or go to its post). */
+  standUp(to: { x: number; z: number }, seconds: number): void {
+    if (!this.seat) return;
+    this.seatFrom.copy(this.position);
+    this.seatTo.set(to.x, 0, to.z);
+    this.seatTime = seconds;
+    this.enter('rising');
+  }
+
+  /** The hip drop that sits its hips at `seat`'s height, as a share of its hip height. */
+  private seatDrop(seat: Seat): number {
+    return 1 - seat.hip / this.rig.proportions.hipY;
   }
 
   /** A block or parry stopped its blow. Subclasses can react differently (the Warden kneels). */
@@ -829,6 +897,19 @@ export abstract class Enemy {
     }
   }
 
+  /** Between where it stood and where it's going, on and off its seat: `k` of the way. */
+  private slideSeat(k: number): void {
+    this.position.x = this.seatFrom.x + (this.seatTo.x - this.seatFrom.x) * k;
+    this.position.z = this.seatFrom.z + (this.seatTo.z - this.seatFrom.z) * k;
+  }
+
+  /** Turn towards facing `yaw`, at its turning speed. */
+  private faceYaw(yaw: number, dt: number): void {
+    const delta = Math.atan2(Math.sin(yaw - this.root.rotation.y), Math.cos(yaw - this.root.rotation.y));
+    const maxStep = this.def.turnSpeed * dt;
+    this.root.rotation.y += Math.max(-maxStep, Math.min(maxStep, delta));
+  }
+
   protected faceToward(target: Vector3, dt: number, rate = 1): void {
     _to.subVectors(target, this.position).setY(0);
     if (_to.lengthSq() < 1e-6) return;
@@ -922,7 +1003,7 @@ export abstract class Enemy {
     if (!this.walked) this.walkedFor = 0;
     this.walked = false;
 
-    if (this.state !== 'dead') {
+    if (this.state !== 'dead' && !this.seated) {
       // Knockback slides the body; decays quickly.
       this.position.addScaledVector(this.knockback, dt);
       this.knockback.multiplyScalar(Math.exp(-8 * dt));
@@ -936,6 +1017,18 @@ export abstract class Enemy {
 
     switch (this.state) {
       case 'rising': {
+        if (this.seat) {
+          // Up off its seat: the pose straightens and the hips come up as it steps out.
+          const k = Math.min(1, this.stateTime / this.seatTime);
+          this.slideSeat(smooth(k));
+          this.hipDrop = this.seatDrop(this.seat) * (1 - smooth(Math.min(1, k * 1.4)));
+          target = k < 0.35 ? SEATED : idle;
+          if (k >= 1) {
+            this.seat = null;
+            this.enter('move');
+          }
+          break;
+        }
         const k = Math.min(1, this.stateTime / this.riseTime);
         this.visual.position.y = -RISE_DEPTH * this.heightScale * (1 - easeOut(k));
         this.faceToward(this.post ? this.postFacing(_home) : ctx.playerFeet, dt, 0.5);
@@ -979,6 +1072,20 @@ export abstract class Enemy {
         if (k >= 1) this.enter('move');
         break;
       }
+      case 'seated':
+        target = SEATED;
+        break;
+      case 'sitting': {
+        // Back onto its seat, turning to face out from it; the hips go down as it gets there.
+        const seat = this.seat!;
+        const k = Math.min(1, this.stateTime / this.seatTime);
+        this.slideSeat(smooth(k));
+        this.faceYaw(seat.yaw, dt);
+        this.hipDrop = this.seatDrop(seat) * smooth(Math.max(0, k * 1.4 - 0.4));
+        target = k > 0.3 ? SEATED : idle;
+        if (k >= 1) this.sit(seat);
+        break;
+      }
       case 'kneel': {
         target = KNEEL;
         this.hipDrop += (KNEEL_DROP - this.hipDrop) * Math.min(1, dt * 8);
@@ -988,7 +1095,7 @@ export abstract class Enemy {
       case 'dead':
         return this.updateDeath(dt);
     }
-    if (this.state !== 'kneel') this.hipDrop += (0 - this.hipDrop) * Math.min(1, dt * 5);
+    if (this.state !== 'kneel' && !this.seated) this.hipDrop += (0 - this.hipDrop) * Math.min(1, dt * 5);
 
     if (!snap) {
       // Everything outside an attack eases toward its target pose.
@@ -1024,7 +1131,7 @@ export abstract class Enemy {
     }
 
     this.updateGlow();
-    this.healthBar.update(dt, this.hpFraction, ctx.playerHead, this.kind === 'warden');
+    this.healthBar.update(dt, this.hpFraction, ctx.playerHead, this.kind === 'warden' && !this.seated);
     return true;
   }
 
@@ -1095,10 +1202,10 @@ export abstract class Enemy {
 export function keepApart(enemies: readonly Enemy[], feet: Vector3, ground: Ground): void {
   for (let i = 0; i < enemies.length; i++) {
     const a = enemies[i];
-    if (!a.alive) continue;
+    if (!a.alive || a.seated) continue;
     for (let j = i + 1; j < enemies.length; j++) {
       const b = enemies[j];
-      if (!b.alive) continue;
+      if (!b.alive || b.seated) continue;
       _v.subVectors(a.position, b.position).setY(0);
       const d = _v.length();
       const min = a.def.radius + b.def.radius + 0.15;

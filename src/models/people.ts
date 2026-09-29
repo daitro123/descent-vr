@@ -45,6 +45,14 @@ const HALE_STAND: Pose = {
   thighR: [0.03, 0, -0.05],
 };
 
+/** Hale once they've handed you their sword: the left hand off the empty scabbard, hanging easy. */
+const HALE_UNARMED: Pose = {
+  ...HALE_STAND,
+  upperArmL: [0.04, 0, 0.12],
+  forearmL: [-0.25, 0, 0],
+  handL: [0, 0, 0],
+};
+
 /** Holding something in front: a tankard, a hammer. */
 const HOLDING: Pose = {
   ...STAND,
@@ -77,9 +85,10 @@ const HALE_LOOK: Look = {
  * The village's guard captain: bareheaded, cropped grey hair and clean-shaven,
  * a mail shirt under a blue tabard with a gold mark front and back, steel
  * pauldrons, leather gloves and bracers, a belt with a gold buckle, and their
- * old longsword (the gilded guard the last quest pays out) at the left hip.
+ * old longsword (the gilded guard the last quest pays out) at the left hip:
+ * once it's `given`, the scabbard hangs empty.
  */
-function dressHale(ctx: DressContext, l: Look): void {
+function dressHale(ctx: DressContext, l: Look, given = false): void {
   body(ctx, l);
   head(ctx, l);
   mail(ctx, l);
@@ -88,7 +97,7 @@ function dressHale(ctx: DressContext, l: Look): void {
   ctx.on('hips').box(0.33, 0.06, 0.24, { at: [0, 0.03, 0.005], color: PAL.leather }).box(0.06, 0.05, 0.02, { at: [0, 0.03, 0.135], color: PAL.gold });
   pauldrons(ctx, l, PAL.steel);
   cuffs(ctx, l, PAL.leatherDark);
-  sheathedSword(ctx, l, PAL.gold);
+  sheathedSword(ctx, l, PAL.gold, !given);
 }
 
 function tankard(ctx: DressContext): void {
@@ -198,6 +207,15 @@ export const PEOPLE: Record<PersonId, Person> = {
   smith: { label: 'Smith', look: SMITH_LOOK, stand: HOLDING, dress: dressSmith, seed: 62 },
   farmer: { label: 'Farmer', look: FARMER_LOOK, stand: FORK, dress: dressFarmer, seed: 63 },
 };
+
+/** Hale once they've handed you their old longsword: the scabbard empty, and the pose to stand in without it. */
+export const HALE_UNARMED_STAND = HALE_UNARMED;
+
+/** Hale's body, with their sword at the hip or, once `given` to you, without it. One draw call. */
+export function buildHale(given: boolean, material?: Material): Rig {
+  const p = PEOPLE.hale;
+  return new Rig(BUILDS[p.look.build].proportions, (ctx) => dressHale(ctx, p.look, given), material, p.seed);
+}
 
 /** A friendly character's body, standing at bind (apply their `stand`). One draw call. */
 export function buildPerson(id: PersonId, material?: Material): Rig {

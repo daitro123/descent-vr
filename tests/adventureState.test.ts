@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type AdventureEvent, AdventureState, type Effect, enemyNumbers, type Role } from '../src/adventureState';
+import { type AdventureEvent, AdventureState, type Effect, enemyNumbers, type Role, statsAt } from '../src/adventureState';
 import { CONFIG } from '../src/config';
 import type { CampId } from '../src/maps/types';
 
@@ -150,6 +150,30 @@ describe('the level cap', () => {
     expect(state.apply(kill(5, 'warden', null))).toEqual([]);
     expect(state.xp).toBe(1000);
     expect(state.level).toBe(5);
+  });
+});
+
+describe("Hale's old longsword", () => {
+  it('adds 0.2 to your damage multiplier, one level\'s step, and nothing to your health', () => {
+    const plain = statsAt(5);
+    const hale = statsAt(5, 'hale');
+    expect(plain.damage).toBeCloseTo(1.8, 9);
+    expect(hale.damage).toBeCloseTo(2.0, 9);
+    expect(hale.maxHp).toBe(plain.maxHp);
+    expect(hale.abilities).toEqual(plain.abilities);
+    expect(statsAt(1, 'hale').damage).toBeCloseTo(statsAt(2).damage, 9);
+  });
+
+  it('is in your numbers once it is in your hand', () => {
+    const state = new AdventureState({
+      level: 5,
+      xp: 1000,
+      sword: 'hale',
+      quests: { raiders: { stage: 'handedIn', counts: [3] }, lumber: { stage: 'handedIn', counts: [5, 1] }, below: { stage: 'handedIn', counts: [1] } },
+      wardenBeaten: true,
+    });
+    expect(state.stats.damage).toBeCloseTo(2.0, 9);
+    expect(new AdventureState().stats.damage).toBe(1);
   });
 });
 

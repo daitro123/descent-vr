@@ -2,7 +2,9 @@ import { Euler, type PerspectiveCamera, Quaternion, type Scene, Vector3, type We
 import { type Ability, type AdventureEvent, AdventureState, type Effect } from './adventureState';
 import { Combat } from './combat/combat';
 import { CONFIG } from './config';
-import { type Camp, Camps, type Member, type You } from './enemies/camps';
+import { type Camp, type CampHooks, Camps, type Member, type You } from './enemies/camps';
+import type { Enemy } from './enemies/enemy';
+import { Throne } from './enemies/throne';
 import { FloatingText } from './fx/floatingText';
 import { Particles } from './fx/particles';
 import { sfx, updateListener } from './fx/sfx';
@@ -53,6 +55,8 @@ const UNLOCKED: Record<Ability, string> = {
  * the board's buttons go into the adventure state, whose levels set your
  * health, damage and abilities. What a quest has you find (the leader's
  * orders) lies where it's found while the state says so, taken with a touch.
+ * At the old mine's foot the Warden waits on its throne while you're on What
+ * Lies Below, and Hale's old longsword comes into your hand when you hand it in.
  * Out of a fight your health comes back; a death fades to black and wakes you
  * by the inn's hearth, inside with the door shut; which building you're in is
  * the World's to say. It saves itself as you go, and loads where you stood
@@ -67,6 +71,8 @@ export class Adventure {
   readonly saves: SaveController;
   readonly player: Player;
   readonly camps: Camps;
+  /** The Warden on its throne at the mine's foot, and what it raises; null in a zone without the mine. */
+  readonly throne: Throne | null;
   readonly combat: Combat;
   /** Marshal Hale, the quest giver, at the crossroads. */
   readonly hale: Hale;
@@ -86,6 +92,8 @@ export class Adventure {
   private readonly fade: Fade;
   private readonly you: You = { feet: new Vector3(), head: new Vector3(), sword: null, alive: true, interior: null };
   private readonly sword = { base: new Vector3(), tip: new Vector3(), speed: 0, swing: 0 };
+  /** Every enemy there is to fight this frame: the camps', the Warden and what it raised. */
+  private readonly foes: Enemy[] = [];
   private hitStop = 0;
   /** Seconds since you last took or dealt damage. */
   private calm = 0;
@@ -146,27 +154,35 @@ export class Adventure {
     );
     // The mine's undead stand on the mine's own ground, whether or not you've come in.
     const below = this.world.mineGround;
-    this.camps = new Camps(
-      zone.camps,
-      (plan) => (plan.interior === 'mine' && below ? below : this.world),
-      {
-        sweep: (e, a, pb, pt, b, t) => this.combat.sweep(e, a, pb, pt, b, t),
-        slam: (e, a, at) => this.combat.slam(e, a, at),
-        shoot: (e, from, damage) => this.combat.shoot(e, from, damage),
-        nock: (e, from, to) => this.combat.projectiles.nock(e, from, to),
-        telegraph: (e, a) => {
-          e.weaponSegment(_a, _b);
-          sfx.windup(_b, a.blockable);
-        },
+    const hooks: CampHooks = {
+      sweep: (e, a, pb, pt, b, t) => this.combat.sweep(e, a, pb, pt, b, t),
+      slam: (e, a, at) => this.combat.slam(e, a, at),
+      shoot: (e, from, damage) => this.combat.shoot(e, from, damage),
+      nock: (e, from, to) => this.combat.projectiles.nock(e, from, to),
+      telegraph: (e, a) => {
+        e.weaponSegment(_a, _b);
+        sfx.windup(_b, a.blockable);
       },
-      { onKill: (camp, member) => this.onKill(camp, member) },
-    );
+    };
+    this.camps = new Camps(zone.camps, (plan) => (plan.interior === 'mine' && below ? below : this.world), hooks, {
+      onKill: (camp, member) => this.onKill(camp, member),
+    });
     scene.add(this.camps.root);
+    // The Warden stands on the mine's ground too, and shares the camps' attack pools.
+    this.throne =
+      zone.mine && below
+        ? new Throne(zone.mine.throne, below, hooks, { melee: this.camps.meleeTokens, ranged: this.camps.rangedTokens }, {
+            onRise: (w) => this.wardenRises(w),
+            onSummon: (w, at) => this.wardenSummons(w, at),
+            onKill: (e, role) => this.apply({ kind: 'kill', camp: null, level: e.level, role }, e.position),
+          })
+        : null;
+    if (this.throne) scene.add(this.throne.root);
 
     this.pickups = new Pickups(zone.pickups);
     scene.add(this.pickups.root);
 
-    this.hale = new Hale(zone.hale, this.world, this.state.hale.marker);
+    this.hale = new Hale(zone.hale, this.world, this.state.hale.marker, this.state.haleSwordAtHip);
     this.world.addBody(this.hale.body);
     scene.add(this.hale.root, this.board.root, this.tracker.mesh);
 
@@ -177,6 +193,7 @@ export class Adventure {
     Object.assign(this.standing, record ? { ...record.position, yaw: record.facing, interior: record.interior } : { ...zone.spawn, interior: null });
     const { x, z, yaw, interior } = this.standing;
     this.player.stats = this.state.stats;
+    this.player.sword.sword = this.state.sword;
     this.world.settle(interior);
     this.player.reset(x, z, yaw);
     this.lastHp = this.player.hp;
@@ -194,7 +211,8 @@ export class Adventure {
     player.update(dt);
     updateListener(player.camera);
     const { hands } = player.input;
-    if (hands.left.primaryPressed || hands.right.primaryPressed) this.combat.warCry(this.camps.enemies);
+    const foes = this.gatherFoes();
+    if (hands.left.primaryPressed || hands.right.primaryPressed) this.combat.warCry(foes);
 
     // Hit-stop freezes enemies (not you) for a few frames on impact.
     const enemyDt = this.hitStop > 0 ? 0 : dt;
@@ -211,13 +229,14 @@ export class Adventure {
       you.sword = this.sword;
     } else you.sword = null;
 
-    this.combat.update(dt, this.camps.enemies);
+    this.combat.update(dt, foes);
     this.camps.update(enemyDt, you);
+    this.throne?.update(enemyDt, you, this.state.wardenSeated);
     this.combat.projectiles.render();
     this.heal(dt);
     this.updateDeath(dt);
 
-    this.shadows.cast(you.feet, this.camps.enemies);
+    this.shadows.cast(you.feet, this.gatherFoes());
     if (sword.tip.valid) {
       sword.segment(rig, _a, _b);
       this.trail.update(dt, _a, _b, sword.hot, player.frenzy > 0);
@@ -237,18 +256,49 @@ export class Adventure {
     this.saves.update(dt);
   }
 
+  /** Every enemy there is to fight: the camps', then the Warden's hall's. */
+  private gatherFoes(): Enemy[] {
+    const { foes } = this;
+    foes.length = 0;
+    foes.push(...this.camps.enemies);
+    if (this.throne) foes.push(...this.throne.enemies);
+    return foes;
+  }
+
   /**
-   * The camps outside are drawn with the outdoors. The mine's undead are
-   * drawn where the mine is: each only in a part of it that's drawn.
+   * The camps outside are drawn with the outdoors. The mine's undead, and the
+   * Warden with what it raises, are drawn where the mine is: each only in a
+   * part of it that's drawn.
    */
   private showCamps(outdoors: boolean): void {
     const mine = this.world.mine;
+    const inMine = (root: { children: readonly { position: Vector3; visible: boolean }[] }) => {
+      for (const body of root.children) body.visible = mine!.drawn[mine!.partAt(body.position.x, body.position.z)];
+    };
     for (const camp of this.camps.camps) {
-      if (camp.plan.interior !== 'mine' || !mine) {
-        camp.root.visible = outdoors;
-        continue;
-      }
-      for (const body of camp.root.children) body.visible = mine.drawn[mine.partAt(body.position.x, body.position.z)];
+      if (camp.plan.interior !== 'mine' || !mine) camp.root.visible = outdoors;
+      else inMine(camp.root);
+    }
+    if (this.throne && mine) inMine(this.throne.root);
+  }
+
+  /** The Warden stands up off its throne as you come through the gate, with a roar. */
+  private wardenRises(w: Enemy): void {
+    this.particles.burst('magic', _a.copy(w.position).setY(w.position.y + 0.2), 40);
+    this.particles.burst('dust', w.position, 30);
+    sfx.roar(w.position);
+    this.text.banner(this.player.camera, 'THE BONE WARDEN', '#6ad0ff', 0.28);
+  }
+
+  /** It calls up the dead round you, as in the arena: a flash on its blade, and each clawing up out of the floor. */
+  private wardenSummons(w: Enemy, at: readonly Vector3[]): void {
+    w.weaponSegment(_a, _b);
+    this.particles.burst('magic', _b, 30);
+    sfx.summon(_b);
+    for (const p of at) {
+      this.particles.burst('magic', _a.copy(p).setY(p.y + 0.1), 16);
+      this.particles.burst('dust', p, 12);
+      sfx.rise(p);
     }
   }
 
@@ -357,7 +407,10 @@ export class Adventure {
           if (e.stage === 'handedIn') sfx.fanfare();
           break;
         case 'sword':
-          // Hale's old longsword comes into your hand with What Lies Below (ticket 28).
+          // Hale's old longsword, straight into your hand, off their hip; it hits one level harder.
+          this.player.sword.sword = e.sword;
+          this.player.stats = this.state.stats;
+          this.hale.swordAtHip = this.state.haleSwordAtHip;
           break;
       }
     }

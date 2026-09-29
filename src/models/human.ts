@@ -386,15 +386,20 @@ export function pommelOf(l: Look): Vec3 {
   return [0.19 * thick(l) - 0.01, 0.215, 0.215];
 }
 
-/** A sheathed sword at the left hip, hilt forward and up; its guard and pommel in `guard`. */
-export function sheathedSword(ctx: DressContext, l: Look, guard: number): void {
+/**
+ * A sheathed sword at the left hip, hilt forward and up; its guard, pommel
+ * and the scabbard's chape in `guard`. Without its `hilt`, the scabbard hangs
+ * empty.
+ */
+export function sheathedSword(ctx: DressContext, l: Look, guard: number, hilt = true): void {
   const x = 0.19 * thick(l);
   const tilt: Vec3 = [0.28, 0, 0.06];
-  ctx
+  const b = ctx
     .on('hips')
     .box(0.045, 0.78, 0.065, { at: [x, -0.36, 0.05], rot: tilt, color: PAL.leatherDark })
-    .box(0.05, 0.08, 0.07, { at: [x + 0.02, -0.73, -0.055], rot: tilt, color: guard })
-    .box(0.035, 0.035, 0.18, { at: [x, 0.04, 0.165], rot: tilt, color: guard })
+    .box(0.05, 0.08, 0.07, { at: [x + 0.02, -0.73, -0.055], rot: tilt, color: guard });
+  if (!hilt) return;
+  b.box(0.035, 0.035, 0.18, { at: [x, 0.04, 0.165], rot: tilt, color: guard })
     .box(0.035, 0.15, 0.035, { at: [x - 0.005, 0.13, 0.19], rot: tilt, color: PAL.leather })
     .ball(0.03, { at: pommelOf(l), color: guard });
 }

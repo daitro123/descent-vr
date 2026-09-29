@@ -5,8 +5,8 @@ import type { CampId } from '../src/maps/types';
 // Marshal Hale's quest chain, at the adventure-state seam: events in (accept,
 // hand in, kills, the orders picked up), and what a player would notice out:
 // what Hale shows (the marker over their head, the board's line and buttons),
-// the tracker, XP, levels and the sword. The lumber camp, its patrol, the mine
-// and the Warden aren't built yet; their kills are events like any other.
+// the tracker, XP, levels and the sword, the Warden on its throne and Hale's
+// sword at their hip. Kills anywhere are events like any other.
 
 const kill = (camp: CampId | null, level: number, role: Role = 'ordinary'): AdventureEvent => ({ kind: 'kill', camp, level, role });
 const ACCEPT: AdventureEvent = { kind: 'accept' };
@@ -299,6 +299,51 @@ describe('What Lies Below', () => {
   });
 });
 
+describe('the Warden on its throne, and the swords', () => {
+  /** What the state answers: does the Warden sit on its throne, which sword you carry, and does Hale's hang at their hip? */
+  const answers = (state: AdventureState) => [state.wardenSeated, state.sword, state.haleSwordAtHip];
+
+  it('answers for every stage of the chain', () => {
+    const state = new AdventureState();
+    const seen: Record<string, unknown[]> = {};
+    const at = (name: string) => (seen[name] = answers(state));
+    at('new');
+    play(state, ...RAIDERS);
+    at('lumber offered');
+    play(state, ...LUMBER);
+    at('below offered');
+    play(state, ACCEPT);
+    at('below under way');
+    play(state, WARDEN);
+    at('Warden beaten');
+    play(state, HAND_IN);
+    at('chain done');
+    expect(seen).toEqual({
+      new: [false, 'plain', true],
+      'lumber offered': [false, 'plain', true],
+      'below offered': [false, 'plain', true],
+      'below under way': [true, 'plain', true],
+      'Warden beaten': [false, 'plain', true],
+      'chain done': [false, 'hale', false],
+    });
+  });
+
+  it("doesn't seat the Warden again once beaten, reloads included", () => {
+    const state = new AdventureState();
+    play(state, ...RAIDERS, ...LUMBER, ACCEPT, WARDEN);
+    const reloaded = new AdventureState(state.snapshot());
+    expect(answers(reloaded)).toEqual([false, 'plain', true]);
+    play(reloaded, HAND_IN);
+    expect(answers(new AdventureState(reloaded.snapshot()))).toEqual([false, 'hale', false]);
+  });
+
+  it('keeps the Warden seated across a reload while the quest is under way', () => {
+    const state = new AdventureState();
+    play(state, ...RAIDERS, ...LUMBER, ACCEPT, kill('mine', 3));
+    expect(new AdventureState(state.snapshot()).wardenSeated).toBe(true);
+  });
+});
+
 describe('after the chain', () => {
   const done = () => {
     const state = new AdventureState();
@@ -393,5 +438,6 @@ describe('the plain route', () => {
       'last hand-in': [1000, 5],
     });
     expect(state.sword).toBe('hale');
+    expect(state.stats.damage).toBeCloseTo(2.0, 9);
   });
 });

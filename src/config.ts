@@ -3,6 +3,7 @@
 
 import type { Ability, Role } from './adventureState';
 import type { EnemyKind } from './models/characters';
+import type { Sword } from './quests';
 
 /** Which keyframe pair (enemies/poses.ts) an attack animates between. */
 export type AttackPoseName = 'chop' | 'slashR' | 'slashL' | 'slam' | 'draw' | 'summon';
@@ -293,6 +294,7 @@ export const CONFIG = {
     xp: [100, 300, 600, 1000], // XP in all to reach levels 2, 3, 4 and 5, the cap; XP past it is dropped
     health: 20, // your maximum health (player.maxHp at level 1) grows this much per level above 1
     step: 0.2, // your damage, and an enemy's health and damage, times 1 + this per level above 1
+    swords: { plain: 0, hale: 0.2 } satisfies Record<Sword, number>, // your damage multiplier's extra with each sword: Hale's old longsword is worth one level
     killXp: 10, // a kill pays this per enemy level…
     roles: { ordinary: 1, leader: 3, deepBrute: 3, warden: 3, raised: 0 } satisfies Record<Role, number>, // …times this, by what it was
     unlocks: { warCry: 2, earthshaker: 3 } satisfies Record<Ability, number>, // the level each ability arrives at; rage comes with the War Cry
@@ -491,6 +493,21 @@ export const CONFIG = {
     enrageAt: 0.35, // below this HP fraction, wind-ups are faster
     enrageWindup: 0.75,
     kneelTime: 2.6,
+    // In the old mine (enemies/throne.ts): the Warden on its throne in its
+    // hall at the mine's foot, while you're on What Lies Below. It rises once
+    // you're `rise` m in through the hall's south gate, and resets once you're
+    // out through it into the antechamber (or down).
+    hall: {
+      level: 5, // it, and the skeletons it raises, at this level and in no camp
+      hp: 600, // its level-1 health, so 1,080 at level 5 (the arena's Warden is 1,100)
+      melee: 2, // the melee pool across every camp while it's up: the arena's, as its fight was tuned with two
+      rise: 0.5, // m in past the gate's inner mouth: it rises
+      seat: -6.2, // m from the hall's middle towards the throne: where it sits…
+      front: -4.7, // …and where it stands up to, and walks back to before it sits (the arena's Warden rises here)
+      seatHeight: 0.95, // m: its hips over the floor while it sits
+      stand: 2.4, // s to stand up off the throne
+      sit: 1.6, // s to sit back down
+    },
   },
 
   // ?duel: a practice duelist, one at a time. It is a grunt that reads nearly
