@@ -1033,6 +1033,20 @@ describe('the old mine', () => {
     for (let i = 1; i < seen.length; i++) if (seen[i].crypt > -Infinity && seen[i - 1].crypt > -Infinity) expect(seen[i].crypt).toBeGreaterThanOrEqual(seen[i - 1].crypt - 1e-9);
   });
 
+  it("never puts you past the breach anywhere short of it: by the dig's east wall, the carved passage is through the rock", () => {
+    const { w, eye, walk, stand } = walkable();
+    stand(0, 4);
+    walk([[0, 4], ...route().slice(0, MINE.breach)], 6);
+    const breach = MINE.route[MINE.breach];
+    for (const { lx, lz } of spots(0.5)) {
+      const piece = hollow.pieceAt(lx, lz) as (typeof MINE.pieces)[number];
+      if (piece.finish === 'dressed' || piece.finish === 'hall') continue;
+      stand(lx, lz);
+      w.update(1 / 72, eye);
+      expect(w.cues.crypt, `at (${lx}, ${lz})`).toBeLessThanOrEqual(-Math.hypot(lx - breach[0], lz - breach[1]) + 1e-9);
+    }
+  });
+
   it('settles in at once for a save made inside it, in the light of where you stood', () => {
     const { w, eye, stand } = walkable();
     w.settle('mine');

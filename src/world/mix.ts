@@ -58,22 +58,22 @@ export function mix(cues: Cues, fight: boolean, out: Mix = blankMix(), rules: Ru
   // Behind the shut door you're furthest behind, or past the mine's bend.
   let room = 0;
   for (const r of cues.rooms) room = Math.max(room, r.light);
-  const under = clamp01(cues.mine);
-  out.outdoors = lerp(1, inside.level, room) * (1 - under);
-  out.outdoorsCutoff = sweep(open, inside.cutoff, Math.max(room, under));
+  const below = clamp01(cues.mine);
+  out.outdoors = lerp(1, inside.level, room) * (1 - below);
+  out.outdoorsCutoff = sweep(open, inside.cutoff, Math.max(room, below));
   // A room's sounds come up as its light does, or partly as its door opens.
   out.rooms.length = cues.rooms.length;
   cues.rooms.forEach((r, i) => {
     const t = Math.max(clamp01(r.light), clamp01(r.door) * door);
     const o = (out.rooms[i] ??= { level: 0, cutoff: open });
-    o.level = lerp(walls.level, 1, t) * (1 - under);
+    o.level = lerp(walls.level, 1, t) * (1 - below);
     o.cutoff = sweep(walls.cutoff, open, t);
   });
   // The drone rises across the breach, as the timbers give way to dressed stone.
   const deep = smooth((cues.crypt - crypt.from) / (crypt.to - crypt.from));
-  out.air = under * lerp(1, crypt.air, deep);
-  out.timbers = under * (1 - deep);
-  out.drone = under * deep;
+  out.air = below * lerp(1, crypt.air, deep);
+  out.timbers = below * (1 - deep);
+  out.drone = below * deep;
   out.all = fight ? rules.fight.level : 1;
   return out;
 }

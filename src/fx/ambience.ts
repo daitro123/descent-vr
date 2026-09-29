@@ -50,7 +50,7 @@ interface Underground {
   nextDrip: number;
   nextCreak: number;
   /** s since the mine's light went out, to stop it once it's silent. */
-  quiet: number;
+  dark: number;
 }
 
 /** One ambient sound playing: into `input`, through its panner, to its part of the mix. */
@@ -75,6 +75,9 @@ interface Bird {
 }
 
 const between = ([lo, hi]: readonly [number, number]) => lo + (hi - lo) * Math.random();
+
+/** Move `param` to `v`, eased over a frame or two (the mix's levels already move smoothly). */
+const ease = (param: AudioParam, v: number, kit: AudioKit) => param.setTargetAtTime(v, kit.ctx.currentTime, CONFIG.sound.mix.ease);
 
 /**
  * Oakvale's ambience, stepped once a frame with your head, the light's cues
@@ -234,11 +237,11 @@ export class Ambience {
    * comes in over its `attack` and goes over its `release`.
    */
   private follow(dt: number, cues: Cues, m: Mix): void {
-    const { ctx } = this.kit!;
-    const now = ctx.currentTime;
-    const set = (p: AudioParam, v: number) => p.setTargetAtTime(v, now, 0.03);
+    const kit = this.kit!;
+    const set = (p: AudioParam, v: number) => ease(p, v, kit);
     const { attack, release } = CONFIG.sound.mix.fight;
-    this.dip += (m.all - this.dip) * (1 - Math.exp(-dt / (m.all < this.dip ? attack : release) * 3));
+    // Exponentially, most of the way (95%) over `attack` or `release`.
+    this.dip += (m.all - this.dip) * (1 - Math.exp((-3 * dt) / (m.all < this.dip ? attack : release)));
     set(this.bus!.gain, CONFIG.sound.ambient.level * this.dip);
     set(this.outdoors!.gain.gain, m.outdoors);
     set(this.outdoors!.filter.frequency, m.outdoorsCutoff);
@@ -262,18 +265,17 @@ export class Ambience {
       if (cues.mine <= 0) return;
       u = this.under = this.startUnder();
     }
-    const now = this.kit!.ctx.currentTime;
-    u.air.gain.setTargetAtTime(m.air, now, 0.03);
-    u.timbers.gain.setTargetAtTime(m.timbers, now, 0.03);
-    u.drone.gain.setTargetAtTime(m.drone * CONFIG.sound.mine.drone, now, 0.03);
-    u.quiet = cues.mine > 0 ? 0 : u.quiet + dt;
-    if (u.quiet > 1) {
+    const { drips, timbers, drone, linger } = CONFIG.sound.mine;
+    ease(u.air.gain, m.air, this.kit!);
+    ease(u.timbers.gain, m.timbers, this.kit!);
+    ease(u.drone.gain, m.drone * drone, this.kit!);
+    u.dark = cues.mine > 0 ? 0 : u.dark + dt;
+    if (u.dark > linger) {
       for (const l of u.loops) l.stop();
       for (const n of [u.air, u.timbers, u.drone]) n.disconnect();
       this.under = null;
       return;
     }
-    const { drips, timbers } = CONFIG.sound.mine;
     const side = (list: readonly StereoPannerNode[]) => list[Math.floor(Math.random() * list.length)];
     if ((u.nextDrip -= dt) <= 0 && m.air > 0) {
       sfx.drip(side(u.drips));
@@ -288,7 +290,7 @@ export class Ambience {
   private startUnder(): Underground {
     const kit = this.kit!;
     const { ctx } = kit;
-    const { air, drips, timbers, pan } = CONFIG.sound.mine;
+    const { air, drips, timbers, sides: spread } = CONFIG.sound.mine;
     const gain = (v: number, into: AudioNode) => {
       const g = ctx.createGain();
       g.gain.value = v;
@@ -296,12 +298,12 @@ export class Ambience {
       return g;
     };
     const u = { air: gain(0, this.bus!), timbers: gain(0, this.bus!), drone: gain(0, this.bus!) };
-    // A few fixed sides, from `pan` left to `pan` right, each drip or creak from one of them.
+    // A few fixed sides, each drip or creak from one of them.
     const sides = (level: number, into: GainNode) => {
       const g = gain(level, into);
-      return [-1, -0.4, 0.4, 1].map((k) => {
+      return spread.map((pan) => {
         const p = ctx.createStereoPanner();
-        p.pan.value = k * pan;
+        p.pan.value = pan;
         p.connect(g);
         return p;
       });
@@ -313,7 +315,7 @@ export class Ambience {
       creaks: sides(timbers.level, u.timbers),
       nextDrip: between(drips.every),
       nextCreak: between(timbers.every),
-      quiet: 0,
+      dark: 0,
     };
   }
 

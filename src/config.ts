@@ -662,6 +662,7 @@ export const CONFIG = {
     // Interiors switch's light does, so over the same half-second.
     mix: {
       open: 20000, // Hz: a lowpass this high muffles nothing
+      ease: 0.03, // s: the graph eases to each frame's mix with this time constant
       // Behind a shut door, the outdoors (the wind, the birds, the places outside) is this loud and muffled above `cutoff` Hz.
       inside: { level: 0.3, cutoff: 500 },
       // A room's own sounds (the inn's hearth) heard from outside through its shut door and walls…
@@ -679,8 +680,9 @@ export const CONFIG = {
       air: 0.9, // the hollow air's loudness (1 about as loud as the arena's drone)
       drips: { level: 0.6, every: [0.5, 2.4] }, // s between drips (random in range)
       timbers: { level: 0.7, every: [3, 9] }, // s between creaks
-      pan: 0.8, // how far to either side a drip or a creak can come from (1 all the way)
+      sides: [-0.8, -0.3, 0.3, 0.8], // the stereo pans a drip or a creak can come from (±1 all the way to one side)
       drone: 1, // the arena's drone in the crypt: 1 as loud as in the arena
+      linger: 1, // s the mine's ambience keeps going once its light is out, before it stops
     },
   },
 
