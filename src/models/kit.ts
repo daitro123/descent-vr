@@ -191,8 +191,13 @@ export class ModelBuilder {
     return this;
   }
 
+  /** How many parts it holds so far. */
+  get count(): number {
+    return this.parts.length;
+  }
+
   /** Merge every part into one geometry. Pass `skinned: false` for static props. */
-  build(opts: { skinned?: boolean; ao?: { from: number; to: number; min: number } } = {}): BufferGeometry {
+  build(opts: { skinned?: boolean; ao?: { from: number; to: number; min: number; floor?: (x: number, z: number) => number } } = {}): BufferGeometry {
     const merged = mergeGeometries(this.parts, false);
     for (const p of this.parts) p.dispose();
     this.parts.length = 0;
@@ -200,7 +205,7 @@ export class ModelBuilder {
       merged.deleteAttribute('skinIndex');
       merged.deleteAttribute('skinWeight');
     }
-    if (opts.ao) bakeHeightAO(merged, opts.ao.from, opts.ao.to, opts.ao.min);
+    if (opts.ao) bakeHeightAO(merged, opts.ao.from, opts.ao.to, opts.ao.min, opts.ao.floor);
     merged.computeBoundingSphere();
     return merged;
   }
@@ -234,12 +239,13 @@ function boxProjectUVs(g: BufferGeometry): void {
   g.setAttribute('uv', new BufferAttribute(uv, 2));
 }
 
-/** Fake ambient occlusion: darken vertices toward the floor. */
-function bakeHeightAO(g: BufferGeometry, from: number, to: number, min: number): void {
+/** Fake ambient occlusion: darken vertices toward the floor (at 0, or wherever `floor` says it is). */
+function bakeHeightAO(g: BufferGeometry, from: number, to: number, min: number, floor?: (x: number, z: number) => number): void {
   const pos = g.getAttribute('position');
   const col = g.getAttribute('color');
   for (let i = 0; i < pos.count; i++) {
-    const t = Math.min(1, Math.max(0, (pos.getY(i) - from) / (to - from)));
+    const y = pos.getY(i) - (floor ? floor(pos.getX(i), pos.getZ(i)) : 0);
+    const t = Math.min(1, Math.max(0, (y - from) / (to - from)));
     const k = min + (1 - min) * t * t * (3 - 2 * t);
     col.setXYZ(i, col.getX(i) * k, col.getY(i) * k, col.getZ(i) * k);
   }

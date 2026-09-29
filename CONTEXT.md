@@ -10,7 +10,7 @@ _Avoid_: campaign, story mode, main game
 
 **Arena**:
 The wave game in the crypt hall at `?arena`, the combat prototype kept for practising fights. It never touches the Adventure's save.
-_Avoid_: practice mode, wave mode, the crypt (the crypt hall is the arena's room)
+_Avoid_: practice mode, wave mode, the crypt (the crypt hall is the arena's room; the Warden's hall at the bottom of the old mine is the same hall, built by the same code)
 
 **Zone**:
 A hand-built outdoor region of the world, joined to its neighbours so the player walks from one into the next.

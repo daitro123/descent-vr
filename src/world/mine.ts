@@ -61,6 +61,10 @@ export interface Mine extends MinePlan {
    * the outdoors is hidden); from inside, the part you're in and its neighbours.
    */
   show(entered: boolean, outdoors: boolean, x: number, z: number): void;
+  /** Which parts are drawn. */
+  readonly drawn: readonly boolean[];
+  /** How many triangles part i draws. */
+  triangles(part: number): number;
   /** Per-frame animation (glows). */
   update(dt: number, camera: Camera): void;
 }

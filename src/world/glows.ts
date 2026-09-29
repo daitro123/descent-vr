@@ -12,6 +12,7 @@ import {
   Vector3,
 } from 'three';
 
+/** How many glows one Glows holds, unless it asks for more. */
 const MAX = 16;
 const _m = new Matrix4();
 const _q = new Quaternion();
@@ -46,8 +47,11 @@ function glowTexture(): CanvasTexture | null {
 export class Glows {
   readonly mesh: InstancedMesh;
   private readonly items: { pos: Vector3; size: number; seed: number }[] = [];
+  /** Only glows `from` up to (not including) `to` are drawn; the rest shrink to nothing. */
+  private from = 0;
+  private to = Infinity;
 
-  constructor() {
+  constructor(private readonly max = MAX) {
     const mat = new MeshBasicMaterial({
       map: glowTexture(),
       transparent: true,
@@ -55,7 +59,7 @@ export class Glows {
       depthWrite: false,
       fog: false,
     });
-    this.mesh = new InstancedMesh(new PlaneGeometry(1, 1), mat, MAX);
+    this.mesh = new InstancedMesh(new PlaneGeometry(1, 1), mat, max);
     this.mesh.instanceMatrix.setUsage(DynamicDrawUsage);
     this.mesh.count = 0;
     this.mesh.frustumCulled = false;
@@ -63,10 +67,21 @@ export class Glows {
 
   add(x: number, y: number, z: number, size: number, color: number): void {
     const i = this.items.length;
-    if (i >= MAX) return;
+    if (i >= this.max) return;
     this.items.push({ pos: new Vector3(x, y, z), size, seed: i * 1.7 });
     this.mesh.setColorAt(i, new Color(color).multiplyScalar(0.55));
     this.mesh.count = this.items.length;
+  }
+
+  /** How many it holds. */
+  get count(): number {
+    return this.items.length;
+  }
+
+  /** Draw only the glows added `from` up to (not including) `to`. */
+  range(from: number, to: number): void {
+    this.from = from;
+    this.to = to;
   }
 
   /** Face the camera and breathe with the flame. */
@@ -74,6 +89,10 @@ export class Glows {
     camera.getWorldPosition(_cam);
     for (let i = 0; i < this.items.length; i++) {
       const g = this.items[i];
+      if (i < this.from || i >= this.to) {
+        this.mesh.setMatrixAt(i, _m.makeScale(0, 0, 0));
+        continue;
+      }
       _m.lookAt(_cam, g.pos, camera.up);
       _q.setFromRotationMatrix(_m);
       const t = time * 8 + g.seed;

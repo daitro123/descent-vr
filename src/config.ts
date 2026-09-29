@@ -97,6 +97,7 @@ export const CONFIG = {
       { kind: 'crate', x: -4.4, z: 6.3, r: 0.55 },
       { kind: 'crate', x: -3.3, z: 6.5, r: 0.3 },
     ],
+    choked: 0.6, // m a choked gate's fallen stone spills into the room (world/hall.ts): the old mine's hall's east and west gates
   },
 
   // The World (world/world.ts): what every zone shares. Loading a zone never

@@ -1,33 +1,82 @@
-import { type Camera, Group, IcosahedronGeometry, Matrix4, Mesh, PlaneGeometry, Vector3 } from 'three';
+import { type BufferGeometry, type Camera, Group, IcosahedronGeometry, Matrix4, Mesh, PlaneGeometry, Vector3 } from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ModelBuilder, type PartOpts } from '../../models/kit';
-import { sharedModelMaterial } from '../../models/materials';
+import { type ModelMaterial, sharedModelMaterial } from '../../models/materials';
 import { PAL } from '../../models/palette';
 import { Glows } from '../../world/glows';
+import { brazier, buildHall, hallMaterials } from '../../world/hall';
 import type { Mine, MinePlan } from '../../world/mine';
-import { Hollow, type Wall } from './hollow';
+import { bends, floorOf, Hollow, type Piece } from './hollow';
 import { FLAME } from './interiorModel';
-import { MINE } from './mine';
+import { type Finish, MINE, type MinePiece } from './mine';
 import { mulberry32, valueNoise } from './noise';
 import { BUILD, EARTH } from './palette';
 
 // The old mine's meshes, built in the mouth's frame (mine.ts) and placed with
-// it: for each part (the adit, the cart hall, the gallery) one mesh and its
-// glows. The rock is planes facing into the open space, roughened away from
-// their edges so neighbouring walls still meet; the timbers, rails, carts and
-// the bandits' leavings stand on it.
+// it. Everything of one material is one mesh, its parts laid down in order
+// along the route, so drawing the part you're in and its neighbours is one
+// draw range: the rock, timbers and props (the models' material), the crypt's
+// flagstone floors, its brick walls, and the glows: four draw calls for the
+// whole mine. The rock is planes facing into the open space, roughened away
+// from their edges so neighbouring walls still meet; the crypt's is dressed
+// stone; the Warden's hall is the arena's (world/hall.ts).
 
-/** How far the rock's faces are pushed out into the open space, at most. */
-const ROUGH = 0.12;
+/** How far the rock's faces are pushed out into the open space, at most: the old mine's, and the bandits' rougher dig. */
+const ROUGH: Record<Finish, number> = { timbered: 0.12, dug: 0.2, dressed: 0, hall: 0 };
 /** The rock stops this far out past the mouth's line, behind its timbers. */
 const LIP = 0.1;
 
 const ROCK: PartOpts = { color: EARTH.cliff, jitter: 0.14 };
 const CEILING: PartOpts = { color: EARTH.rockDark, jitter: 0.14 };
 const FLOOR: PartOpts = { color: EARTH.dirtDark, jitter: 0.1 };
+const DUG_FLOOR: PartOpts = { color: EARTH.mud, jitter: 0.14 };
+const VAULT: PartOpts = { color: PAL.stoneDark, jitter: 0.08 };
 const TIMBER: PartOpts = { color: PAL.woodDark, jitter: 0.12 };
 const IRON: PartOpts = { color: PAL.ironDark, jitter: 0.05 };
+/** Flagstones and bricks: white, so the texture is all the colour. */
+const TEXTURED: PartOpts = { color: 0xffffff, jitter: 0 };
+const BRICK = 0x6e463a;
+/** Room for every glow in the mine. */
+const MAX_GLOWS = 24;
 
-type Glow = (x: number, y: number, z: number, size: number) => void;
+type Glow = (x: number, y: number, z: number, size: number, color?: number) => void;
+
+/** One part's builders: the models' material, the crypt's flagstones and its bricks. */
+interface PartBuilders {
+  readonly model: ModelBuilder;
+  readonly floor: ModelBuilder;
+  readonly walls: ModelBuilder;
+}
+
+/** A mesh holding every part's geometry of one material in route order: `starts[i]` is where part i's vertices begin. */
+class PartedMesh {
+  readonly mesh: Mesh;
+  readonly starts: number[] = [0];
+
+  constructor(geometries: (BufferGeometry | null)[], material: ModelMaterial, name: string, place: Matrix4) {
+    const present = geometries.filter((g): g is BufferGeometry => !!g);
+    for (const g of geometries) this.starts.push(this.starts[this.starts.length - 1] + (g ? g.getAttribute('position').count : 0));
+    const merged = mergeGeometries(present, false);
+    for (const g of present) g.dispose();
+    merged.applyMatrix4(place);
+    merged.computeBoundingSphere();
+    this.mesh = new Mesh(merged, material);
+    this.mesh.name = name;
+  }
+
+  /** Draw parts `lo` to `hi`; nothing if `lo` > `hi`. */
+  show(lo: number, hi: number): void {
+    const from = this.starts[Math.max(0, lo)];
+    const to = this.starts[Math.min(this.starts.length - 1, hi + 1)];
+    this.mesh.geometry.setDrawRange(from, Math.max(0, to - from));
+    this.mesh.visible = to > from;
+  }
+
+  /** Part i's triangles. */
+  triangles(part: number): number {
+    return (this.starts[part + 1] - this.starts[part]) / 3;
+  }
+}
 
 /** The mine, its parts hidden but for the adit, for its `plan`. */
 export function buildMine(plan: MinePlan): Mine {
@@ -35,49 +84,69 @@ export function buildMine(plan: MinePlan): Mine {
   const place = new Matrix4().makeRotationY(mouth.yaw).setPosition(mouth.x, mouth.y, mouth.z);
   const hollow = new Hollow(MINE.pieces);
   const partOf = (x: number, z: number) => hollow.pieceAt(x, z).part;
+  const floorAt = (x: number, z: number) => hollow.floorAt(x, z);
 
-  const builders = MINE.parts.map((_, i) => new ModelBuilder(250 + i));
-  const glows = MINE.parts.map(() => new Glows());
-  const glowIn = (part: number): Glow => (x, y, z, size) => {
+  const builders: PartBuilders[] = MINE.parts.map((_, i) => ({ model: new ModelBuilder(250 + i), floor: new ModelBuilder(270 + i), walls: new ModelBuilder(290 + i) }));
+  const glowsOf: { x: number; y: number; z: number; size: number; color: number }[][] = MINE.parts.map(() => []);
+  const glowIn = (part: number): Glow => (x, y, z, size, color = FLAME) => {
     const p = new Vector3(x, y, z).applyMatrix4(place);
-    glows[part].add(p.x, p.y, p.z, size, FLAME);
+    glowsOf[part].push({ x: p.x, y: p.y, z: p.z, size, color });
   };
-  const at = (x: number, z: number) => builders[partOf(x, z)];
+  const at = (x: number, z: number) => builders[partOf(x, z)].model;
   const glowAt = (x: number, z: number) => glowIn(partOf(x, z));
 
   buildRock(hollow, builders);
   buildSets(at);
   buildRails(at);
-  buildHall(builders[1], glowIn(1));
-  buildGallery(builders[2]);
-  for (const [x, y, z] of MINE.lanterns) lantern(at(x, z), glowAt(x, z), x, y, z);
+  buildCartHall(builders[1].model, glowIn(1));
+  buildGallery(builders[2].model);
+  buildRamp(at, floorAt);
+  buildDig(builders[4], glowIn(4));
+  buildCrypt(builders, glowIn, floorAt);
+  for (const [x, y, z] of MINE.lanterns) lantern(at(x, z), glowAt(x, z), x, floorAt(x, z) + y, z);
 
-  const parts = builders.map((b, i) => {
-    const geometry = b.build({ ao: { from: 0, to: 1.4, min: 0.6 } });
-    geometry.applyMatrix4(place);
-    const mesh = new Mesh(geometry, sharedModelMaterial());
-    mesh.name = `mine-${MINE.parts[i].replace(' ', '-')}`;
-    const group = new Group();
-    group.name = `${mesh.name}-part`;
-    group.add(mesh, glows[i].mesh);
-    return group;
-  });
+  const ao = { from: 0, to: 1.4, min: 0.6, floor: floorAt };
+  const built = (b: ModelBuilder, opts = {}) => (b.count > 0 ? b.build(opts) : null);
+  const materials = hallMaterials();
+  const meshes = [
+    new PartedMesh(builders.map((b) => built(b.model, { ao })), sharedModelMaterial(), 'mine-rock', place),
+    new PartedMesh(builders.map((b) => built(b.floor)), materials.floor, 'mine-flagstones', place),
+    new PartedMesh(builders.map((b) => built(b.walls)), materials.walls, 'mine-bricks', place),
+  ];
+  const glows = new Glows(MAX_GLOWS);
+  const glowStarts = [0];
+  for (const list of glowsOf) {
+    for (const g of list) glows.add(g.x, g.y, g.z, g.size, g.color);
+    glowStarts.push(glows.count);
+  }
+  glows.mesh.name = 'mine-glows';
   const root = new Group();
   root.name = 'mine';
-  root.add(...parts);
+  root.add(...meshes.map((m) => m.mesh), glows.mesh);
 
   let current = 0;
   let time = 0;
+  let drawn = MINE.parts.map(() => false);
   const mine: Mine = {
     ...plan,
     root,
     show(entered, outdoors, x, z) {
       if (entered) current = plan.partAt(x, z);
-      for (let i = 0; i < parts.length; i++) parts[i].visible = entered ? Math.abs(i - current) <= 1 : i === 0 && outdoors;
+      const [lo, hi] = entered ? [current - 1, current + 1] : outdoors ? [0, 0] : [1, 0];
+      for (const m of meshes) m.show(lo, hi);
+      glows.range(glowStarts[Math.max(0, lo)], glowStarts[Math.min(MINE.parts.length, hi + 1)]);
+      glows.mesh.visible = hi >= lo;
+      drawn = MINE.parts.map((_, i) => i >= lo && i <= hi);
+    },
+    get drawn() {
+      return drawn;
+    },
+    triangles(part) {
+      return meshes.reduce((n, m) => n + m.triangles(part), 0);
     },
     update(dt: number, camera: Camera) {
       time += dt;
-      for (let i = 0; i < parts.length; i++) if (parts[i].visible) glows[i].update(time, camera);
+      if (glows.mesh.visible) glows.update(time, camera);
     },
   };
   mine.show(false, true, mouth.x, mouth.z);
@@ -87,63 +156,149 @@ export function buildMine(plan: MinePlan): Mine {
 // ------------------------------------------------------------------ rock
 
 /**
- * A w×h plane facing +Z, its middle pushed out towards +Z by up to ROUGH in
- * lumps, its edges left flat so it meets its neighbours. `u0`, `v0` place
- * the lumps, so one wall's lumps don't repeat another's.
+ * A quad from its corners, facing `n`: `a0` and `b0` along its bottom edge,
+ * `a1` and `b1` along its top (a0→b0 and a0→a1 must turn to face `n`, as x
+ * and y do to face z). Its middle is pushed out along `n` by up to `rough`
+ * in lumps, its edges left flat so it meets its neighbours; `u0`, `v0` place
+ * the lumps, so one face's don't repeat another's.
  */
-function roughPlane(w: number, h: number, u0: number, v0: number, seed: number): PlaneGeometry {
+function roughQuad(
+  a0: Vector3,
+  b0: Vector3,
+  a1: Vector3,
+  b1: Vector3,
+  n: Vector3,
+  rough: number,
+  u0: number,
+  v0: number,
+  seed: number,
+): PlaneGeometry {
+  const w = a0.distanceTo(b0);
+  const h = a0.distanceTo(a1);
   const sw = Math.max(1, Math.round(w / 0.8));
   const sh = Math.max(1, Math.round(h / 0.8));
-  const g = new PlaneGeometry(w, h, sw, sh);
+  const g = new PlaneGeometry(1, 1, sw, sh);
   const pos = g.getAttribute('position');
+  const p = new Vector3();
+  const top = new Vector3();
   for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i);
-    const y = pos.getY(i);
-    const edge = Math.min(w / 2 - Math.abs(x), h / 2 - Math.abs(y));
-    if (edge < 1e-3) continue;
-    const lump = valueNoise((u0 + x) * 0.9, (v0 + y) * 0.9, seed) * 0.7 + valueNoise((u0 + x) * 2.3, (v0 + y) * 2.3, seed + 1) * 0.3;
-    pos.setZ(i, ROUGH * lump * Math.min(1, edge / 0.5));
+    const t = pos.getX(i) + 0.5;
+    const s = pos.getY(i) + 0.5;
+    p.lerpVectors(a0, b0, t);
+    top.lerpVectors(a1, b1, t);
+    p.lerp(top, s);
+    const edge = Math.min(Math.min(t, 1 - t) * w, Math.min(s, 1 - s) * h);
+    if (rough > 0 && edge > 1e-3) {
+      const u = t * w;
+      const v = s * h;
+      const lump = valueNoise((u0 + u) * 0.9, (v0 + v) * 0.9, seed) * 0.7 + valueNoise((u0 + u) * 2.3, (v0 + v) * 2.3, seed + 1) * 0.3;
+      p.addScaledVector(n, rough * lump * Math.min(1, edge / 0.5));
+    }
+    pos.setXYZ(i, p.x, p.y, p.z);
   }
+  g.computeVertexNormals();
   return g;
 }
 
-/** The rock round the open space: floors, ceilings, walls and the rock over openings, each in its piece's part. */
-function buildRock(hollow: Hollow, builders: ModelBuilder[]): void {
-  const { pieces } = hollow;
+/** Where along [a, b] a piece's floor bends: its ends and its slope's, in order. */
+function stops(p: Piece, axis: 'x' | 'z', a: number, b: number): number[] {
+  return [a, ...bends(p, axis, a, b), b];
+}
+
+const _a0 = new Vector3();
+const _b0 = new Vector3();
+const _a1 = new Vector3();
+const _b1 = new Vector3();
+const _n = new Vector3();
+const UP = new Vector3(0, 1, 0);
+const DOWN = new Vector3(0, -1, 0);
+
+/** The rock round the open space (or the crypt's dressed stone): floors, ceilings, walls and the rock over openings, each in its piece's part. */
+function buildRock(hollow: Hollow, builders: PartBuilders[]): void {
+  const pieces = hollow.pieces as readonly MinePiece[];
   for (const { piece, rect } of hollow.floors()) {
+    const p = pieces[piece];
+    if (p.finish === 'hall') continue;
     const z1 = Math.min(rect.z1, LIP);
-    const w = rect.x1 - rect.x0;
-    const d = z1 - rect.z0;
-    if (d <= 0) continue;
-    const g = new PlaneGeometry(w, d, Math.max(1, Math.round(w / 1.2)), Math.max(1, Math.round(d / 1.2)));
-    builders[pieces[piece].part].shape(g, { ...FLOOR, at: [(rect.x0 + rect.x1) / 2, pieces[piece].floor, (rect.z0 + z1) / 2], rot: [-Math.PI / 2, 0, 0] });
+    if (z1 - rect.z0 <= 0) continue;
+    // Split where the floor bends, so each stretch is one flat or sloping plane.
+    const xs = stops(p, 'x', rect.x0, rect.x1);
+    const zs = stops(p, 'z', rect.z0, z1);
+    for (let i = 1; i < xs.length; i++) {
+      for (let j = 1; j < zs.length; j++) {
+        const [x0, x1, za, zb] = [xs[i - 1], xs[i], zs[j - 1], zs[j]];
+        const y = (x: number, z: number) => floorOf(p, x, z);
+        const g = roughQuad(_a0.set(x0, y(x0, zb), zb), _b0.set(x1, y(x1, zb), zb), _a1.set(x0, y(x0, za), za), _b1.set(x1, y(x1, za), za), UP, 0, 0, 0, 0);
+        if (p.finish === 'dressed') builders[p.part].floor.shape(g, TEXTURED);
+        else builders[p.part].model.shape(g, p.finish === 'dug' ? DUG_FLOOR : FLOOR);
+      }
+    }
   }
   for (const { piece, rect } of hollow.ceilings()) {
     const p = pieces[piece];
+    if (p.finish === 'hall') continue;
     // The ceiling stops at the mouth's line, under the lintel.
     const z1 = Math.min(rect.z1, 0);
-    const w = rect.x1 - rect.x0;
-    const d = z1 - rect.z0;
-    if (d <= 0) continue;
-    const g = roughPlane(w, d, rect.x0, rect.z0, 61);
-    builders[p.part].shape(g, { ...CEILING, at: [(rect.x0 + rect.x1) / 2, p.floor + p.height, (rect.z0 + z1) / 2], rot: [Math.PI / 2, 0, 0] });
+    if (z1 - rect.z0 <= 0) continue;
+    const xs = stops(p, 'x', rect.x0, rect.x1);
+    const zs = stops(p, 'z', rect.z0, z1);
+    for (let i = 1; i < xs.length; i++) {
+      for (let j = 1; j < zs.length; j++) {
+        const [x0, x1, za, zb] = [xs[i - 1], xs[i], zs[j - 1], zs[j]];
+        const y = (x: number, z: number) => floorOf(p, x, z) + p.height;
+        const g = roughQuad(_a0.set(x0, y(x0, za), za), _b0.set(x1, y(x1, za), za), _a1.set(x0, y(x0, zb), zb), _b1.set(x1, y(x1, zb), zb), DOWN, ROUGH[p.finish], x0, za, 61);
+        builders[p.part].model.shape(g, p.finish === 'dressed' ? VAULT : CEILING);
+      }
+    }
   }
-  const face = (w: Wall, y0: number, y1: number, part: number) => {
-    const bz = Math.min(w.bz, LIP);
-    const az = Math.min(w.az, LIP);
-    const len = Math.hypot(w.bx - w.ax, bz - az);
-    if (len <= 1e-3) return;
-    const g = roughPlane(len, y1 - y0, w.ax + w.az, y0, 67);
-    builders[part].shape(g, { ...ROCK, at: [(w.ax + w.bx) / 2, (y0 + y1) / 2, (az + bz) / 2], rot: [0, Math.atan2(w.nx, w.nz), 0] });
+  /** A stretch of wall from (ax, az) to (bx, bz), facing (nx, nz), between `bottom` and `top` at each end, split where the floor bends. */
+  const face = (p: MinePiece, w: { ax: number; az: number; bx: number; bz: number; nx: number; nz: number }, bottom: (x: number, z: number) => number, top: (x: number, z: number) => number) => {
+    // Turn so that a→b and up face into the open space.
+    const flip = w.nz * (w.bx - w.ax) - w.nx * (w.bz - w.az) < 0;
+    const [ax, az, bx, bz] = flip ? [w.bx, w.bz, w.ax, w.az] : [w.ax, w.az, w.bx, w.bz];
+    const axis = ax === bx ? 'z' : 'x';
+    const marks = stops(p, axis, axis === 'x' ? ax : az, axis === 'x' ? bx : bz);
+    _n.set(w.nx, 0, w.nz);
+    for (let k = 1; k < marks.length; k++) {
+      const [x0, z0] = axis === 'x' ? [marks[k - 1], az] : [ax, marks[k - 1]];
+      const [x1, z1] = axis === 'x' ? [marks[k], az] : [ax, marks[k]];
+      const [cz0, cz1] = [Math.min(z0, LIP), Math.min(z1, LIP)];
+      if (Math.hypot(x1 - x0, cz1 - cz0) <= 1e-3) continue;
+      if (top(x0, z0) - bottom(x0, z0) <= 1e-3 && top(x1, z1) - bottom(x1, z1) <= 1e-3) continue;
+      const g = roughQuad(
+        _a0.set(x0, bottom(x0, z0), cz0),
+        _b0.set(x1, bottom(x1, z1), cz1),
+        _a1.set(x0, top(x0, z0), cz0),
+        _b1.set(x1, top(x1, z1), cz1),
+        _n,
+        ROUGH[p.finish],
+        x0 + z0,
+        bottom(x0, z0),
+        67,
+      );
+      if (p.finish === 'dressed') builders[p.part].walls.shape(g, TEXTURED);
+      else builders[p.part].model.shape(g, ROCK);
+    }
   };
   for (const w of hollow.walls) {
     const p = pieces[w.piece];
-    face(w, p.floor, p.floor + p.height, p.part);
+    if (p.finish === 'hall') continue;
+    face(p, w, (x, z) => floorOf(p, x, z), (x, z) => floorOf(p, x, z) + p.height);
   }
-  for (const l of hollow.lintels) face(l.wall, l.y0, l.y1, pieces[l.wall.piece].part);
+  for (const l of hollow.lintels) {
+    const p = pieces[l.wall.piece];
+    if (p.finish === 'hall') continue;
+    const { ax, az, bx, bz } = l.wall;
+    // Its height from the wall's a end to its b end, whichever way round the face is laid.
+    const end = (x: number, z: number, i: 0 | 1) => {
+      const t = ((x - ax) * (bx - ax) + (z - az) * (bz - az)) / ((bx - ax) ** 2 + (bz - az) ** 2);
+      return l.a[i] + (l.b[i] - l.a[i]) * t;
+    };
+    face(p, l.wall, (x, z) => end(x, z, 0), (x, z) => end(x, z, 1));
+  }
   // Over the adit's first metres, where the hillside is dug away, a lump of rock to close the hole.
   const { hw, height } = MINE.tunnel;
-  builders[0].box(2 * hw + 1.1, 1.8, 2.6, { ...ROCK, at: [0, height + 0.95, -1.3] });
+  builders[0].model.box(2 * hw + 1.1, 1.8, 2.6, { ...ROCK, at: [0, height + 0.95, -1.3] });
 }
 
 // ------------------------------------------------------------------ timbers
@@ -245,7 +400,7 @@ function oreCart(b: ModelBuilder, x: number, z: number, full: boolean): void {
 // ------------------------------------------------------------------ the cart hall
 
 /** The cart hall: props and beams under its roof, the winch over the shaft, the bandits' camp. */
-function buildHall(b: ModelBuilder, glow: Glow): void {
+function buildCartHall(b: ModelBuilder, glow: Glow): void {
   const hall = MINE.pieces[2];
   const top = hall.floor + hall.height;
   const { props, propRadius, winch, brazier, crates, bedrolls } = MINE;
@@ -303,11 +458,11 @@ function buildHall(b: ModelBuilder, glow: Glow): void {
 
 // ------------------------------------------------------------------ the gallery
 
-/** The gallery: timbers on its west wall, the scaffolding on its east, a streak of the vein, and the fallen rock at its end. */
+/** The gallery: timbers on its west wall, the scaffolding on its east, and a streak of the vein. */
 function buildGallery(b: ModelBuilder): void {
   const gallery = MINE.pieces[4];
   const top = gallery.floor + gallery.height;
-  const { scaffold, fall, sets } = MINE;
+  const { scaffold, sets } = MINE;
   // Props against the west wall, sunk into it, with lanterns on some.
   for (const z of [-23, -31]) {
     b.box(sets.post, top, sets.post, { ...TIMBER, at: [gallery.x0 + sets.post / 2 - 0.07, top / 2, z] })
@@ -338,18 +493,162 @@ function buildGallery(b: ModelBuilder): void {
     const y = 1.2 + rand() * 3.5;
     b.box(0.06, 0.08 + rand() * 0.08, 0.8 + rand() * 1.4, { color: 0x9aa4ae, glow: 0.06, jitter: 0.1, at: [gallery.x0 + 0.05, y, z], rot: [rand() * 0.4 - 0.2, 0, 0] });
   }
+}
 
-  // Fallen rock heaped across the far end, where the bandits' ramp goes down, and the broken timbers that let it in.
-  const fx = (fall.x0 + fall.x1) / 2;
-  for (let i = 0; i < 16; i++) {
-    const r = 0.4 + rand() * 0.6;
-    const x = fall.x0 + r * 0.6 + rand() * (fall.x1 - fall.x0 - r * 1.2);
-    const d = 1 - Math.abs(x - fx) / ((fall.x1 - fall.x0) / 2);
-    const z = fall.z0 + 0.2 + rand() * (fall.z1 - fall.z0 - r * 0.9 - 0.2);
-    const y = r * 0.6 + rand() * 2.4 * d;
-    b.shape(new IcosahedronGeometry(r, 0), { at: [x, y, z], rot: [rand() * 3, rand() * 3, 0], color: rand() < 0.5 ? EARTH.cliff : EARTH.rockDark, jitter: 0.18 });
+// ------------------------------------------------------------------ the bandits' ramp and dig
+
+/** The bandits' crooked props down their ramp: thinner than the old miners', leaning, far apart. */
+function buildRamp(at: (x: number, z: number) => ModelBuilder, floorAt: (x: number, z: number) => number): void {
+  const { hw, height } = MINE.tunnel;
+  const { post, cap, first, second } = MINE.ramp;
+  const inset = hw + post / 2 - 0.06;
+  const [legA, legB] = [MINE.pieces[6], MINE.pieces[7]];
+  const mid = (a: number, b: number) => (a + b) / 2;
+  const set = (x: number, z: number, across: 'x' | 'z', lean: number) => {
+    const b = at(x, z);
+    const y = floorAt(x, z);
+    for (const s of [-1, 1]) {
+      const [px, pz] = across === 'x' ? [x + s * inset, z] : [x, z + s * inset];
+      b.box(post, height - 0.05, post, { ...TIMBER, at: [px, y + (height - 0.05) / 2, pz], rot: across === 'x' ? [lean * s, 0, 0] : [0, 0, lean * s] });
+    }
+    const [w, d] = across === 'x' ? [2 * hw + 0.2, cap] : [cap, 2 * hw + 0.2];
+    b.box(w, cap, d, { ...TIMBER, at: [x, y + height - cap / 2 - 0.05, z], rot: across === 'x' ? [0, 0, lean * 0.3] : [lean * 0.3, 0, 0] });
+  };
+  first.forEach((x, i) => set(x, mid(legA.z0, legA.z1), 'z', i % 2 ? 0.05 : -0.04));
+  second.forEach((z, i) => set(mid(legB.x0, legB.x1), z, 'x', i % 2 ? -0.05 : 0.04));
+}
+
+/** The dig: the silver vein glinting in its walls, and what the bandits dropped. */
+function buildDig(b: PartBuilders, glow: Glow): void {
+  const dig = MINE.pieces[8];
+  const { strongbox, picks, cloak, lantern: fallen, vein } = MINE.dig;
+  const y = dig.floor;
+  const m = b.model;
+  // The vein: bright flecks of silver along the north and west walls, catching the light.
+  const rand = mulberry32(26);
+  for (let i = 0; i < vein; i++) {
+    const north = i % 3 !== 0;
+    const along = north ? dig.x0 + 1.5 + rand() * (dig.x1 - dig.x0 - 3) : dig.z0 + 1.5 + rand() * (dig.z1 - dig.z0 - 5);
+    const h = y + 0.9 + rand() * 2.6;
+    const len = 0.5 + rand() * 0.9;
+    // Half sunk in the rock's lumps, so it reads as a seam in the wall, not a bar in front of it.
+    const [x, z] = north ? [along, dig.z0 + 0.1] : [dig.x0 + 0.1, along];
+    m.box(north ? len : 0.1, 0.05 + rand() * 0.05, north ? 0.1 : len, { color: 0x8a949e, glow: 0.08, jitter: 0.12, at: [x, h, z], rot: north ? [0, 0, rand() * 0.6 - 0.3] : [rand() * 0.6 - 0.3, 0, 0] });
+    for (let k = 0; k < 3; k++) m.box(0.04, 0.04, 0.04, { color: 0xdce6f0, glow: 0.35, jitter: 0, at: [x + (north ? (rand() - 0.5) * len : 0.1), h + (rand() - 0.5) * 0.2, z + (north ? 0.1 : (rand() - 0.5) * len)] });
   }
-  b.box(0.22, 2.6, 0.22, { ...TIMBER, at: [fall.x0 + 0.2, 1.3, fall.z0 + 0.25], rot: [0, 0, 0.12] })
-    .box(0.22, 1.4, 0.22, { ...TIMBER, at: [fall.x1 - 0.2, 0.7, fall.z0 + 0.3] })
-    .bar([fall.x0 + 0.1, 2.5, fall.z0 + 0.4], [fall.x1 - 0.4, 1.1, fall.z0 + 0.6], 0.22, 0.22, TIMBER);
+  // The strongbox of ore against the north wall, its lid thrown back.
+  const sx = (strongbox.x0 + strongbox.x1) / 2;
+  const sz = (strongbox.z0 + strongbox.z1) / 2;
+  const sw = strongbox.x1 - strongbox.x0;
+  const sd = strongbox.z1 - strongbox.z0;
+  m.box(sw, 0.5, sd, { color: PAL.woodDark, jitter: 0.1, at: [sx, y + 0.25, sz] })
+    .box(sw + 0.02, 0.05, sd + 0.02, { ...IRON, at: [sx, y + 0.12, sz] })
+    .box(sw + 0.02, 0.05, sd + 0.02, { ...IRON, at: [sx, y + 0.42, sz] })
+    .box(sw, 0.05, sd, { color: PAL.woodDark, jitter: 0.1, at: [sx, y + 0.55, strongbox.z0 + 0.05], rot: [-1.35, 0, 0] });
+  for (let i = 0; i < 6; i++) m.shape(new IcosahedronGeometry(0.12, 0), { at: [sx + (rand() - 0.5) * (sw - 0.3), y + 0.52, sz + (rand() - 0.5) * (sd - 0.25)], rot: [rand() * 3, rand() * 3, 0], color: i % 2 ? 0xb8c2cc : EARTH.rockDark, glow: i % 2 ? 0.2 : 0, jitter: 0.15 });
+  // Two picks dropped on the floor.
+  for (const [x, z, yaw] of picks) {
+    m.box(0.05, 0.05, 0.9, { color: PAL.wood, at: [x, y + 0.03, z], rot: [0, yaw, 0] });
+    const hx = x + Math.sin(yaw) * 0.42;
+    const hz = z + Math.cos(yaw) * 0.42;
+    m.box(0.55, 0.06, 0.06, { ...IRON, at: [hx, y + 0.04, hz], rot: [0, yaw, 0.08] });
+  }
+  // A torn cloak, dropped in a heap.
+  m.box(0.9, 0.04, 0.6, { color: PAL.cloth, jitter: 0.12, at: [cloak.x, y + 0.02, cloak.z], rot: [0, cloak.yaw, 0] })
+    .box(0.5, 0.06, 0.45, { color: PAL.clothDark, jitter: 0.12, at: [cloak.x + 0.3, y + 0.04, cloak.z - 0.2], rot: [0, cloak.yaw + 0.7, 0.1] })
+    .box(0.3, 0.03, 0.25, { color: PAL.cloth, jitter: 0.12, at: [cloak.x - 0.45, y + 0.02, cloak.z + 0.25], rot: [0, cloak.yaw - 0.5, 0] });
+  // Their lantern, fallen on its side and still burning.
+  // Its cage lies along its length: two end caps and four bars, the flame showing between.
+  m.on(0, new Matrix4().makeRotationY(0.5).setPosition(fallen.x, y + 0.1, fallen.z));
+  for (const e of [-1, 1]) m.box(0.2, 0.2, 0.03, { ...IRON, at: [0, 0, e * 0.13] });
+  for (const [bx, by] of [
+    [-1, -1],
+    [-1, 1],
+    [1, -1],
+    [1, 1],
+  ]) m.box(0.025, 0.025, 0.26, { ...IRON, at: [bx * 0.09, by * 0.09, 0] });
+  m.box(0.13, 0.13, 0.2, { at: [0, 0, 0], color: 0xffd080, glow: 1, jitter: 0 });
+  m.on(0, new Matrix4());
+  glow(fallen.x, y + 0.12, fallen.z, 0.6);
+}
+
+// ------------------------------------------------------------------ the crypt
+
+/**
+ * The crypt the bandits broke into: its outer wall laid bare round the
+ * breach, the carved passage's stone ribs, the antechamber's braziers and
+ * the frame of the hall's gate, and the Warden's hall itself, the arena's.
+ */
+function buildCrypt(builders: PartBuilders[], glowIn: (part: number) => Glow, floorAt: (x: number, z: number) => number): void {
+  const dig = MINE.pieces[8];
+  const breach = MINE.pieces[9];
+  const { masonry } = MINE;
+  // The crypt's wall on the dig's side, round the hole, and loose bricks at its foot.
+  const b4 = builders[4];
+  const x = dig.x1 - masonry.thick / 2;
+  const hole = breach.height;
+  const box = (z0: number, z1: number, y0: number, y1: number) =>
+    b4.walls.box(masonry.thick, y1 - y0, z1 - z0, { ...TEXTURED, at: [x, dig.floor + (y0 + y1) / 2, (z0 + z1) / 2] });
+  box(masonry.z0, breach.z0, 0, masonry.height);
+  box(breach.z1, masonry.z1, 0, masonry.height);
+  box(breach.z0, breach.z1, hole, masonry.height);
+  const rand = mulberry32(27);
+  for (let i = 0; i < 14; i++) {
+    const z = breach.z0 - 0.8 + rand() * (breach.z1 - breach.z0 + 1.6);
+    const out = 0.3 + rand() * 1.1;
+    b4.model.box(0.3, 0.1, 0.16, { color: BRICK, jitter: 0.15, at: [dig.x1 - out, dig.floor + 0.05, z], rot: [0, rand() * 3, rand() * 0.3] });
+  }
+  // Broken bricks round the hole's edge.
+  for (let i = 0; i < 8; i++) {
+    const side = i % 2 ? breach.z0 : breach.z1;
+    b4.model.box(0.32, 0.16, 0.2, { color: BRICK, jitter: 0.15, at: [dig.x1 - masonry.thick - 0.02, dig.floor + 0.3 + rand() * (hole - 0.4), side + (rand() - 0.5) * 0.2], rot: [0, 0, rand() * 0.4] });
+  }
+
+  // Stone ribs across the carved passage's vault, every few metres, following its slope.
+  const passage = MINE.pieces[11];
+  for (let z = passage.z0 + 1.5; z < passage.z1 - 0.5; z += 3) {
+    const cx = (passage.x0 + passage.x1) / 2;
+    const top = floorAt(cx, z) + passage.height;
+    const b = builders[passage.part].model;
+    b.box(passage.x1 - passage.x0, 0.22, 0.3, { ...VAULT, at: [cx, top - 0.11, z] });
+    for (const s of [-1, 1]) b.box(0.18, passage.height, 0.3, { color: PAL.stone, jitter: 0.08, at: [cx + s * ((passage.x1 - passage.x0) / 2 - 0.09), top - passage.height / 2, z] });
+  }
+
+  // The antechamber: a brazier either side of the gate, and the gate's frame on this side.
+  const ante = MINE.pieces[13];
+  const b6 = builders[ante.part].model;
+  const gate = MINE.pieces[14];
+  const lift = (b: ModelBuilder, dy: number, fn: () => void) => {
+    b.on(0, new Matrix4().makeTranslation(0, dy, 0));
+    fn();
+    b.on(0, new Matrix4());
+  };
+  lift(b6, ante.floor, () => {
+    for (const [bx, bz] of MINE.braziers) brazier(b6, (gx, gy, gz, size, color) => glowIn(ante.part)(gx, ante.floor + gy, gz, size, color), bx, bz);
+    const gx = (gate.x0 + gate.x1) / 2;
+    const gw = (gate.x1 - gate.x0) / 2;
+    for (const s of [-1, 1]) b6.box(0.34, gate.height + 0.2, 0.34, { at: [gx + s * (gw + 0.14), (gate.height + 0.2) / 2, ante.z0 + 0.1], color: PAL.stoneLight });
+    b6.box(gate.x1 - gate.x0 + 0.7, 0.36, 0.36, { at: [gx, gate.height + 0.16, ante.z0 + 0.1], color: PAL.stoneLight });
+    // Plinth and cornice round the room.
+    for (const [x0, x1, z0, z1] of [
+      [ante.x0, ante.x1, ante.z0, ante.z0 + 0.16],
+      [ante.x0, ante.x1, ante.z1 - 0.16, ante.z1],
+      [ante.x0, ante.x0 + 0.16, ante.z0, ante.z1],
+      [ante.x1 - 0.16, ante.x1, ante.z0, ante.z1],
+    ] as const) {
+      b6.box(x1 - x0, 0.28, z1 - z0, { color: PAL.stoneDark, at: [(x0 + x1) / 2, 0.14, (z0 + z1) / 2] });
+      b6.box(x1 - x0, 0.24, z1 - z0, { color: PAL.stone, at: [(x0 + x1) / 2, ante.height - 0.12, (z0 + z1) / 2] });
+    }
+  });
+
+  // The Warden's hall, as the arena's, come in by its south gate; its east and west gates are choked.
+  const { hall } = MINE;
+  const hallPart = builders[MINE.pieces[15].part];
+  const offset = new Matrix4().makeTranslation(hall.x, hall.floor, hall.z);
+  for (const b of [hallPart.model, hallPart.floor, hallPart.walls]) b.on(0, offset);
+  buildHall(
+    { floor: hallPart.floor, walls: hallPart.walls, props: hallPart.model, glow: (gx, gy, gz, size, color) => glowIn(MINE.pieces[15].part)(hall.x + gx, hall.floor + gy, hall.z + gz, size, color) },
+    { south: 'through', east: 'choked', west: 'choked' },
+  );
+  for (const b of [hallPart.model, hallPart.floor, hallPart.walls]) b.on(0, new Matrix4());
 }

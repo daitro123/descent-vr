@@ -99,7 +99,7 @@ const mine = () =>
       zoneShown: world.zoneAt(0, 0).root.visible,
       sun: world.sun.intensity,
       fog: [world.fog.near, world.fog.far],
-      parts: m.root.children.map((p) => p.visible),
+      parts: m.drawn.slice(0, 3),
       part: m.partAt(head.x, head.z),
       lit: world.pool.filter((l) => l.intensity > 0).length,
       onMine,
@@ -197,13 +197,10 @@ check(s.onMine === 4, `the pool on the 4 nearest flames (${s.onMine})`);
 check(s.programs === programs, `no new shader program walking in (${programs} → ${s.programs})`);
 const cost = await page.evaluate(() => {
   const { mine: m } = window.__descent.world.underground;
-  return m.root.children.map((part) => {
-    const meshes = part.children;
-    const body = meshes.find((o) => !o.isInstancedMesh);
-    return { name: part.name, meshes: meshes.length, triangles: body.geometry.attributes.position.count / 3 };
-  });
+  return { meshes: m.root.children.length, parts: m.parts.slice(0, 3).map((name, i) => ({ name, triangles: m.triangles(i) })) };
 });
-for (const c of cost) check(c.triangles > 1000 && c.triangles < 6000 && c.meshes === 2, `${c.name}: ${c.triangles} triangles in ${c.meshes} draw calls (the rock and props, and the glows)`);
+check(cost.meshes === 4, `the whole mine is ${cost.meshes} meshes (the rock and props, flagstones, bricks, glows)`);
+for (const c of cost.parts) check(c.triangles > 1000 && c.triangles < 6000, `${c.name}: ${c.triangles} triangles`);
 await standIn(-6.4, -10.6, -12, -12.4);
 s = await mine();
 check(s.part === 1 && s.parts.join() === 'true,true,true', `in the cart hall: it and its neighbours drawn (${s.parts})`);
@@ -218,8 +215,8 @@ check(s.part === 2 && s.parts.join() === 'false,true,true', `in the gallery: the
 frame = await frameCost();
 console.log(`     a frame in the gallery: ${frame.calls} draw calls, ${frame.triangles} triangles`);
 await shot('05-the-gallery');
-await standIn(-15.8, -31.5, -14, -36, 0.1);
-await shot('06-the-fallen-rock');
+await standIn(-15.8, -31.5, -10, -33.5, 0.1);
+await shot('06-the-head-of-the-ramp');
 
 // 4. Back to the bend.
 await standIn(-7.5, -10, 0, -10);

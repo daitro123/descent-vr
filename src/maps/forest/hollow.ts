@@ -1,7 +1,8 @@
 // The open space dug out of the rock: a union of rectangles (rooms and
 // lengths of tunnel), each with its floor and ceiling, in some frame of its
-// own (x across, z along, as a building's frame). Pieces meet by
-// overlapping. From the pieces come the walls: every side of every piece,
+// own (x across, z along, as a building's frame). A floor is level, or
+// slopes straight along one axis between level ends (a ramp), its ceiling
+// keeping its height over it. Pieces meet by overlapping or edge to edge. From the pieces come the walls: every side of every piece,
 // less where another piece opens off it. The walls are what you bump into
 // and what you can't see through; nothing is solid but rock. Pure numbers,
 // no meshes, so it runs in unit tests (mine.ts, mineModel.ts).
@@ -20,10 +21,38 @@ export interface Piece {
   readonly floor: number;
   /** Floor to ceiling. */
   readonly height: number;
+  /**
+   * A ramp: the floor is `floor` up to `from` along `axis`, `floor + rise`
+   * from `to` on, and straight between. Level where it meets its neighbours.
+   */
+  readonly slope?: Slope;
   /** Which part of the whole it belongs to, counting from 0 at the way in. */
   readonly part: number;
   /** Sides with no wall at all: the way in from outside. */
   readonly open?: readonly Side[];
+}
+
+/** How a piece's floor slopes: see `Piece.slope`. */
+export interface Slope {
+  readonly axis: 'x' | 'z';
+  readonly from: number;
+  readonly to: number;
+  readonly rise: number;
+}
+
+/** A piece's floor at (x, z), over the frame's origin. */
+export function floorOf(p: Piece, x: number, z: number): number {
+  const s = p.slope;
+  if (!s) return p.floor;
+  const t = ((s.axis === 'x' ? x : z) - s.from) / (s.to - s.from);
+  return p.floor + s.rise * Math.max(0, Math.min(1, t));
+}
+
+/** Where a piece's floor bends along `axis` inside [a, b]: the ends of its slope. */
+export function bends(p: Piece, axis: 'x' | 'z', a: number, b: number): number[] {
+  const s = p.slope;
+  if (!s || s.axis !== axis) return [];
+  return [s.from, s.to].filter((m) => m > Math.min(a, b) + EPS && m < Math.max(a, b) - EPS).sort((u, v) => (a < b ? u - v : v - u));
 }
 
 /** A stretch of wall: from a to b along a piece's side, facing into the open space. */
@@ -42,9 +71,10 @@ export interface Wall {
 /** Where a piece's side opens onto another piece with a lower ceiling or a higher floor: the wall above or below the opening. */
 export interface Lintel {
   readonly wall: Wall;
-  /** From and to, over the frame's origin. */
-  readonly y0: number;
-  readonly y1: number;
+  /** From and to, over the frame's origin, at the wall's a end… */
+  readonly a: readonly [number, number];
+  /** …and at its b end (they differ where floors slope). */
+  readonly b: readonly [number, number];
 }
 
 /** A rectangle x0..x1 by z0..z1. */
@@ -73,10 +103,14 @@ export class Hollow {
           if (w.by === null) walls.push(w.wall);
           else {
             const q = pieces[w.by];
-            const top = p.floor + p.height;
-            const theirs = q.floor + q.height;
-            if (theirs < top - EPS) lintels.push({ wall: w.wall, y0: theirs, y1: top });
-            if (q.floor > p.floor + EPS) lintels.push({ wall: w.wall, y0: p.floor, y1: q.floor });
+            const { ax, az, bx, bz } = w.wall;
+            // Floors and ceilings at each end of the opening, mine and theirs.
+            const [mineA, mineB] = [floorOf(p, ax, az), floorOf(p, bx, bz)];
+            const [theirsA, theirsB] = [floorOf(q, ax, az), floorOf(q, bx, bz)];
+            const [topA, topB] = [mineA + p.height, mineB + p.height];
+            const [lowA, lowB] = [theirsA + q.height, theirsB + q.height];
+            if (lowA < topA - EPS || lowB < topB - EPS) lintels.push({ wall: w.wall, a: [Math.min(lowA, topA), topA], b: [Math.min(lowB, topB), topB] });
+            if (theirsA > mineA + EPS || theirsB > mineB + EPS) lintels.push({ wall: w.wall, a: [mineA, Math.max(mineA, theirsA)], b: [mineB, Math.max(mineB, theirsB)] });
           }
         }
       }
@@ -105,6 +139,11 @@ export class Hollow {
       }
     }
     return best!;
+  }
+
+  /** The floor at (x, z): the deepest part's there, or the nearest piece's. */
+  floorAt(x: number, z: number): number {
+    return floorOf(this.pieceAt(x, z), x, z);
   }
 
   /** How far (x, z) is from the open space: 0 inside it. */
@@ -163,13 +202,19 @@ export class Hollow {
     return this.pieces.flatMap((p, i) => minus(p, this.pieces.filter((_, j) => j < i)).map((rect) => ({ piece: i, rect })));
   }
 
-  /** Each piece's ceiling, less where a higher one is (or an earlier one as high). */
+  /** Each piece's ceiling, less where a higher one is (or an earlier one as high), judged where the two overlap. */
   ceilings(): { piece: number; rect: Rect }[] {
-    const top = (p: Piece) => p.floor + p.height;
     return this.pieces.flatMap((p, i) =>
       minus(
         p,
-        this.pieces.filter((q, j) => top(q) > top(p) + EPS || (Math.abs(top(q) - top(p)) <= EPS && j < i)),
+        this.pieces.filter((q, j) => {
+          if (j === i) return false;
+          const x = (Math.max(p.x0, q.x0) + Math.min(p.x1, q.x1)) / 2;
+          const z = (Math.max(p.z0, q.z0) + Math.min(p.z1, q.z1)) / 2;
+          const mine = floorOf(p, x, z) + p.height;
+          const theirs = floorOf(q, x, z) + q.height;
+          return theirs > mine + EPS || (Math.abs(theirs - mine) <= EPS && j < i);
+        }),
       ).map((rect) => ({ piece: i, rect })),
     );
   }

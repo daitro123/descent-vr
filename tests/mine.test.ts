@@ -1,7 +1,7 @@
 import { Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
-import { Hollow, type Piece } from '../src/maps/forest/hollow';
+import { bends, floorOf, Hollow, type Piece } from '../src/maps/forest/hollow';
 import { MineSwitch, type MineStanding } from '../src/world/mine';
 
 // The mine on its own: the switch that says whether you came in by its mouth
@@ -117,7 +117,10 @@ describe('the hollow', () => {
     expect(length).toBeCloseTo(12.75 + 9.25 + 3.5 + 4.25 + 4.25 + 24 + 20 - 3.5, 6);
     // The rock over the opening into the taller room.
     expect(hollow.lintels).toHaveLength(1);
-    expect([hollow.lintels[0].y0, hollow.lintels[0].y1]).toEqual([3, 3.6]);
+    expect([hollow.lintels[0].a, hollow.lintels[0].b]).toEqual([
+      [3, 3.6],
+      [3, 3.6],
+    ]);
   });
 
   it('keeps a body off the walls and brings one back out of the rock', () => {
@@ -148,3 +151,49 @@ describe('the hollow', () => {
     expect(area(hollow.ceilings())).toBeCloseTo(union, 6);
   });
 });
+
+describe('a ramp in the hollow', () => {
+  // A tunnel sloping north down 2 m, level at each end, onto a taller room edge to edge.
+  const ramp: Piece = { x0: -1.5, x1: 1.5, z0: -10, z1: 0, floor: 0, height: 3, part: 0, open: ['south'], slope: { axis: 'z', from: -1, to: -9, rise: -2 } };
+  const room: Piece = { x0: -4, x1: 4, z0: -18, z1: -10, floor: -2, height: 4, part: 1 };
+  const hollow = new Hollow([ramp, room]);
+
+  it('slopes straight between level ends', () => {
+    expect(floorOf(ramp, 0, 0)).toBe(0);
+    expect(floorOf(ramp, 0, -1)).toBe(0);
+    expect(floorOf(ramp, 0, -5)).toBeCloseTo(-1, 9);
+    expect(floorOf(ramp, 0, -9)).toBe(-2);
+    expect(floorOf(ramp, 0, -10)).toBe(-2);
+    expect(hollow.floorAt(0, -3)).toBeCloseTo(-0.5, 9);
+    expect(hollow.floorAt(0, -12)).toBe(-2);
+    // Where it bends, in the order asked.
+    expect(bends(ramp, 'z', 0, -10)).toEqual([-1, -9]);
+    expect(bends(ramp, 'z', -10, 0)).toEqual([-9, -1]);
+    expect(bends(ramp, 'x', -1.5, 1.5)).toEqual([]);
+  });
+
+  it('meets the room edge to edge, with rock over the opening only on the taller side', () => {
+    // The ramp's end is open onto the room: no wall across it.
+    expect(hollow.walls.some((w) => w.piece === 0 && w.az === -10 && w.bz === -10)).toBe(false);
+    expect(hollow.resolve(new Vector3(0, 0, -10), 0.3)).toBe(false);
+    expect(hollow.sees(0, -2, 0, -15)).toBe(true);
+    expect(hollow.lintels).toHaveLength(1);
+    const [l] = hollow.lintels;
+    expect(l.wall.piece).toBe(1);
+    expect([l.a, l.b]).toEqual([
+      [1, 2],
+      [1, 2],
+    ]);
+  });
+
+  it('judges which ceiling is laid where two overlap by their height there', () => {
+    // The level end of a ramp overlapping a lower room: the ramp's ceiling is higher there, so it's laid, and the room's isn't.
+    const lower: Piece = { x0: -4, x1: 4, z0: -18, z1: -9.5, floor: -2, height: 2.5, part: 1 };
+    const both = new Hollow([ramp, lower]);
+    const area = (rs: { piece: number; rect: { x0: number; x1: number; z0: number; z1: number } }[], piece: number) =>
+      rs.filter((r) => r.piece === piece).reduce((a, { rect: r }) => a + (r.x1 - r.x0) * (r.z1 - r.z0), 0);
+    expect(area(both.ceilings(), 0)).toBeCloseTo(30, 6);
+    expect(area(both.ceilings(), 1)).toBeCloseTo(8 * 8.5 - 3 * 0.5, 6);
+  });
+});
+
