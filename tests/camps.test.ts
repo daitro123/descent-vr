@@ -342,3 +342,153 @@ describe('getting home', () => {
     expect(member.enemy.hp).toBe(member.enemy.maxHp);
   });
 });
+
+describe('the patrol', () => {
+  const P = C.patrol;
+  /** Two thugs walking a straight road 20 m north from (0, 0), level along the hill. */
+  const ROAD = [
+    { x: 0, z: 0 },
+    { x: 0, z: -20 },
+  ];
+  function patrol(road = ROAD, place = { x: 0, z: -10, r: 10 }): CampPlan {
+    return { id: 'patrol', place, level: 2, posts: [thug(0, 0), thug(0, 0)], road };
+  }
+  const along = (p: { z: number }) => -p.z;
+
+  it('walks its road in single file at 0.8 m/s, 1.8 m apart, each on the road and facing the way it walks', () => {
+    const { camps, step } = world([patrol()], 60, -10);
+    const [walkers] = camps.camps;
+    const [a, b] = walkers.members.map((m) => m.enemy);
+    const from = [along(a.position), along(b.position)];
+    step(5);
+    for (const [i, e] of [a, b].entries()) {
+      expect((along(e.position) - from[i]) / 5).toBeCloseTo(P.speed, 1);
+      expect(Math.abs(e.position.x)).toBeLessThan(0.1);
+      // Facing north (−z), the way it walks.
+      expect(-Math.cos(e.root.rotation.y)).toBeGreaterThan(0.95);
+    }
+    // The second of the pair leads; the first follows in its steps.
+    expect(along(b.position) - along(a.position)).toBeCloseTo(P.gap, 0);
+    expect(minds(walkers)).toEqual(['idle', 'idle']);
+    expect(camps.fighting).toBe(false);
+  });
+
+  it('pauses 3 s at each end, then walks back with the last in the file leading', () => {
+    const { camps, step } = world([patrol()], 60, -10);
+    const [walkers] = camps.camps;
+    const walk = walkers.patrol!;
+    const lead = walkers.members[1];
+    // Walk to the far end: the leader's place in the file stops at the road's end.
+    let t = 0;
+    while (!walk.pausing && t < 40) {
+      step(DT);
+      t += DT;
+    }
+    expect(walk.pausing).toBe(true);
+    expect(along(lead.post)).toBeCloseTo(20, 1);
+    // Both stand there, looking on past the end, for 3 s.
+    let paused = 0;
+    while (walk.pausing && paused < 10) {
+      step(DT);
+      paused += DT;
+    }
+    expect(paused).toBeCloseTo(P.pause, 1);
+    for (const m of walkers.members) {
+      expect(flat(m.enemy.position, m.post)).toBeLessThan(0.4);
+    }
+    // Then back south, the first of the pair leading now.
+    step(4);
+    const [a, b] = walkers.members.map((m) => m.enemy);
+    expect(along(a.position)).toBeLessThan(along(b.position));
+    expect(along(b.position) - along(a.position)).toBeCloseTo(P.gap, 0);
+    expect(Math.cos(a.root.rotation.y)).toBeGreaterThan(0.95); // facing south (+z)
+    // And all the way to the near end, and round again.
+    t = 0;
+    while (!walk.pausing && t < 40) {
+      step(DT);
+      t += DT;
+    }
+    expect(along(walkers.members[0].post)).toBeCloseTo(0, 1);
+  });
+
+  it('measures a jumped patrol’s leash from where it was jumped, walks home there and walks on from it', () => {
+    const { camps, stand, step } = world([patrol()], 60, -10);
+    const [walkers] = camps.camps;
+    const [first, second] = walkers.members;
+    step(6);
+    // Hurt the second as it walks by, 6 m or so along the road.
+    const jumped = { x: second.enemy.position.x, z: second.enemy.position.z };
+    expect(along(jumped)).toBeGreaterThan(5);
+    hit(walkers, 1, 20);
+    step(DT);
+    expect(minds(walkers)).toEqual(['fight', 'fight']);
+    // Lead them off east, faster than they run, until they give up.
+    let x = second.enemy.position.x + 5;
+    let gaveUpAt: number | null = null;
+    for (let t = 0; t < 30 && gaveUpAt === null; t += DT) {
+      step(DT, () => stand((x += 2.4 * DT), jumped.z));
+      if (second.mind === 'home') gaveUpAt = flat(second.enemy.position, jumped);
+    }
+    // 30 m from where it was jumped (not from the road's start, 6 m further off).
+    expect(gaveUpAt).not.toBeNull();
+    expect(gaveUpAt!).toBeGreaterThan(C.leash - 0.1);
+    expect(gaveUpAt!).toBeLessThan(C.leash + 0.1);
+    // Home: back where it was jumped, whole, and nobody walked on meanwhile.
+    for (let t = 0; t < 30 && minds(walkers).some((m) => m !== 'idle'); t += DT) step(DT);
+    expect(minds(walkers)).toEqual(['idle', 'idle']);
+    expect(flat(second.enemy.position, jumped)).toBeLessThan(C.home);
+    expect(second.enemy.hp).toBe(second.enemy.maxHp);
+    // Then the file walks on from there.
+    const from = along(first.enemy.position);
+    step(3);
+    expect(along(first.enemy.position) - from).toBeGreaterThan(1.5);
+  });
+
+  it('walks on alone once one of it falls, still to the ends of its road', () => {
+    const { camps, step } = world([patrol()], 60, -10);
+    const [walkers] = camps.camps;
+    hit(walkers, 0);
+    step(DT);
+    hit(walkers, 0, 999);
+    step(DT);
+    expect(minds(walkers)).toEqual(['dead', 'fight']);
+    // The survivor fights on, loses you (60 m off) and goes back to walking.
+    const survivor = walkers.members[1];
+    step(60);
+    expect(survivor.mind).toBe('idle');
+    const from = along(survivor.enemy.position);
+    step(2);
+    expect(Math.abs(along(survivor.enemy.position) - from)).toBeGreaterThan(1);
+    // It pauses at each end of the road itself, not where its place in the pair would stop.
+    const walk = walkers.patrol!;
+    const ends: number[] = [];
+    for (let t = 0; t < 80 && ends.length < 2; t += DT) {
+      const was = walk.pausing;
+      step(DT);
+      if (walk.pausing && !was) ends.push(along(survivor.post));
+    }
+    expect(ends.map((e) => Math.round(e) + 0).sort((a, b) => a - b)).toEqual([0, 20]);
+  });
+
+  it('refills only while you are at least 30 m from its road, wherever its place is', () => {
+    // A long road, with its place set at the road's south end.
+    const road = [
+      { x: 0, z: 0 },
+      { x: 0, z: -40 },
+    ];
+    const { camps, stand, step } = world([patrol(road, { x: 0, z: 0, r: 0 })], 60, -10);
+    const [walkers] = camps.camps;
+    hit(walkers, 0, 999);
+    hit(walkers, 1, 999);
+    // By the road's north end: over 30 m from its place, but 25 m from the road.
+    stand(25, -40);
+    step(C.refillTime + 5);
+    expect(minds(walkers)).toEqual(['dead', 'dead']);
+    stand(C.refillAway + 1, -40);
+    step(DT);
+    expect(minds(walkers)).toEqual(['idle', 'idle']);
+    // Freshly raised in file at the road's start.
+    step(1);
+    for (const m of walkers.members) expect(along(m.enemy.position)).toBeLessThan(P.gap + 1.5);
+  });
+});
