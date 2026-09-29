@@ -1,8 +1,7 @@
-import type { Vector3 } from 'three';
 import type { Atmosphere } from '../../world/atmosphere';
-import { type Flame, type Frame, type InteriorPlan, toFrame } from '../../world/interiors';
-import { Colliders } from './colliders';
+import type { Frame, InteriorPlan } from '../../world/interiors';
 import { LIGHT, SKY } from './palette';
+import { planRoom, type Shapes, wallShapes } from './rooms';
 
 // The Golden Tankard's taproom: the plan only (what stands where, what you
 // bump into, its flames), in the inn's own frame: origin on the ground at the
@@ -24,8 +23,8 @@ export const INN = {
   room: { hw: 5.15, hd: 3.65, height: 2.86 },
   /** The door's leaves hang in the doorway this far out from the room's front wall. */
   leaves: { z: 3.88, thick: 0.05 },
-  /** The doorway in the middle of the front: clear width and height over the floor. */
-  door: { width: 1.8, height: 2.1 },
+  /** The doorway in the middle of the front: its middle across it, clear width and height over the floor. */
+  door: { x: 0, width: 1.8, height: 2.1 },
   /** Down the steps outside the door, the floor meets the ground this far out. */
   steps: { width: 2.6, out: 1.25 },
   /** The big hearth under the larger chimney, on the right wall: its middle along the wall, its width and how far it stands out. */
@@ -72,15 +71,6 @@ export const INN_ATMOSPHERE_BASE: Omit<Atmosphere, 'flames'> = {
   farPlane: 60,
 };
 
-function toWorld(f: Frame, lx: number, lz: number): [number, number] {
-  const c = Math.cos(f.yaw);
-  const s = Math.sin(f.yaw);
-  return [f.x + lx * c + lz * s, f.z - lx * s + lz * c];
-}
-
-/** Scratch for `groundAt`, asked every frame. */
-const _local = { x: 0, z: 0 };
-
 /** The four flames the pool sits on, in the inn's frame: the hearth, the lantern over the bar and those over two tables. */
 export function innFlames(): readonly [number, number, number][] {
   const { room, hearth, bar, tables, lanternDrop, floor } = INN;
@@ -94,30 +84,22 @@ export function innFlames(): readonly [number, number, number][] {
 }
 
 /**
- * The taproom's colliders, in the inn's frame: boxes (x, z, half width, half
- * depth) and circles. The walls are the outer walls' footprint, with the
- * doorway left open, so from outside the inn collides as its old solid box did.
+ * The taproom's colliders, in the inn's frame. The walls are the outer walls'
+ * footprint, with the doorway left open, so from outside the inn collides as
+ * its old solid box did.
  */
-export function innColliders(): { boxes: [number, number, number, number][]; circles: [number, number, number][] } {
+export function innColliders(): Shapes {
   const { hw, hd, room, door, hearth, fireplace, bar, shelves, barrels, barrelRadius, tables, table } = INN;
-  const side = (hw - room.hw) / 2;
-  const end = (hd - room.hd) / 2;
-  const jamb = door.width / 2;
-  const front = (hw - jamb) / 2;
   return {
     boxes: [
-      [0, -(room.hd + end), hw, end],
-      [-(room.hw + side), 0, side, hd],
-      [room.hw + side, 0, side, hd],
-      [-(jamb + front), room.hd + end, front, end],
-      [jamb + front, room.hd + end, front, end],
+      ...wallShapes(hw, hd, room, door),
       [room.hw - hearth.depth / 2, hearth.z, hearth.depth / 2, hearth.width / 2],
       [-room.hw + fireplace.depth / 2, fireplace.z, fireplace.depth / 2, fireplace.width / 2],
       [(bar.x0 + bar.x1) / 2, bar.z - bar.depth / 2, (bar.x1 - bar.x0) / 2, bar.depth / 2],
       [0, -room.hd + shelves.depth / 2, shelves.half, shelves.depth / 2],
-      ...tables.map(([x, z]) => [x, z, table.set.hw, table.set.hd] as [number, number, number, number]),
+      ...tables.map(([x, z]) => [x, z, table.set.hw, table.set.hd] as const),
     ],
-    circles: barrels.map(([x, z]) => [x, z, barrelRadius]),
+    circles: barrels.map(([x, z]) => [x, z, barrelRadius] as const),
   };
 }
 
@@ -127,44 +109,18 @@ export function innColliders(): { boxes: [number, number, number, number][]; cir
  * the steps outside the door; its walls and props are colliders.
  */
 export function planInn(inn: Frame & { readonly hw: number; readonly hd: number }): InteriorPlan {
-  const { hw, hd, floor, room, door, steps, wake } = INN;
+  const { hw, hd } = INN;
   if (Math.abs(inn.hw - hw) > 1e-9 || Math.abs(inn.hd - hd) > 1e-9) throw new Error("The inn's footprint must be INN's");
-  const frame = { x: inn.x, z: inn.z, yaw: inn.yaw, y: inn.y };
-  const colliders = new Colliders({ minX: -Infinity, maxX: Infinity, minZ: -Infinity, maxZ: Infinity });
-  const shapes = innColliders();
-  for (const [lx, lz, bw, bd] of shapes.boxes) {
-    const [x, z] = toWorld(frame, lx, lz);
-    colliders.addBox({ x, z, hw: bw, hd: bd, yaw: frame.yaw });
-  }
-  for (const [lx, lz, r] of shapes.circles) {
-    const [x, z] = toWorld(frame, lx, lz);
-    colliders.addCircle({ x, z, r });
-  }
-  const flames: Flame[] = innFlames().map(([lx, y, lz]) => {
-    const [x, z] = toWorld(frame, lx, lz);
-    return { x, y: frame.y + y, z };
-  });
-  const [wx, wz] = toWorld(frame, wake.x, wake.z);
-  // Facing the door's middle: yaw 0 looks down −Z, so a turn of a looks along (−sin a, −cos a).
-  const lookYaw = Math.atan2(-(0 - wake.x), -(hd - wake.z));
-  const top = frame.y + floor;
-  return {
+  return planRoom({
     id: 'inn',
-    frame,
-    footprint: { hw, hd },
-    floor: top,
-    height: room.height,
-    door: { width: door.width },
-    flames,
-    atmosphere: { ...INN_ATMOSPHERE_BASE, flames },
-    respawn: { x: wx, z: wz, yaw: lookYaw + frame.yaw },
-    groundAt(x, z) {
-      const { x: lx, z: lz } = toFrame(frame, x, z, _local);
-      if (Math.abs(lx) <= hw && Math.abs(lz) <= hd) return top;
-      // The steps: from the floor at the door's line down to the ground at their foot.
-      if (Math.abs(lx) <= steps.width / 2 && lz > hd && lz < hd + steps.out) return frame.y + floor * (1 - (lz - hd) / steps.out);
-      return null;
-    },
-    resolve: (p: Vector3, radius: number) => colliders.resolve(p, radius),
-  };
+    site: inn,
+    floor: INN.floor,
+    height: INN.room.height,
+    door: INN.door,
+    steps: INN.steps,
+    shapes: innColliders(),
+    flames: innFlames(),
+    atmosphere: INN_ATMOSPHERE_BASE,
+    wake: INN.wake,
+  });
 }

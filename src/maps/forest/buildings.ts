@@ -2,10 +2,12 @@ import { type BufferGeometry, IcosahedronGeometry } from 'three';
 import { ModelBuilder, type PartOpts, type Vec3 } from '../../models/kit';
 import { PAL } from '../../models/palette';
 import type { Deck, Field, ForestLayout, Structure } from './layout';
+import { HOUSE } from './house';
 import { INN } from './inn';
 import { localToWorld, standingStones, TENT } from './layout';
 import { mulberry32 } from './noise';
 import { stump } from './nature';
+import { SMITHY } from './smithy';
 import { BUILD, CROP, EARTH, GREEN, WATER } from './palette';
 
 // Buildings and set pieces, each authored in its own frame: origin on the
@@ -76,9 +78,14 @@ function foundation(b: ModelBuilder, w: number, d: number, top: number, color: n
   b.box(w, 1.6 + top, d, { at: [0, (top - 1.6) / 2, 0], color });
 }
 
-/** A gable roof with its ridge along X: plaster gable ends and two slabs that overhang. */
-function gable(b: ModelBuilder, w: number, d: number, top: number, rise: number, over: number, roof: number, gableColor: number, thick = 0.16): void {
-  b.taper(w, d, w, 0.04, rise, { at: [0, top, 0], color: gableColor });
+/**
+ * A gable roof with its ridge along X: plaster gable ends and two slabs that
+ * overhang. With `ends`, the gable ends are that thick and the roof is hollow
+ * under its slopes, for a building you can look up into.
+ */
+function gable(b: ModelBuilder, w: number, d: number, top: number, rise: number, over: number, roof: number, gableColor: number, thick = 0.16, ends?: number): void {
+  if (ends === undefined) b.taper(w, d, w, 0.04, rise, { at: [0, top, 0], color: gableColor });
+  else for (const s of [-1, 1]) b.taper(ends, d, ends, 0.04, rise, { at: [s * (w / 2 - ends / 2), top, 0], color: gableColor });
   const half = d / 2 + over;
   const theta = Math.atan2(rise, d / 2);
   const len = half / Math.cos(theta);
@@ -94,12 +101,21 @@ function gable(b: ModelBuilder, w: number, d: number, top: number, rise: number,
   b.box(w + 2 * over, 0.16, 0.34, { at: [0, top + rise + thick * 0.6, 0], color: roof === BUILD.thatch ? BUILD.thatchDark : BUILD.slateDark });
 }
 
-/** Dark timbers over a plaster storey: corner posts, sill and head beams, and a few braces. */
-function frame(b: ModelBuilder, w: number, d: number, y0: number, h: number): void {
+/**
+ * Dark timbers over a plaster storey: corner posts, sill and head beams, and a
+ * few braces. A `doorway` in the front (its middle and width) is left clear.
+ */
+function frame(b: ModelBuilder, w: number, d: number, y0: number, h: number, doorway?: { x: number; width: number }): void {
   const t: PartOpts = { color: BUILD.timber, jitter: 0.1 };
   for (const x of [-w / 2, w / 2]) for (const z of [-d / 2, d / 2]) b.box(0.24, h, 0.24, { ...t, at: [x, y0 + h / 2, z] });
+  const [gapL, gapR] = doorway ? [doorway.x - doorway.width / 2 - 0.12, doorway.x + doorway.width / 2 + 0.12] : [Infinity, -Infinity];
   for (const z of [-d / 2 - 0.03, d / 2 + 0.03]) {
-    b.box(w, 0.18, 0.08, { ...t, at: [0, y0 + 0.09, z] }).box(w, 0.18, 0.08, { ...t, at: [0, y0 + h - 0.09, z] });
+    b.box(w, 0.18, 0.08, { ...t, at: [0, y0 + h - 0.09, z] });
+    if (z < 0 || !doorway) b.box(w, 0.18, 0.08, { ...t, at: [0, y0 + 0.09, z] });
+    else {
+      b.box(gapL + w / 2, 0.18, 0.08, { ...t, at: [(gapL - w / 2) / 2, y0 + 0.09, z] });
+      b.box(w / 2 - gapR, 0.18, 0.08, { ...t, at: [(gapR + w / 2) / 2, y0 + 0.09, z] });
+    }
   }
   for (const x of [-w / 2 - 0.03, w / 2 + 0.03]) {
     b.box(0.08, 0.18, d, { ...t, at: [x, y0 + 0.09, 0] }).box(0.08, 0.18, d, { ...t, at: [x, y0 + h - 0.09, 0] });
@@ -108,7 +124,7 @@ function frame(b: ModelBuilder, w: number, d: number, y0: number, h: number): vo
   const bays = Math.max(2, Math.round(w / 2.2));
   for (let i = 1; i < bays; i++) {
     const x = -w / 2 + (i * w) / bays;
-    for (const z of [-d / 2 - 0.03, d / 2 + 0.03]) b.box(0.16, h, 0.08, { ...t, at: [x, y0 + h / 2, z] });
+    for (const z of [-d / 2 - 0.03, d / 2 + 0.03]) if (z < 0 || x < gapL - 0.08 || x > gapR + 0.08) b.box(0.16, h, 0.08, { ...t, at: [x, y0 + h / 2, z] });
   }
   for (const z of [-d / 2 - 0.04, d / 2 + 0.04]) {
     const x0 = -w / 2 + 0.1;
@@ -247,37 +263,80 @@ function inn(b: ModelBuilder, s: Structure, ctx: StructureContext): void {
     .box(0.1, 0.44, 0.34, { at: [-1.4, 0.22, d / 2 + 0.55], color: BUILD.timber });
 }
 
-/** A one-storey cottage with an attic. Variants change the roof and walls. */
+/**
+ * A one-storey cottage with an attic. Variants change the roof and walls. The
+ * house by the well (variant 0) opens: its walls stand round its room with a
+ * real doorway, and its roof is hollow over it; the door itself and the room
+ * are the interior's (houseModel.ts). Faces point outwards, so from inside the
+ * walls vanish.
+ */
 function house(b: ModelBuilder, s: Structure, ctx: StructureContext): void {
   const w = s.hw * 2;
   const d = s.hd * 2;
   const thatched = s.variant === 1;
+  const opens = s.variant === 0;
   foundation(b, w + 0.3, d + 0.3, 0.3);
   const h = 2.9;
   const y0 = 0.3;
+  const { door } = HOUSE;
   if (s.variant === 1) {
     b.box(w, 1.1, d, { at: [0, y0 + 0.55, 0], color: PAL.stone });
     b.box(w - 0.02, h - 1.1, d - 0.02, { at: [0, y0 + 1.1 + (h - 1.1) / 2, 0], color: BUILD.plasterShade });
+  } else if (opens) {
+    const t = HOUSE.wall;
+    const plaster: PartOpts = { color: BUILD.plaster, jitter: 0.04 };
+    const left = door.x - door.width / 2 - 0.1; // the frame's jambs cover the walls' ends
+    const right = door.x + door.width / 2 + 0.1;
+    const lintel = HOUSE.floor + door.height + 0.1;
+    b.box(w, h, t, { ...plaster, at: [0, y0 + h / 2, -d / 2 + t / 2] })
+      .box(t, h, d - 2 * t, { ...plaster, at: [-w / 2 + t / 2, y0 + h / 2, 0] })
+      .box(t, h, d - 2 * t, { ...plaster, at: [w / 2 - t / 2, y0 + h / 2, 0] })
+      .box(left + w / 2, h, t, { ...plaster, at: [(left - w / 2) / 2, y0 + h / 2, d / 2 - t / 2] })
+      .box(w / 2 - right, h, t, { ...plaster, at: [(right + w / 2) / 2, y0 + h / 2, d / 2 - t / 2] })
+      .box(right - left, y0 + h - lintel, t, { ...plaster, at: [door.x, (lintel + y0 + h) / 2, d / 2 - t / 2] });
+    // The doorway's timber frame, lining the walls' ends down to where the leaf hangs.
+    const frameDepth = d / 2 + 0.04 - (HOUSE.leaves.z - HOUSE.leaves.thick);
+    const frameZ = d / 2 + 0.04 - frameDepth / 2;
+    const top = HOUSE.floor + door.height + 0.12;
+    for (const side of [-1, 1]) b.box(0.12, top - y0, frameDepth, { at: [door.x + side * (door.width / 2 + 0.06), (top + y0) / 2, frameZ], color: BUILD.timber, jitter: 0.1 });
+    b.box(door.width + 0.24, 0.13, frameDepth, { at: [door.x, top - 0.065, frameZ], color: BUILD.timber, jitter: 0.1 });
   } else {
     b.box(w, h, d, { at: [0, y0 + h / 2, 0], color: s.variant === 2 ? BUILD.plasterShade : BUILD.plaster, jitter: 0.04 });
   }
-  frame(b, w, d, y0, h);
-  gable(b, w, d, y0 + h, thatched ? 2.8 : 2.5, 0.5, thatched ? BUILD.thatch : BUILD.slate, BUILD.plaster, thatched ? 0.35 : 0.16);
-  if (!thatched) chimney(b, w / 2 - 0.9, -0.8, y0 + h, y0 + h + 3.1);
-  doorOn(b, 'front', w, d, 0.9, y0);
+  frame(b, w, d, y0, h, opens ? door : undefined);
+  gable(b, w, d, y0 + h, thatched ? 2.8 : 2.5, 0.5, thatched ? BUILD.thatch : BUILD.slate, BUILD.plaster, thatched ? 0.35 : 0.16, opens ? HOUSE.wall : undefined);
+  // The house by the well's chimney stands at its gable end, over the hearth in the room's back corner.
+  if (opens) chimney(b, w / 2 - 0.4, HOUSE.hearth.z, y0 + h, y0 + h + 3.1);
+  else if (!thatched) chimney(b, w / 2 - 0.9, -0.8, y0 + h, y0 + h + 3.1);
+  if (!opens) doorOn(b, 'front', w, d, 0.9, y0);
   windowOn(b, 'front', w, d, -1.4, y0 + 1.5, s.variant === 0);
   windowOn(b, 'left', w, d, 0, y0 + 1.5);
   windowOn(b, 'right', w, d, 0, y0 + 1.5, true);
   windowOn(b, 'back', w, d, 0.8, y0 + 1.5);
   windowOn(b, 'front', w, d, 0, y0 + h + 0.7);
-  b.box(1.4, 0.18, 0.6, { at: [0.9, 0.2, d / 2 + 0.35], color: PAL.stone });
+  if (opens) {
+    // Steps up to the door.
+    b.box(door.width + 0.4, 0.2, 0.5, { at: [door.x, 0.2, d / 2 + 0.25], color: PAL.stone }).box(door.width + 0.4, 0.2, 0.45, {
+      at: [door.x, 0.05, d / 2 + 0.72],
+      color: PAL.stoneDark,
+    });
+  } else b.box(1.4, 0.18, 0.6, { at: [0.9, 0.2, d / 2 + 0.35], color: PAL.stone });
   // Flower boxes and a woodpile.
   b.box(1.0, 0.18, 0.2, { at: [-1.4, y0 + 0.85, d / 2 + 0.18], color: BUILD.plank });
   for (let i = 0; i < 4; i++) b.box(0.1, 0.1, 0.1, { at: [-1.75 + i * 0.23, y0 + 1.0, d / 2 + 0.18], color: [0xd84a3a, 0xf0d040][i % 2], jitter: 0 });
   for (let i = 0; i < 3; i++) {
     b.cyl(0.12, 0.12, 1.3, 6, { at: [-w / 2 - 0.35, 0.14 + i * 0.22, d / 2 - 1.0 - (i % 2) * 0.12], rot: [PI / 2, 0, 0], color: EARTH.bark });
   }
-  if (s.variant === 0) ctx.glow([0.9 + 0.85, y0 + 2.2, d / 2 + 0.25], 0.5, 0xffb050);
+  if (opens) {
+    // The lantern at the door, on an iron bracket.
+    const lx = door.x + 0.85;
+    const ly = y0 + 2.15;
+    b.box(0.04, 0.04, 0.3, { at: [lx, ly + 0.25, d / 2 + 0.12], color: PAL.ironDark, jitter: 0 })
+      .box(0.03, 0.12, 0.03, { at: [lx, ly + 0.2, d / 2 + 0.26], color: PAL.ironDark, jitter: 0 })
+      .box(0.2, 0.28, 0.2, { at: [lx, ly, d / 2 + 0.26], color: PAL.ironDark })
+      .box(0.14, 0.2, 0.14, { at: [lx, ly, d / 2 + 0.26], color: 0xffd080, glow: 1, jitter: 0 });
+    ctx.glow([lx, ly, d / 2 + 0.36], 0.6, 0xffb050);
+  }
 }
 
 function farmhouse(b: ModelBuilder, s: Structure): void {
@@ -301,40 +360,45 @@ function farmhouse(b: ModelBuilder, s: Structure): void {
   barrel(b, 2.2, d / 2 + 0.6);
 }
 
-/** The smithy: an open-fronted lean-to with a stone forge, an anvil and a rack of blades. */
+/**
+ * The smithy: an open-fronted lean-to with a stone forge, an anvil and a rack
+ * of blades. You walk in under its roof (smithy.ts says what you bump into);
+ * its floor is flagstones flush with the levelled ground.
+ */
 function smithy(b: ModelBuilder, s: Structure, ctx: StructureContext): void {
   const w = s.hw * 2;
   const d = s.hd * 2;
-  b.box(w, 0.25, d, { at: [0, 0.05, 0], color: PAL.stoneDark });
-  b.box(w, 2.4, 0.45, { at: [0, 1.2, -d / 2 + 0.22], color: PAL.stone, jitter: 0.12 });
-  b.box(0.45, 1.2, d - 0.5, { at: [-w / 2 + 0.22, 0.6, 0.25], color: PAL.stone, jitter: 0.12 });
+  const { back: bw, side, posts, forge, anvil, barrel: quench, grindstone: grind, crate: box } = SMITHY;
+  b.box(w, 0.3, d, { at: [0, -0.11, 0], color: PAL.stoneDark });
+  b.box(w, 2.4, bw, { at: [0, 1.2, -d / 2 + bw / 2], color: PAL.stone, jitter: 0.12 });
+  b.box(side, 1.2, d - bw, { at: [-w / 2 + side / 2, 0.6, bw / 2], color: PAL.stone, jitter: 0.12 });
   const back = 4.0;
   const front = 3.1;
-  for (const x of [-w / 2 + 0.2, 0, w / 2 - 0.2]) {
-    b.box(0.26, back, 0.26, { at: [x, back / 2, -d / 2 + 0.2], color: BUILD.timber })
-      .box(0.26, front, 0.26, { at: [x, front / 2, d / 2 - 0.2], color: BUILD.timber });
+  for (const x of [-w / 2 + posts.inset, 0, w / 2 - posts.inset]) {
+    b.box(posts.size, back, posts.size, { at: [x, back / 2, -d / 2 + posts.inset], color: BUILD.timber })
+      .box(posts.size, front, posts.size, { at: [x, front / 2, d / 2 - posts.inset], color: BUILD.timber });
   }
   const theta = Math.atan2(back - front, d);
   b.box(w + 0.8, 0.14, Math.hypot(d, back - front) + 1.0, { at: [0, (back + front) / 2 + 0.08, 0], rot: [theta, 0, 0], color: BUILD.slate });
-  b.box(w, 0.2, 0.2, { at: [0, front - 0.1, d / 2 - 0.2], color: BUILD.timber });
+  b.box(w, 0.2, 0.2, { at: [0, front - 0.1, d / 2 - posts.inset], color: BUILD.timber });
   // Forge, hood and chimney.
-  const fx = -w / 2 + 1.3;
-  const fz = -d / 2 + 1.2;
-  b.box(1.8, 0.95, 1.4, { at: [fx, 0.48, fz], color: PAL.stone, jitter: 0.12 })
+  const fx = forge.x;
+  const fz = forge.z;
+  b.box(2 * forge.hw, 0.95, 2 * forge.hd, { at: [fx, 0.48, fz], color: PAL.stone, jitter: 0.12 })
     .box(1.3, 0.06, 0.9, { at: [fx, 0.97, fz], color: PAL.coal, glow: 0.85, jitter: 0.2 })
     .taper(1.8, 1.4, 0.8, 0.8, 1.1, { at: [fx, 2.0, fz], color: PAL.stoneDark })
     .box(0.8, 2.4, 0.8, { at: [fx, 4.2, fz], color: PAL.stoneDark });
   ctx.glow([fx, 1.2, fz + 0.3], 1.1, 0xff7a2a);
   // Anvil on a stump, a quench barrel, a grindstone.
-  stump(b, 0.8, 0, 0.4, 1);
-  b.box(0.5, 0.16, 0.2, { at: [0.8, 0.66, 0.4], color: PAL.ironDark })
-    .box(0.26, 0.12, 0.16, { at: [0.8, 0.55, 0.4], color: PAL.ironDark })
-    .cone(0.08, 0.26, 4, { at: [1.16, 0.68, 0.4], rot: [0, 0, -PI / 2], color: PAL.ironDark });
-  barrel(b, 1.9, 1.5);
-  b.box(0.8, 0.02, 0.8, { at: [1.9, 0.83, 1.5], color: WATER.deep, jitter: 0 });
-  b.cyl(0.4, 0.4, 0.14, 10, { at: [2.3, 0.8, -1.2], rot: [PI / 2, 0, 0], color: PAL.stoneLight })
-    .box(0.1, 0.8, 0.1, { at: [2.3, 0.4, -1.05], color: BUILD.timber })
-    .box(0.1, 0.8, 0.1, { at: [2.3, 0.4, -1.35], color: BUILD.timber });
+  stump(b, anvil.x, 0, anvil.z, 1);
+  b.box(0.5, 0.16, 0.2, { at: [anvil.x, 0.66, anvil.z], color: PAL.ironDark })
+    .box(0.26, 0.12, 0.16, { at: [anvil.x, 0.55, anvil.z], color: PAL.ironDark })
+    .cone(0.08, 0.26, 4, { at: [anvil.x + 0.36, 0.68, anvil.z], rot: [0, 0, -PI / 2], color: PAL.ironDark });
+  barrel(b, quench.x, quench.z);
+  b.box(0.8, 0.02, 0.8, { at: [quench.x, 0.83, quench.z], color: WATER.deep, jitter: 0 });
+  b.cyl(0.4, 0.4, 0.14, 10, { at: [grind.x, 0.8, grind.z], rot: [PI / 2, 0, 0], color: PAL.stoneLight })
+    .box(0.1, 0.8, 0.1, { at: [grind.x, 0.4, grind.z + 0.15], color: BUILD.timber })
+    .box(0.1, 0.8, 0.1, { at: [grind.x, 0.4, grind.z - 0.15], color: BUILD.timber });
   // Blades on the back wall.
   for (let i = 0; i < 4; i++) {
     const x = -0.6 + i * 0.45;
@@ -343,7 +407,7 @@ function smithy(b: ModelBuilder, s: Structure, ctx: StructureContext): void {
       .box(0.04, 0.2, 0.04, { at: [x, 0.68, -d / 2 + 0.48], color: PAL.leatherDark });
   }
   b.box(2.2, 0.08, 0.12, { at: [0.1, 0.9, -d / 2 + 0.5], color: BUILD.timber });
-  crate(b, w / 2 - 0.6, -d / 2 + 0.9, 0.6, 0.2);
+  crate(b, box.x, box.z, 0.6, 0.2);
 }
 
 function well(b: ModelBuilder): void {
