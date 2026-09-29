@@ -2,6 +2,7 @@ import { type BufferGeometry, IcosahedronGeometry } from 'three';
 import { ModelBuilder, type PartOpts, type Vec3 } from '../../models/kit';
 import { PAL } from '../../models/palette';
 import type { Deck, Field, ForestLayout, Structure } from './layout';
+import { INN } from './inn';
 import { localToWorld, standingStones, TENT } from './layout';
 import { mulberry32 } from './noise';
 import { stump } from './nature';
@@ -161,12 +162,32 @@ function crate(b: ModelBuilder, x: number, z: number, s: number, yaw: number, y 
 
 // ------------------------------------------------------------------ the village
 
-/** Two storeys: a stone ground floor, a jettied timber-framed upper floor, a tall slate roof. */
+/**
+ * Two storeys: a stone ground floor, a jettied timber-framed upper floor, a
+ * tall slate roof. The ground floor's walls stand round the taproom, with a
+ * real doorway in the front; the door itself, its frame and the room are the
+ * interior's (innModel.ts). Faces point outwards, so from inside the walls vanish.
+ */
 function inn(b: ModelBuilder, s: Structure, ctx: StructureContext): void {
   const w = s.hw * 2;
   const d = s.hd * 2;
   foundation(b, w + 0.4, d + 0.4, 0.3);
-  b.box(w, 3, d, { at: [0, 1.8, 0], color: PAL.stone, jitter: 0.1 });
+  const t = INN.wall;
+  const stone: PartOpts = { color: PAL.stone, jitter: 0.1 };
+  const gap = INN.door.width / 2 + 0.1; // the frame's jambs cover the walls' ends
+  const lintel = 0.3 + INN.door.height + 0.1;
+  b.box(w, 3, t, { ...stone, at: [0, 1.8, -d / 2 + t / 2] })
+    .box(t, 3, d - 2 * t, { ...stone, at: [-w / 2 + t / 2, 1.8, 0] })
+    .box(t, 3, d - 2 * t, { ...stone, at: [w / 2 - t / 2, 1.8, 0] })
+    .box(w / 2 - gap, 3, t, { ...stone, at: [-(w / 2 + gap) / 2, 1.8, d / 2 - t / 2] })
+    .box(w / 2 - gap, 3, t, { ...stone, at: [(w / 2 + gap) / 2, 1.8, d / 2 - t / 2] })
+    .box(2 * gap, 3.3 - lintel, t, { ...stone, at: [0, (lintel + 3.3) / 2, d / 2 - t / 2] });
+  // The doorway's timber frame, lining the walls' ends down to where the leaves hang.
+  const frameDepth = d / 2 + 0.04 - (INN.leaves.z - INN.leaves.thick);
+  const frameZ = d / 2 + 0.04 - frameDepth / 2;
+  const top = 0.3 + INN.door.height + 0.12;
+  for (const side of [-1, 1]) b.box(0.12, top - 0.3, frameDepth, { at: [side * (INN.door.width / 2 + 0.06), (top + 0.3) / 2, frameZ], color: BUILD.timber, jitter: 0.1 });
+  b.box(INN.door.width + 0.24, 0.13, frameDepth, { at: [0, top - 0.065, frameZ], color: BUILD.timber, jitter: 0.1 });
   const y1 = 3.3;
   const h1 = 2.7;
   const W = w + 0.4;
@@ -184,8 +205,7 @@ function inn(b: ModelBuilder, s: Structure, ctx: StructureContext): void {
     windowOn(b, 'front', 1.4, D - 0.1, x, y1 + h1 + 1.0, true);
   }
 
-  // Ground floor: a wide double door under a little porch roof, windows either side.
-  doorOn(b, 'front', w, d, 0, 0.3, 1.8, BUILD.plank);
+  // Ground floor: a wide doorway under a little porch roof, windows either side.
   for (const u of [-3.4, 3.4]) windowOn(b, 'front', w, d, u, 1.9, true);
   for (const u of [-2.2, 2.2]) {
     windowOn(b, 'left', w, d, u, 1.9, true);

@@ -1,6 +1,8 @@
 import { PatrolWalk } from '../../enemies/patrol';
-import type { CampId, CampPlan, Pickup, PostPlan, Spot } from '../types';
+import type { InteriorPlan } from '../../world/interiors';
+import type { CampId, CampPlan, Pickup, PostPlan, Respawn, Spot } from '../types';
 import { Colliders } from './colliders';
+import { INN, planInn } from './inn';
 import { fbm, lerp, mulberry32, nearestOnPolyline, type P2, sampleCurve, smoothstep, valueNoise } from './noise';
 
 // Oakvale: a gentle forest valley. A dirt road runs north from the southern
@@ -143,13 +145,6 @@ export const TENT = {
   orders: { x: 0, z: 1.75 },
 } as const;
 
-/**
- * Where you wake after dying outside the mine: in front of the inn's door,
- * facing the crossroads, until the inn opens and its hearth takes over
- * (ticket 23). Metres out from the door along the inn's front.
- */
-const INN_DOOR_STEP = 2;
-
 export interface Clearing {
   id: string;
   x: number;
@@ -200,7 +195,8 @@ type Spec = Omit<Structure, 'y' | 'variant' | 'solid'> & { variant?: number; sol
 
 const STRUCTURES: Spec[] = [
   // Crossroads village.
-  { kind: 'inn', x: 13, z: -15, yaw: facing(13, -15, 2, -3), hw: 5.5, hd: 4 },
+  // The inn collides through its interior's walls (inn.ts), which leave its doorway open.
+  { kind: 'inn', x: 13, z: -15, yaw: facing(13, -15, 2, -3), hw: INN.hw, hd: INN.hd, solid: false },
   { kind: 'house', x: -13, z: -12, yaw: facing(-13, -12, -2, -3), hw: 3.5, hd: 3 },
   { kind: 'house', x: -15, z: 15, yaw: facing(-15, 15, -2, 5), hw: 3.2, hd: 2.8, variant: 1 },
   { kind: 'house', x: -24, z: -3, yaw: facing(-24, -3, -10, 3), hw: 3, hd: 2.6, variant: 2 },
@@ -386,8 +382,10 @@ export interface ForestLayout {
   roadDistance: DistanceField;
   /** Where a new character starts, and where `?map` and `?fly` begin: the crossroads, facing Hale's spot. */
   spawn: { x: number; z: number; yaw: number };
-  /** Where you wake after a death (yaw as `spawn`'s). */
-  respawns: { village: Spot };
+  /** Where you wake after a death (yaw as `spawn`'s): the village's is by the inn's hearth. */
+  respawns: { village: Respawn };
+  /** The buildings you walk into: the inn. */
+  interiors: InteriorPlan[];
   /** Where Marshal Hale stands, facing the crossroads' centre (yaw as a model turns: 0 faces +Z). */
   hale: Spot;
   camps: CampPlan[];
@@ -477,6 +475,9 @@ export function buildLayout(): ForestLayout {
   // instead of the door hanging over a cutting.
   const tower = structures.find((s) => s.kind === 'tower')!;
   levelRect(ground, tower, tower.y, -6.5, 6.5, -6.5, 6.5, 4);
+  // The inn stands on level ground, out to the foot of the steps at its door.
+  const innSite = structures.find((s) => s.kind === 'inn')!;
+  levelRect(ground, innSite, innSite.y, -INN.hw - 0.3, INN.hw + 0.3, -INN.hd - 0.3, INN.hd + INN.steps.out + 1.5, 2);
 
   // The bridge spans the channel where the main road meets the stream.
   const main = paths[0];
@@ -563,9 +564,9 @@ export function buildLayout(): ForestLayout {
   const south = main.line[main.line.findIndex(([, z]) => z < 70)];
 
   const at = (kind: StructureKind) => structures.find((st) => st.kind === kind)!;
-  const inn = at('inn');
-  const [rx, rz] = localToWorld(inn, 0, inn.hd + INN_DOOR_STEP);
-  const respawns = { village: { x: rx, z: rz, yaw: Math.atan2(rx, rz) } };
+  const interiors = [planInn(at('inn'))];
+  // After a death outside the mine you wake by the inn's hearth, inside with the door shut.
+  const respawns = { village: { ...interiors[0].respawn!, interior: 'inn' as const } };
   const hale = { ...HALE, yaw: facing(HALE.x, HALE.z, 0, 0) };
   const camps: CampPlan[] = CAMPS.map((c) => {
     const clearing = CLEARINGS.find((cl) => cl.id === c.clearing)!;
@@ -621,6 +622,7 @@ export function buildLayout(): ForestLayout {
     roadDistance,
     spawn,
     respawns,
+    interiors,
     hale,
     camps,
     pickups,

@@ -5,6 +5,7 @@ import type { Atmosphere } from '../../world/atmosphere';
 import { Glows } from '../../world/glows';
 import type { Zone } from '../types';
 import { buildFence, buildField, buildStructure } from './buildings';
+import { buildInnInterior } from './innModel';
 import { buildLayout, FOREST } from './layout';
 import { plantPrototypes } from './nature';
 import { LIGHT, SKY } from './palette';
@@ -101,6 +102,7 @@ export function buildForest(): Zone {
     spawn: layout.spawn,
     camps: layout.camps,
     respawns: layout.respawns,
+    interiors: layout.interiors.map(buildInnInterior),
     hale: layout.hale,
     pickups: layout.pickups,
     bounds: { minX: -play, maxX: play, minZ: -play, maxZ: play },

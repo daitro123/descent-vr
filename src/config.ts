@@ -110,7 +110,16 @@ export const CONFIG = {
      * dark outdoors, where glows fake every flame. The arena's torches give
      * the same light.
      */
-    pool: { size: 4, color: 0xff9a3c, intensity: 7, distance: 10, decay: 1.5 },
+    pool: {
+      size: 4,
+      color: 0xff9a3c,
+      intensity: 7,
+      distance: 10,
+      decay: 1.5,
+      fade: 0.3, // s a light takes to fade out of one flame, and again into the next
+      // Flicker by intensity: this share of the flame's light plus two waves.
+      flicker: { base: 0.85, depth: [0.1, 0.06], rate: [9, 24] }, // 1, ratios of intensity, rad/s
+    },
     sky: {
       radius: 180, // m; the World shrinks it inside a nearer far plane
       farShare: 0.9, // …to this share of the far plane
@@ -349,6 +358,19 @@ export const CONFIG = {
     dark: 0.5, // s of black, while you're moved to the respawn point
     fadeIn: 1, // s back to the view
   },
+  // Buildings you walk into (world/interiors.ts): the door swings open as you
+  // walk up and shuts behind you, and the light swaps once it's shut.
+  interiors: {
+    open: 2, // m from the door's middle, from either side: it swings open…
+    margin: 0.3, // m: …and outside, shuts again once you're this much further off
+    shut: 1.5, // m in past the door's line: it shuts behind you, and the room's light comes up
+    reopen: 1.2, // m from the door's middle, from inside: the sun comes back, then the door opens
+    fadeIn: 0.5, // s for the sun to fade and the room's light to take over, once the door is shut
+    fadeOut: 0.3, // s for the sun to come back as you walk to the door, before it opens
+    swing: 0.35, // s for a door to swing from shut to open, or back
+    angle: 1.6, // rad a door swings in to when open
+  },
+
   save: {
     every: 30, // s of play between writes when nothing else has written (where you stand is kept too)
     openTimeout: 5, // s to wait for the browser's storage to open before playing unsaved

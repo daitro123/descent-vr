@@ -4,6 +4,8 @@ import type { RoadPoint } from '../enemies/patrol';
 import type { Item } from '../quests';
 import type { EnemyKind, Family } from '../models/characters';
 import type { Atmosphere } from '../world/atmosphere';
+import type { Interior as InteriorId } from '../save/record';
+import type { Interior } from '../world/interiors';
 
 // A map is a place the game can put you. A zone (Oakvale) is loaded into the
 // World, which lights it, gives it the sky and fog, and answers its ground; a
@@ -32,6 +34,11 @@ export interface Spot {
   readonly x: number;
   readonly z: number;
   readonly yaw: number;
+}
+
+/** Where you wake after a death, and the building it's in, if any. */
+export interface Respawn extends Spot {
+  readonly interior: InteriorId | null;
 }
 
 /**
@@ -86,8 +93,10 @@ export interface Zone extends MapBase {
   readonly atmosphere: Atmosphere;
   /** Its enemies, camp by camp. */
   readonly camps: readonly CampPlan[];
-  /** Where you wake after a death. */
-  readonly respawns: { readonly village: Spot };
+  /** Where you wake after a death: the village's is by the inn's hearth. */
+  readonly respawns: { readonly village: Respawn };
+  /** The buildings you walk into, built with the zone and hidden until their doors open. */
+  readonly interiors: readonly Interior[];
   /** Where Marshal Hale, the quest giver, stands (yaw as a model turns: 0 faces +Z). */
   readonly hale: Spot;
   /** What lies about to be picked up by hand, shown while the adventure state says it lies there. */

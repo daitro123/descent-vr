@@ -223,6 +223,19 @@ describe('the in-memory store', () => {
     expect(answers(new AdventureState(read.record))).toEqual(answers(state));
   });
 
+  it('round-trips a save made inside the inn, with the inn as its interior', async () => {
+    const state = new AdventureState();
+    const record = saveRecord(state.snapshot(), { x: 16.05, z: -13.29, yaw: 1.78, interior: 'inn' }, 99);
+    expect(record.interior).toBe('inn');
+    const store = new MemoryStore();
+    await store.write(record);
+    const read = readSave(await store.read());
+    expect(read).toEqual({ kind: 'saved', record });
+    // Outdoors, a record has no interior; one naming a building that isn't one is unreadable.
+    expect(recordOf(state.snapshot()).interior).toBe(null);
+    expect(readSave(stored({ ...record, interior: 'cellar' }))).toEqual({ kind: 'unreadable' });
+  });
+
   it('keeps what was written, not the object it was given', async () => {
     const record = recordOf(new AdventureState().snapshot());
     const store = new MemoryStore();
