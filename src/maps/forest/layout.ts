@@ -566,7 +566,7 @@ export function buildLayout(): ForestLayout {
   const at = (kind: StructureKind) => structures.find((st) => st.kind === kind)!;
   const interiors = [planInn(at('inn'))];
   // After a death outside the mine you wake by the inn's hearth, inside with the door shut.
-  const respawns = { village: { ...interiors[0].respawn!, interior: 'inn' as const } };
+  const respawns = { village: { ...interiors[0].respawn!, interior: interiors[0].id } };
   const hale = { ...HALE, yaw: facing(HALE.x, HALE.z, 0, 0) };
   const camps: CampPlan[] = CAMPS.map((c) => {
     const clearing = CLEARINGS.find((cl) => cl.id === c.clearing)!;

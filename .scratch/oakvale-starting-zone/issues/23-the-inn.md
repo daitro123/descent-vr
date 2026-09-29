@@ -29,9 +29,9 @@ Built on 2026-09-29 by Claude, in autonomous mode (Tom asked for the rest of Oak
 - **The Interiors switch** (`InteriorSwitch`) is pure: _outside_, _atDoor_, _inside_ and _leaving_ (walking back to the door from inside), with `light` (0 outdoors' to 1 room's) and `door` (0 shut to 1 open).
   - The door opens within 2 m of its middle from either side, stays open while you're in the doorway, and shuts once you're 1.5 m in past its line, or 2.3 m off outside.
   - With the door shut behind you, the light swaps over 0.5 s, and the outdoors is hidden once the door is shut.
-  - Walking back within 1.2 m of the door, the sun comes back over 0.3 s, and only then does the door open.
+  - Walking back within 1.3 m of the door, the sun comes back over 0.2 s, and only then does the door open.
   - Arriving any other way (waking by the hearth, loading a save, a teleport) swaps at once (`settle`).
-- **The World** steps each interior's switch from where the camera stands (a camera above the ceiling is nowhere near the door), swings its door, shows its room, blends its atmosphere from the zone's by the switch's `light`, and hides the zones and the sky while a door is shut behind you. It reports `interior` (the one you're inside, or walking back to the door of).
+- **The World** steps each interior's switch from where the camera stands (a camera above the ceiling is nowhere near the door), swings its door, shows its room, blends its atmosphere from the zone's by the switch's `light`, and hides the zones and the sky while a door is shut behind you (`outdoorsShown`; the Adventure hides its camps, pickups and Hale with them). It reports `interior` (the one you're inside, or walking back to the door of).
 - **The pool of 4 point lights** now picks the 4 flames nearest your head, from the atmosphere shown and any room showing. A light leaving a flame fades out over 0.3 s before it moves, and fades in on its new one, and each flickers by intensity. The count never changes. Outdoors it's dark, as before.
 - **The World as `Ground`**: inside an interior's footprint (and on the steps up to its door) the height is the interior's; its walls and props push you out wherever you are. The inn's old solid footprint is gone from the zone's colliders; its walls collide from outside just as the box did, less the doorway.
 - **The Golden Tankard** (`src/maps/forest/inn.ts`, the plan; `innModel.ts`, the meshes):
@@ -40,7 +40,7 @@ Built on 2026-09-29 by Claude, in autonomous mode (Tom asked for the rest of Oak
   - The big hearth is on the right wall under the larger chimney; the small fireplace is on the left wall under the other; a bar runs along the back with tankards; shelves of bottles and tankards stand between the back windows; two barrels (one tapped) stand past the bar's end; four tables have a bench along each side.
   - Its flames: the hearth, a lantern over the bar and lanterns over two tables. The small fireplace and candles on the other two tables are glows.
   - The innkeeper's spot behind the bar is `INN.keeper`, empty until ticket 29.
-  - It costs 4,482 triangles in one draw call, plus one for its 4 glows and two for the door's leaves (240 triangles).
+  - It costs 4,494 triangles in one draw call, plus one for its 4 glows and two for the door's leaves (240 triangles).
 - **The village respawn point** is before the hearth, facing the door (`Respawn.interior` says it's in the inn). You wake inside with the door shut and the room lit.
 - **The save** records the interior you're in (`saveRecord` takes it with where you stand); loading a save made inside settles you inside, door shut, room lit.
 - **Tunables:** `CONFIG.interiors` (open, margin, shut, reopen, fadeIn, fadeOut, swing, angle) and `CONFIG.world.pool` (fade, flicker).
@@ -52,14 +52,14 @@ Built on 2026-09-29 by Claude, in autonomous mode (Tom asked for the rest of Oak
 
 Calls **taken on Tom's behalf**, to revisit:
 
-- **From inside, the door opens again at 1.2 m, not 2 m.** It shuts once you're 1.5 m in, so opening it again within 2 m would have it swing back open as soon as it shut. The sun comes back over 0.3 s rather than 0.5 s, so walking back at full pace you're barely held at a shut door.
+- **From inside, the door opens again at 1.3 m, not 2 m.** It shuts once you're 1.5 m in, so opening it again within 2 m would have it swing back open as soon as it shut. The sun comes back over 0.2 s rather than 0.5 s, so at a walk (2.2 m/s) the door is open by the time you reach it. Running (a later ticket) will reach it while it's still swinging; since the door doesn't collide, that's a brush through a leaf, not a stop.
 - **Standing in a front corner of the room keeps the door open**: it shuts only once you're 1.5 m in past its line.
 - **"Inside" for the save** is inside or walking back to the door; standing in the doorway is outside.
 - **The door doesn't collide**, shut or open, so it can never hold you up or trap anyone. It's two leaves swinging in, each a small mesh of its own, since they're part of the outside's look too.
 - **The room is 2.86 m high**, not 2.9, to sit under the jettied upper floor's beam; and 10.3 × 7.3 m inside the 0.25 m stone walls.
 - **The hearth is centred 0.6 m off the chimney's line** (at z −0.8 rather than −1.4), to clear the right wall's back window.
 - **The taproom's layout**: the bar leaves its right end open to walk behind it; the barrels stand past that end; the tables leave either a body's width (1.1 m for the biggest enemy) or no room at all between them and everything else, so nothing can be knocked into a nook it can't walk out of; the door's line leads straight to the bar.
-- **The room's light**: a warm fill of 0.55 instead of the sky, fog from 14 to 60 m and a 60 m far plane.
+- **The room's light**: a warm fill of 0.55 instead of the sky, a warm brown fog from 4 to 30 m (it softens the far wall a little) and a 60 m far plane.
 - **No enemy comes indoors** because every camp post and patrol road stands more than a leash and a notice (38 m) from the inn's walls, checked by a test. No runtime rule keeps them out.
 - **The pool picks the 4 flames nearest your head**, from anywhere a room shows.
 - **The door opens for a camera flying over** only when it's below the ceiling, so `?fly` never hides the outdoors.

@@ -341,6 +341,7 @@ describe('walking into the inn and out again', () => {
     expect(room.room.visible).toBe(true);
     expect(w.sun.intensity).toBe(oakvale.atmosphere.sun.intensity);
     expect(oakvale.root.visible).toBe(true);
+    expect(w.outdoorsShown).toBe(true);
     // The pool sits on the room's four flames.
     const onFlames = w.pool.filter((l) => l.intensity > 0 && room.flames.some((f) => l.position.distanceTo(new Vector3(f.x, f.y, f.z)) < 1e-6));
     expect(onFlames).toHaveLength(4);
@@ -355,6 +356,7 @@ describe('walking into the inn and out again', () => {
     expect(w.sun.intensity).toBe(0);
     expect(w.hemisphere.intensity).toBeCloseTo(room.atmosphere.hemisphere.intensity, 9);
     expect(oakvale.root.visible).toBe(false);
+    expect(w.outdoorsShown).toBe(false);
     expect(room.room.visible).toBe(true);
     expect(w.pool.filter((l) => l.intensity > 0)).toHaveLength(4);
     // Back out the door and off down the road: the sun's up, the room's gone and the pool is dark.

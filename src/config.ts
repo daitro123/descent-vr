@@ -117,8 +117,9 @@ export const CONFIG = {
       distance: 10,
       decay: 1.5,
       fade: 0.3, // s a light takes to fade out of one flame, and again into the next
-      // Flicker by intensity: this share of the flame's light plus two waves.
-      flicker: { base: 0.85, depth: [0.1, 0.06], rate: [9, 24] }, // 1, ratios of intensity, rad/s
+      // Flicker by intensity: this share of the flame's light plus two waves,
+      // the second a `phase` behind the first, and each light `stagger` s on from the last.
+      flicker: { base: 0.85, depth: [0.1, 0.06], rate: [9, 24], phase: 1.3, stagger: 2.9 }, // 1, ratios of intensity, rad/s, rad, s
     },
     sky: {
       radius: 180, // m; the World shrinks it inside a nearer far plane
@@ -364,9 +365,9 @@ export const CONFIG = {
     open: 2, // m from the door's middle, from either side: it swings open…
     margin: 0.3, // m: …and outside, shuts again once you're this much further off
     shut: 1.5, // m in past the door's line: it shuts behind you, and the room's light comes up
-    reopen: 1.2, // m from the door's middle, from inside: the sun comes back, then the door opens
+    reopen: 1.3, // m from the door's middle, from inside: the sun comes back, then the door opens (open by the time you reach it at a walk)
     fadeIn: 0.5, // s for the sun to fade and the room's light to take over, once the door is shut
-    fadeOut: 0.3, // s for the sun to come back as you walk to the door, before it opens
+    fadeOut: 0.2, // s for the sun to come back as you walk to the door, before it opens
     swing: 0.35, // s for a door to swing from shut to open, or back
     angle: 1.6, // rad a door swings in to when open
   },

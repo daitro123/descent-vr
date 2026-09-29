@@ -17,11 +17,30 @@ export interface Flame {
   readonly z: number;
 }
 
+/** A building's frame: the footprint's centre on the ground, its front (+Z) facing (sin yaw, cos yaw). */
+export interface Frame {
+  readonly x: number;
+  readonly z: number;
+  readonly yaw: number;
+  readonly y: number;
+}
+
+/** The point (x, z) on the floor plane, in `frame`'s own axes, written into `out`. */
+export function toFrame<T extends { x: number; z: number }>(frame: Omit<Frame, 'y'>, x: number, z: number, out: T): T {
+  const dx = x - frame.x;
+  const dz = z - frame.z;
+  const c = Math.cos(frame.yaw);
+  const s = Math.sin(frame.yaw);
+  out.x = dx * c - dz * s;
+  out.z = dx * s + dz * c;
+  return out;
+}
+
 /** An interior's plan: where it stands, its ground, its door, its flames and its air. No meshes. */
 export interface InteriorPlan {
   readonly id: InteriorId;
-  /** Its building's frame: the footprint's centre on the ground, its front (+Z) facing (sin yaw, cos yaw). */
-  readonly frame: { readonly x: number; readonly z: number; readonly yaw: number; readonly y: number };
+  /** Its building's frame. */
+  readonly frame: Frame;
   /** Half extents of the footprint, in the frame: inside it the ground is the interior's. */
   readonly footprint: { readonly hw: number; readonly hd: number };
   /** The floor's height, in world metres. */

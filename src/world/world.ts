@@ -15,11 +15,13 @@ import type { Zone } from '../maps/types';
 import type { Interior as InteriorId } from '../save/record';
 import { type Atmosphere, blendAtmospheres } from './atmosphere';
 import type { Ground } from './ground';
-import { type Flame, type Interior, InteriorSwitch } from './interiors';
+import { type Flame, type Interior, InteriorSwitch, toFrame } from './interiors';
 import { buildSky, type Sky } from './sky';
 
 const _probe = new Vector3();
 const _eye = new Vector3();
+/** Where you stand in the interior being stepped, reused each frame. */
+const _standing = { x: 0, z: 0, within: false };
 
 /** One of the pool's point lights: the flame it sits on, if any, and how far it has faded up on it. */
 interface PoolLight {
@@ -76,6 +78,7 @@ export class World implements Ground {
   private time = 0;
   /** The flames the pool may sit on this frame, nearest first (kept to spare the garbage collector). */
   private readonly flames: Flame[] = [];
+  private outdoors = true;
   /** Put the pool straight onto its flames next frame, with no fade (after `settle`). */
   private snapPool = false;
   /** While the fog is lifted, how far you see; null under the atmosphere's own fog. */
@@ -88,7 +91,7 @@ export class World implements Ground {
     this.sun.position.copy(toSun);
     const { size, color, distance, decay } = CONFIG.world.pool;
     this.pool = Array.from({ length: size }, () => new PointLight(color, 0, distance, decay));
-    this.lights = this.pool.map((light, i) => ({ light, flame: null, weight: 0, seed: i * 2.9 }));
+    this.lights = this.pool.map((light, i) => ({ light, flame: null, weight: 0, seed: i * CONFIG.world.pool.flicker.stagger }));
     this.sky = buildSky(toSun);
     this.root.add(this.hemisphere, this.sun, ...this.pool, this.sky.root);
   }
@@ -135,6 +138,11 @@ export class World implements Ground {
   apply(atmosphere: Atmosphere): void {
     this.atmosphere = atmosphere;
     this.show(this.blend.interior ? blendAtmospheres(atmosphere, this.blend.interior.atmosphere, this.blend.t) : atmosphere);
+  }
+
+  /** Is the outdoors drawn? Not while a door is shut behind you: whoever adds to it outside the zones (camps, people) hides theirs too. */
+  get outdoorsShown(): boolean {
+    return this.outdoors;
   }
 
   /** The interior you're in (inside, or walking back to its door), if any. */
@@ -216,28 +224,34 @@ export class World implements Ground {
     camera.getWorldPosition(_eye);
     for (const h of this.interiors) {
       const { frame, footprint, floor, height } = h.interior;
-      const [x, z] = toFrame(frame, _eye.x, _eye.z);
+      toFrame(frame, _eye.x, _eye.z, _standing);
+      const { x, z } = _standing;
       // A camera flying over a building is nowhere near its door.
       const over = _eye.y > floor + height;
-      h.switch.update(dt, {
-        x: over ? Infinity : x,
-        z,
-        within: !over && Math.abs(x) <= footprint.hw && Math.abs(z) <= footprint.hd,
-      });
+      _standing.x = over ? Infinity : x;
+      _standing.within = !over && Math.abs(x) <= footprint.hw && Math.abs(z) <= footprint.hd;
+      h.switch.update(dt, _standing);
       this.showSwitch(h);
       if (h.interior.room.visible) h.interior.update(dt, camera);
     }
+    this.showOutdoors();
     this.blendLight();
     this.updatePool(dt, _eye);
     this.sky.update(dt, camera);
     for (const zone of this.zones) if (zone.root.visible) zone.update(dt, camera);
   }
 
-  /** An interior's switch, drawn: its door, its room, and whether the outdoors shows. */
+  /** An interior's switch, drawn: its door and its room. */
   private showSwitch(h: Held): void {
     h.interior.swing(h.switch.door);
     h.interior.room.visible = h.switch.roomShown;
-    const outdoors = !this.interiors.some((o) => o.switch.outdoorsHidden);
+  }
+
+  /** The outdoors, hidden while a door is shut behind you. */
+  private showOutdoors(): void {
+    let outdoors = true;
+    for (const h of this.interiors) if (h.switch.outdoorsHidden) outdoors = false;
+    this.outdoors = outdoors;
     for (const zone of this.zones) zone.root.visible = outdoors;
     this.sky.root.visible = outdoors;
   }
@@ -262,11 +276,8 @@ export class World implements Ground {
     const { intensity, fade, flicker } = CONFIG.world.pool;
     const flames = this.flames;
     flames.length = 0;
-    for (const f of this.shown?.flames ?? []) flames.push(f);
-    for (const h of this.interiors) if (h.switch.flamesLit) for (const f of h.interior.flames) if (!flames.includes(f)) flames.push(f);
-    const d2 = (f: Flame) => (f.x - eye.x) ** 2 + (f.y - eye.y) ** 2 + (f.z - eye.z) ** 2;
-    flames.sort((a, b) => d2(a) - d2(b));
-    if (flames.length > this.lights.length) flames.length = this.lights.length;
+    if (this.shown) for (const f of this.shown.flames) nearest(flames, f, eye, this.lights.length);
+    for (const h of this.interiors) if (h.switch.flamesLit) for (const f of h.interior.flames) nearest(flames, f, eye, this.lights.length);
     const wanted = flames;
     // After `settle`, as if every light had long since faded where it's going.
     const snap = this.snapPool;
@@ -277,8 +288,13 @@ export class World implements Ground {
       if (l.weight === 0) l.flame = null;
     }
     for (const f of wanted) {
-      if (this.lights.some((l) => l.flame === f)) continue;
-      const free = this.lights.find((l) => l.flame === null);
+      let free: PoolLight | null = null;
+      let held = false;
+      for (const l of this.lights) {
+        if (l.flame === f) held = true;
+        else if (!free && l.flame === null) free = l;
+      }
+      if (held) continue;
       if (!free) break;
       free.flame = f;
       free.light.position.set(f.x, f.y, f.z);
@@ -288,7 +304,7 @@ export class World implements Ground {
     for (const l of this.lights) {
       if (l.flame && wanted.includes(l.flame)) l.weight = snap ? 1 : Math.min(1, l.weight + dt / fade);
       const t = this.time + l.seed;
-      l.light.intensity = intensity * l.weight * (flicker.base + a * Math.sin(t * ra) + b * Math.sin(t * rb + 1.3));
+      l.light.intensity = intensity * l.weight * (flicker.base + a * Math.sin(t * ra) + b * Math.sin(t * rb + flicker.phase));
     }
   }
 
@@ -386,11 +402,20 @@ export class World implements Ground {
   }
 }
 
-/** A point on the floor plane in a frame turned by `yaw` about +Y. */
-function toFrame(f: { readonly x: number; readonly z: number; readonly yaw: number }, x: number, z: number): [number, number] {
-  const dx = x - f.x;
-  const dz = z - f.z;
-  const c = Math.cos(f.yaw);
-  const s = Math.sin(f.yaw);
-  return [dx * c - dz * s, dx * s + dz * c];
+/**
+ * Put `f` into `list`, kept nearest `eye` first and at most `max` long, unless
+ * it's there already (an atmosphere and its room may share flames).
+ */
+function nearest(list: Flame[], f: Flame, eye: Vector3, max: number): void {
+  if (list.includes(f)) return;
+  const d = distance2(f, eye);
+  let i = list.length;
+  while (i > 0 && distance2(list[i - 1], eye) > d) i--;
+  if (i >= max) return;
+  list.splice(i, 0, f);
+  if (list.length > max) list.length = max;
+}
+
+function distance2(f: Flame, eye: Vector3): number {
+  return (f.x - eye.x) ** 2 + (f.y - eye.y) ** 2 + (f.z - eye.z) ** 2;
 }

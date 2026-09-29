@@ -54,9 +54,9 @@ const UNLOCKED: Record<Ability, string> = {
  * health, damage and abilities. What a quest has you find (the leader's
  * orders) lies where it's found while the state says so, taken with a touch.
  * Out of a fight your health comes back; a death fades to black and wakes you
- * by the inn's hearth, inside with the door shut. Doors open as you walk up,
- * and the World swaps the light once one shuts behind you. It saves itself as you go, and loads where you stood with
- * your level, XP, sword and quests, at full health with every camp full
+ * by the inn's hearth, inside with the door shut; which building you're in is
+ * the World's to say. It saves itself as you go, and loads where you stood
+ * with your level, XP, sword and quests, at full health with every camp full
  * (.scratch/oakvale-starting-zone/).
  */
 export class Adventure {
@@ -181,6 +181,9 @@ export class Adventure {
     dt = Math.min(dt, 1 / 30);
     const { player, you } = this;
     this.world.update(dt, player.camera);
+    // With a door shut behind you, what stands outside isn't drawn either.
+    const outdoors = this.world.outdoorsShown;
+    this.camps.root.visible = this.pickups.root.visible = this.hale.root.visible = outdoors;
     player.update(dt);
     updateListener(player.camera);
     const { hands } = player.input;

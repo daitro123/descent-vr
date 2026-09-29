@@ -1,6 +1,6 @@
 import type { Vector3 } from 'three';
 import type { Atmosphere } from '../../world/atmosphere';
-import type { Flame, InteriorPlan } from '../../world/interiors';
+import { type Flame, type Frame, type InteriorPlan, toFrame } from '../../world/interiors';
 import { Colliders } from './colliders';
 import { LIGHT, SKY } from './palette';
 
@@ -65,14 +65,12 @@ export const INN = {
 /** The taproom with the door shut: the fire's warm dark, a low fill instead of the sky, fog close in. */
 export const INN_ATMOSPHERE_BASE: Omit<Atmosphere, 'flames'> = {
   background: 0x140d08,
-  fog: { color: 0x2a1c12, near: 14, far: 60 },
+  fog: { color: 0x2a1c12, near: 4, far: 30 },
   sky: { zenith: SKY.zenith, horizon: SKY.horizon, haze: SKY.haze, sun: SKY.sun },
   sun: { color: LIGHT.sun, intensity: 0 },
   hemisphere: { sky: 0xffc890, ground: 0x3a2618, intensity: 0.55 },
   farPlane: 60,
 };
-
-type Frame = { readonly x: number; readonly z: number; readonly yaw: number; readonly y: number };
 
 function toWorld(f: Frame, lx: number, lz: number): [number, number] {
   const c = Math.cos(f.yaw);
@@ -80,13 +78,8 @@ function toWorld(f: Frame, lx: number, lz: number): [number, number] {
   return [f.x + lx * c + lz * s, f.z - lx * s + lz * c];
 }
 
-function toLocal(f: Frame, x: number, z: number): [number, number] {
-  const dx = x - f.x;
-  const dz = z - f.z;
-  const c = Math.cos(f.yaw);
-  const s = Math.sin(f.yaw);
-  return [dx * c - dz * s, dx * s + dz * c];
-}
+/** Scratch for `groundAt`, asked every frame. */
+const _local = { x: 0, z: 0 };
 
 /** The four flames the pool sits on, in the inn's frame: the hearth, the lantern over the bar and those over two tables. */
 export function innFlames(): readonly [number, number, number][] {
@@ -166,7 +159,7 @@ export function planInn(inn: Frame & { readonly hw: number; readonly hd: number 
     atmosphere: { ...INN_ATMOSPHERE_BASE, flames },
     respawn: { x: wx, z: wz, yaw: lookYaw + frame.yaw },
     groundAt(x, z) {
-      const [lx, lz] = toLocal(frame, x, z);
+      const { x: lx, z: lz } = toFrame(frame, x, z, _local);
       if (Math.abs(lx) <= hw && Math.abs(lz) <= hd) return top;
       // The steps: from the floor at the door's line down to the ground at their foot.
       if (Math.abs(lx) <= steps.width / 2 && lz > hd && lz < hd + steps.out) return frame.y + floor * (1 - (lz - hd) / steps.out);
