@@ -4,7 +4,7 @@ import type { Interior, InteriorPlan } from '../../world/interiors';
 import { INN, innFlames } from './inn';
 import { mulberry32 } from './noise';
 import { BUILD } from './palette';
-import { buildRoom, fireplaceOn, type Glow, windowIn } from './roomModel';
+import { buildInterior, fireplaceOn, type Glow, windowIn } from './interiorModel';
 
 // The Golden Tankard's taproom, built in the inn's frame (inn.ts) and placed
 // with it: one mesh for the room, its glows, and the door's two leaves, which
@@ -13,7 +13,7 @@ import { buildRoom, fireplaceOn, type Glow, windowIn } from './roomModel';
 /** The taproom, its glows and the door, for the inn's `plan`. */
 export function buildInnInterior(plan: InteriorPlan): Interior {
   const { width, height } = INN.door;
-  return buildRoom(plan, {
+  return buildInterior(plan, {
     name: 'inn',
     seed: 23,
     build: buildTaproom,

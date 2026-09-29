@@ -275,9 +275,10 @@ function house(b: ModelBuilder, s: Structure, ctx: StructureContext): void {
   const d = s.hd * 2;
   const thatched = s.variant === 1;
   const opens = s.variant === 0;
-  foundation(b, w + 0.3, d + 0.3, 0.3);
-  const h = 2.9;
-  const y0 = 0.3;
+  // Every cottage has the house by the well's walls and roof, so the room inside it fits.
+  const y0 = HOUSE.base;
+  const h = HOUSE.eaves - y0;
+  foundation(b, w + 0.3, d + 0.3, y0);
   const { door } = HOUSE;
   if (s.variant === 1) {
     b.box(w, 1.1, d, { at: [0, y0 + 0.55, 0], color: PAL.stone });
@@ -304,9 +305,9 @@ function house(b: ModelBuilder, s: Structure, ctx: StructureContext): void {
     b.box(w, h, d, { at: [0, y0 + h / 2, 0], color: s.variant === 2 ? BUILD.plasterShade : BUILD.plaster, jitter: 0.04 });
   }
   frame(b, w, d, y0, h, opens ? door : undefined);
-  gable(b, w, d, y0 + h, thatched ? 2.8 : 2.5, 0.5, thatched ? BUILD.thatch : BUILD.slate, BUILD.plaster, thatched ? 0.35 : 0.16, opens ? HOUSE.wall : undefined);
+  gable(b, w, d, y0 + h, thatched ? 2.8 : HOUSE.rise, 0.5, thatched ? BUILD.thatch : BUILD.slate, BUILD.plaster, thatched ? 0.35 : 0.16, opens ? HOUSE.wall : undefined);
   // The house by the well's chimney stands at its gable end, over the hearth in the room's back corner.
-  if (opens) chimney(b, w / 2 - 0.4, HOUSE.hearth.z, y0 + h, y0 + h + 3.1);
+  if (opens) chimney(b, HOUSE.chimney.x, HOUSE.hearth.z, y0 + h, y0 + h + 3.1);
   else if (!thatched) chimney(b, w / 2 - 0.9, -0.8, y0 + h, y0 + h + 3.1);
   if (!opens) doorOn(b, 'front', w, d, 0.9, y0);
   windowOn(b, 'front', w, d, -1.4, y0 + 1.5, s.variant === 0);
@@ -316,7 +317,7 @@ function house(b: ModelBuilder, s: Structure, ctx: StructureContext): void {
   windowOn(b, 'front', w, d, 0, y0 + h + 0.7);
   if (opens) {
     // Steps up to the door.
-    b.box(door.width + 0.4, 0.2, 0.5, { at: [door.x, 0.2, d / 2 + 0.25], color: PAL.stone }).box(door.width + 0.4, 0.2, 0.45, {
+    b.box(HOUSE.steps.width, 0.2, 0.5, { at: [door.x, 0.2, d / 2 + 0.25], color: PAL.stone }).box(HOUSE.steps.width, 0.2, 0.45, {
       at: [door.x, 0.05, d / 2 + 0.72],
       color: PAL.stoneDark,
     });
@@ -368,7 +369,7 @@ function farmhouse(b: ModelBuilder, s: Structure): void {
 function smithy(b: ModelBuilder, s: Structure, ctx: StructureContext): void {
   const w = s.hw * 2;
   const d = s.hd * 2;
-  const { back: bw, side, posts, forge, anvil, barrel: quench, grindstone: grind, crate: box } = SMITHY;
+  const { back: bw, side, posts, forge, anvil, barrel: quench, grindstone: grind, crate: spare } = SMITHY;
   b.box(w, 0.3, d, { at: [0, -0.11, 0], color: PAL.stoneDark });
   b.box(w, 2.4, bw, { at: [0, 1.2, -d / 2 + bw / 2], color: PAL.stone, jitter: 0.12 });
   b.box(side, 1.2, d - bw, { at: [-w / 2 + side / 2, 0.6, bw / 2], color: PAL.stone, jitter: 0.12 });
@@ -407,7 +408,7 @@ function smithy(b: ModelBuilder, s: Structure, ctx: StructureContext): void {
       .box(0.04, 0.2, 0.04, { at: [x, 0.68, -d / 2 + 0.48], color: PAL.leatherDark });
   }
   b.box(2.2, 0.08, 0.12, { at: [0.1, 0.9, -d / 2 + 0.5], color: BUILD.timber });
-  crate(b, box.x, box.z, 0.6, 0.2);
+  crate(b, spare.x, spare.z, 0.6, 0.2);
 }
 
 function well(b: ModelBuilder): void {

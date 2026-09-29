@@ -18,6 +18,9 @@ export function toWorld(f: Omit<Frame, 'y'>, lx: number, lz: number): [number, n
   return [f.x + lx * c + lz * s, f.z - lx * s + lz * c];
 }
 
+/** Where a building stands, with its footprint's half extents. */
+export type Site = Frame & { readonly hw: number; readonly hd: number };
+
 /** Colliders in a building's frame: boxes (x, z, half width, half depth) and circles (x, z, r). */
 export interface Shapes {
   readonly boxes: readonly (readonly [number, number, number, number])[];
@@ -49,10 +52,11 @@ export function wallShapes(
 }
 
 /** A building that opens, as its module describes it, in its own frame. */
-export interface RoomSpec {
+export interface InteriorSpec {
   readonly id: InteriorId;
-  /** Where the building stands, and its footprint's half extents. */
-  readonly site: Frame & { readonly hw: number; readonly hd: number };
+  /** Where the building stands, and its footprint's half extents, which must be the interior's `footprint`. */
+  readonly site: Site;
+  readonly footprint: { readonly hw: number; readonly hd: number };
   /** The floor over the ground, at the top of the foundation. */
   readonly floor: number;
   /** Floor to ceiling (or to the eaves, where it's open to the rafters). */
@@ -73,9 +77,10 @@ export interface RoomSpec {
  * footprint and a ramp down the steps outside the door; its walls and props
  * are colliders.
  */
-export function planRoom(spec: RoomSpec): InteriorPlan {
+export function planInterior(spec: InteriorSpec): InteriorPlan {
   const { site, floor, steps, door, wake } = spec;
-  const { hw, hd } = site;
+  const { hw, hd } = spec.footprint;
+  if (Math.abs(site.hw - hw) > 1e-9 || Math.abs(site.hd - hd) > 1e-9) throw new Error(`The ${spec.id}'s footprint must be its plan's`);
   const frame = { x: site.x, z: site.z, yaw: site.yaw, y: site.y };
   const colliders = new Colliders({ minX: -Infinity, maxX: Infinity, minZ: -Infinity, maxZ: Infinity });
   for (const [lx, lz, bw, bd] of spec.shapes.boxes) {

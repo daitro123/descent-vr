@@ -1,7 +1,7 @@
 import type { Atmosphere } from '../../world/atmosphere';
-import type { Frame, InteriorPlan } from '../../world/interiors';
+import type { InteriorPlan } from '../../world/interiors';
 import { LIGHT, SKY } from './palette';
-import { planRoom, type Shapes, wallShapes } from './rooms';
+import { planInterior, type Shapes, type Site, wallShapes } from './interiorPlan';
 
 // The Golden Tankard's taproom: the plan only (what stands where, what you
 // bump into, its flames), in the inn's own frame: origin on the ground at the
@@ -108,12 +108,11 @@ export function innColliders(): Shapes {
  * must be INN's). Its ground is the floor over the footprint and a ramp down
  * the steps outside the door; its walls and props are colliders.
  */
-export function planInn(inn: Frame & { readonly hw: number; readonly hd: number }): InteriorPlan {
-  const { hw, hd } = INN;
-  if (Math.abs(inn.hw - hw) > 1e-9 || Math.abs(inn.hd - hd) > 1e-9) throw new Error("The inn's footprint must be INN's");
-  return planRoom({
+export function planInn(inn: Site): InteriorPlan {
+  return planInterior({
     id: 'inn',
     site: inn,
+    footprint: INN,
     floor: INN.floor,
     height: INN.room.height,
     door: INN.door,

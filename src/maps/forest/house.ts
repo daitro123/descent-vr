@@ -1,7 +1,7 @@
 import type { Atmosphere } from '../../world/atmosphere';
-import type { Frame, InteriorPlan } from '../../world/interiors';
+import type { InteriorPlan } from '../../world/interiors';
 import { LIGHT, SKY } from './palette';
-import { planRoom, type Shapes, wallShapes } from './rooms';
+import { planInterior, type Shapes, type Site, wallShapes } from './interiorPlan';
 
 // The house by the well: the slate-roofed cottage facing the crossroads, with
 // the lantern at its door. The plan only (what stands where, what you bump
@@ -17,7 +17,8 @@ export const HOUSE = {
   wall: 0.2,
   /** The floor, on the 0.3 m foundation. */
   floor: 0.31,
-  /** The walls' tops over the ground, where the roof starts, and how far it rises to the ridge. */
+  /** The foundation's top, which the outer walls stand on, and their tops, where the roof starts; and how far it rises to the ridge. */
+  base: 0.3,
   eaves: 3.2,
   rise: 2.5,
   /** The room's walls stand just inside the outer walls: its half width and depth. */
@@ -28,8 +29,10 @@ export const HOUSE = {
   door: { x: 0.9, width: 1.2, height: 2.05 },
   /** Down the steps outside the door, the floor meets the ground this far out. */
   steps: { width: 1.6, out: 1.0 },
-  /** The hearth in the back right corner, against the right wall under the chimney: its middle along the wall, its width, how far it stands out, and its mouth. */
-  hearth: { z: -1.75, width: 1.4, depth: 0.7, mouth: 1.05 },
+  /** The hearth in the back right corner, against the right wall under the chimney: its middle along the wall (at the back wall), its width, how far it stands out, and its mouth. */
+  hearth: { z: -2.0, width: 1.4, depth: 0.7, mouth: 1.05 },
+  /** The chimney over it, at the gable end: its middle across the front. */
+  chimney: { x: 3.1 },
   /** The bed along the left wall, its head against the back wall. */
   bed: { x: -2.65, z: -1.65, hw: 0.5, hd: 1.0 },
   /** The chest across the bed's foot. */
@@ -91,12 +94,11 @@ export function houseColliders(): Shapes {
 }
 
 /** The house's interior, for the house standing at `house` (its footprint must be HOUSE's). Nobody is home. */
-export function planHouse(house: Frame & { readonly hw: number; readonly hd: number }): InteriorPlan {
-  const { hw, hd } = HOUSE;
-  if (Math.abs(house.hw - hw) > 1e-9 || Math.abs(house.hd - hd) > 1e-9) throw new Error("The house's footprint must be HOUSE's");
-  return planRoom({
+export function planHouse(house: Site): InteriorPlan {
+  return planInterior({
     id: 'house',
     site: house,
+    footprint: HOUSE,
     floor: HOUSE.floor,
     // You're inside below the eaves: above them, over the roof's slope, is outdoors.
     height: HOUSE.eaves - HOUSE.floor,

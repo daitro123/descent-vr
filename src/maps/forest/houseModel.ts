@@ -4,7 +4,7 @@ import type { Interior, InteriorPlan } from '../../world/interiors';
 import { HOUSE, houseFlames, roofAt } from './house';
 import { mulberry32 } from './noise';
 import { BUILD, CROP } from './palette';
-import { buildRoom, fireplaceOn, type Glow, windowIn } from './roomModel';
+import { buildInterior, fireplaceOn, type Glow, windowIn } from './interiorModel';
 
 // The house by the well's one room, built in the house's frame (house.ts) and
 // placed with it: one mesh for the room, open to the rafters, its glows, and
@@ -16,7 +16,7 @@ const UNDER = 0.07;
 /** The room, its glows and the door, for the house's `plan`. */
 export function buildHouseInterior(plan: InteriorPlan): Interior {
   const { door, floor, leaves } = HOUSE;
-  return buildRoom(plan, {
+  return buildInterior(plan, {
     name: 'house',
     seed: 24,
     build: buildCottageRoom,

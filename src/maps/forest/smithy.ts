@@ -1,4 +1,4 @@
-import type { Shapes } from './rooms';
+import type { Shapes } from './interiorPlan';
 
 // The smithy: an open-fronted lean-to you walk in under, up to the forge and
 // the anvil. No door and no switch: it's lit by the sun. What stands where,

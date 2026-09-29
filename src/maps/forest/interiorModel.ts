@@ -24,8 +24,8 @@ export interface Leaf {
   readonly width: number;
 }
 
-export interface RoomParts {
-  /** Names the meshes: `<name>-room`, `<name>-door`, `<name>-interior`. */
+export interface InteriorParts {
+  /** Names the meshes and groups: `<name>-room` (and its group with the glows, `<name>-inside`), `<name>-door`, `<name>-interior`. */
   readonly name: string;
   /** Its seed for the builder's jitter. */
   readonly seed: number;
@@ -39,7 +39,7 @@ export interface RoomParts {
 }
 
 /** A room, its glows and its door, for the building's `plan`. */
-export function buildRoom(plan: InteriorPlan, parts: RoomParts): Interior {
+export function buildInterior(plan: InteriorPlan, parts: InteriorParts): Interior {
   const { frame } = plan;
   const place = new Matrix4().makeRotationY(frame.yaw).setPosition(frame.x, frame.y, frame.z);
   const glows = new Glows();
