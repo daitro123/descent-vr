@@ -50,7 +50,7 @@ Calls **taken on Tom's behalf**, to revisit:
 
 Left for later:
 
-- `checks/mine-deep.mjs` finds one new shader program on the way down (12 → 13) on main as it stood before this ticket too, so it came with the mine's undead (27); not chased here.
+- `checks/mine-deep.mjs` finds one new shader program on the way down (12 → 13) on main as it stood before this ticket too, so it came with the mine's undead (27); not chased here. _Fixed after this ticket: it was the hurt vignette's shader, first compiled when the gallery's undead first hit you on the way down; the belt HUD now compiles it as it's built._
 
 - The drone at the breach and the crypt's sound (31); staging the Warden with the hall's meshes (34).
 

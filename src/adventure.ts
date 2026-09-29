@@ -143,6 +143,7 @@ export class Adventure {
     this.shockwaves = new Shockwaves(scene);
     this.hud = new BeltHud(this.player, camera, { waves: false });
     scene.add(this.hud.root);
+    this.hud.warm(renderer, scene);
     this.fade = new Fade(camera);
 
     this.combat = new Combat(
