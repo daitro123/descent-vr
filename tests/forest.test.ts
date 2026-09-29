@@ -5,6 +5,7 @@ import { buildLayout, FOREST, type ForestLayout, HALE, localToWorld, type Struct
 import type { CampPlan } from '../src/maps/types';
 import { nearestOnPolyline } from '../src/maps/forest/noise';
 import { MAPS } from '../src/maps/registry';
+import { INN } from '../src/maps/forest/inn';
 
 let layout: ForestLayout;
 beforeAll(() => {
@@ -465,18 +466,25 @@ describe("the leader's orders", () => {
 });
 
 describe('the village respawn point', () => {
-  it("stands clear and dry in front of the inn's door, facing the crossroads", () => {
+  it("is by the inn's hearth, inside with the door shut, standing clear and facing the door", () => {
     const { village } = layout.respawns;
-    expect(layout.colliders.blocked(village.x, village.z, CONFIG.player.bodyRadius + 0.5)).toBe(false);
-    expect(layout.heightAt(village.x, village.z)).toBeGreaterThan(FOREST.water + 0.3);
-    expect(onFoot(village.x, village.z)).toBe(true);
+    expect(village.interior).toBe('inn');
     const inn = layout.structures.find((s) => s.kind === 'inn')!;
-    const [, lz] = worldToLocal(inn, village.x, village.z);
-    expect(lz).toBeGreaterThan(inn.hd); // out past the front wall
-    expect(lz).toBeLessThan(inn.hd + 3);
-    // Yaw 0 looks down −Z.
-    const d = Math.hypot(village.x, village.z);
-    const facing = (-Math.sin(village.yaw) * -village.x - Math.cos(village.yaw) * -village.z) / d;
+    const [lx, lz] = worldToLocal(inn, village.x, village.z);
+    expect(Math.abs(lx - INN.wake.x) + Math.abs(lz - INN.wake.z)).toBeLessThan(1e-9);
+    // Well in past the door's line, where the door shuts behind you.
+    expect(inn.hd - lz).toBeGreaterThan(CONFIG.interiors.shut + 1);
+    // An arm's length from the hearth, which is against the right wall.
+    const hearthFront = INN.room.hw - INN.hearth.depth;
+    expect(hearthFront - lx).toBeGreaterThan(CONFIG.player.bodyRadius);
+    expect(hearthFront - lx).toBeLessThan(1.5);
+    expect(Math.abs(lz - INN.hearth.z)).toBeLessThan(INN.hearth.width / 2);
+    // Nothing of the taproom's in the way. Yaw 0 looks down −Z, turned with the inn.
+    const [innInterior] = layout.interiors;
+    expect(innInterior.resolve(new Vector3(village.x, 0, village.z), CONFIG.player.bodyRadius + 0.3)).toBe(false);
+    const [dx, dz] = localToWorld(inn, 0, inn.hd);
+    const d = Math.hypot(dx - village.x, dz - village.z);
+    const facing = (-Math.sin(village.yaw) * (dx - village.x) - Math.cos(village.yaw) * (dz - village.z)) / d;
     expect(facing).toBeGreaterThan(0.999);
   });
 

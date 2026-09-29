@@ -8,11 +8,11 @@ import { Particles } from './fx/particles';
 import { sfx, updateListener } from './fx/sfx';
 import { Shockwaves } from './fx/shockwave';
 import { SwordTrail } from './fx/trail';
-import type { Spot, Zone } from './maps/types';
+import type { Respawn, Zone } from './maps/types';
 import { Hale } from './people/hale';
 import { Player } from './player/player';
 import { SaveController } from './save/controller';
-import { saveRecord } from './save/record';
+import { type Interior, saveRecord } from './save/record';
 import type { Save } from './save/store';
 import { BeltHud } from './ui/beltHud';
 import { Fade } from './ui/fade';
@@ -54,8 +54,9 @@ const UNLOCKED: Record<Ability, string> = {
  * health, damage and abilities. What a quest has you find (the leader's
  * orders) lies where it's found while the state says so, taken with a touch.
  * Out of a fight your health comes back; a death fades to black and wakes you
- * in the village. It saves itself as you go, and loads where you stood with
- * your level, XP, sword and quests, at full health with every camp full
+ * by the inn's hearth, inside with the door shut; which building you're in is
+ * the World's to say. It saves itself as you go, and loads where you stood
+ * with your level, XP, sword and quests, at full health with every camp full
  * (.scratch/oakvale-starting-zone/).
  */
 export class Adventure {
@@ -93,14 +94,14 @@ export class Adventure {
   private deadFor: number | null = null;
   /** Seconds since you woke, while the view fades back in; null otherwise. */
   private wakingFor: number | null = null;
-  private readonly respawn: Spot;
+  private readonly respawn: Respawn;
   /** What can press the board's buttons: your left fist, your right fist and your sword's tip, in that order. */
   private readonly probes: (Probe | null)[] = [null, null, null];
   private readonly probePoints = [new Vector3(), new Vector3(), new Vector3()];
   /** A level a hand-in landed, floating over Hale a moment after its XP. */
   private handInLevel: { level: number; unlocks: readonly Ability[]; in: number } | null = null;
-  /** Where the save puts you: over the ground in world metres, facing as you look (a mutable `Spot`). */
-  private readonly standing = { x: 0, z: 0, yaw: 0 };
+  /** Where the save puts you: over the ground in world metres, facing as you look, and the building you're in. */
+  private readonly standing: { x: number; z: number; yaw: number; interior: Interior | null } = { x: 0, z: 0, yaw: 0, interior: null };
 
   constructor(
     scene: Scene,
@@ -165,12 +166,13 @@ export class Adventure {
     scene.add(this.hale.root, this.board.root, this.tracker.mesh);
 
     // A new character at the zone's start, facing Hale; or where the save stood,
-    // facing the same way, at full health and with no rage. (A save inside a
-    // building or the mine will load inside it once they're built.)
-    Object.assign(this.standing, record ? { ...record.position, yaw: record.facing } : zone.spawn);
-    const { x, z, yaw } = this.standing;
+    // facing the same way, at full health and with no rage. A save made inside
+    // the inn loads inside it, with the door shut and the room lit.
+    Object.assign(this.standing, record ? { ...record.position, yaw: record.facing, interior: record.interior } : { ...zone.spawn, interior: null });
+    const { x, z, yaw, interior } = this.standing;
     this.player.stats = this.state.stats;
     this.player.reset(x, z, yaw);
+    this.world.settle(interior);
     this.lastHp = this.player.hp;
   }
 
@@ -179,6 +181,9 @@ export class Adventure {
     dt = Math.min(dt, 1 / 30);
     const { player, you } = this;
     this.world.update(dt, player.camera);
+    // With a door shut behind you, what stands outside isn't drawn either.
+    const outdoors = this.world.outdoorsShown;
+    this.camps.root.visible = this.pickups.root.visible = this.hale.root.visible = outdoors;
     player.update(dt);
     updateListener(player.camera);
     const { hands } = player.input;
@@ -233,6 +238,7 @@ export class Adventure {
     }
     standing.x = this.you.head.x;
     standing.z = this.you.head.z;
+    standing.interior = this.world.interior;
     standing.yaw = _turn.setFromQuaternion(player.camera.getWorldQuaternion(_look), 'YXZ').y;
   }
 
@@ -402,10 +408,11 @@ export class Adventure {
     if (this.deadFor >= D.linger + D.fadeOut + D.dark) this.wake();
   }
 
-  /** At the village respawn point with full health and no rage. Nothing else changes. */
+  /** At the village respawn point, by the inn's hearth with the door shut, with full health and no rage. Nothing else changes. */
   private wake(): void {
-    const { x, z, yaw } = this.respawn;
+    const { x, z, yaw, interior } = this.respawn;
     this.player.reset(x, z, yaw);
+    this.world.settle(interior);
     this.lastHp = this.player.hp;
     this.combat.projectiles.clear();
     this.deadFor = null;

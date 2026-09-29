@@ -10,7 +10,7 @@ import { SWORDS } from '../quests';
 /** The record's version: bump it, and add a migration from the one before, whenever its shape changes. */
 export const SAVE_VERSION = 1;
 
-/** Every building and the mine you can be inside. None are built yet: the inn, the house and the mine arrive with their tickets. */
+/** Every building and the mine you can be inside. The inn is built; the house and the mine arrive with their tickets. */
 export const INTERIORS = ['inn', 'house', 'mine'] as const;
 
 /** A building or the mine you're inside. */
@@ -29,9 +29,9 @@ export interface SaveRecord extends Progress {
   readonly interior: Interior | null;
 }
 
-/** The record for a character with `progress`, standing at `at` (outdoors: there are no interiors yet). */
-export function saveRecord(progress: Progress, at: Spot, savedAt = Date.now()): SaveRecord {
-  return { version: SAVE_VERSION, savedAt, ...progress, position: { x: at.x, z: at.z }, facing: at.yaw, interior: null };
+/** The record for a character with `progress`, standing at `at`, inside `at.interior` if it says so. */
+export function saveRecord(progress: Progress, at: Spot & { readonly interior?: Interior | null }, savedAt = Date.now()): SaveRecord {
+  return { version: SAVE_VERSION, savedAt, ...progress, position: { x: at.x, z: at.z }, facing: at.yaw, interior: at.interior ?? null };
 }
 
 /** A record as some version wrote it: nothing is known of it but its version. */

@@ -12,11 +12,30 @@ import {
 } from 'three';
 import { CONFIG } from '../config';
 import type { Zone } from '../maps/types';
-import type { Atmosphere } from './atmosphere';
+import type { Interior as InteriorId } from '../save/record';
+import { type Atmosphere, blendAtmospheres } from './atmosphere';
 import type { Ground } from './ground';
+import { type Flame, type Interior, InteriorSwitch, toFrame } from './interiors';
 import { buildSky, type Sky } from './sky';
 
 const _probe = new Vector3();
+const _eye = new Vector3();
+/** Where you stand in the interior being stepped, reused each frame. */
+const _standing = { x: 0, z: 0, within: false };
+
+/** One of the pool's point lights: the flame it sits on, if any, and how far it has faded up on it. */
+interface PoolLight {
+  readonly light: PointLight;
+  flame: Flame | null;
+  weight: number;
+  readonly seed: number;
+}
+
+/** An interior the World holds, with its switch. */
+interface Held {
+  readonly interior: Interior;
+  readonly switch: InteriorSwitch;
+}
 
 /**
  * Everything the zones share: one light rig (a hemisphere light, one sun and
@@ -25,8 +44,14 @@ const _probe = new Vector3();
  * applies by changing values. So loading a zone never adds a light, a sky or
  * a shader.
  *
+ * A zone's interiors come with it, each with its Interiors switch, stepped
+ * from where the camera stands: a door opens as you walk up, the pool of
+ * point lights moves onto the room's flames, and once the door is shut
+ * behind you the light blends over to the room's and the outdoors is hidden.
+ *
  * It is also the `Ground` for wherever you stand, answering from the zone
- * underfoot, so enemies, arrows and the player never learn which zone they're in.
+ * underfoot, or from an interior inside its footprint, so enemies, arrows and
+ * the player never learn which zone or building they're in.
  */
 export class World implements Ground {
   /** The light rig, the sky and every loaded zone. */
@@ -35,14 +60,27 @@ export class World implements Ground {
   readonly background = new Color();
   readonly hemisphere = new HemisphereLight();
   readonly sun = new DirectionalLight();
-  /** Always CONFIG.world.pool.size lights, dark unless the atmosphere has flames for them. */
+  /** Always CONFIG.world.pool.size lights, dark unless there are flames near for them. */
   readonly pool: readonly PointLight[];
+  private readonly lights: readonly PoolLight[];
   private readonly sky: Sky;
   private readonly zones: Zone[] = [];
+  private readonly interiors: Held[] = [];
   /** People standing about, whom nothing walks through: circles on the floor plane. */
   private readonly bodies: { readonly x: number; readonly z: number; readonly r: number }[] = [];
   private camera: PerspectiveCamera | null = null;
+  /** The zone's own atmosphere, which an interior's blends from. */
   private atmosphere: Atmosphere | null = null;
+  /** The atmosphere as shown: the zone's, or blended towards an interior's. */
+  private shown: Atmosphere | null = null;
+  /** How far the light shown has gone over to an interior's, and whose. */
+  private blend: { interior: Interior | null; t: number } = { interior: null, t: 0 };
+  private time = 0;
+  /** The flames the pool may sit on this frame, nearest first (kept to spare the garbage collector). */
+  private readonly flames: Flame[] = [];
+  private outdoors = true;
+  /** Put the pool straight onto its flames next frame, with no fade (after `settle`). */
+  private snapPool = false;
   /** While the fog is lifted, how far you see; null under the atmosphere's own fog. */
   private liftedTo: number | null = null;
 
@@ -53,6 +91,7 @@ export class World implements Ground {
     this.sun.position.copy(toSun);
     const { size, color, distance, decay } = CONFIG.world.pool;
     this.pool = Array.from({ length: size }, () => new PointLight(color, 0, distance, decay));
+    this.lights = this.pool.map((light, i) => ({ light, flame: null, weight: 0, seed: i * CONFIG.world.pool.flicker.stagger }));
     this.sky = buildSky(toSun);
     this.root.add(this.hemisphere, this.sun, ...this.pool, this.sky.root);
   }
@@ -79,18 +118,53 @@ export class World implements Ground {
     this.bodies.push(body);
   }
 
-  /** Add a zone (once) and make its atmosphere the World's. */
+  /** Add a zone (once), with its interiors, and make its atmosphere the World's. */
   load(zone: Zone): void {
     if (!this.zones.includes(zone)) {
       this.zones.push(zone);
       this.root.add(zone.root);
+      for (const interior of zone.interiors) {
+        this.interiors.push({ interior, switch: new InteriorSwitch(interior.footprint.hd) });
+        this.root.add(interior.root);
+      }
     }
     this.apply(zone.atmosphere);
   }
 
-  /** Take on an atmosphere: colours, intensities, distances and the pool's places. Values only. */
+  /**
+   * Take on an atmosphere: colours, intensities, distances, and the flames the
+   * pool may move onto. Values only. An interior you're in blends from it.
+   */
   apply(atmosphere: Atmosphere): void {
     this.atmosphere = atmosphere;
+    this.show(this.blend.interior ? blendAtmospheres(atmosphere, this.blend.interior.atmosphere, this.blend.t) : atmosphere);
+  }
+
+  /** Is the outdoors drawn? Not while a door is shut behind you: whoever adds to it outside the zones (camps, people) hides theirs too. */
+  get outdoorsShown(): boolean {
+    return this.outdoors;
+  }
+
+  /** The interior you're in (inside, or walking back to its door), if any. */
+  get interior(): InteriorId | null {
+    return this.interiors.find((h) => h.switch.occupied)?.interior.id ?? null;
+  }
+
+  /**
+   * Arrive in `id` at once, door shut and its light already on (waking by its
+   * hearth, or loading a save made inside it), or outdoors (null).
+   */
+  settle(id: InteriorId | null): void {
+    for (const h of this.interiors) {
+      h.switch.settle(h.interior.id === id);
+      this.showSwitch(h);
+    }
+    this.blendLight();
+    this.snapPool = true;
+  }
+
+  private show(atmosphere: Atmosphere): void {
+    this.shown = atmosphere;
     this.fog.color.setHex(atmosphere.fog.color);
     this.background.setHex(atmosphere.background);
     this.sky.apply(atmosphere);
@@ -99,11 +173,6 @@ export class World implements Ground {
     this.hemisphere.intensity = atmosphere.hemisphere.intensity;
     this.sun.color.setHex(atmosphere.sun.color);
     this.sun.intensity = atmosphere.sun.intensity;
-    this.pool.forEach((light, i) => {
-      const flame = atmosphere.flames[i];
-      light.intensity = flame ? CONFIG.world.pool.intensity : 0;
-      if (flame) light.position.set(flame.x, flame.y, flame.z);
-    });
     this.applyView();
   }
 
@@ -124,7 +193,7 @@ export class World implements Ground {
   }
 
   private applyView(): void {
-    const atmosphere = this.atmosphere;
+    const atmosphere = this.shown;
     if (!atmosphere) return;
     const far = this.liftedTo ?? atmosphere.farPlane;
     this.fog.near = this.liftedTo === null ? atmosphere.fog.near : far;
@@ -151,18 +220,107 @@ export class World implements Ground {
   }
 
   update(dt: number, camera: Camera): void {
+    this.time += dt;
+    camera.getWorldPosition(_eye);
+    for (const h of this.interiors) {
+      const { frame, footprint, floor, height } = h.interior;
+      toFrame(frame, _eye.x, _eye.z, _standing);
+      const { x, z } = _standing;
+      // A camera flying over a building is nowhere near its door.
+      const over = _eye.y > floor + height;
+      _standing.x = over ? Infinity : x;
+      _standing.within = !over && Math.abs(x) <= footprint.hw && Math.abs(z) <= footprint.hd;
+      h.switch.update(dt, _standing);
+      this.showSwitch(h);
+      if (h.interior.room.visible) h.interior.update(dt, camera);
+    }
+    this.showOutdoors();
+    this.blendLight();
+    this.updatePool(dt, _eye);
     this.sky.update(dt, camera);
-    for (const zone of this.zones) zone.update(dt, camera);
+    for (const zone of this.zones) if (zone.root.visible) zone.update(dt, camera);
+  }
+
+  /** An interior's switch, drawn: its door and its room. */
+  private showSwitch(h: Held): void {
+    h.interior.swing(h.switch.door);
+    h.interior.room.visible = h.switch.roomShown;
+  }
+
+  /** The outdoors, hidden while a door is shut behind you. */
+  private showOutdoors(): void {
+    let outdoors = true;
+    for (const h of this.interiors) if (h.switch.outdoorsHidden) outdoors = false;
+    this.outdoors = outdoors;
+    for (const zone of this.zones) zone.root.visible = outdoors;
+    this.sky.root.visible = outdoors;
+  }
+
+  /** The light shown: the zone's, blended towards the interior whose light is up. */
+  private blendLight(): void {
+    let best: Held | null = null;
+    for (const h of this.interiors) if (h.switch.light > (best?.switch.light ?? 0)) best = h;
+    const interior = best?.interior ?? null;
+    const t = best?.switch.light ?? 0;
+    if (interior === this.blend.interior && t === this.blend.t) return;
+    this.blend = { interior, t };
+    if (this.atmosphere) this.apply(this.atmosphere);
+  }
+
+  /**
+   * The pool onto the flames nearest `eye`, from the atmosphere shown and any
+   * room showing. A light leaving a flame fades out before it moves, and in
+   * again on its new one, and every lit one flickers by intensity.
+   */
+  private updatePool(dt: number, eye: Vector3): void {
+    const { intensity, fade, flicker } = CONFIG.world.pool;
+    const flames = this.flames;
+    flames.length = 0;
+    if (this.shown) for (const f of this.shown.flames) nearest(flames, f, eye, this.lights.length);
+    for (const h of this.interiors) if (h.switch.flamesLit) for (const f of h.interior.flames) nearest(flames, f, eye, this.lights.length);
+    const wanted = flames;
+    // After `settle`, as if every light had long since faded where it's going.
+    const snap = this.snapPool;
+    this.snapPool = false;
+    for (const l of this.lights) {
+      if (!l.flame || wanted.includes(l.flame)) continue;
+      l.weight = snap ? 0 : Math.max(0, l.weight - dt / fade);
+      if (l.weight === 0) l.flame = null;
+    }
+    for (const f of wanted) {
+      let free: PoolLight | null = null;
+      let held = false;
+      for (const l of this.lights) {
+        if (l.flame === f) held = true;
+        else if (!free && l.flame === null) free = l;
+      }
+      if (held) continue;
+      if (!free) break;
+      free.flame = f;
+      free.light.position.set(f.x, f.y, f.z);
+    }
+    const [a, b] = flicker.depth;
+    const [ra, rb] = flicker.rate;
+    for (const l of this.lights) {
+      if (l.flame && wanted.includes(l.flame)) l.weight = snap ? 1 : Math.min(1, l.weight + dt / fade);
+      const t = this.time + l.seed;
+      l.light.intensity = intensity * l.weight * (flicker.base + a * Math.sin(t * ra) + b * Math.sin(t * rb + flicker.phase));
+    }
   }
 
   // ------------------------------------------------------------------ Ground
 
   heightAt(x: number, z: number): number {
+    for (const { interior } of this.interiors) {
+      const floor = interior.groundAt(x, z);
+      if (floor !== null) return floor;
+    }
     return this.zoneAt(x, z)?.heightAt(x, z) ?? 0;
   }
 
   resolve(p: Vector3, radius: number): boolean {
     let moved = this.zoneAt(p.x, p.z)?.resolve(p, radius) ?? false;
+    for (const { interior } of this.interiors) if (interior.resolve(p, radius)) moved = true;
     for (const b of this.bodies) {
       const dx = p.x - b.x;
       const dz = p.z - b.z;
@@ -242,4 +400,22 @@ export class World implements Ground {
     if (p.y <= floor + arrowWidth) return true;
     return p.y < floor + propHeight && this.blocked(p.x, p.z, arrowWidth);
   }
+}
+
+/**
+ * Put `f` into `list`, kept nearest `eye` first and at most `max` long, unless
+ * it's there already (an atmosphere and its room may share flames).
+ */
+function nearest(list: Flame[], f: Flame, eye: Vector3, max: number): void {
+  if (list.includes(f)) return;
+  const d = distance2(f, eye);
+  let i = list.length;
+  while (i > 0 && distance2(list[i - 1], eye) > d) i--;
+  if (i >= max) return;
+  list.splice(i, 0, f);
+  if (list.length > max) list.length = max;
+}
+
+function distance2(f: Flame, eye: Vector3): number {
+  return (f.x - eye.x) ** 2 + (f.y - eye.y) ** 2 + (f.z - eye.z) ** 2;
 }
