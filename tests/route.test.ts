@@ -1,13 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
-import { readPage } from '../src/route';
+import { forgetNewGame, readPage } from '../src/route';
 
 describe('reading the page from its URL', () => {
   it('starts the Adventure at the plain URL, and for any flag it does not know', () => {
-    expect(readPage('').route).toEqual({ kind: 'adventure' });
-    expect(readPage('?').route).toEqual({ kind: 'adventure' });
-    expect(readPage('?utm_source=quest').route).toEqual({ kind: 'adventure' });
-    expect(readPage('?talk').route).toEqual({ kind: 'adventure' });
+    expect(readPage('').route).toEqual({ kind: 'adventure', newGame: false });
+    expect(readPage('?').route).toEqual({ kind: 'adventure', newGame: false });
+    expect(readPage('?utm_source=quest').route).toEqual({ kind: 'adventure', newGame: false });
+    expect(readPage('?talk').route).toEqual({ kind: 'adventure', newGame: false });
+  });
+
+  it('asks to start the Adventure over at ?newgame, and nowhere else', () => {
+    expect(readPage('?newgame').route).toEqual({ kind: 'adventure', newGame: true });
+    expect(readPage('?newgame&perf').route).toEqual({ kind: 'adventure', newGame: true });
+    // The arena and walking a map never touch the save.
+    expect(readPage('?arena&newgame').route).toMatchObject({ kind: 'arena' });
+    expect(readPage('?map=forest&newgame').route).toEqual({ kind: 'walk', map: 'forest' });
   });
 
   it('opens the arena at ?arena, as the plain URL did before', () => {
@@ -39,6 +47,13 @@ describe('reading the page from its URL', () => {
     expect(readPage('?map=crypt').route).toEqual({ kind: 'walk', map: 'crypt' });
     expect(readPage('?map').route).toEqual({ kind: 'walk', map: 'forest' });
     expect(readPage('?map=forest&arena').route).toEqual({ kind: 'walk', map: 'forest' });
+  });
+
+  it('forgets ?newgame once answered, keeping every other flag as it was written', () => {
+    expect(forgetNewGame('?newgame')).toBe('');
+    expect(forgetNewGame('?newgame&emulate&nodevui')).toBe('?emulate&nodevui');
+    expect(forgetNewGame('?perf&newgame=1')).toBe('?perf');
+    expect(forgetNewGame('')).toBe('');
   });
 
   it('reads ?perf over whichever game runs', () => {

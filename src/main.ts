@@ -6,9 +6,11 @@ import { CONFIG } from './config';
 import { startAmbience, unlockAudio } from './fx/sfx';
 import { Game } from './game';
 import { findMap } from './maps/registry';
-import { readPage, type Route } from './route';
+import { forgetNewGame, readPage, type Route } from './route';
+import { openSave, type Save } from './save/store';
 import { buildShowcase, pinShowcaseCamera } from './showcase';
 import './style.css';
+import { askNewGame } from './ui/newGameDialog';
 import { PerfReadout } from './ui/perfReadout';
 import { useRadialFog } from './world/radialFog';
 
@@ -69,7 +71,7 @@ async function start(): Promise<void> {
     case 'arena':
       return startArena(renderer, scene, camera, device, perf, r);
     case 'adventure':
-      return startAdventure(renderer, scene, camera, device, perf);
+      return startAdventure(renderer, scene, camera, device, perf, r);
   }
 }
 
@@ -88,21 +90,31 @@ function onEnterVR(renderer: WebGLRenderer, then?: () => void): void {
   addEventListener('pointerdown', unlockAudio, { once: true });
 }
 
-/** The plain URL: Oakvale. */
+/** The plain URL: Oakvale, loaded from the save (`?newgame` asks to start over). */
 async function startAdventure(
   renderer: WebGLRenderer,
   scene: Scene,
   camera: PerspectiveCamera,
   device: unknown,
   perf: PerfReadout | null,
+  { newGame }: Extract<Route, { kind: 'adventure' }>,
 ): Promise<void> {
+  const save = await openCharacter(newGame);
   // Let the intro paint before the (synchronous) build.
   await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
   const oakvale = await findMap('forest')!.load();
   if (oakvale.kind !== 'zone') throw new Error('Oakvale should be a zone');
-  const adventure = new Adventure(scene, camera, renderer, oakvale);
+  const adventure = new Adventure(scene, camera, renderer, oakvale, save);
   document.querySelector('#intro .loading')?.remove();
-  onEnterVR(renderer);
+  // Keep where you stand when you go: the page hidden, VR ended, or the headset
+  // put down or its menu opened (the session no longer visible).
+  const { saves } = adventure;
+  document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && saves.onLeaving());
+  renderer.xr.addEventListener('sessionend', () => saves.onLeaving());
+  onEnterVR(renderer, () => {
+    const session = renderer.xr.getSession();
+    session?.addEventListener('visibilitychange', () => session.visibilityState !== 'visible' && saves.onLeaving());
+  });
 
   // Handle for poking at the game from the console and for scripted checks.
   // `paused` stops XR frames stepping the game, so `step` alone moves it on.
@@ -112,6 +124,8 @@ async function startAdventure(
     world: adventure.world,
     player: adventure.player,
     camps: adventure.camps,
+    /** Resolves once no save write is in flight. */
+    saved: () => adventure.saves.settled(),
     device,
     renderer,
     camera,
@@ -139,6 +153,24 @@ async function startAdventure(
     renderer.render(scene, camera);
     perf?.update(dt);
   });
+}
+
+/**
+ * The character to load: the save's, with a note on the page if it can't be
+ * kept. At `?newgame`, a saved character is deleted once you say yes, and the
+ * flag leaves the address, so a reload carries on rather than asking again.
+ */
+async function openCharacter(newGame: boolean): Promise<Save> {
+  let save = await openSave();
+  if (newGame) {
+    if (save.held && (await askNewGame(save.record))) save = await save.startOver();
+    history.replaceState(null, '', `${location.pathname}${forgetNewGame(location.search)}${location.hash}`);
+  }
+  if (save.note) {
+    const note = Object.assign(document.createElement('p'), { className: 'save-note', textContent: save.note });
+    document.querySelector('#intro .loading')?.before(note);
+  }
+  return save;
 }
 
 /** `?arena`: the wave game in the crypt hall, as the plain URL played before Oakvale. */

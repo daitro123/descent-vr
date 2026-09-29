@@ -59,6 +59,56 @@ canvas {
   color: #e0b060;
 }
 
+/* Where the browser won't keep the save (main.ts). */
+#intro .save-note {
+  margin: 6px 0 0;
+  color: #f08060;
+}
+
+/* ?newgame's question, before VR (ui/newGameDialog.ts). */
+#new-game {
+  max-width: min(360px, calc(100vw - 32px));
+  padding: 14px 18px;
+  color: inherit;
+  background: rgb(20 16 12 / 0.95);
+  border: 1px solid #5a4a30;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+#new-game::backdrop {
+  background: rgb(0 0 0 / 0.5);
+}
+
+#new-game h2 {
+  margin: 0 0 6px;
+  font-size: 16px;
+  letter-spacing: 0.05em;
+  color: #e0b060;
+}
+
+#new-game form {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+#new-game button {
+  padding: 6px 14px;
+  font: inherit;
+  color: #e8dcc0;
+  background: #3a2e1e;
+  border: 1px solid #8a7040;
+  cursor: pointer;
+}
+
+#new-game button[value='yes'] {
+  color: #ffd0b0;
+  border-color: #b05a3a;
+}
+
 #viewer-hud {
   position: absolute;
   top: 16px;

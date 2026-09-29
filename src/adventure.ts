@@ -1,4 +1,4 @@
-import { type PerspectiveCamera, type Scene, Vector3, type WebGLRenderer } from 'three';
+import { Euler, type PerspectiveCamera, Quaternion, type Scene, Vector3, type WebGLRenderer } from 'three';
 import { type Ability, type AdventureEvent, AdventureState, type Effect } from './adventureState';
 import { Combat } from './combat/combat';
 import { CONFIG } from './config';
@@ -11,6 +11,9 @@ import { SwordTrail } from './fx/trail';
 import type { Spot, Zone } from './maps/types';
 import { Hale } from './people/hale';
 import { Player } from './player/player';
+import { SaveController } from './save/controller';
+import { saveRecord } from './save/record';
+import type { Save } from './save/store';
 import { BeltHud } from './ui/beltHud';
 import { Fade } from './ui/fade';
 import { QuestTracker } from './ui/questTracker';
@@ -24,6 +27,8 @@ const _b = new Vector3();
 const _gaze = new Vector3();
 const _haleHead = new Vector3();
 const _float = new Vector3();
+const _look = new Quaternion();
+const _turn = new Euler();
 
 type FloatStyle = Parameters<FloatingText['spawn']>[2];
 /** "+N XP" where an enemy fell. */
@@ -46,13 +51,16 @@ const UNLOCKED: Record<Ability, string> = {
  * their board unfolds, and the tracker shows the quest you're on. Kills and
  * the board's buttons go into the adventure state, whose levels set your
  * health, damage and abilities. Out of a fight your health comes back; a
- * death fades to black and wakes you in the village. Saving joins it next
- * (.scratch/oakvale-starting-zone/).
+ * death fades to black and wakes you in the village. It saves itself as you
+ * go, and loads where you stood with your level, XP, sword and quests, at full
+ * health with every camp full (.scratch/oakvale-starting-zone/).
  */
 export class Adventure {
   readonly world = new World();
-  /** Your progress: level and XP. */
-  readonly state = new AdventureState();
+  /** Your progress: level, XP, the sword and the quests. */
+  readonly state: AdventureState;
+  /** When your progress and where you stand are written to the save. */
+  readonly saves: SaveController;
   readonly player: Player;
   readonly camps: Camps;
   readonly combat: Combat;
@@ -86,6 +94,8 @@ export class Adventure {
   private readonly probePoints = [new Vector3(), new Vector3(), new Vector3()];
   /** A level a hand-in landed, floating over Hale a moment after its XP. */
   private handInLevel: { level: number; unlocks: readonly Ability[]; in: number } | null = null;
+  /** Where the save puts you: over the ground in world metres, facing as you look (a mutable `Spot`). */
+  private readonly standing = { x: 0, z: 0, yaw: 0 };
 
   constructor(
     scene: Scene,
@@ -93,7 +103,12 @@ export class Adventure {
     renderer: WebGLRenderer,
     /** Where a new character starts: Oakvale. */
     zone: Zone,
+    /** The character to load, if any, and where to keep it. */
+    save: Pick<Save, 'store' | 'record'>,
   ) {
+    const { record } = save;
+    this.state = new AdventureState(record ?? undefined);
+    this.saves = new SaveController(save.store, () => saveRecord(this.state.snapshot(), this.standing));
     this.world.attach(scene, camera);
     this.world.load(zone);
     this.respawn = zone.respawns.village;
@@ -141,8 +156,11 @@ export class Adventure {
     this.world.addBody(this.hale.body);
     scene.add(this.hale.root, this.board.root, this.tracker.mesh);
 
-    // A new character, at the zone's start and facing Hale.
-    const { x, z, yaw } = zone.spawn;
+    // A new character at the zone's start, facing Hale; or where the save stood,
+    // facing the same way, at full health and with no rage. (A save inside a
+    // building or the mine will load inside it once they're built.)
+    Object.assign(this.standing, record ? { ...record.position, yaw: record.facing } : zone.spawn);
+    const { x, z, yaw } = this.standing;
     this.player.stats = this.state.stats;
     this.player.reset(x, z, yaw);
     this.lastHp = this.player.hp;
@@ -193,6 +211,20 @@ export class Adventure {
     this.hud.status.level = this.state.level;
     this.hud.status.progress = this.state.progress;
     this.hud.update(dt);
+    this.updateStanding();
+    this.saves.update(dt);
+  }
+
+  /** Where the save puts you: where your head is and the way you look, or where you'll wake while you're down. */
+  private updateStanding(): void {
+    const { player, standing } = this;
+    if (!player.alive) {
+      Object.assign(standing, this.respawn);
+      return;
+    }
+    standing.x = this.you.head.x;
+    standing.z = this.you.head.z;
+    standing.yaw = _turn.setFromQuaternion(player.camera.getWorldQuaternion(_look), 'YXZ').y;
   }
 
   /** A camp's member fell: it pays XP into the adventure state, and may count for your quest. */
@@ -241,9 +273,11 @@ export class Adventure {
     return probes;
   }
 
-  /** Something happened: into the adventure state, and show what it did at `at`. */
+  /** Something happened: into the adventure state, into the save if it earned anything, and show what it did at `at`. */
   private apply(event: AdventureEvent, at: Vector3): void {
-    this.show(this.state.apply(event), at, event.kind === 'handIn');
+    const effects = this.state.apply(event);
+    this.saves.onEffects(effects);
+    this.show(effects, at, event.kind === 'handIn');
   }
 
   /**

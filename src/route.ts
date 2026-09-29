@@ -13,8 +13,8 @@ export type Route =
   | { kind: 'walk'; map: string }
   /** `?arena`: the wave game. `?duel`, `?wave=N` and `?showcase` alone open it too. */
   | { kind: 'arena'; firstWave: number; duel: boolean; showcase: boolean }
-  /** Anything else: Oakvale. */
-  | { kind: 'adventure' };
+  /** Anything else: Oakvale, with the save. `?newgame` asks to start over. */
+  | { kind: 'adventure'; newGame: boolean };
 
 export interface Page {
   route: Route;
@@ -27,6 +27,12 @@ export interface Page {
 }
 
 const ARENA_FLAGS = ['arena', 'duel', 'wave', 'showcase'];
+
+/** The query string without `?newgame`, for the address once it's been answered. */
+export function forgetNewGame(search: string): string {
+  const rest = search.replace(/^\?/, '').split('&').filter((p) => p && p.split('=')[0] !== 'newgame');
+  return rest.length ? `?${rest.join('&')}` : '';
+}
 
 export function readPage(search: string): Page {
   const params = new URLSearchParams(search);
@@ -52,5 +58,5 @@ function chooseRoute(params: URLSearchParams): Route {
       showcase: params.has('showcase'),
     };
   }
-  return { kind: 'adventure' };
+  return { kind: 'adventure', newGame: params.has('newgame') };
 }

@@ -12,8 +12,11 @@ export type QuestId = 'raiders' | 'lumber' | 'below';
 /** Something an objective asks you to pick up by hand. */
 export type Item = 'orders';
 
-/** The sword in your hand: the one you start with, or Hale's old longsword. */
-export type Sword = 'plain' | 'hale';
+/** Every sword: the one you start with, and Hale's old longsword. */
+export const SWORDS = ['plain', 'hale'] as const;
+
+/** The sword in your hand. */
+export type Sword = (typeof SWORDS)[number];
 
 /** One thing a quest asks before it can be handed in. */
 export type Objective =
