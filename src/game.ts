@@ -84,6 +84,7 @@ export class Game {
     this.trail = new SwordTrail(scene);
     this.hud = new BeltHud(this.player, camera);
     scene.add(this.hud.root);
+    this.hud.warm(renderer, scene);
 
     this.combat = new Combat(
       this.player,

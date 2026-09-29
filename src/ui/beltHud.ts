@@ -8,10 +8,12 @@ import {
   NearestFilter,
   PlaneGeometry,
   type PerspectiveCamera,
+  type Scene,
   ShaderMaterial,
   SphereGeometry,
   SRGBColorSpace,
   Vector3,
+  type WebGLRenderer,
 } from 'three';
 import { CONFIG } from '../config';
 import type { Player } from '../player/player';
@@ -129,6 +131,15 @@ export class BeltHud {
     this.vignetteMesh.visible = false;
     camera.add(this.vignetteMesh);
     player.onDash = () => (this.dashTimer = CONFIG.dash.time + 0.08);
+  }
+
+  /**
+   * Compile the vignette's shader now. It's hidden until you're first hurt or
+   * dash, so otherwise that first hit stalls a frame compiling it, wherever
+   * it lands (in the mine, since its undead came).
+   */
+  warm(renderer: WebGLRenderer, scene: Scene): void {
+    renderer.compile(this.vignetteMesh, this.player.camera, scene);
   }
 
   flashHurt(): void {
