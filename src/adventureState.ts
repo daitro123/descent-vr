@@ -1,6 +1,6 @@
 import { CONFIG, type EnemyConfig } from './config';
 import type { CampId } from './maps/types';
-import { CHAIN, CHAIN_DONE, type Item, type Objective, type QuestId, RETURN_TO_HALE, type Sword } from './quests';
+import { BARKS, CHAIN, CHAIN_DONE, type Item, type Objective, type QuestId, RETURN_TO_HALE, type Sword, type VillagerId } from './quests';
 
 // The rules of progress in the Adventure, with no three.js in it: events in,
 // effects and answers out. The Adventure feeds it what happens in the world
@@ -272,6 +272,15 @@ export class AdventureState {
     const quest = CHAIN[i];
     const lines = stage === 'ready' ? [RETURN_TO_HALE] : quest.objectives.map((o, k) => `${o.text}: ${this.counts[i][k]}/${o.need}`);
     return { title: quest.title, lines };
+  }
+
+  /** The line `villager` barks as you pass, for where the chain stands. */
+  bark(villager: VillagerId): string {
+    const reached = (quest: QuestId, stage: Stage) =>
+      STAGES.indexOf(this.stages[CHAIN.findIndex((q) => q.id === quest)]) >= STAGES.indexOf(stage);
+    let line = '';
+    for (const b of BARKS[villager]) if (!b.from || reached(b.from.quest, b.from.stage)) line = b.line;
+    return line;
   }
 
   /**

@@ -344,6 +344,62 @@ describe('the Warden on its throne, and the swords', () => {
   });
 });
 
+describe("the villagers' barks", () => {
+  const FARMER = ["Those red-masked thieves took my farm. The marshal's the one to see.", "You ran them off my fields! I'll be home by harvest."];
+  const SMITH = ["Bandits in the lumber camp, and not a plank to be had. Mind their leader's axe.", "Timber's coming down the road again. Good work at the camp."];
+  const INNKEEPER = [
+    'Welcome to the Golden Tankard. Sit by the fire a while.',
+    "The old mine? Folk say there's a tomb under that hill. Come back in one piece.",
+    "They say you put the dead back to rest. Your ale's on the house.",
+  ];
+  const barks = (state: AdventureState) => [state.bark('farmer'), state.bark('smith'), state.bark('innkeeper')];
+
+  it('answer every villager for every stage of the chain, as the spec\'s barks table says', () => {
+    const state = new AdventureState();
+    const seen: Record<string, string[]> = {};
+    const at = (name: string) => (seen[name] = barks(state));
+    at('Raiders offered');
+    play(state, ACCEPT);
+    at('Raiders under way');
+    play(state, ...times(3, FARM));
+    at('Raiders ready');
+    play(state, HAND_IN);
+    at('Lumber offered');
+    play(state, ACCEPT);
+    at('Lumber under way');
+    play(state, THUG, THUG, THUG, ARCHER, LEADER, ORDERS);
+    at('Lumber ready');
+    play(state, HAND_IN);
+    at('Below offered');
+    play(state, ACCEPT);
+    at('Below under way');
+    play(state, WARDEN);
+    at('Warden beaten');
+    play(state, HAND_IN);
+    at('chain done');
+    expect(seen).toEqual({
+      'Raiders offered': [FARMER[0], SMITH[0], INNKEEPER[0]],
+      'Raiders under way': [FARMER[0], SMITH[0], INNKEEPER[0]],
+      'Raiders ready': [FARMER[0], SMITH[0], INNKEEPER[0]],
+      'Lumber offered': [FARMER[1], SMITH[0], INNKEEPER[0]],
+      'Lumber under way': [FARMER[1], SMITH[0], INNKEEPER[0]],
+      'Lumber ready': [FARMER[1], SMITH[0], INNKEEPER[0]],
+      'Below offered': [FARMER[1], SMITH[1], INNKEEPER[0]],
+      'Below under way': [FARMER[1], SMITH[1], INNKEEPER[1]],
+      'Warden beaten': [FARMER[1], SMITH[1], INNKEEPER[2]],
+      'chain done': [FARMER[1], SMITH[1], INNKEEPER[2]],
+    });
+  });
+
+  it('say the same after a reload', () => {
+    const state = new AdventureState();
+    for (const events of [RAIDERS, LUMBER, [ACCEPT], [WARDEN]]) {
+      play(state, ...events);
+      expect(barks(new AdventureState(state.snapshot()))).toEqual(barks(state));
+    }
+  });
+});
+
 describe('after the chain', () => {
   const done = () => {
     const state = new AdventureState();

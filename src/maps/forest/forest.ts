@@ -119,6 +119,7 @@ export function buildForest(): Zone {
     }),
     mine: buildMine(layout.mine),
     hale: layout.hale,
+    villagers: layout.villagers,
     pickups: layout.pickups,
     bounds: { minX: -play, maxX: play, minZ: -play, maxZ: play },
     landmarks: layout.landmarks,

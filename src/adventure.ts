@@ -12,6 +12,7 @@ import { Shockwaves } from './fx/shockwave';
 import { SwordTrail } from './fx/trail';
 import type { Respawn, Zone } from './maps/types';
 import { Hale } from './people/hale';
+import { Villagers } from './people/villagers';
 import { Player } from './player/player';
 import { SaveController } from './save/controller';
 import { type Interior, saveRecord } from './save/record';
@@ -57,7 +58,8 @@ const UNLOCKED: Record<Ability, string> = {
  * camps waiting to be pulled. It owns and steps everything in it, one
  * `update(dt)` per XR frame, as the arena's `Game` does for the waves.
  * Marshal Hale stands at the crossroads with the quest chain: walk up and
- * their board unfolds, and the tracker shows the quest you're on. Kills and
+ * their board unfolds, and the tracker shows the quest you're on. The
+ * innkeeper, the smith and the farmer are at work, and bark as you pass. Kills and
  * the board's buttons go into the adventure state, whose levels set your
  * health, damage and abilities. What a quest has you find (the leader's
  * orders) lies where it's found while the state says so, taken with a touch.
@@ -82,6 +84,8 @@ export class Adventure {
   readonly combat: Combat;
   /** Marshal Hale, the quest giver, at the crossroads. */
   readonly hale: Hale;
+  /** The innkeeper, the smith and the farmer, at work. */
+  readonly villagers: Villagers;
   /** Hale's board, which unfolds as you walk up to them. */
   readonly board = new TalkBoard();
   /** The quest you're on, top left of your view. */
@@ -196,6 +200,15 @@ export class Adventure {
     this.hale = new Hale(zone.hale, this.world, this.state.hale.marker, this.state.haleSwordAtHip);
     this.world.addBody(this.hale.body);
     scene.add(this.hale.root, this.board.root, this.tracker.mesh);
+    // The innkeeper hangs from the inn's room, drawn while it is; the others are drawn with the outdoors.
+    this.villagers = new Villagers(zone.villagers, this.world, (id) => {
+      const room = zone.interiors.find((i) => i.id === id)?.room;
+      if (!room) throw new Error(`No room for a villager in the ${id}`);
+      return room;
+    });
+    for (const v of this.villagers.all) this.world.addBody(v.body);
+    scene.add(this.villagers.root);
+    this.villagers.warm(renderer, camera, scene);
 
     // A new character at the zone's start, facing Hale; or where the save stood,
     // facing the same way, at full health and with no rage. A save made inside
@@ -217,7 +230,7 @@ export class Adventure {
     this.world.update(dt, player.camera);
     // With a door shut behind you, what stands outside isn't drawn either.
     const outdoors = this.world.outdoorsShown;
-    this.pickups.root.visible = this.hale.root.visible = outdoors;
+    this.pickups.root.visible = this.hale.root.visible = this.villagers.root.visible = outdoors;
     this.showCamps(outdoors);
     player.update(dt);
     updateListener(player.camera);
@@ -254,6 +267,7 @@ export class Adventure {
     }
     this.orbs.update(dt, player);
     this.talk(dt);
+    this.villagers.update(dt, you.head, this.state);
     this.pickUp();
     this.updateHandIn(dt);
     this.tracker.update(dt, player.camera, this.state.tracker);

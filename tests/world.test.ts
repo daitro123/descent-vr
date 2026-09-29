@@ -589,20 +589,21 @@ describe('the smithy', () => {
     }
   });
 
-  it('keeps you out of its back wall, low side wall, forge, anvil, barrel and grindstone, and lets you in under its roof', () => {
+  it('keeps you out of its back wall, low side wall, forge, bellows, anvil, barrel and grindstone, and lets you in under its roof', () => {
     const r = CONFIG.player.bodyRadius;
-    const { hd, hw, back, side, forge, anvil, barrel, grindstone } = SMITHY;
+    const { hd, hw, back, side, forge, bellows, anvil, barrel, grindstone } = SMITHY;
     const pushed = (lx: number, lz: number) => world.resolve(at(lx, lz), r);
     expect(pushed(0, -hd + back / 2)).toBe(true);
     expect(pushed(-hw + side / 2, 0.5)).toBe(true);
     expect(pushed(forge.x, forge.z)).toBe(true);
+    expect(pushed(bellows.x, bellows.z)).toBe(true);
     expect(pushed(anvil.x, anvil.z)).toBe(true);
     expect(pushed(barrel.x, barrel.z)).toBe(true);
     expect(pushed(grindstone.x, grindstone.z)).toBe(true);
     // Stand at the forge and at the anvil, under the roof.
     expect(pushed(forge.x, forge.z + forge.hd + r + 0.05)).toBe(false);
     expect(pushed(anvil.x - anvil.r - r - 0.05, anvil.z)).toBe(false);
-    expect(pushed(-1, -0.5)).toBe(false);
+    expect(pushed(1, -0.5)).toBe(false);
     expect(pushed(-1, hd + 0.5)).toBe(false); // out front
   });
 

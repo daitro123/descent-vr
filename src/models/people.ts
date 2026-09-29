@@ -122,6 +122,20 @@ function pitchfork(ctx: DressContext): void {
   for (const x of [-0.08, 0, 0.08]) b.box(0.015, 0.015, 0.22, { at: [x, -0.02, 0.85], color: PAL.iron });
 }
 
+/** Tongs in the left hand, gripping a bar hot from the forge across their jaws. */
+function tongs(ctx: DressContext): void {
+  ctx
+    .on('handL')
+    .box(0.016, 0.44, 0.016, { at: [-0.013, -0.2, 0.01], color: PAL.ironDark })
+    .box(0.016, 0.44, 0.016, { at: [0.013, -0.2, 0.01], color: PAL.ironDark })
+    .box(0.03, 0.03, 0.24, { at: [0, -0.43, 0.05], color: HUE.hotIron, glow: 0.8, jitter: 0 });
+}
+
+/** A rag in the left hand, for the bar and the tankards. */
+function rag(ctx: DressContext): void {
+  ctx.on('handL').box(0.11, 0.025, 0.13, { at: [0, -0.075, 0.02], color: HUE.linenDark });
+}
+
 const INNKEEPER_LOOK: Look = {
   build: 'stout',
   skin: HUE.skinFair,
@@ -135,7 +149,7 @@ const INNKEEPER_LOOK: Look = {
   belt: PAL.leather,
 };
 
-/** Stout and bald with a brown moustache: rolled sleeves, a russet waistcoat, a long white apron and a tankard. */
+/** Stout and bald with a brown moustache: rolled sleeves, a russet waistcoat, a long white apron, a tankard and a rag. */
 function dressInnkeeper(ctx: DressContext, l: Look): void {
   body(ctx, l);
   head(ctx, l);
@@ -147,6 +161,7 @@ function dressInnkeeper(ctx: DressContext, l: Look): void {
     .box(0.12, L * 0.7, 0.02, { at: [0.1, L * 0.45, 0.18], color: HUE.russet });
   apron(ctx, l, HUE.apronWhite, false, 0.62);
   tankard(ctx);
+  rag(ctx);
 }
 
 const SMITH_LOOK: Look = {
@@ -164,13 +179,14 @@ const SMITH_LOOK: Look = {
   belt: PAL.leatherDark,
 };
 
-/** Broad, with cropped dark hair and a short beard: a sleeveless dark shirt, a leather bib apron, thick gloves and a hammer. */
+/** Broad, with cropped dark hair and a short beard: a sleeveless dark shirt, a leather bib apron, thick gloves, a hammer and tongs. */
 function dressSmith(ctx: DressContext, l: Look): void {
   body(ctx, l);
   head(ctx, l);
   apron(ctx, l, PAL.leather, true, 0.66);
   cuffs(ctx, l, PAL.leatherDark);
   hammer(ctx);
+  tongs(ctx);
 }
 
 const FARMER_LOOK: Look = {

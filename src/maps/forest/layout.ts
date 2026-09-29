@@ -1,7 +1,7 @@
 import { PatrolWalk } from '../../enemies/patrol';
 import type { InteriorPlan } from '../../world/interiors';
 import type { MinePlan } from '../../world/mine';
-import type { CampId, CampPlan, Pickup, PostPlan, Respawn, Spot } from '../types';
+import type { CampId, CampPlan, Pickup, PostPlan, Respawn, Spot, VillagerSpot } from '../types';
 import { Colliders } from './colliders';
 import { HOUSE, planHouse } from './house';
 import { INN, planInn } from './inn';
@@ -58,6 +58,12 @@ export const POND = { x: -50, z: 30, r: 12 } as const;
  * edge just west of the signpost. They face north, towards the crossroads.
  */
 export const HALE = { x: 1.5, z: 4.8 } as const;
+
+/** The farm's yard, which the farmer by the well looks off towards. */
+const FARM: P2 = [54, 28];
+
+/** The farmer's spot: at the well's east side, clear of its wall, towards the crossroads. */
+const FARMER: P2 = [-4.1, -4.8];
 
 /** Where a new character starts: on the road about 3.5 m from Hale, facing them. */
 const START: P2 = [0.2, 1.5];
@@ -397,6 +403,8 @@ export interface ForestLayout {
   mine: MinePlan;
   /** Where Marshal Hale stands, facing the crossroads' centre (yaw as a model turns: 0 faces +Z). */
   hale: Spot;
+  /** Where the innkeeper (behind the inn's bar), the smith (at the anvil) and the farmer (by the well) work. */
+  villagers: VillagerSpot[];
   camps: CampPlan[];
   /** What lies about to be picked up by hand: the leader's orders in their tent. */
   pickups: Pickup[];
@@ -597,6 +605,7 @@ export function buildLayout(): ForestLayout {
   // inside the mine, on the rail bed outside its mouth.
   const respawns = { village: { ...interiors[0].respawn!, interior: interiors[0].id }, mine: mineRespawn(mouth) };
   const hale = { ...HALE, yaw: facing(HALE.x, HALE.z, 0, 0) };
+  const villagers = placeVillagers(at('inn'), at('smithy'));
   const camps: CampPlan[] = CAMPS.map((c) => {
     const clearing = CLEARINGS.find((cl) => cl.id === c.clearing)!;
     return {
@@ -630,7 +639,7 @@ export function buildLayout(): ForestLayout {
     { label: 'Southern road', x: south[0], z: south[1] },
     { label: 'Inn', x: at('inn').x, z: at('inn').z },
     { label: 'Stone bridge', x: bridge.x, z: bridge.z },
-    { label: 'Farm', x: 54, z: 28 },
+    { label: 'Farm', x: FARM[0], z: FARM[1] },
     { label: 'Pond', x: dock.x, z: dock.z },
     { label: 'Standing stones', x: stones.x, z: stones.z },
     { label: 'Lumber camp', x: -48, z: -42 },
@@ -656,11 +665,33 @@ export function buildLayout(): ForestLayout {
     interiors,
     mine: planMine(mouth),
     hale,
+    villagers,
     camps,
     pickups,
     landmarks,
     heightAt,
   };
+}
+
+/**
+ * The villagers at work, each facing their work: the innkeeper behind the
+ * bar, facing the room; the smith at the anvil, facing it and the smithy's
+ * open front, the bellows round behind them on their right; the farmer by the well,
+ * facing the farm.
+ */
+function placeVillagers(inn: Structure, smithy: Structure): VillagerSpot[] {
+  const [kx, kz] = localToWorld(inn, INN.keeper.x, INN.keeper.z);
+  const { smith, bellows } = SMITHY;
+  const [sx, sz] = localToWorld(smithy, smith.x, smith.z);
+  // Round to the bellows' handle, a little short of it, so it's before their right hand, which pumps it,
+  // and the fire beyond before their left, whose tongs hold the piece in it.
+  const handle = Math.atan2(bellows.handle.x - smith.x, bellows.handle.z - smith.z);
+  const [fx, fz] = FARMER;
+  return [
+    { id: 'innkeeper', x: kx, z: kz, yaw: inn.yaw, interior: 'inn', turn: 0 },
+    { id: 'smith', x: sx, z: sz, yaw: smithy.yaw, interior: null, turn: handle + 0.35 },
+    { id: 'farmer', x: fx, z: fz, yaw: facing(fx, fz, FARM[0], FARM[1]), interior: null, turn: 0 },
+  ];
 }
 
 // ------------------------------------------------------------------ helpers

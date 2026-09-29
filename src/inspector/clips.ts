@@ -5,6 +5,7 @@ import { type EnemyKind, type Family, proportionsOf } from '../models/characters
 import { PEOPLE, type PersonId } from '../models/people';
 import { BONES, blendPoses, type Pose, type Proportions } from '../models/rig';
 import { BREATH_PERIOD, friendlyPose } from '../people/poses';
+import { workLoop } from '../people/work';
 
 // The inspector's animations: every pose the game plays for a kind, as a
 // looping clip with the game's own timings and easing (see Enemy.updateAttack),
@@ -155,12 +156,23 @@ export function clipsFor(kind: EnemyKind, family: Family = 'undead'): Clip[] {
   return clips;
 }
 
-/** A friendly character's animations: standing at ease, and Hale's wave as you walk up. */
+/** A friendly character's animations: standing at ease, Hale's wave as you walk up, and a villager's work (turning on the spot aside). */
 export function personClips(id: PersonId): Clip[] {
   const { stand } = PEOPLE[id];
   const clips: Clip[] = [
     { name: 'stand', duration: BREATH_PERIOD, sample: (t, out) => ({ pose: copyInto(friendlyPose(stand, t), out), hipY: 0, phase: 'stand', telegraph: 0 }) },
   ];
+  if (id !== 'hale') {
+    const work = workLoop(id);
+    clips.push({
+      name: 'work',
+      duration: work.duration,
+      sample: (t, out) => {
+        const at = work.at(t);
+        return { pose: copyInto(friendlyPose(at.pose, t), out), hipY: at.hip[1], phase: 'work', telegraph: 0 };
+      },
+    });
+  }
   if (id === 'hale') {
     const duration = CONFIG.hale.waveTime;
     clips.push({

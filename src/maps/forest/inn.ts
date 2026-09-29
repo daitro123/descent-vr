@@ -55,8 +55,8 @@ export const INN = {
   table: { hw: 0.7, hd: 0.38, height: 0.75, set: { hw: 0.8, hd: 0.78 } },
   /** Lanterns hang this far below the ceiling: over the bar and over the first and third tables. */
   lanternDrop: 0.65,
-  /** Where the innkeeper will stand behind the bar (ticket 29), facing the room. */
-  keeper: { x: 0, z: -2.9 },
+  /** Where the innkeeper stands behind the bar, facing the room: a body's width off its back, within reach of its top. */
+  keeper: { x: 0, z: -2.72 },
   /** Where you wake: before the hearth, facing the door. */
   wake: { x: 3.5, z: -0.8 },
 } as const;

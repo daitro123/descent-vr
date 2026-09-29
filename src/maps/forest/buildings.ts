@@ -370,7 +370,7 @@ function farmhouse(b: ModelBuilder, s: Structure): void {
 function smithy(b: ModelBuilder, s: Structure, ctx: StructureContext): void {
   const w = s.hw * 2;
   const d = s.hd * 2;
-  const { back: bw, side, posts, forge, anvil, barrel: quench, grindstone: grind, crate: spare } = SMITHY;
+  const { back: bw, side, posts, forge, anvil, bellows, barrel: quench, grindstone: grind, crate: spare } = SMITHY;
   b.box(w, 0.3, d, { at: [0, -0.11, 0], color: PAL.stoneDark });
   b.box(w, 2.4, bw, { at: [0, 1.2, -d / 2 + bw / 2], color: PAL.stone, jitter: 0.12 });
   b.box(side, 1.2, d - bw, { at: [-w / 2 + side / 2, 0.6, bw / 2], color: PAL.stone, jitter: 0.12 });
@@ -391,6 +391,15 @@ function smithy(b: ModelBuilder, s: Structure, ctx: StructureContext): void {
     .taper(1.8, 1.4, 0.8, 0.8, 1.1, { at: [fx, 2.0, fz], color: PAL.stoneDark })
     .box(0.8, 2.4, 0.8, { at: [fx, 4.2, fz], color: PAL.stoneDark });
   ctx.glow([fx, 1.2, fz + 0.3], 1.1, 0xff7a2a);
+  // The bellows on a stand at the forge's side, nozzle into the fire, their handle standing up off the far end.
+  const { x: bx, z: bz, hw: bhw, hd: bhd, handle } = bellows;
+  for (const dx of [-bhw + 0.08, bhw - 0.08]) b.box(0.08, 0.5, 2 * bhd - 0.04, { at: [bx + dx, 0.25, bz], color: BUILD.timber });
+  b.box(2 * bhw, 0.04, 2 * bhd, { at: [bx, 0.52, bz], color: BUILD.plank })
+    .taper(2 * bhw - 0.12, 2 * bhd - 0.04, 2 * bhw - 0.12, 2 * bhd - 0.1, 0.14, { at: [bx + 0.02, 0.54, bz], color: PAL.leatherDark })
+    .box(2 * bhw - 0.04, 0.035, 2 * bhd - 0.02, { at: [bx + 0.02, 0.7, bz], rot: [0, 0, -0.08], color: BUILD.plank })
+    .cone(0.05, 0.16, 5, { at: [bx - bhw - 0.04, 0.57, bz], rot: [0, 0, PI / 2], color: PAL.ironDark })
+    .box(0.05, handle.y - 0.7, 0.05, { at: [handle.x, (handle.y + 0.7) / 2, handle.z], color: BUILD.timber })
+    .box(0.05, 0.05, 0.22, { at: [handle.x, handle.y, handle.z], color: PAL.leatherDark });
   // Anvil on a stump, a quench barrel, a grindstone.
   stump(b, anvil.x, 0, anvil.z, 1);
   b.box(0.5, 0.16, 0.2, { at: [anvil.x, 0.66, anvil.z], color: PAL.ironDark })
