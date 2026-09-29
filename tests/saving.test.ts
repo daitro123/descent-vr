@@ -243,6 +243,15 @@ describe('the in-memory store', () => {
     expect(readSave(await store.read())).toEqual({ kind: 'saved', record });
   });
 
+  it('round-trips a save made in the old mine, with the mine as its interior', async () => {
+    // In the gallery, well past the adit's bend, under 20 m of hillside.
+    const record = saveRecord(new AdventureState().snapshot(), { x: -29.5, z: -105, yaw: 0.2, interior: 'mine' }, 99);
+    expect(record.interior).toBe('mine');
+    const store = new MemoryStore();
+    await store.write(record);
+    expect(readSave(await store.read())).toEqual({ kind: 'saved', record });
+  });
+
   it('keeps what was written, not the object it was given', async () => {
     const record = recordOf(new AdventureState().snapshot());
     const store = new MemoryStore();

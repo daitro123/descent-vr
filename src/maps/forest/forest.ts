@@ -9,6 +9,7 @@ import type { Zone } from '../types';
 import { buildFence, buildField, buildStructure } from './buildings';
 import { buildHouseInterior } from './houseModel';
 import { buildInnInterior } from './innModel';
+import { buildMine } from './mineModel';
 import { buildLayout, FOREST } from './layout';
 import { plantPrototypes } from './nature';
 import { LIGHT, SKY } from './palette';
@@ -116,6 +117,7 @@ export function buildForest(): Zone {
       if (!build) throw new Error(`No model for the ${plan.id}`);
       return build(plan);
     }),
+    mine: buildMine(layout.mine),
     hale: layout.hale,
     pickups: layout.pickups,
     bounds: { minX: -play, maxX: play, minZ: -play, maxZ: play },

@@ -5,6 +5,7 @@ import type { Deck, Field, ForestLayout, Structure } from './layout';
 import { HOUSE } from './house';
 import { INN } from './inn';
 import { localToWorld, standingStones, TENT } from './layout';
+import { MINE } from './mine';
 import { mulberry32 } from './noise';
 import { stump } from './nature';
 import { SMITHY } from './smithy';
@@ -645,7 +646,12 @@ function tower(b: ModelBuilder, ctx: StructureContext): void {
   crate(b, -2.3, 2.9, 0.6, 0.4);
 }
 
-/** The old mine: a timbered mouth in a pile of boulders, with rails running out. */
+/**
+ * The old mine's mouth: a timbered frame in a pile of boulders, with rails
+ * running out to an ore cart. The adit behind it is the mine's own (mine.ts,
+ * mineModel.ts): the boulders keep clear of it, as wide as its tunnel and up
+ * to its roof.
+ */
 function mine(b: ModelBuilder, ctx: StructureContext, rand: () => number): void {
   const rock = (r: number, at: Vec3, squash = 0.8) => {
     const g = new IcosahedronGeometry(r, 0);
@@ -653,36 +659,37 @@ function mine(b: ModelBuilder, ctx: StructureContext, rand: () => number): void 
     b.shape(g, { at, rot: [rand() * PI, rand() * PI, 0], color: rand() < 0.5 ? EARTH.cliff : EARTH.rockDark, jitter: 0.14 });
   };
   const front = 2.5;
+  const { hw, height } = MINE.tunnel;
+  const { rails, cart } = MINE.outside;
   // Boulders framing the mouth and piled up the ridge behind it.
   for (const side of [-1, 1]) {
-    rock(1.8, [side * 3.0, 1.0, front - 0.8]);
+    rock(1.8, [side * 3.9, 1.0, front - 0.8]);
     rock(1.4, [side * 4.2, 0.6, front - 0.1]);
-    rock(2.0, [side * 2.6, 3.3, front - 1.6]);
+    rock(2.0, [side * 3.0, 5.3, front - 1.6]);
     rock(1.6, [side * 4.6, 2.6, -0.6]);
   }
-  rock(2.3, [0, 5.2, front - 2.2]);
-  rock(2.6, [-1.8, 5.8, -1.8]);
-  rock(2.6, [2.2, 5.4, -2.0]);
-  rock(3.0, [0, 7.4, -3.0]);
-  // The dark inside.
-  b.box(2.7, 3.2, 3.5, { at: [0, 1.5, front - 1.9], color: 0x060505, jitter: 0 });
-  // Timber frame.
-  for (const x of [-1.5, 1.5]) b.box(0.32, 3.3, 0.32, { at: [x, 1.55, front + 0.05], color: PAL.woodDark });
-  b.box(3.7, 0.38, 0.42, { at: [0, 3.35, front + 0.05], color: PAL.woodDark })
-    .bar([-1.4, 2.6, front + 0.12], [-0.6, 3.2, front + 0.12], 0.14, 0.1, { color: PAL.woodDark })
-    .bar([1.4, 2.6, front + 0.12], [0.6, 3.2, front + 0.12], 0.14, 0.1, { color: PAL.woodDark });
-  // Rails and sleepers.
-  for (let z = front - 1.6; z < front + 6.5; z += 0.6) b.box(1.3, 0.08, 0.2, { at: [0, 0.04, z], color: PAL.woodDark });
-  for (const x of [-0.45, 0.45]) b.box(0.07, 0.07, 8.2, { at: [x, 0.12, front + 2.5], color: PAL.iron });
+  rock(2.3, [0, 5.6, front - 2.2]);
+  rock(2.6, [-1.8, 6.0, -1.8]);
+  rock(2.6, [2.2, 5.8, -2.0]);
+  rock(3.0, [0, 7.6, -3.0]);
+  // Timber frame, its posts either side of the adit.
+  const post = hw + 0.16;
+  for (const x of [-post, post]) b.box(0.32, height + 0.35, 0.32, { at: [x, (height + 0.35) / 2, front + 0.05], color: PAL.woodDark });
+  b.box(2 * post + 0.5, 0.38, 0.42, { at: [0, height + 0.19, front + 0.05], color: PAL.woodDark })
+    .bar([-post + 0.1, height - 0.4, front + 0.12], [-post + 0.9, height + 0.1, front + 0.12], 0.14, 0.1, { color: PAL.woodDark })
+    .bar([post - 0.1, height - 0.4, front + 0.12], [post - 0.9, height + 0.1, front + 0.12], 0.14, 0.1, { color: PAL.woodDark });
+  // Rails and sleepers, from the mouth out along the rail bed.
+  for (let z = front + 0.3; z < front + rails; z += 0.6) b.box(1.3, 0.08, 0.2, { at: [0, 0.04, z], color: PAL.woodDark });
+  for (const x of [-0.45, 0.45]) b.box(0.07, 0.07, rails - 0.1, { at: [x, 0.12, front + 0.1 + (rails - 0.1) / 2], color: PAL.iron });
   // A cart of ore on the rails.
-  const cz = front + 4.2;
+  const cz = front + cart.z;
   b.taper(0.8, 1.0, 1.0, 1.2, 0.6, { at: [0, 0.3, cz], color: PAL.ironDark });
   for (const x of [-0.45, 0.45]) for (const z of [-0.35, 0.35]) b.cyl(0.14, 0.14, 0.08, 8, { at: [x, 0.22, cz + z], rot: [0, 0, PI / 2], color: PAL.iron });
   for (let i = 0; i < 4; i++) rock(0.2, [(rand() - 0.5) * 0.5, 0.9, cz + (rand() - 0.5) * 0.6], 0.8);
   // A lantern on the lintel and a warning board.
-  b.box(0.2, 0.28, 0.2, { at: [0.9, 2.95, front + 0.35], color: PAL.ironDark })
-    .box(0.14, 0.2, 0.14, { at: [0.9, 2.95, front + 0.35], color: 0xffd080, glow: 1, jitter: 0 });
-  ctx.glow([0.9, 2.95, front + 0.45], 0.7, 0xffb050);
+  b.box(0.2, 0.28, 0.2, { at: [0.9, height - 0.05, front + 0.35], color: PAL.ironDark })
+    .box(0.14, 0.2, 0.14, { at: [0.9, height - 0.05, front + 0.35], color: 0xffd080, glow: 1, jitter: 0 });
+  ctx.glow([0.9, height - 0.05, front + 0.45], 0.7, 0xffb050);
   b.box(0.12, 1.6, 0.12, { at: [2.6, 0.8, front + 1.8], rot: [0, 0, 0.08], color: PAL.woodDark })
     .box(1.0, 0.6, 0.06, { at: [2.63, 1.4, front + 1.86], rot: [0, -0.2, 0.08], color: BUILD.plank })
     .box(0.5, 0.1, 0.02, { at: [2.63, 1.45, front + 1.9], rot: [0, -0.2, 0.9], color: PAL.cloth, jitter: 0 })

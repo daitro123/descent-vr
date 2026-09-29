@@ -39,7 +39,7 @@ function camp(id: CampId, posts: PostPlan[], r = 8): CampPlan {
 function world(plans: CampPlan[], x: number, z: number, ground = hill) {
   const kills: string[] = [];
   const camps = new Camps(plans, ground, hooks, { onKill: (c) => kills.push(c.plan.id) });
-  const you: You = { feet: new Vector3(), head: new Vector3(), sword: null, alive: true };
+  const you: You = { feet: new Vector3(), head: new Vector3(), sword: null, alive: true, indoors: false };
   const stand = (nx: number, nz: number) => {
     you.feet.set(nx, hill.heightAt(nx, nz), nz);
     you.head.copy(you.feet).setY(you.feet.y + 1.6);
@@ -179,6 +179,32 @@ describe('the leash', () => {
     // Walking right beside it doesn't pull it back into the fight either.
     step(0.5, () => stand(enemy.position.x + 2, enemy.position.z));
     expect(member.mind).toBe('home');
+  });
+});
+
+describe('going indoors', () => {
+  it('sends everyone fighting you home as you go in, and nobody notices or comes for you in there', () => {
+    // A building or the mine: their ground and walls are yours alone, so no camp outdoors follows you in.
+    const { camps, you, stand, step } = world([camp('farm', [thug(0, 0), thug(0, 5)])], 0, 60);
+    const [farm] = camps.camps;
+    hit(farm, 0);
+    step(DT);
+    expect(minds(farm)).toEqual(['fight', 'fight']);
+    step(1);
+    you.indoors = true;
+    step(DT);
+    expect(minds(farm)).toEqual(['home', 'home']);
+    step(10);
+    expect(minds(farm)).toEqual(['idle', 'idle']);
+    // Standing right beside one, or hurting it, stirs nobody while you're in.
+    stand(0, 1.5);
+    hit(farm, 1);
+    step(1);
+    expect(minds(farm)).toEqual(['idle', 'idle']);
+    // Out again, and the nearest notices you.
+    you.indoors = false;
+    step(DT);
+    expect(camps.fighting).toBe(true);
   });
 });
 

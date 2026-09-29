@@ -16,12 +16,15 @@ import type { Interior as InteriorId } from '../save/record';
 import { type Atmosphere, blendAtmospheres } from './atmosphere';
 import type { Ground } from './ground';
 import { type Flame, type Interior, InteriorSwitch, toFrame } from './interiors';
+import { type Mine, type MinePlan, type MineStanding, MineSwitch } from './mine';
 import { buildSky, type Sky } from './sky';
 
 const _probe = new Vector3();
 const _eye = new Vector3();
 /** Where you stand in the interior being stepped, reused each frame. */
 const _standing = { x: 0, z: 0, within: false };
+/** Where you stand with respect to the mine, reused each frame. */
+const _underground: MineStanding = { ahead: 0, inMouth: false, past: 0, fromMouth: 0 };
 
 /** One of the pool's point lights: the flame it sits on, if any, and how far it has faded up on it. */
 interface PoolLight {
@@ -37,6 +40,12 @@ interface Held {
   readonly switch: InteriorSwitch;
 }
 
+/** The mine the World holds, with its switch. */
+interface HeldMine {
+  readonly mine: Mine;
+  readonly switch: MineSwitch;
+}
+
 /**
  * Everything the zones share: one light rig (a hemisphere light, one sun and
  * a pool of point lights), one sky, one fog and the camera's far plane. Zones
@@ -49,9 +58,15 @@ interface Held {
  * point lights moves onto the room's flames, and once the door is shut
  * behind you the light blends over to the room's and the outdoors is hidden.
  *
+ * The old mine comes with its zone too. Walk in through its mouth and its
+ * ground and walls are yours until you walk out through it again; past its
+ * adit's bend the same switch runs as at a door, and only the part of the
+ * mine you're in and its neighbours are drawn.
+ *
  * It is also the `Ground` for wherever you stand, answering from the zone
- * underfoot, or from an interior inside its footprint, so enemies, arrows and
- * the player never learn which zone or building they're in.
+ * underfoot, from an interior inside its footprint, or from the mine once
+ * you've come in by its mouth, so enemies, arrows and the player never learn
+ * which zone or building they're in.
  */
 export class World implements Ground {
   /** The light rig, the sky and every loaded zone. */
@@ -66,6 +81,7 @@ export class World implements Ground {
   private readonly sky: Sky;
   private readonly zones: Zone[] = [];
   private readonly interiors: Held[] = [];
+  private underground: HeldMine | null = null;
   /** People standing about, whom nothing walks through: circles on the floor plane. */
   private readonly bodies: { readonly x: number; readonly z: number; readonly r: number }[] = [];
   private camera: PerspectiveCamera | null = null;
@@ -73,8 +89,8 @@ export class World implements Ground {
   private atmosphere: Atmosphere | null = null;
   /** The atmosphere as shown: the zone's, or blended towards an interior's. */
   private shown: Atmosphere | null = null;
-  /** How far the light shown has gone over to an interior's, and whose. */
-  private blend: { interior: Interior | null; t: number } = { interior: null, t: 0 };
+  /** How far the light shown has gone over to an interior's or the mine's, and whose. */
+  private blend: { atmosphere: Atmosphere | null; t: number } = { atmosphere: null, t: 0 };
   private time = 0;
   /** The flames the pool may sit on this frame, nearest first (kept to spare the garbage collector). */
   private readonly flames: Flame[] = [];
@@ -127,6 +143,10 @@ export class World implements Ground {
         this.interiors.push({ interior, switch: new InteriorSwitch(interior.footprint.hd) });
         this.root.add(interior.root);
       }
+      if (zone.mine && !this.underground) {
+        this.underground = { mine: zone.mine, switch: new MineSwitch() };
+        this.root.add(zone.mine.root);
+      }
     }
     this.apply(zone.atmosphere);
   }
@@ -137,28 +157,36 @@ export class World implements Ground {
    */
   apply(atmosphere: Atmosphere): void {
     this.atmosphere = atmosphere;
-    this.show(this.blend.interior ? blendAtmospheres(atmosphere, this.blend.interior.atmosphere, this.blend.t) : atmosphere);
+    this.show(this.blend.atmosphere ? blendAtmospheres(atmosphere, this.blend.atmosphere, this.blend.t) : atmosphere);
   }
 
-  /** Is the outdoors drawn? Not while a door is shut behind you: whoever adds to it outside the zones (camps, people) hides theirs too. */
+  /** Is the outdoors drawn? Not while a door is shut behind you, or you're past the mine's bend: whoever adds to it outside the zones (camps, people) hides theirs too. */
   get outdoorsShown(): boolean {
     return this.outdoors;
   }
 
-  /** The interior you're in (inside, or walking back to its door), if any. */
+  /** The interior you're in (inside, or walking back to its door), or the mine once you've come in by its mouth, if any. */
   get interior(): InteriorId | null {
-    return this.interiors.find((h) => h.switch.occupied)?.interior.id ?? null;
+    return this.interiors.find((h) => h.switch.occupied)?.interior.id ?? (this.underground?.switch.occupied ? 'mine' : null);
+  }
+
+  /** The mine, for its route's centre line and its sight test through rock, if a loaded zone has one. */
+  get mine(): MinePlan | null {
+    return this.underground?.mine ?? null;
   }
 
   /**
    * Arrive in `id` at once, door shut and its light already on (waking by its
-   * hearth, or loading a save made inside it), or outdoors (null).
+   * hearth, or loading a save made inside it), or outdoors (null). In the
+   * mine, its ground is yours at once, and where you stand says on the next
+   * update whether you're past its bend.
    */
   settle(id: InteriorId | null): void {
     for (const h of this.interiors) {
       h.switch.settle(h.interior.id === id);
       this.showSwitch(h);
     }
+    this.underground?.switch.settle(id === 'mine');
     this.blendLight();
     this.snapPool = true;
   }
@@ -234,7 +262,13 @@ export class World implements Ground {
       this.showSwitch(h);
       if (h.interior.room.visible) h.interior.update(dt, camera);
     }
+    const u = this.underground;
+    if (u) u.switch.update(dt, u.mine.stand(_eye.x, _eye.y, _eye.z, _underground));
     this.showOutdoors();
+    if (u) {
+      u.mine.show(u.switch.entered, this.outdoors, _eye.x, _eye.z);
+      u.mine.update(dt, camera);
+    }
     this.blendLight();
     this.updatePool(dt, _eye);
     this.sky.update(dt, camera);
@@ -251,19 +285,21 @@ export class World implements Ground {
   private showOutdoors(): void {
     let outdoors = true;
     for (const h of this.interiors) if (h.switch.outdoorsHidden) outdoors = false;
+    if (this.underground?.switch.outdoorsHidden) outdoors = false;
     this.outdoors = outdoors;
     for (const zone of this.zones) zone.root.visible = outdoors;
     this.sky.root.visible = outdoors;
   }
 
-  /** The light shown: the zone's, blended towards the interior whose light is up. */
+  /** The light shown: the zone's, blended towards the interior's or the mine's whose light is up. */
   private blendLight(): void {
-    let best: Held | null = null;
-    for (const h of this.interiors) if (h.switch.light > (best?.switch.light ?? 0)) best = h;
-    const interior = best?.interior ?? null;
-    const t = best?.switch.light ?? 0;
-    if (interior === this.blend.interior && t === this.blend.t) return;
-    this.blend = { interior, t };
+    let atmosphere: Atmosphere | null = null;
+    let t = 0;
+    for (const h of this.interiors) if (h.switch.light > t) [atmosphere, t] = [h.interior.atmosphere, h.switch.light];
+    const u = this.underground;
+    if (u && u.switch.light > t) [atmosphere, t] = [u.mine.atmosphere, u.switch.light];
+    if (atmosphere === this.blend.atmosphere && t === this.blend.t) return;
+    this.blend = { atmosphere, t };
     if (this.atmosphere) this.apply(this.atmosphere);
   }
 
@@ -278,6 +314,8 @@ export class World implements Ground {
     flames.length = 0;
     if (this.shown) for (const f of this.shown.flames) nearest(flames, f, eye, this.lights.length);
     for (const h of this.interiors) if (h.switch.flamesLit) for (const f of h.interior.flames) nearest(flames, f, eye, this.lights.length);
+    const u = this.underground;
+    if (u?.switch.flamesLit) for (const f of u.mine.flames) nearest(flames, f, eye, this.lights.length);
     const wanted = flames;
     // After `settle`, as if every light had long since faded where it's going.
     const snap = this.snapPool;
@@ -315,11 +353,19 @@ export class World implements Ground {
       const floor = interior.groundAt(x, z);
       if (floor !== null) return floor;
     }
-    return this.zoneAt(x, z)?.heightAt(x, z) ?? 0;
+    return this.mineGround(x, z) ?? this.zoneAt(x, z)?.heightAt(x, z) ?? 0;
+  }
+
+  /** The mine's floor at (x, z), once you've come in by its mouth and while it reaches there; else null. */
+  private mineGround(x: number, z: number): number | null {
+    const u = this.underground;
+    return u?.switch.entered ? u.mine.groundAt(x, z) : null;
   }
 
   resolve(p: Vector3, radius: number): boolean {
-    let moved = this.zoneAt(p.x, p.z)?.resolve(p, radius) ?? false;
+    // In the mine its walls are all there is: the hillside's aren't.
+    let moved =
+      this.mineGround(p.x, p.z) !== null ? this.underground!.mine.resolve(p, radius) : (this.zoneAt(p.x, p.z)?.resolve(p, radius) ?? false);
     for (const { interior } of this.interiors) if (interior.resolve(p, radius)) moved = true;
     for (const b of this.bodies) {
       const dx = p.x - b.x;

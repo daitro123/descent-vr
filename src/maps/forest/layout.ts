@@ -1,9 +1,11 @@
 import { PatrolWalk } from '../../enemies/patrol';
 import type { InteriorPlan } from '../../world/interiors';
+import type { MinePlan } from '../../world/mine';
 import type { CampId, CampPlan, Pickup, PostPlan, Respawn, Spot } from '../types';
 import { Colliders } from './colliders';
 import { HOUSE, planHouse } from './house';
 import { INN, planInn } from './inn';
+import { mineRespawn, mouthColliders, mouthOf, planMine } from './mine';
 import { SMITHY, smithyColliders } from './smithy';
 import { fbm, lerp, mulberry32, nearestOnPolyline, type P2, sampleCurve, smoothstep, valueNoise } from './noise';
 
@@ -226,7 +228,8 @@ const STRUCTURES: Spec[] = [
   { kind: 'tent', x: -51.95, z: -46.6, yaw: facing(-51.95, -46.6, -48, -41), hw: TENT.hw, hd: TENT.hd },
   { kind: 'campfire', x: -48, z: -41, yaw: 0, hw: 0.6, hd: 0.6 },
   { kind: 'logpile', x: -55, z: -38, yaw: 0.35, hw: 2.1, hd: 1 },
-  { kind: 'mine', x: -14, z: -80.5, yaw: 0, hw: 4.5, hd: 2.5 },
+  // The old mine opens: the boulders round its mouth collide (mine.ts), and inside is the mine's own.
+  { kind: 'mine', x: -14, z: -80.5, yaw: 0, hw: 4.5, hd: 2.5, solid: false },
   { kind: 'stones', x: -30, z: 52, yaw: 0, hw: 6, hd: 6, solid: false },
 ];
 
@@ -386,10 +389,12 @@ export interface ForestLayout {
   roadDistance: DistanceField;
   /** Where a new character starts, and where `?map` and `?fly` begin: the crossroads, facing Hale's spot. */
   spawn: { x: number; z: number; yaw: number };
-  /** Where you wake after a death (yaw as `spawn`'s): the village's is by the inn's hearth. */
-  respawns: { village: Respawn };
+  /** Where you wake after a death (yaw as `spawn`'s): the village's is by the inn's hearth, the mine's outside its mouth. */
+  respawns: { village: Respawn; mine: Respawn };
   /** The buildings you walk into: the inn, then the house by the well. */
   interiors: InteriorPlan[];
+  /** The old mine, which you walk into by its mouth. */
+  mine: MinePlan;
   /** Where Marshal Hale stands, facing the crossroads' centre (yaw as a model turns: 0 faces +Z). */
   hale: Spot;
   camps: CampPlan[];
@@ -554,6 +559,11 @@ export function buildLayout(): ForestLayout {
     const [x, z] = localToWorld(smithySite, lx, lz);
     colliders.addCircle({ x, z, r });
   }
+  const mouth = mouthOf(mine);
+  for (const [lx, lz, hw, hd] of mouthColliders().boxes) {
+    const [x, z] = localToWorld(mouth, lx, lz);
+    colliders.addBox({ x, z, hw, hd, yaw: mouth.yaw });
+  }
   // Bridge railings, so the arch can't be walked off sideways.
   for (const side of [-1, 1]) {
     const [x, z] = localToWorld(bridge, side * (bridge.hw + 0.12), 0);
@@ -583,8 +593,9 @@ export function buildLayout(): ForestLayout {
 
   const at = (kind: StructureKind) => structures.find((st) => st.kind === kind)!;
   const interiors = [planInn(at('inn')), planHouse(houseSite)];
-  // After a death outside the mine you wake by the inn's hearth, inside with the door shut.
-  const respawns = { village: { ...interiors[0].respawn!, interior: interiors[0].id } };
+  // After a death outside the mine you wake by the inn's hearth, inside with the door shut;
+  // inside the mine, on the rail bed outside its mouth.
+  const respawns = { village: { ...interiors[0].respawn!, interior: interiors[0].id }, mine: mineRespawn(mouth) };
   const hale = { ...HALE, yaw: facing(HALE.x, HALE.z, 0, 0) };
   const camps: CampPlan[] = CAMPS.map((c) => {
     const clearing = CLEARINGS.find((cl) => cl.id === c.clearing)!;
@@ -641,6 +652,7 @@ export function buildLayout(): ForestLayout {
     spawn,
     respawns,
     interiors,
+    mine: planMine(mouth),
     hale,
     camps,
     pickups,

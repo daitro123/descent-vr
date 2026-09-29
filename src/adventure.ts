@@ -84,7 +84,7 @@ export class Adventure {
   private readonly shadows = new BlobShadows();
   private readonly orbs = new Orbs();
   private readonly fade: Fade;
-  private readonly you: You = { feet: new Vector3(), head: new Vector3(), sword: null, alive: true };
+  private readonly you: You = { feet: new Vector3(), head: new Vector3(), sword: null, alive: true, indoors: false };
   private readonly sword = { base: new Vector3(), tip: new Vector3(), speed: 0, swing: 0 };
   private hitStop = 0;
   /** Seconds since you last took or dealt damage. */
@@ -94,7 +94,9 @@ export class Adventure {
   private deadFor: number | null = null;
   /** Seconds since you woke, while the view fades back in; null otherwise. */
   private wakingFor: number | null = null;
-  private readonly respawn: Respawn;
+  /** Where you wake after a death: the village's, or the mine's if you died in it. */
+  private readonly respawns: { readonly village: Respawn; readonly mine: Respawn };
+  private respawn: Respawn;
   /** What can press the board's buttons: your left fist, your right fist and your sword's tip, in that order. */
   private readonly probes: (Probe | null)[] = [null, null, null];
   private readonly probePoints = [new Vector3(), new Vector3(), new Vector3()];
@@ -117,6 +119,7 @@ export class Adventure {
     this.saves = new SaveController(save.store, () => saveRecord(this.state.snapshot(), this.standing));
     this.world.attach(scene, camera);
     this.world.load(zone);
+    this.respawns = zone.respawns;
     this.respawn = zone.respawns.village;
     this.player = new Player(camera, renderer, this.world);
     scene.add(this.player.rig, this.orbs.root, this.shadows.mesh);
@@ -167,12 +170,13 @@ export class Adventure {
 
     // A new character at the zone's start, facing Hale; or where the save stood,
     // facing the same way, at full health and with no rage. A save made inside
-    // the inn loads inside it, with the door shut and the room lit.
+    // the inn loads inside it, with the door shut and the room lit; one made in
+    // the mine loads in it, standing on its floor (so it settles first).
     Object.assign(this.standing, record ? { ...record.position, yaw: record.facing, interior: record.interior } : { ...zone.spawn, interior: null });
     const { x, z, yaw, interior } = this.standing;
     this.player.stats = this.state.stats;
-    this.player.reset(x, z, yaw);
     this.world.settle(interior);
+    this.player.reset(x, z, yaw);
     this.lastHp = this.player.hp;
   }
 
@@ -195,6 +199,7 @@ export class Adventure {
     player.feetPosition(you.feet);
     player.headPosition(you.head);
     you.alive = player.alive;
+    you.indoors = this.world.interior !== null;
     const { sword, rig } = player;
     if (sword.tip.valid && player.alive) {
       sword.segment(rig, this.sword.base, this.sword.tip);
@@ -402,17 +407,22 @@ export class Adventure {
     if (this.player.alive) return;
     if (this.deadFor === null) {
       this.deadFor = 0;
+      this.respawn = this.world.interior === 'mine' ? this.respawns.mine : this.respawns.village;
       this.text.banner(this.player.camera, 'YOU DIED', '#c81e1e');
     } else this.deadFor += dt;
     this.fade.level = (this.deadFor - D.linger) / D.fadeOut;
     if (this.deadFor >= D.linger + D.fadeOut + D.dark) this.wake();
   }
 
-  /** At the village respawn point, by the inn's hearth with the door shut, with full health and no rage. Nothing else changes. */
+  /**
+   * At the respawn point, with full health and no rage: by the inn's hearth
+   * with the door shut, or on the rail bed outside the mine if you died in it.
+   * Nothing else changes.
+   */
   private wake(): void {
     const { x, z, yaw, interior } = this.respawn;
-    this.player.reset(x, z, yaw);
     this.world.settle(interior);
+    this.player.reset(x, z, yaw);
     this.lastHp = this.player.hp;
     this.combat.projectiles.clear();
     this.deadFor = null;

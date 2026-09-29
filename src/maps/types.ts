@@ -6,6 +6,7 @@ import type { EnemyKind, Family } from '../models/characters';
 import type { Atmosphere } from '../world/atmosphere';
 import type { Interior as InteriorId } from '../save/record';
 import type { Interior } from '../world/interiors';
+import type { Mine } from '../world/mine';
 
 // A map is a place the game can put you. A zone (Oakvale) is loaded into the
 // World, which lights it, gives it the sky and fog, and answers its ground; a
@@ -93,10 +94,12 @@ export interface Zone extends MapBase {
   readonly atmosphere: Atmosphere;
   /** Its enemies, camp by camp. */
   readonly camps: readonly CampPlan[];
-  /** Where you wake after a death: the village's is by the inn's hearth. */
-  readonly respawns: { readonly village: Respawn };
+  /** Where you wake after a death: the village's is by the inn's hearth, the mine's outside its mouth. */
+  readonly respawns: { readonly village: Respawn; readonly mine: Respawn };
   /** The buildings you walk into, built with the zone and hidden until their doors open. */
   readonly interiors: readonly Interior[];
+  /** The old mine, built with the zone and hidden but for its adit until you walk in by its mouth. */
+  readonly mine: Mine | null;
   /** Where Marshal Hale, the quest giver, stands (yaw as a model turns: 0 faces +Z). */
   readonly hale: Spot;
   /** What lies about to be picked up by hand, shown while the adventure state says it lies there. */

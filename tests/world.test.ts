@@ -1,10 +1,12 @@
-import { HemisphereLight, DirectionalLight, type Light, type Object3D, PerspectiveCamera, PointLight, Vector3 } from 'three';
+import { HemisphereLight, DirectionalLight, type InstancedMesh, type Light, type Mesh, type Object3D, PerspectiveCamera, PointLight, Vector3 } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
 import { Camps, type You } from '../src/enemies/camps';
 import { buildForest } from '../src/maps/forest/forest';
+import { Hollow } from '../src/maps/forest/hollow';
 import { HOUSE } from '../src/maps/forest/house';
 import { INN } from '../src/maps/forest/inn';
+import { MINE } from '../src/maps/forest/mine';
 import { SMITHY } from '../src/maps/forest/smithy';
 import { buildLayout, type ForestLayout, localToWorld, worldToLocal } from '../src/maps/forest/layout';
 import type { Zone } from '../src/maps/types';
@@ -48,12 +50,20 @@ function flood(
   rect: { x0: number; x1: number; z0: number; z1: number },
   seed: readonly [number, number],
   radius: number,
+  /** The World to ask, and which spots count at all (the rest are as good as walls). */
+  ground: World = world,
+  counts: (p: Vector3) => boolean = () => true,
 ): { seedFree: boolean; pockets: string[] } {
   const step = 0.1;
   const nx = Math.round((rect.x1 - rect.x0) / step) + 1;
   const nz = Math.round((rect.z1 - rect.z0) / step) + 1;
   const free = new Uint8Array(nx * nz);
-  for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) free[i * nz + j] = world.resolve(at(rect.x0 + i * step, rect.z0 + j * step), radius) ? 0 : 1;
+  for (let i = 0; i < nx; i++) {
+    for (let j = 0; j < nz; j++) {
+      const p = at(rect.x0 + i * step, rect.z0 + j * step);
+      free[i * nz + j] = counts(p) && !ground.resolve(p, radius) ? 1 : 0;
+    }
+  }
   const seen = new Uint8Array(nx * nz);
   const start = Math.round((seed[0] - rect.x0) / step) * nz + Math.round((seed[1] - rect.z0) / step);
   const stack = free[start] ? [start] : [];
@@ -170,7 +180,7 @@ describe("the lumber camp's tent", () => {
     const tent = plan.structures.find((s) => s.kind === 'tent')!;
     const [x, z] = localToWorld(tent, 0, -tent.hd - 2.5);
     const feet = new Vector3(x, world.heightAt(x, z), z);
-    const you: You = { feet, head: feet.clone().setY(feet.y + 1.6), sword: null, alive: true };
+    const you: You = { feet, head: feet.clone().setY(feet.y + 1.6), sword: null, alive: true, indoors: false };
     const leader = camps.camps[0].members.find((m) => m.plan.role === 'leader')!.enemy;
     let took = Infinity;
     for (let t = 0; t < 15 && took === Infinity; t += 1 / 72) {
@@ -621,6 +631,298 @@ describe('the smithy', () => {
       expect(w.interior).toBe(null);
       expect(w.outdoorsShown).toBe(true);
       expect(w.sun.intensity).toBe(oakvale.atmosphere.sun.intensity);
+    }
+  });
+});
+
+describe('the old mine', () => {
+  const mouth = () => plan.mine.mouth;
+  const mine = () => oakvale.mine!;
+  /** A spot in the mouth's frame (x across it, z out along the rail bed), in the world. */
+  const inMine = (lx: number, lz: number) => {
+    const [x, z] = localToWorld(mouth(), lx, lz);
+    return new Vector3(x, 0, z);
+  };
+  /** Every spot of the mine's open space on a grid `step` m apart, in the mouth's frame, with its part. */
+  const spots = (step: number) => {
+    const hollow = new Hollow(MINE.pieces);
+    const out: { lx: number; lz: number; part: number }[] = [];
+    for (let lx = -19 + step / 2; lx < 1.75; lx += step) {
+      for (let lz = -35 + step / 2; lz < 0; lz += step) if (hollow.contains(lx, lz)) out.push({ lx, lz, part: hollow.pieceAt(lx, lz).part });
+    }
+    return out;
+  };
+  /** Spots across the mouth's line, to see out by. */
+  const mouthLine = () => [-1.5, -0.5, 0.5, 1.5].map((lx) => inMine(lx, 0));
+
+  /** A World with Oakvale in it, and a camera to walk it with at eye height, in the mouth's frame. */
+  function walkable() {
+    const w = new World();
+    w.load(oakvale);
+    const eye = new PerspectiveCamera();
+    const stand = (lx: number, lz: number) => {
+      const p = inMine(lx, lz);
+      eye.position.set(p.x, w.heightAt(p.x, p.z) + 1.6, p.z);
+      eye.updateMatrixWorld();
+    };
+    /** Walk from point to point at `speed`, stepping the World each frame. */
+    const walk = (pts: readonly (readonly [number, number])[], speed: number = CONFIG.player.moveSpeed, each?: (lx: number, lz: number) => void) => {
+      const dt = 1 / 72;
+      for (let k = 1; k < pts.length; k++) {
+        const [ax, az] = pts[k - 1];
+        const [bx, bz] = pts[k];
+        const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az) / (speed * dt)));
+        for (let i = 1; i <= n; i++) {
+          const [lx, lz] = [ax + ((bx - ax) * i) / n, az + ((bz - az) * i) / n];
+          stand(lx, lz);
+          w.update(dt, eye);
+          each?.(lx, lz);
+        }
+      }
+    };
+    const hold = (seconds: number) => {
+      for (let t = 0; t < seconds; t += 1 / 72) w.update(1 / 72, eye);
+    };
+    return { w, eye, stand, walk, hold };
+  }
+
+  it('opens at the mine front and runs north under the ridge, the hillside over all of it', () => {
+    const structure = plan.structures.find((s) => s.kind === 'mine')!;
+    const [lx, lz] = worldToLocal(structure, mouth().x, mouth().z);
+    expect([lx, lz]).toEqual([0, structure.hd]);
+    expect(oakvale.interiors.map((i) => i.id)).toEqual(['inn', 'house']);
+    expect(mine().id).toBe('mine');
+    for (const p of MINE.pieces) {
+      expect(p.z0).toBeLessThan(0);
+      // The hillside stands over every tunnel and chamber, past the first metres where the adit cuts in.
+      for (let x = p.x0; x <= p.x1; x += 0.5) {
+        for (let z = Math.min(p.z1, -2.6); z >= p.z0; z -= 0.5) {
+          const at = inMine(x, z);
+          expect(oakvale.heightAt(at.x, at.z), `over (${x}, ${z})`).toBeGreaterThan(mouth().y + p.floor + p.height + 0.5);
+        }
+      }
+    }
+  });
+
+  it("gives you its ground only once you've come in by the mouth: the hillside over the adit stays Oakvale's", () => {
+    const { w, eye, walk } = walkable();
+    const check = () => expect(w.heightAt(eye.position.x, eye.position.z)).toBe(oakvale.heightAt(eye.position.x, eye.position.z));
+    // Over the ridge above the adit, across it and down its face to the rail bed.
+    walk(
+      [
+        [-6, -6],
+        [6, -6],
+        [0, -8],
+        [0, 4],
+      ],
+      CONFIG.player.moveSpeed,
+      () => {
+        expect(w.interior).toBe(null);
+        check();
+      },
+    );
+    // In through the mouth: the adit's floor, level with the rail bed, under the hillside.
+    walk([
+      [0, 4],
+      [0, -5],
+    ]);
+    const adit = inMine(0, -5);
+    expect(w.interior).toBe('mine');
+    expect(w.heightAt(adit.x, adit.z)).toBe(mouth().y);
+    expect(oakvale.heightAt(adit.x, adit.z)).toBeGreaterThan(mouth().y + 8);
+    // Its walls are yours, and the hillside's aren't: the boulders over the adit don't stop you in it.
+    expect(w.resolve(inMine(0, -3), CONFIG.player.bodyRadius)).toBe(false);
+    const rock = inMine(3, -5);
+    expect(w.resolve(rock, CONFIG.player.bodyRadius)).toBe(true);
+    expect(worldToLocal(mouth(), rock.x, rock.z)[0]).toBeCloseTo(MINE.tunnel.hw - CONFIG.player.bodyRadius, 6);
+    // Out again: the hillside's.
+    walk([
+      [0, -5],
+      [0, 4],
+    ]);
+    expect(w.interior).toBe(null);
+    expect(w.heightAt(adit.x, adit.z)).toBe(oakvale.heightAt(adit.x, adit.z));
+  });
+
+  it('wakes you on the rail bed a few metres out, facing the mouth, clear of everything', () => {
+    const { mine: wake } = oakvale.respawns;
+    expect(wake.interior).toBe(null);
+    const [lx, lz] = worldToLocal(mouth(), wake.x, wake.z);
+    expect(Math.abs(lx)).toBeLessThan(0.01);
+    expect(lz).toBeGreaterThan(2);
+    expect(lz).toBeLessThan(5);
+    // Looking (−sin yaw, −cos yaw), straight at the mouth.
+    const d = Math.hypot(mouth().x - wake.x, mouth().z - wake.z);
+    expect((-Math.sin(wake.yaw) * (mouth().x - wake.x) - Math.cos(wake.yaw) * (mouth().z - wake.z)) / d).toBeGreaterThan(0.999);
+    const fresh = new World();
+    fresh.load(oakvale);
+    for (const radius of RADII) expect(fresh.resolve(new Vector3(wake.x, 0, wake.z), radius), `radius ${radius}`).toBe(false);
+    expect(fresh.heightAt(wake.x, wake.z)).toBeCloseTo(mouth().y, 1);
+  });
+
+  it('is walkable from the mouth to every spot a body can stand on, for every body radius (no pockets)', () => {
+    const w = new World();
+    w.load(oakvale);
+    w.settle('mine');
+    const inside = (p: Vector3) => w.mine!.groundAt(p.x, p.z) !== null;
+    for (const radius of RADII) {
+      const { seedFree, pockets } = flood(inMine, { x0: -19.5, x1: 2, z0: -35.5, z1: -0.05 }, [0, -1], radius, w, inside);
+      expect(seedFree, `radius ${radius}: inside the mouth is clear`).toBe(true);
+      expect(pockets.slice(0, 5), `radius ${radius}`).toEqual([]);
+    }
+  });
+
+  it('keeps its floors, and the step in from the rail bed, at 1 in 5 or gentler', () => {
+    const outside = new World();
+    outside.load(oakvale);
+    const inside = new World();
+    inside.load(oakvale);
+    inside.settle('mine');
+    const floor = (lx: number, lz: number) => {
+      const p = inMine(lx, lz);
+      return (lz > 0 ? outside : inside).heightAt(p.x, p.z);
+    };
+    const step = 0.1;
+    for (let lx = -1.5; lx <= 1.5; lx += 0.5) for (let lz = 3; lz > -3; lz -= step) expect(Math.abs(floor(lx, lz - step) - floor(lx, lz)), `(${lx}, ${lz})`).toBeLessThanOrEqual(0.2 * step + 1e-9);
+    for (const { lx, lz } of spots(0.5)) {
+      expect(Math.abs(floor(lx + 0.5, lz) - floor(lx, lz))).toBeLessThanOrEqual(0.1 + 1e-9);
+      expect(Math.abs(floor(lx, lz + 0.5) - floor(lx, lz))).toBeLessThanOrEqual(0.1 + 1e-9);
+    }
+  });
+
+  it('gives the World its route: from the mouth through every part, clear of walls and props for every body', () => {
+    const w = new World();
+    w.load(oakvale);
+    w.settle('mine');
+    const { route } = w.mine!;
+    expect(route[0].x).toBeCloseTo(mouth().x, 9);
+    expect(route[0].z).toBeCloseTo(mouth().z, 9);
+    let part = 0;
+    for (let i = 1; i < route.length; i++) {
+      const a = route[i - 1];
+      const b = route[i];
+      const n = Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 0.25);
+      for (let k = 0; k <= n; k++) {
+        const p = new Vector3(a.x + ((b.x - a.x) * k) / n, 0, a.z + ((b.z - a.z) * k) / n);
+        if (worldToLocal(mouth(), p.x, p.z)[1] >= -0.5) continue;
+        for (const radius of RADII) expect(w.resolve(p.clone(), radius), `(${p.x.toFixed(2)}, ${p.z.toFixed(2)}) radius ${radius}`).toBe(false);
+        const at = w.mine!.partAt(p.x, p.z);
+        expect(at === part || at === part + 1, `parts in order at (${p.x.toFixed(2)}, ${p.z.toFixed(2)})`).toBe(true);
+        part = at;
+      }
+    }
+    expect(part).toBe(MINE.parts.length - 1);
+  });
+
+  it('gives the World a sight test through rock: nothing two parts away can be seen, and from outside only the adit', () => {
+    const { sees } = mine();
+    const all = spots(0.75).map((s) => ({ ...s, p: inMine(s.lx, s.lz) }));
+    for (const a of all) {
+      for (const b of all) {
+        if (b.part - a.part < 2) continue;
+        expect(sees(a.p.x, a.p.z, b.p.x, b.p.z), `(${a.lx}, ${a.lz}) sees (${b.lx}, ${b.lz})`).toBe(false);
+      }
+    }
+    for (let lx = -8; lx <= 8; lx += 1) {
+      for (let lz = 0.2; lz <= 12; lz += 1) {
+        const o = inMine(lx, lz);
+        for (const b of all) if (b.part > 0) expect(sees(o.x, o.z, b.p.x, b.p.z), `(${lx}, ${lz}) outside sees (${b.lx}, ${b.lz})`).toBe(false);
+      }
+    }
+    // Along the adit, and not through the rock between the cart hall and the gallery.
+    expect(sees(mouthLine()[1].x, mouthLine()[1].z, inMine(0, -9).x, inMine(0, -9).z)).toBe(true);
+    expect(sees(inMine(-12, -7).x, inMine(-12, -7).z, inMine(-15.5, -27).x, inMine(-15.5, -27).z)).toBe(false);
+  });
+
+  it("swaps to its light past the bend, and brings the sun back before you can see out; only what can be seen is drawn", () => {
+    const { w, eye, walk, hold } = walkable();
+    const route = MINE.route.map(([x, z]) => [x, z] as const);
+    const parts = mine().root.children;
+    const outdoorSun = oakvale.atmosphere.sun.intensity;
+    const checkView = () => {
+      const seesOut = mouthLine().some((m) => mine().sees(eye.position.x, eye.position.z, m.x, m.z));
+      if (seesOut) {
+        expect(w.outdoorsShown).toBe(true);
+        expect(w.sun.intensity).toBe(outdoorSun);
+      }
+      if (!w.outdoorsShown) expect(seesOut).toBe(false);
+      if (w.interior === 'mine') {
+        const here = mine().partAt(eye.position.x, eye.position.z);
+        parts.forEach((p, i) => expect(p.visible, `part ${i} from part ${here}`).toBe(Math.abs(i - here) <= 1));
+      }
+    };
+    // From outside only the adit.
+    walk([
+      [0, 12],
+      [0, 1],
+    ]);
+    expect(parts.map((p) => p.visible)).toEqual([true, false, false]);
+    walk([[0, 1], ...route], CONFIG.player.moveSpeed, checkView);
+    hold(1);
+    expect(w.interior).toBe('mine');
+    expect(w.sun.intensity).toBe(0);
+    expect(w.hemisphere.intensity).toBeCloseTo(mine().atmosphere.hemisphere.intensity, 9);
+    expect([w.fog.near, w.fog.far]).toEqual([6, 18]);
+    expect(oakvale.root.visible).toBe(false);
+    expect(w.pool.filter((l) => l.intensity > 0)).toHaveLength(CONFIG.world.pool.size);
+    // Back out at a run.
+    walk([...route].reverse(), 3.5, checkView);
+    walk([
+      [0, 0],
+      [0, 6],
+    ]);
+    hold(1);
+    expect(w.interior).toBe(null);
+    expect(w.sun.intensity).toBe(outdoorSun);
+    expect(parts.map((p) => p.visible)).toEqual([true, false, false]);
+  });
+
+  it('settles in at once for a save made inside it, in the light of where you stood', () => {
+    const { w, eye, stand } = walkable();
+    w.settle('mine');
+    stand(-15.5, -27);
+    w.update(1 / 72, eye);
+    expect(w.interior).toBe('mine');
+    expect(w.sun.intensity).toBe(0);
+    expect(w.outdoorsShown).toBe(false);
+    expect(w.pool.filter((l) => l.intensity > CONFIG.world.pool.intensity * 0.6)).toHaveLength(CONFIG.world.pool.size);
+    const adit = walkable();
+    adit.w.settle('mine');
+    adit.stand(0, -4);
+    adit.w.update(1 / 72, adit.eye);
+    expect(adit.w.interior).toBe('mine');
+    expect(adit.w.sun.intensity).toBe(oakvale.atmosphere.sun.intensity);
+    expect(adit.w.heightAt(inMine(0, -4).x, inMine(0, -4).z)).toBe(mouth().y);
+  });
+
+  it("leaves Oakvale's ground out where the adit cuts in, and nothing of Oakvale's pokes into the adit", () => {
+    const { hw, height } = MINE.tunnel;
+    let checked = 0;
+    oakvale.root.traverse((o) => {
+      const mesh = o as Mesh;
+      if (!mesh.isMesh || (o as InstancedMesh).isInstancedMesh) return;
+      const pos = mesh.geometry.getAttribute('position');
+      for (let i = 0; i < pos.count; i += 3) {
+        let [cx, cy, cz] = [0, 0, 0];
+        for (let k = 0; k < 3; k++) [cx, cy, cz] = [cx + pos.getX(i + k) / 3, cy + pos.getY(i + k) / 3, cz + pos.getZ(i + k) / 3];
+        const [lx, lz] = worldToLocal(mouth(), cx, cz);
+        const inside = Math.abs(lx) < hw - 0.02 && lz < -0.3 && lz > -11.7 && cy > mouth().y + 0.2 && cy < mouth().y + height - 0.02;
+        expect(inside, `a triangle of ${mesh.name} at (${lx.toFixed(2)}, ${(cy - mouth().y).toFixed(2)}, ${lz.toFixed(2)})`).toBe(false);
+        checked++;
+      }
+    });
+    expect(checked).toBeGreaterThan(1000);
+  });
+
+  it('costs a few thousand triangles and two draw calls a part', () => {
+    const parts = mine().root.children;
+    expect(parts).toHaveLength(MINE.parts.length);
+    for (const part of parts) {
+      const meshes = part.children as Mesh[];
+      expect(meshes).toHaveLength(2);
+      const triangles = meshes.filter((m) => !(m as unknown as InstancedMesh).isInstancedMesh).reduce((n, m) => n + m.geometry.getAttribute('position').count / 3, 0);
+      expect(triangles, part.name).toBeGreaterThan(1000);
+      expect(triangles, part.name).toBeLessThan(6000);
     }
   });
 });
