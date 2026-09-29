@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG, type EnemyConfig } from '../src/config';
 import { IDLE } from '../src/enemies/poses';
-import { clipsFor, type MutablePose } from '../src/inspector/clips';
+import { clipsFor, type MutablePose, personClips } from '../src/inspector/clips';
 import type { EnemyKind } from '../src/models/characters';
+import { PEOPLE, type PersonId } from '../src/models/people';
 
 const KINDS: EnemyKind[] = ['grunt', 'archer', 'brute', 'warden'];
 
@@ -43,5 +44,29 @@ describe('inspector clips', () => {
     const out: MutablePose = {};
     const phases = Array.from({ length: 100 }, (_, i) => chop.sample((i / 100) * chop.duration, out));
     for (const f of phases) expect(f.telegraph > 0).toBe(f.phase === 'windup' || f.phase === 'active');
+  });
+
+  it('play the same animations on bandits, bar rising from the ground', () => {
+    for (const kind of ['grunt', 'archer', 'brute'] as const) {
+      const undead = clipsFor(kind).map((c) => c.name);
+      expect(clipsFor(kind, 'bandit').map((c) => c.name)).toEqual(undead.filter((n) => n !== 'rise'));
+    }
+  });
+
+  it('show friendly characters standing at ease, and Hale waving', () => {
+    for (const id of Object.keys(PEOPLE) as PersonId[]) {
+      const names = personClips(id).map((c) => c.name);
+      expect(names).toEqual(id === 'hale' ? ['stand', 'wave'] : ['stand']);
+    }
+  });
+
+  it('bring Hale’s hand up to wave and back down to rest on their sword', () => {
+    const wave = personClips('hale').find((c) => c.name === 'wave')!;
+    const out: MutablePose = {};
+    const armUp = (t: number) => -(wave.sample(t, out).pose.upperArmR?.[2] ?? 0);
+    expect(armUp(0)).toBeLessThan(0.2);
+    expect(armUp(wave.duration / 3)).toBeGreaterThan(2);
+    expect(wave.sample(wave.duration - 0.01, out).pose.upperArmL).toEqual(PEOPLE.hale.stand.upperArmL);
+    expect(armUp(wave.duration - 0.01)).toBeLessThan(0.2);
   });
 });

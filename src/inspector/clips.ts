@@ -1,12 +1,15 @@
 import { type AttackConfig, CONFIG, type EnemyConfig } from '../config';
 import { SUMMON_ATTACK } from '../enemies/kinds';
 import { ATTACK_POSES, GUARD, type GuardSide, IDLE, KNEEL, KNEEL_DROP, RISE, STAGGER, walkOffsets } from '../enemies/poses';
-import { type EnemyKind, PROPORTIONS } from '../models/characters';
-import { BONES, blendPoses, type Pose } from '../models/rig';
+import { type EnemyKind, type Family, proportionsOf } from '../models/characters';
+import { PEOPLE, type PersonId } from '../models/people';
+import { BONES, blendPoses, type Pose, type Proportions } from '../models/rig';
+import { BREATH_PERIOD, friendlyPose } from '../people/poses';
 
 // The inspector's animations: every pose the game plays for a kind, as a
 // looping clip with the game's own timings and easing (see Enemy.updateAttack),
-// so what loops here is what swings at the player in a fight.
+// so what loops here is what swings at the player in a fight. Friendly
+// characters loop what they do in Oakvale (people/poses.ts).
 
 export type MutablePose = Record<string, [number, number, number]>;
 
@@ -50,8 +53,7 @@ function idleClip(kind: EnemyKind): Clip {
   };
 }
 
-function walkClip(kind: EnemyKind): Clip {
-  const p = PROPORTIONS[kind];
+function walkClip(kind: EnemyKind, p: Proportions): Clip {
   const heightScale = p.hipY / 0.92;
   // Full-speed walk, phase rate as Enemy.update drives it.
   const rate = 7 * (CONFIG.enemies[kind].speed / Math.max(0.8, heightScale));
@@ -111,11 +113,11 @@ export function attackClip(kind: EnemyKind, attack: AttackConfig, name: string =
 }
 
 /** Idle → pose → hold → idle, for the reaction poses the game eases into. */
-function holdClip(kind: EnemyKind, name: string, pose: Pose, hold: number, hipDrop = 0): Clip {
+function holdClip(kind: EnemyKind, name: string, pose: Pose, hold: number, hipDrop = 0, p?: Proportions): Clip {
   const idle = IDLE[kind];
   const IN = 0.3;
   const OUT = 0.5;
-  const drop = hipDrop * PROPORTIONS[kind].hipY;
+  const drop = hipDrop * (p?.hipY ?? 0);
   return {
     name,
     duration: REST + IN + hold + OUT + REST,
@@ -131,10 +133,11 @@ function holdClip(kind: EnemyKind, name: string, pose: Pose, hold: number, hipDr
   };
 }
 
-/** Every animation the game plays for this kind, in a stable order. */
-export function clipsFor(kind: EnemyKind): Clip[] {
+/** Every animation the game plays for this kind in this family's body, in a stable order. */
+export function clipsFor(kind: EnemyKind, family: Family = 'undead'): Clip[] {
   const def: EnemyConfig = CONFIG.enemies[kind];
-  const clips: Clip[] = [idleClip(kind), walkClip(kind)];
+  const p = proportionsOf(kind, family);
+  const clips: Clip[] = [idleClip(kind), walkClip(kind, p)];
   // One clip per distinct attack pose; the first config entry supplies the timings.
   const seen = new Set<string>();
   for (const attack of def.attacks) {
@@ -147,7 +150,29 @@ export function clipsFor(kind: EnemyKind): Clip[] {
     for (const side of ['high', 'left', 'right', 'low'] as GuardSide[]) clips.push(holdClip(kind, `guard ${side}`, GUARD[side], def.guard.hold[1]));
   }
   clips.push(holdClip(kind, 'stagger', STAGGER, def.staggerTime * 0.6));
-  if (kind === 'warden') clips.push(holdClip(kind, 'kneel', KNEEL, CONFIG.warden.kneelTime, KNEEL_DROP));
-  clips.push(holdClip(kind, 'rise', RISE, 0.8));
+  if (kind === 'warden') clips.push(holdClip(kind, 'kneel', KNEEL, CONFIG.warden.kneelTime, KNEEL_DROP, p));
+  // Only the dead claw up out of the ground.
+  if (family === 'undead') clips.push(holdClip(kind, 'rise', RISE, 0.8));
+  return clips;
+}
+
+/** A friendly character's animations: standing at ease, and Hale's wave as you walk up. */
+export function personClips(id: PersonId): Clip[] {
+  const { stand } = PEOPLE[id];
+  const clips: Clip[] = [
+    { name: 'stand', duration: BREATH_PERIOD, sample: (t, out) => ({ pose: copyInto(friendlyPose(stand, t), out), hipY: 0, phase: 'stand', telegraph: 0 }) },
+  ];
+  if (id === 'hale') {
+    const duration = CONFIG.hale.waveTime;
+    clips.push({
+      name: 'wave',
+      duration: duration + REST,
+      sample: (t, out) => {
+        const waving = t < duration;
+        const pose = friendlyPose(stand, t, waving ? { t, duration } : undefined);
+        return { pose: copyInto(pose, out), hipY: 0, phase: waving ? 'wave' : 'rest', telegraph: 0 };
+      },
+    });
+  }
   return clips;
 }

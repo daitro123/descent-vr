@@ -66,6 +66,7 @@ export interface EnemyConfig {
   exposedTime: number; // bonus-damage window after a parry, bash or stuck weapon
   critMultiplier: number; // head hits
   orbChance: number;
+  /** How its undead die: a skeleton shatters into its bones, the brute topples. Bandits always topple. */
   death: 'shatter' | 'topple';
   attacks: readonly AttackConfig[];
   /** Kinds without one never block. */

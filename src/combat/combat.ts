@@ -37,6 +37,8 @@ const _capB = new Vector3();
 const _push = new Vector3();
 const _feet = new Vector3();
 const _vel = new Vector3();
+/** What flies from a bandit when a blow lands. */
+const HUMAN_BLOOD = 0x7a1812;
 const _to = new Vector3();
 const _p = new Vector3();
 const _a = new Vector3();
@@ -232,10 +234,11 @@ export class Combat implements ArrowResolver {
     this.fx.text.spawn('Evade', at.clone().setY(at.y + 0.2), { color: '#c0c0c0', scale: 0.16 });
   }
 
-  /** Bone chips from skeletons, dark ichor from the brute; sparks on crits. */
+  /** Red from bandits, dark ichor from the undead brute, bone chips from skeletons; sparks on crits. */
   private impactFx(enemy: Enemy, at: Vector3, dir: Vector3, bright: boolean): void {
     _vel.copy(dir).normalize();
-    if (enemy.kind === 'brute') this.fx.particles.burst('blood', at, 10, _vel);
+    if (enemy.family === 'bandit') this.fx.particles.burst('blood', at, 8, _vel, HUMAN_BLOOD);
+    else if (enemy.kind === 'brute') this.fx.particles.burst('blood', at, 10, _vel);
     else this.fx.particles.burst('bone', at, 6, _vel);
     if (bright) this.fx.particles.burst('sparks', at, 14, _vel);
   }
@@ -244,8 +247,10 @@ export class Combat implements ArrowResolver {
     combatStats.kills++;
     enemy.capsule(_a, _b);
     _a.lerp(_b, 0.5);
-    sfx.death(_a, enemy.kind === 'warden' || enemy.kind === 'brute');
-    if (enemy.kind === 'brute') this.fx.particles.burst('blood', _a, 24);
+    const bandit = enemy.family === 'bandit';
+    sfx.death(_a, enemy.kind === 'warden' || enemy.kind === 'brute', !bandit);
+    if (bandit) this.fx.particles.burst('blood', _a, 12, undefined, HUMAN_BLOOD);
+    else if (enemy.kind === 'brute') this.fx.particles.burst('blood', _a, 24);
     else this.fx.particles.burst('bone', _a, enemy.kind === 'warden' ? 40 : 14);
     if (enemy.kind === 'warden') {
       this.fx.particles.burst('magic', _a, 60);

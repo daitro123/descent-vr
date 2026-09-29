@@ -260,6 +260,8 @@ function stab(at: Vector3, hand = new Vector3(0.25, 1.15, DIST)): [PlayerSword, 
 
 describe.each([
   ['grunt', () => new TestGrunt('grunt', 0, 0)],
+  ['bandit thug with a sword', () => new TestGrunt('grunt', 0, 0, { family: 'bandit' })],
+  ['bandit thug with a hatchet', () => new TestGrunt('grunt', 0, 0, { family: 'bandit', variant: 1 })],
   ['warden', () => new TestWarden('warden', 0, 0)],
 ] as const)('%s guarding', (_name, make) => {
   /** Guard `side`, give the pose time to come up, and hold still. */
@@ -335,7 +337,7 @@ describe.each([
 });
 
 describe('the duelist (?duel)', () => {
-  const make = () => new TestGrunt('grunt', 0, 0, 0, DUELIST);
+  const make = () => new TestGrunt('grunt', 0, 0, { def: DUELIST });
 
   it('reads about nine swings in ten', () => {
     // Evenly spread rolls in place of Math.random, so the count is repeatable.

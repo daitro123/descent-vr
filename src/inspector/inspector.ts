@@ -16,30 +16,41 @@ import {
   Vector3,
   type WebGLRenderer,
 } from 'three';
-import { buildCharacter, type EnemyKind, type WeaponSpec } from '../models/characters';
+import { buildCharacter, type EnemyKind, type Family, type WeaponSpec } from '../models/characters';
 import { createModelMaterial, type ModelMaterial } from '../models/materials';
+import { buildPerson, PEOPLE, type PersonId } from '../models/people';
 import type { Rig } from '../models/rig';
 import { XRInput } from '../player/input';
 import { TextPanel } from '../ui/panel';
-import { type Clip, clipsFor, type MutablePose } from './clips';
+import { type Clip, clipsFor, type MutablePose, personClips } from './clips';
 
-// `?inspect`: a turntable for the bestiary. One enemy at a time on a plinth in
+// `?inspect`: a turntable for every character. One at a time on a plinth in
 // front of you, looping any of its animations with the game's timings, with a
 // metre ruler beside it and optional guides (weapon segment, arrow line).
 // Works in the headset and on the desktop page.
 
-export interface InspectorEntry {
-  kind: EnemyKind;
-  variant: number;
-  label: string;
-}
+export type InspectorEntry =
+  /** An enemy: its behaviour, its family's body, and which of its looks. */
+  | { kind: EnemyKind; family: Family; variant: number; label: string }
+  /** A friendly character. */
+  | { person: PersonId; label: string };
 
-/** Every model the game builds: grunts come in six helmet/cloth/weapon combos. */
+const VARIANTS = [0, 1, 2, 3, 4, 5];
+
+/**
+ * Every model the game builds: the undead (grunts come in six helmet, cloth
+ * and weapon combos), the bandits (thugs in six looks and weapons), then
+ * Marshal Hale and the villagers.
+ */
 export const ENTRIES: InspectorEntry[] = [
-  ...[0, 1, 2, 3, 4, 5].map((v) => ({ kind: 'grunt' as const, variant: v, label: `Grunt v${v}` })),
-  { kind: 'archer', variant: 0, label: 'Archer' },
-  { kind: 'brute', variant: 0, label: 'Brute' },
-  { kind: 'warden', variant: 0, label: 'Bone Warden' },
+  ...VARIANTS.map((v) => ({ kind: 'grunt' as const, family: 'undead' as const, variant: v, label: `Grunt v${v}` })),
+  { kind: 'archer', family: 'undead', variant: 0, label: 'Archer' },
+  { kind: 'brute', family: 'undead', variant: 0, label: 'Brute' },
+  { kind: 'warden', family: 'undead', variant: 0, label: 'Bone Warden' },
+  ...VARIANTS.map((v) => ({ kind: 'grunt' as const, family: 'bandit' as const, variant: v, label: `Bandit thug v${v}` })),
+  { kind: 'archer', family: 'bandit', variant: 0, label: 'Bandit archer' },
+  { kind: 'brute', family: 'bandit', variant: 0, label: 'Bandit leader' },
+  ...(Object.keys(PEOPLE) as PersonId[]).map((id) => ({ person: id, label: PEOPLE[id].label })),
 ];
 
 export const SPEEDS = [1, 0.5, 0.25, 0.1];
@@ -56,7 +67,8 @@ const _b = new Vector3();
 
 interface Built {
   rig: Rig;
-  weapon: WeaponSpec;
+  /** What it strikes with; friendly characters strike with nothing. */
+  weapon: WeaponSpec | null;
   material: ModelMaterial;
   clips: Clip[];
 }
@@ -133,8 +145,11 @@ export class Inspector {
     if (!b) {
       const e = ENTRIES[index];
       const material = createModelMaterial();
-      const { rig, weapon } = buildCharacter(e.kind, { material, variant: e.variant });
-      b = { rig, weapon, material, clips: clipsFor(e.kind) };
+      if ('person' in e) b = { rig: buildPerson(e.person, material), weapon: null, material, clips: personClips(e.person) };
+      else {
+        const { rig, weapon } = buildCharacter(e.kind, { material, family: e.family, variant: e.variant });
+        b = { rig, weapon, material, clips: clipsFor(e.kind, e.family) };
+      }
       this.built.set(index, b);
     }
     return b;
@@ -278,9 +293,12 @@ export class Inspector {
     if (!this.showGuides) return;
     const bones = b.rig.bones;
     const w = b.weapon;
-    _a.set(...w.base).applyMatrix4(bones[w.bone].matrixWorld);
-    _b.set(...w.tip).applyMatrix4(bones[w.bone].matrixWorld);
-    setSegment(this.weaponLine, _a, _b);
+    this.weaponLine.visible = w !== null;
+    if (w) {
+      _a.set(...w.base).applyMatrix4(bones[w.bone].matrixWorld);
+      _b.set(...w.tip).applyMatrix4(bones[w.bone].matrixWorld);
+      setSegment(this.weaponLine, _a, _b);
+    }
     // Where a nocked arrow points: string hand through bow hand (Enemy.nock), 8 m on.
     const shot = clip.attack?.kind === 'shot';
     this.arrowLine.visible = shot;
@@ -297,8 +315,9 @@ export class Inspector {
     const a = clip.attack;
     const timing = a ? `wind ${a.windup}s  swing ${a.active}s  recover ${a.recover}s` : '';
     const height = b.rig.proportions.hipY / 0.92;
+    const tris = b.rig.mesh.geometry.getAttribute('position').count / 3;
     return [
-      `${e.label.toUpperCase()}   ${this.entry + 1}/${ENTRIES.length}   ×${height.toFixed(2)} height`,
+      `${e.label.toUpperCase()}   ${this.entry + 1}/${ENTRIES.length}   ×${height.toFixed(2)} height   ${tris} tris`,
       `${clip.name}   ${this.clip + 1}/${b.clips.length}   ${this.phase}`,
       `${this.time.toFixed(2)} / ${clip.duration.toFixed(2)} s   ${timing}`,
       `${this.playing ? 'playing' : 'PAUSED'}  ${SPEEDS[this.speed]}x   scale ${this.scaled.scale.x.toFixed(2)}   guides ${this.showGuides ? 'on' : 'off'}`,
