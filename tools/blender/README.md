@@ -1,12 +1,13 @@
 # Blender low-poly experiment
 
-One human, one skeleton and one oak modelled in Blender 5.2 by script, to see
+Two humans, one skeleton and one oak modelled in Blender 5.2 by script, to see
 whether Blender-made models can look better than the code-built ones and still
 fit the Quest 3 browser budget. See them beside today's models at `?blender`.
 
 | Model | Today (code) | Blender | File (gzip) |
 | --- | --- | --- | --- |
 | Human | Farmer, 704 tris | 1,320 tris | 127 KB (≈32 KB) |
+| Human, detailed (Warcraft Classic style) | Farmer, 704 tris | 2,130 tris, smooth-shaded | 248 KB (≈61 KB) |
 | Skeleton | Grunt v0, 1,048 tris | 1,464 tris | 164 KB (≈33 KB) |
 | Oak | 128 tris | 320 tris (far LOD 62) | 21 KB (≈9 KB), LOD 3 KB |
 
@@ -35,4 +36,4 @@ tweak by hand. The .glb files land in `public/models/blender/`.
 
 - `lowpoly.py`: helpers (skin-modifier bodies, lathe rings, tubes, face
   painting, the rig, AO bake, glTF export).
-- `human.py`, `skeleton.py`, `tree.py`: the three models.
+- `human.py`, `hero.py` (the detailed human), `skeleton.py`, `tree.py`: the models.

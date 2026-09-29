@@ -26,10 +26,12 @@ import { XRInput } from '../player/input';
 import { TextPanel } from '../ui/panel';
 
 // `?blender`: the Blender experiment beside what the game builds today. The
-// farmer and a Blender villager, an undead grunt and a Blender skeleton, both
-// looping the same animation from the game's poses, and the forest oak beside
-// a Blender oak and its far LOD. Everything uses the game's own material, so
-// only the modelling differs. The .glb files come from tools/blender/.
+// farmer beside a plain Blender villager and a more detailed, Warcraft Classic
+// style militiaman; an undead grunt beside a Blender skeleton, all looping the
+// same animation from the game's poses; and the forest oak beside a Blender oak
+// and its far LOD. Everything uses the game's own material, so only the
+// modelling differs (the detailed human is smooth-shaded). The .glb files come
+// from tools/blender/.
 
 export interface Posable {
   readonly object: Object3D;
@@ -190,18 +192,24 @@ export class BlenderCompare {
   }
 
   private async build(): Promise<void> {
-    const [human, skeleton, oak, oakLod] = await Promise.all(['human', 'skeleton', 'oak', 'oak_lod'].map(loadGlb));
+    const [human, hero, skeleton, oak, oakLod] = await Promise.all(['human', 'human_hd', 'skeleton', 'oak', 'oak_lod'].map(loadGlb));
     const kb = (b: number) => `${(b / 1024).toFixed(0)} KB glb`;
 
-    // Humans: the farmer (code) and the Blender villager, walking like bandits do.
+    // Humans: the farmer (code), the Blender villager and the detailed militiaman, walking like bandits do.
     const banditClips = clipsFor('grunt', 'bandit');
     const farmerMat = createModelMaterial();
     const farmer = new CodeRig(buildPerson('farmer', farmerMat), farmerMat);
     const humanMat = createModelMaterial();
     adoptGameMaterial(human.mesh, humanMat);
     const villager = new GlbRig(human.root, human.mesh as SkinnedMesh, humanMat);
-    this.stand(farmer, banditClips, [-2.1, STAGE_Z], ['TODAY: FARMER', `${farmer.triangles} tris`, 'built in code at load']);
-    this.stand(villager, banditClips, [-1.15, STAGE_Z], ['BLENDER: HUMAN', `${villager.triangles} tris`, kb(human.bytes)]);
+    // The detailed one keeps Blender's smooth normals, as Warcraft's models were smooth-shaded.
+    const heroMat = createModelMaterial();
+    heroMat.flatShading = false;
+    adoptGameMaterial(hero.mesh, heroMat);
+    const militia = new GlbRig(hero.root, hero.mesh as SkinnedMesh, heroMat);
+    this.stand(farmer, banditClips, [-2.75, STAGE_Z], ['TODAY: FARMER', `${farmer.triangles} tris`, 'built in code at load']);
+    this.stand(villager, banditClips, [-1.85, STAGE_Z], ['BLENDER: HUMAN', `${villager.triangles} tris`, kb(human.bytes)]);
+    this.stand(militia, banditClips, [-0.95, STAGE_Z], ['BLENDER: DETAILED', `${militia.triangles} tris, smooth`, kb(hero.bytes)]);
 
     // Skeletons: grunt v0 (code) and the Blender grunt, same clips.
     const undeadClips = clipsFor('grunt', 'undead');

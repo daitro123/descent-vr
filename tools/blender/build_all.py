@@ -1,19 +1,19 @@
-# Builds the three Blender low-poly models and exports them to
-# public/models/blender/ as .glb (plus the oak's far LOD).
+# Builds the Blender low-poly models and exports them to public/models/blender/
+# as .glb: the plain human, the detailed (Warcraft Classic style) human, the
+# skeleton, and the oak with its far LOD.
 #
 #   Through the Blender Lab MCP add-on: exec this file with HERE set to this folder.
 #   Headless:  blender -b -P tools/blender/build_all.py
 #
-# Each model gets its own scene in the open file ("Descent Human",
-# "Descent Skeleton", "Descent Oak"), so they can be inspected and tweaked by
-# hand in Blender afterwards.
+# In a running Blender each model gets its own scene in the open file, so they
+# can be inspected and tweaked by hand afterwards.
 
 import os
 
 HERE = globals().get('HERE') or os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, '..', '..', 'public', 'models', 'blender')
 ns = globals()
-for f in ('lowpoly.py', 'human.py', 'skeleton.py', 'tree.py'):
+for f in ('lowpoly.py', 'human.py', 'hero.py', 'skeleton.py', 'tree.py'):
     exec(open(os.path.join(HERE, f), encoding='utf-8').read(), ns)
 os.makedirs(OUT, exist_ok=True)
 
@@ -31,6 +31,12 @@ human, human_rig = build_human(sc)
 drop_fx(human)
 export_glb(sc, [human, human_rig], os.path.join(OUT, 'human.glb'))
 built['human'] = tris(human)
+
+sc = fresh_scene('Descent Human Detailed')
+hero, hero_rig = build_hero(sc)
+drop_fx(hero)
+export_glb(sc, [hero, hero_rig], os.path.join(OUT, 'human_hd.glb'), normals=True)
+built['human_hd'] = tris(hero)
 
 sc = fresh_scene('Descent Skeleton')
 skel, skel_rig = build_skeleton(sc)

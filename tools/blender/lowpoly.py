@@ -503,7 +503,7 @@ def limit_weights(ob, limit=4):
 # ---------------------------------------------------------------- output
 
 
-def export_glb(sc, obs, path):
+def export_glb(sc, obs, path, normals=False):
     vl = sc.view_layers[0]
     for o in sc.objects:
         o.select_set(o in obs, view_layer=vl)
@@ -515,7 +515,7 @@ def export_glb(sc, obs, path):
             use_selection=True,
             export_yup=True,
             export_apply=False,
-            export_normals=False,
+            export_normals=normals,
             export_texcoords=False,
             export_vertex_color='ACTIVE',
             export_all_vertex_colors=False,
