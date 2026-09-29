@@ -7,7 +7,7 @@
 // 1. The model inspector (`?inspect`) lists Hale, the villagers, six thugs,
 //    the archer and the leader. Each plays every one of its animations (the
 //    bandits' behaviour's, bar rising from the ground; Hale's stand and wave;
-//    the villagers' stand) with every bone in place, and each is one body under
+//    the villagers' stand and work) with every bone in place, and each is one body under
 //    900 triangles. Screenshots of each, and of everyone in a row beside two
 //    skeletons.
 // 2. In the Adventure, Hale at the crossroads is the real Hale (the human
@@ -86,7 +86,7 @@ const HUMANS = ['Bandit thug v0', 'Bandit thug v1', 'Bandit thug v2', 'Bandit th
     const kind = Object.entries(behaviour).find(([k]) => label.toLowerCase().includes(k))?.[1];
     const clipsOk = kind
       ? ['idle', 'walk', ...want[kind], 'stagger'].every((c) => r.clips.includes(c)) && !r.clips.includes('rise')
-      : JSON.stringify(r.clips) === JSON.stringify(label === 'Marshal Hale' ? ['stand', 'wave'] : ['stand']);
+      : JSON.stringify(r.clips) === JSON.stringify(label === 'Marshal Hale' ? ['stand', 'wave'] : ['stand', 'work']);
     check(clipsOk && r.placed, `${label} plays all ${r.clips.length} animations, every bone in place (${r.clips.join(', ')})`);
     check(r.meshes && r.triangles < 900, `${label} is one body of ${r.triangles} triangles`);
   }

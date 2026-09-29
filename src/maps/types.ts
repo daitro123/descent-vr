@@ -1,7 +1,7 @@
 import type { Camera, Object3D, Vector3 } from 'three';
 import type { Role } from '../adventureState';
 import type { RoadPoint } from '../enemies/patrol';
-import type { Item } from '../quests';
+import type { Item, VillagerId } from '../quests';
 import type { EnemyKind, Family } from '../models/characters';
 import type { Atmosphere } from '../world/atmosphere';
 import type { Interior as InteriorId } from '../save/record';
@@ -35,6 +35,14 @@ export interface Spot {
   readonly x: number;
   readonly z: number;
   readonly yaw: number;
+}
+
+/** Where a villager works (yaw as a model turns: 0 faces +Z), and the building they're in, if any. */
+export interface VillagerSpot extends Spot {
+  readonly id: VillagerId;
+  readonly interior: InteriorId | null;
+  /** How far round to their left (rad) they turn to their work's other place: the smith's bellows. */
+  readonly turn: number;
 }
 
 /** Where you wake after a death, and the building it's in, if any. */
@@ -110,6 +118,8 @@ export interface Zone extends MapBase {
   readonly mine: Mine | null;
   /** Where Marshal Hale, the quest giver, stands (yaw as a model turns: 0 faces +Z). */
   readonly hale: Spot;
+  /** Where the innkeeper, the smith and the farmer work. */
+  readonly villagers: readonly VillagerSpot[];
   /** What lies about to be picked up by hand, shown while the adventure state says it lies there. */
   readonly pickups: readonly Pickup[];
 }

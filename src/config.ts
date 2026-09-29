@@ -321,6 +321,36 @@ export const CONFIG = {
     marker: 0.5, // m over their head the "!" or "?" floats
   },
 
+  // The village's people at work (people/villagers.ts, people/work.ts): the
+  // innkeeper behind the bar, the smith at the anvil, the farmer by the well.
+  villagers: {
+    radius: 0.3, // m round each: they're solid, so you can't walk through them
+    notice: 4, // m: they turn their head to follow you this close, and stop work while you're there
+    look: { rate: 4, head: 1.1, chest: 0.35 }, // per s the head eases round; rad the head turns at most, and the chest with it beyond that
+    attend: 1.5, // per s: how fast they stop work as you come, and go back to it as you leave
+    // A bark: a short line on a small panel over their head, turned to you.
+    bark: {
+      within: 4, // m: it shows as you come this close…
+      time: 4, // s: …for this long…
+      rearm: 10, // m: …and not again until you've been this far away
+      most: 2, // barks showing at once, at most
+      over: 0.6, // m over the middle of their head, to the panel's middle (clear of the farmer's hat and pitchfork)
+    },
+    // The smith's loop: bursts of blows, turning the piece between them, and the bellows now and then.
+    smith: {
+      bursts: [4, 3, 5], // blows in each burst, the loop round
+      blow: 0.8, // s from one blow to the next
+      turnPiece: 1.3, // s turning the piece over between bursts
+      face: 0.8, // s turning to the bellows after the last burst, and back
+      pumps: 3, // pulls on the bellows' handle…
+      pump: 1.2, // …each this long
+    },
+    // The innkeeper's loop: wiping the bar, polishing a tankard, setting it down and picking up another.
+    innkeeper: { wipe: 5, polish: 5, setDown: 1.4, pickUp: 1.6, rubs: 1.6 }, // s each; rubs per s of the rag
+    // The farmer's loop: leaning on the pitchfork, shifting their weight, shading their eyes to look towards the farm.
+    farmer: { lean: 4, shift: 1.2, look: 3, lift: 0.8 }, // s each: a lean before each shift of weight, the look after every second one, the hand going up and down
+  },
+
   // Talking to Hale on a board that unfolds beside them: the talk prototype's
   // variant A (in history at merge 19ce545).
   talk: {

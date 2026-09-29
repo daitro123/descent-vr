@@ -53,10 +53,10 @@ describe('inspector clips', () => {
     }
   });
 
-  it('show friendly characters standing at ease, and Hale waving', () => {
+  it('show friendly characters standing at ease, Hale waving and the villagers at work', () => {
     for (const id of Object.keys(PEOPLE) as PersonId[]) {
       const names = personClips(id).map((c) => c.name);
-      expect(names).toEqual(id === 'hale' ? ['stand', 'wave'] : ['stand']);
+      expect(names).toEqual(id === 'hale' ? ['stand', 'wave'] : ['stand', 'work']);
     }
   });
 

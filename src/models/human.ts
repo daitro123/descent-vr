@@ -41,6 +41,7 @@ export const HUE = {
   strawDark: 0xa88838,
   mail: 0x80848c,
   bowString: 0xd8d0b8,
+  hotIron: 0xff7a2a,
 } as const;
 
 export type BuildName = 'average' | 'stout' | 'broad' | 'big';
