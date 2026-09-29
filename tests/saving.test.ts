@@ -236,6 +236,13 @@ describe('the in-memory store', () => {
     expect(readSave(stored({ ...record, interior: 'cellar' }))).toEqual({ kind: 'unreadable' });
   });
 
+  it('round-trips a save made inside the house by the well, with the house as its interior', async () => {
+    const record = saveRecord(new AdventureState().snapshot(), { x: -12.4, z: -11.6, yaw: 0.9, interior: 'house' }, 99);
+    const store = new MemoryStore();
+    await store.write(record);
+    expect(readSave(await store.read())).toEqual({ kind: 'saved', record });
+  });
+
   it('keeps what was written, not the object it was given', async () => {
     const record = recordOf(new AdventureState().snapshot());
     const store = new MemoryStore();

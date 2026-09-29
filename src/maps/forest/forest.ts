@@ -1,10 +1,13 @@
 import { type Camera, Group, Matrix4, Mesh, Quaternion, Vector3 } from 'three';
 import { ModelBuilder } from '../../models/kit';
 import { sharedModelMaterial } from '../../models/materials';
+import type { Interior as InteriorId } from '../../save/record';
 import type { Atmosphere } from '../../world/atmosphere';
+import type { Interior, InteriorPlan } from '../../world/interiors';
 import { Glows } from '../../world/glows';
 import type { Zone } from '../types';
 import { buildFence, buildField, buildStructure } from './buildings';
+import { buildHouseInterior } from './houseModel';
 import { buildInnInterior } from './innModel';
 import { buildLayout, FOREST } from './layout';
 import { plantPrototypes } from './nature';
@@ -12,6 +15,12 @@ import { LIGHT, SKY } from './palette';
 import { addPaths, addPatches, addTerrain, buildWater, Chunks } from './terrain';
 
 const UP = new Vector3(0, 1, 0);
+
+/** Each interior's meshes, by its id. */
+const INTERIOR_MODELS: Partial<Record<InteriorId, (plan: InteriorPlan) => Interior>> = {
+  inn: buildInnInterior,
+  house: buildHouseInterior,
+};
 
 /**
  * Oakvale's air and light under the World's late-afternoon sun: a pale blue
@@ -102,7 +111,11 @@ export function buildForest(): Zone {
     spawn: layout.spawn,
     camps: layout.camps,
     respawns: layout.respawns,
-    interiors: layout.interiors.map(buildInnInterior),
+    interiors: layout.interiors.map((plan) => {
+      const build = INTERIOR_MODELS[plan.id];
+      if (!build) throw new Error(`No model for the ${plan.id}`);
+      return build(plan);
+    }),
     hale: layout.hale,
     pickups: layout.pickups,
     bounds: { minX: -play, maxX: play, minZ: -play, maxZ: play },

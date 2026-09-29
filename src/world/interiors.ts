@@ -47,8 +47,8 @@ export interface InteriorPlan {
   readonly floor: number;
   /** Floor to ceiling, metres: you're only inside below it (a camera flying over isn't). */
   readonly height: number;
-  /** The doorway, centred on the front: the door's line is at z = footprint.hd in the frame. */
-  readonly door: { readonly width: number };
+  /** The doorway in the front, its middle `x` across it: the door's line is at z = footprint.hd in the frame. */
+  readonly door: { readonly x: number; readonly width: number };
   /** The flames the pool may sit on; the rest are glows. */
   readonly flames: readonly Flame[];
   /** How it looks with the door shut behind you. */

@@ -223,12 +223,12 @@ export class World implements Ground {
     this.time += dt;
     camera.getWorldPosition(_eye);
     for (const h of this.interiors) {
-      const { frame, footprint, floor, height } = h.interior;
+      const { frame, footprint, floor, height, door } = h.interior;
       toFrame(frame, _eye.x, _eye.z, _standing);
       const { x, z } = _standing;
       // A camera flying over a building is nowhere near its door.
       const over = _eye.y > floor + height;
-      _standing.x = over ? Infinity : x;
+      _standing.x = over ? Infinity : x - door.x;
       _standing.within = !over && Math.abs(x) <= footprint.hw && Math.abs(z) <= footprint.hd;
       h.switch.update(dt, _standing);
       this.showSwitch(h);

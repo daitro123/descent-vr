@@ -1,95 +1,33 @@
-import { type BufferGeometry, type Camera, Group, Matrix4, Mesh, Vector3 } from 'three';
-import { CONFIG } from '../../config';
-import { ModelBuilder, type PartOpts } from '../../models/kit';
-import { sharedModelMaterial } from '../../models/materials';
+import type { ModelBuilder, PartOpts } from '../../models/kit';
 import { PAL } from '../../models/palette';
-import { Glows } from '../../world/glows';
 import type { Interior, InteriorPlan } from '../../world/interiors';
 import { INN, innFlames } from './inn';
 import { mulberry32 } from './noise';
-import { BUILD, EARTH } from './palette';
+import { BUILD } from './palette';
+import { buildInterior, fireplaceOn, type Glow, windowIn } from './interiorModel';
 
 // The Golden Tankard's taproom, built in the inn's frame (inn.ts) and placed
 // with it: one mesh for the room, its glows, and the door's two leaves, which
 // hang in the doorway whether you're in or out.
 
-const DAYLIGHT = 0xe4ecf0;
-const FLAME = 0xffb050;
-
 /** The taproom, its glows and the door, for the inn's `plan`. */
 export function buildInnInterior(plan: InteriorPlan): Interior {
-  const { frame } = plan;
-  const place = new Matrix4().makeRotationY(frame.yaw).setPosition(frame.x, frame.y, frame.z);
-  const glows = new Glows();
-  const glow = (x: number, y: number, z: number, size: number) => {
-    const p = new Vector3(x, y, z).applyMatrix4(place);
-    glows.add(p.x, p.y, p.z, size, FLAME);
-  };
-
-  const b = new ModelBuilder(23);
-  buildRoom(b, glow);
-  const geometry = b.build({ ao: { from: INN.floor, to: INN.floor + 1.2, min: 0.65 } });
-  geometry.applyMatrix4(place);
-  const roomMesh = new Mesh(geometry, sharedModelMaterial());
-  roomMesh.name = 'inn-room';
-  const room = new Group();
-  room.name = 'inn-taproom';
-  room.add(roomMesh, glows.mesh);
-  room.visible = false;
-
-  // The door: two leaves hinged at the doorway's sides, swinging in.
   const { width, height } = INN.door;
-  const leaf = buildLeaf(width / 2 - 0.01, height);
-  const hinges = [-1, 1].map((side) => {
-    const hinge = new Group();
-    const mesh = new Mesh(leaf, sharedModelMaterial());
-    mesh.name = 'inn-door';
-    mesh.scale.x = -side; // the left leaf reaches right from its hinge, the right leaf left
-    hinge.add(mesh);
-    const at = new Vector3(side * (width / 2), INN.floor, INN.leaves.z - INN.leaves.thick / 2).applyMatrix4(place);
-    hinge.position.copy(at);
-    return { hinge, side };
+  return buildInterior(plan, {
+    name: 'inn',
+    seed: 23,
+    build: buildTaproom,
+    ao: { from: INN.floor, to: INN.floor + 1.2, min: 0.65 },
+    // Two leaves hinged at the doorway's sides, swinging in.
+    leaves: [
+      { hinge: -width / 2, reach: 1, width: width / 2 },
+      { hinge: width / 2, reach: -1, width: width / 2 },
+    ],
+    door: { floor: INN.floor, z: INN.leaves.z, thick: INN.leaves.thick, height },
   });
-
-  const root = new Group();
-  root.name = 'inn-interior';
-  root.add(room, ...hinges.map((h) => h.hinge));
-  let time = 0;
-  const interior: Interior = {
-    ...plan,
-    root,
-    room,
-    swing(open: number) {
-      // Turning the left leaf (reaching +X) by +a swings it in towards −Z; the right leaf turns the other way.
-      for (const { hinge, side } of hinges) hinge.rotation.y = frame.yaw - side * CONFIG.interiors.angle * open;
-    },
-    update(dt: number, camera: Camera) {
-      time += dt;
-      if (room.visible) glows.update(time, camera);
-    },
-  };
-  interior.swing(0);
-  return interior;
 }
 
-/** One of the door's leaves, from its hinge (at the origin, on the floor) out along +X. */
-function buildLeaf(w: number, h: number): BufferGeometry {
-  const b = new ModelBuilder(7);
-  const t = INN.leaves.thick;
-  const board: PartOpts = { color: BUILD.plank, jitter: 0.12 };
-  const boards = 3;
-  for (let i = 0; i < boards; i++) b.box(w / boards - 0.01, h, t, { ...board, at: [(i + 0.5) * (w / boards), h / 2, 0] });
-  for (const y of [0.35, h - 0.35]) b.box(w - 0.04, 0.12, t + 0.03, { at: [w / 2, y, 0], color: BUILD.timber, jitter: 0.1 });
-  b.bar([0.06, 0.45, 0], [w - 0.08, h - 0.45, 0], 0.1, t + 0.02, { color: BUILD.timber, jitter: 0.1 });
-  for (const y of [0.35, h - 0.35]) b.box(0.4, 0.05, t + 0.05, { at: [0.2, y, 0], color: PAL.ironDark, jitter: 0 });
-  b.box(0.05, 0.14, 0.06, { at: [w - 0.12, h * 0.48, 0.05], color: PAL.ironDark, jitter: 0 });
-  b.box(0.05, 0.14, 0.06, { at: [w - 0.12, h * 0.48, -0.05], color: PAL.ironDark, jitter: 0 });
-  return b.build();
-}
-
-type Glow = (x: number, y: number, z: number, size: number) => void;
-
-function buildRoom(b: ModelBuilder, glow: Glow): void {
+function buildTaproom(b: ModelBuilder, glow: Glow): void {
   const { room, floor, door, leaves, hearth, fireplace, bar, shelves, barrels, tables, table } = INN;
   const W = room.hw;
   const D = room.hd;
@@ -138,21 +76,7 @@ function buildRoom(b: ModelBuilder, glow: Glow): void {
   b.box(2 * W, 0.24, 0.22, { ...timber, at: [0, top - 0.12, 0] });
 
   // Windows: panes glowing with the afternoon outside, where the outside has them.
-  const windowAt = (x: number, z: number, yaw: number) => {
-    const y = 1.9;
-    const rot = [0, yaw, 0] as const;
-    const out = (d: number) => [x + Math.sin(yaw) * d, z + Math.cos(yaw) * d] as const;
-    const [px, pz] = out(0.03);
-    const [fx, fz] = out(0.05);
-    const [sx, sz] = out(0.1);
-    b.box(0.8, 0.9, 0.03, { at: [px, y, pz], rot, color: DAYLIGHT, glow: 0.85, jitter: 0.02 })
-      .box(1.0, 0.1, 0.06, { at: [fx, y + 0.5, fz], rot, color: BUILD.timber })
-      .box(0.1, 1.08, 0.06, { at: [fx + Math.cos(yaw) * 0.45, y, fz - Math.sin(yaw) * 0.45], rot, color: BUILD.timber })
-      .box(0.1, 1.08, 0.06, { at: [fx - Math.cos(yaw) * 0.45, y, fz + Math.sin(yaw) * 0.45], rot, color: BUILD.timber })
-      .box(0.06, 0.9, 0.05, { at: [fx, y, fz], rot, color: BUILD.timber })
-      .box(0.8, 0.06, 0.05, { at: [fx, y, fz], rot, color: BUILD.timber })
-      .box(1.1, 0.07, 0.16, { at: [sx, y - 0.5, sz], rot, color: BUILD.timber });
-  };
+  const windowAt = (x: number, z: number, yaw: number) => windowIn(b, x, 1.9, z, yaw);
   // A window's frame sits proud of the wall into the room: turned to face the room, with `yaw` as a model turns.
   for (const x of [-3.4, 3.4]) windowAt(x, D, Math.PI);
   for (const x of [-2.2, 2.2]) windowAt(x, -D, 0);
@@ -162,9 +86,9 @@ function buildRoom(b: ModelBuilder, glow: Glow): void {
   }
 
   // The big hearth on the right wall, under the larger chimney.
-  fireplaceOn(b, glow, W, hearth.z, hearth.width, hearth.depth, 1.3, true);
+  fireplaceOn(b, glow, { wall: W, z: hearth.z, width: hearth.width, depth: hearth.depth, mouth: 1.3, big: true, floor, top });
   // The small fireplace on the left wall, under the other chimney: its fire is a glow.
-  fireplaceOn(b, glow, -W, fireplace.z, fireplace.width, fireplace.depth, 0.95, false);
+  fireplaceOn(b, glow, { wall: -W, z: fireplace.z, width: fireplace.width, depth: fireplace.depth, mouth: 0.95, big: false, floor, top });
 
   // The bar along the back, its top overhanging towards the room.
   const bx = (bar.x0 + bar.x1) / 2;
@@ -228,38 +152,6 @@ function buildRoom(b: ModelBuilder, glow: Glow): void {
       .box(0.16, 0.22, 0.16, { at: [x, y, z], color: 0xffd080, glow: 1, jitter: 0 })
       .taper(0.26, 0.26, 0.06, 0.06, 0.12, { at: [x, y + 0.15, z], color: PAL.ironDark });
   }
-}
-
-/**
- * A hearth against the side wall at x = `wall` (its sign says which), centred
- * at `z` along it: stone cheeks and a timber mantel round the fire, the
- * chimney breast up to the ceiling above, logs and flames inside.
- */
-function fireplaceOn(b: ModelBuilder, glow: Glow, wall: number, z: number, width: number, depth: number, mouth: number, big: boolean): void {
-  const { floor, room } = INN;
-  const top = floor + room.height;
-  const s = Math.sign(wall);
-  const x = (d: number) => wall - s * d; // `d` in from the wall
-  const cheek = 0.25;
-  const stone: PartOpts = { color: PAL.stoneLight, jitter: 0.12 };
-  b.box(depth + 0.2, 0.08, width + 0.4, { color: PAL.stoneDark, jitter: 0.1, at: [x((depth + 0.2) / 2), floor + 0.04, z] });
-  for (const side of [-1, 1]) b.box(depth, mouth, cheek, { ...stone, at: [x(depth / 2), floor + mouth / 2, z + side * (width / 2 - cheek / 2)] });
-  b.box(depth + 0.08, 0.16, width + 0.12, { color: BUILD.timber, jitter: 0.1, at: [x(depth / 2), floor + mouth + 0.08, z] })
-    .box(depth - 0.15, top - floor - mouth - 0.16, width - 0.1, { ...stone, at: [x((depth - 0.15) / 2), (floor + mouth + 0.16 + top) / 2, z] })
-    .box(0.05, mouth, width - 2 * cheek, { color: 0x1a120c, jitter: 0.05, at: [x(0.03), floor + mouth / 2, z] });
-  // Logs, embers and flames.
-  const inX = x(depth * 0.45);
-  const logs = big ? 3 : 2;
-  for (let i = 0; i < logs; i++) {
-    b.cyl(0.07, 0.07, width - 2 * cheek - 0.15, 6, { at: [inX + (i - (logs - 1) / 2) * 0.12, floor + 0.14 + (i % 2) * 0.08, z], rot: [Math.PI / 2, 0, 0], color: EARTH.barkDark });
-  }
-  b.box(depth * 0.6, 0.05, width - 2 * cheek - 0.1, { at: [inX, floor + 0.1, z], color: PAL.coal, glow: 0.9, jitter: 0.2 });
-  const flames = big ? [-0.3, 0, 0.3] : [-0.12, 0.12];
-  flames.forEach((dz, i) => {
-    const h = (big ? 0.55 : 0.35) * (i % 2 ? 0.75 : 1);
-    b.cone(0.12, h, 5, { at: [inX, floor + 0.2 + h / 2, z + dz], color: PAL.flame, glow: 1, jitter: 0.1 });
-  });
-  glow(inX, floor + (big ? 0.5 : 0.35), z, big ? 1.4 : 0.8);
 }
 
 function tankard(b: ModelBuilder, x: number, y: number, z: number): void {

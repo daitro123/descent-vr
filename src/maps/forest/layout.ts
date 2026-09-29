@@ -2,7 +2,9 @@ import { PatrolWalk } from '../../enemies/patrol';
 import type { InteriorPlan } from '../../world/interiors';
 import type { CampId, CampPlan, Pickup, PostPlan, Respawn, Spot } from '../types';
 import { Colliders } from './colliders';
+import { HOUSE, planHouse } from './house';
 import { INN, planInn } from './inn';
+import { SMITHY, smithyColliders } from './smithy';
 import { fbm, lerp, mulberry32, nearestOnPolyline, type P2, sampleCurve, smoothstep, valueNoise } from './noise';
 
 // Oakvale: a gentle forest valley. A dirt road runs north from the southern
@@ -197,10 +199,12 @@ const STRUCTURES: Spec[] = [
   // Crossroads village.
   // The inn collides through its interior's walls (inn.ts), which leave its doorway open.
   { kind: 'inn', x: 13, z: -15, yaw: facing(13, -15, 2, -3), hw: INN.hw, hd: INN.hd, solid: false },
-  { kind: 'house', x: -13, z: -12, yaw: facing(-13, -12, -2, -3), hw: 3.5, hd: 3 },
+  // The house by the well opens: it collides through its interior's walls (house.ts), which leave its doorway open.
+  { kind: 'house', x: -13, z: -12, yaw: facing(-13, -12, -2, -3), hw: HOUSE.hw, hd: HOUSE.hd, solid: false },
   { kind: 'house', x: -15, z: 15, yaw: facing(-15, 15, -2, 5), hw: 3.2, hd: 2.8, variant: 1 },
   { kind: 'house', x: -24, z: -3, yaw: facing(-24, -3, -10, 3), hw: 3, hd: 2.6, variant: 2 },
-  { kind: 'smithy', x: 13, z: 12, yaw: facing(13, 12, 3, 3), hw: 3.5, hd: 3 },
+  // You walk in under the smithy's roof: it collides by its walls and what stands in it (smithy.ts).
+  { kind: 'smithy', x: 13, z: 12, yaw: facing(13, 12, 3, 3), hw: SMITHY.hw, hd: SMITHY.hd, solid: false },
   { kind: 'well', x: -5.5, z: -5.5, yaw: 0.3, hw: 1, hd: 1 },
   { kind: 'signpost', x: 3.8, z: 4.4, yaw: 0, hw: 0.2, hd: 0.2 },
   { kind: 'lamp', x: 3.4, z: -8, yaw: 0, hw: 0.2, hd: 0.2 },
@@ -384,7 +388,7 @@ export interface ForestLayout {
   spawn: { x: number; z: number; yaw: number };
   /** Where you wake after a death (yaw as `spawn`'s): the village's is by the inn's hearth. */
   respawns: { village: Respawn };
-  /** The buildings you walk into: the inn. */
+  /** The buildings you walk into: the inn, then the house by the well. */
   interiors: InteriorPlan[];
   /** Where Marshal Hale stands, facing the crossroads' centre (yaw as a model turns: 0 faces +Z). */
   hale: Spot;
@@ -478,6 +482,11 @@ export function buildLayout(): ForestLayout {
   // The inn stands on level ground, out to the foot of the steps at its door.
   const innSite = structures.find((s) => s.kind === 'inn')!;
   levelRect(ground, innSite, innSite.y, -INN.hw - 0.3, INN.hw + 0.3, -INN.hd - 0.3, INN.hd + INN.steps.out + 1.5, 2);
+  // So does the house by the well, and the smithy, whose flagstones are flush with the ground.
+  const houseSite = structures.find((s) => s.kind === 'house' && s.variant === 0)!;
+  levelRect(ground, houseSite, houseSite.y, -HOUSE.hw - 0.3, HOUSE.hw + 0.3, -HOUSE.hd - 0.3, HOUSE.hd + HOUSE.steps.out + 1, 2);
+  const smithySite = structures.find((s) => s.kind === 'smithy')!;
+  levelRect(ground, smithySite, smithySite.y, -SMITHY.hw - 1.5, SMITHY.hw + 1.5, -SMITHY.hd - 1.5, SMITHY.hd + 1.5, 2);
 
   // The bridge spans the channel where the main road meets the stream.
   const main = paths[0];
@@ -536,6 +545,15 @@ export function buildLayout(): ForestLayout {
   }
   const stones = structures.find((s) => s.kind === 'stones')!;
   for (const [x, z] of standingStones(stones)) colliders.addCircle({ x, z, r: 0.55 });
+  const smithyShapes = smithyColliders();
+  for (const [lx, lz, hw, hd] of smithyShapes.boxes) {
+    const [x, z] = localToWorld(smithySite, lx, lz);
+    colliders.addBox({ x, z, hw, hd, yaw: smithySite.yaw });
+  }
+  for (const [lx, lz, r] of smithyShapes.circles) {
+    const [x, z] = localToWorld(smithySite, lx, lz);
+    colliders.addCircle({ x, z, r });
+  }
   // Bridge railings, so the arch can't be walked off sideways.
   for (const side of [-1, 1]) {
     const [x, z] = localToWorld(bridge, side * (bridge.hw + 0.12), 0);
@@ -564,7 +582,7 @@ export function buildLayout(): ForestLayout {
   const south = main.line[main.line.findIndex(([, z]) => z < 70)];
 
   const at = (kind: StructureKind) => structures.find((st) => st.kind === kind)!;
-  const interiors = [planInn(at('inn'))];
+  const interiors = [planInn(at('inn')), planHouse(houseSite)];
   // After a death outside the mine you wake by the inn's hearth, inside with the door shut.
   const respawns = { village: { ...interiors[0].respawn!, interior: interiors[0].id } };
   const hale = { ...HALE, yaw: facing(HALE.x, HALE.z, 0, 0) };
