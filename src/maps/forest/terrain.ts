@@ -155,7 +155,7 @@ export class Chunks {
 // ------------------------------------------------------------------ ground
 
 export function addTerrain(chunks: Chunks, layout: ForestLayout): void {
-  const { ground, fields, plants } = layout;
+  const { ground, fields, plants, mine } = layout;
   const { n, cell, half } = ground;
   const { water } = FOREST;
 
@@ -211,7 +211,7 @@ export function addTerrain(chunks: Chunks, layout: ForestLayout): void {
     return color.multiplyScalar((1 - Math.min(0.25, sh * 0.1)) * (0.95 + rand() * 0.1));
   };
 
-  const v = (i: number, j: number) => [-half + i * cell, ground.get(i, j), -half + j * cell];
+  const v = (i: number, j: number): [number, number, number] => [-half + i * cell, ground.get(i, j), -half + j * cell];
   for (let j = 0; j < n - 1; j++) {
     for (let i = 0; i < n - 1; i++) {
       const a = v(i, j);
@@ -228,6 +228,8 @@ export function addTerrain(chunks: Chunks, layout: ForestLayout): void {
         [a, b, c, [ka, kb, kc]],
         [b, d, c, [kb, kd, kc]],
       ] as const) {
+        // Where the mine's adit cuts into the hillside, the ground is left out.
+        if (mine.cuts([p, q, r])) continue;
         const cx = (p[0] + q[0] + r[0]) / 3;
         const cz = (p[2] + q[2] + r[2]) / 3;
         const cy = (p[1] + q[1] + r[1]) / 3;

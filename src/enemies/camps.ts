@@ -41,6 +41,11 @@ export interface You {
   /** Your blade, for enemies' guards; null when untracked or down. */
   sword: PlayerSword | null;
   alive: boolean;
+  /**
+   * In a building or the mine. The camps so far are all outdoors: none notices
+   * you or follows you in, since the ground and walls in there are yours alone.
+   */
+  indoors: boolean;
 }
 
 /** The fight's side of `EnemyContext`: where enemies' blows, slams and arrows land (Combat, in the game). No summons: a camp never holds a boss. */
@@ -107,10 +112,10 @@ export class Camp {
       m.hp = e.hp;
       switch (m.mind) {
         case 'idle':
-          if (you.alive && (hurt || flat(e.position, you.feet) < notice)) this.engage(m);
+          if (you.alive && !you.indoors && (hurt || flat(e.position, you.feet) < notice)) this.engage(m);
           break;
         case 'fight':
-          if (!you.alive || flat(e.position, m.post) > leash) this.sendHome(m);
+          if (!you.alive || you.indoors || flat(e.position, m.post) > leash) this.sendHome(m);
           break;
         case 'home': {
           const d = flat(e.position, m.post);

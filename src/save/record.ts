@@ -10,7 +10,7 @@ import { SWORDS } from '../quests';
 /** The record's version: bump it, and add a migration from the one before, whenever its shape changes. */
 export const SAVE_VERSION = 1;
 
-/** Every building and the mine you can be inside. The inn and the house are built; the mine arrives with its ticket. */
+/** Every building and the mine you can be inside. */
 export const INTERIORS = ['inn', 'house', 'mine'] as const;
 
 /** A building or the mine you're inside. */

@@ -372,6 +372,17 @@ export const CONFIG = {
     angle: 1.6, // rad a door swings in to when open
   },
 
+  // The old mine (world/mine.ts): you're in it once you walk in through its
+  // mouth, and the Interiors switch runs past its adit's bend. From 3.3 m
+  // past the bend on, the mouth can't be seen.
+  mine: {
+    inside: 5.5, // m on past the adit's bend along the route: the sun fades, the mine's light and fog come up, the outdoors is hidden
+    back: 4.5, // m past the bend, walking back: the sun comes back (up before you can see out at a run)
+    near: 12, // m from the mouth's middle: the pool sits on the adit's lanterns
+    fadeIn: 0.5, // s for the sun to fade and the mine's light to take over
+    fadeOut: 0.2, // s for the sun to come back as you walk back to the bend
+  },
+
   save: {
     every: 30, // s of play between writes when nothing else has written (where you stand is kept too)
     openTimeout: 5, // s to wait for the browser's storage to open before playing unsaved
