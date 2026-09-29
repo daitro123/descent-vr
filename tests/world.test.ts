@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
 import { Camps, type You } from '../src/enemies/camps';
 import { buildForest } from '../src/maps/forest/forest';
-import { Hollow } from '../src/maps/forest/hollow';
+import { floorOf, Hollow } from '../src/maps/forest/hollow';
 import { HOUSE } from '../src/maps/forest/house';
 import { INN } from '../src/maps/forest/inn';
 import { MINE } from '../src/maps/forest/mine';
@@ -643,15 +643,24 @@ describe('the old mine', () => {
     const [x, z] = localToWorld(mouth(), lx, lz);
     return new Vector3(x, 0, z);
   };
+  const hollow = new Hollow(MINE.pieces);
+  /** The mine's open space's bounds, in the mouth's frame. */
+  const bounds = {
+    x0: Math.min(...MINE.pieces.map((p) => p.x0)),
+    x1: Math.max(...MINE.pieces.map((p) => p.x1)),
+    z0: Math.min(...MINE.pieces.map((p) => p.z0)),
+    z1: 0,
+  };
   /** Every spot of the mine's open space on a grid `step` m apart, in the mouth's frame, with its part. */
   const spots = (step: number) => {
-    const hollow = new Hollow(MINE.pieces);
     const out: { lx: number; lz: number; part: number }[] = [];
-    for (let lx = -19 + step / 2; lx < 1.75; lx += step) {
-      for (let lz = -35 + step / 2; lz < 0; lz += step) if (hollow.contains(lx, lz)) out.push({ lx, lz, part: hollow.pieceAt(lx, lz).part });
+    for (let lx = bounds.x0 + step / 2; lx < bounds.x1; lx += step) {
+      for (let lz = bounds.z0 + step / 2; lz < 0; lz += step) if (hollow.contains(lx, lz)) out.push({ lx, lz, part: hollow.pieceAt(lx, lz).part });
     }
     return out;
   };
+  /** The route in the mouth's frame, as it runs from the mouth to the hall's gate. */
+  const route = () => MINE.route.map(([x, z]) => [x, z] as const);
   /** Spots across the mouth's line, to see out by. */
   const mouthLine = () => [-1.5, -0.5, 0.5, 1.5].map((lx) => inMine(lx, 0));
 
@@ -698,9 +707,17 @@ describe('the old mine', () => {
       for (let x = p.x0; x <= p.x1; x += 0.5) {
         for (let z = Math.min(p.z1, -2.6); z >= p.z0; z -= 0.5) {
           const at = inMine(x, z);
-          expect(oakvale.heightAt(at.x, at.z), `over (${x}, ${z})`).toBeGreaterThan(mouth().y + p.floor + p.height + 0.5);
+          expect(oakvale.heightAt(at.x, at.z), `over (${x}, ${z})`).toBeGreaterThan(mouth().y + floorOf(p, x, z) + p.height + 0.5);
         }
       }
+    }
+    // It stays under Oakvale's own ground, inside the terrain.
+    for (const [x, z] of [
+      [bounds.x0, bounds.z0],
+      [bounds.x1, bounds.z0],
+    ]) {
+      const at = inMine(x, z);
+      expect(Math.max(Math.abs(at.x), Math.abs(at.z)), `(${x}, ${z})`).toBeLessThan(138);
     }
   });
 
@@ -765,14 +782,18 @@ describe('the old mine', () => {
     w.load(oakvale);
     w.settle('mine');
     const inside = (p: Vector3) => w.mine!.groundAt(p.x, p.z) !== null;
+    const open = (p: Vector3) => {
+      const [lx, lz] = worldToLocal(mouth(), p.x, p.z);
+      return hollow.contains(lx, lz) && inside(p);
+    };
     for (const radius of RADII) {
-      const { seedFree, pockets } = flood(inMine, { x0: -19.5, x1: 2, z0: -35.5, z1: -0.05 }, [0, -1], radius, w, inside);
+      const { seedFree, pockets } = flood(inMine, { x0: bounds.x0 - 0.5, x1: bounds.x1 + 0.5, z0: bounds.z0 - 0.5, z1: -0.05 }, [0, -1], radius, w, open);
       expect(seedFree, `radius ${radius}: inside the mouth is clear`).toBe(true);
       expect(pockets.slice(0, 5), `radius ${radius}`).toEqual([]);
     }
   });
 
-  it('keeps its floors, and the step in from the rail bed, at 1 in 5 or gentler', () => {
+  it('goes about 7 m down over two ramps of about 1 in 5, with no floor steeper, and the step in from the rail bed as gentle', () => {
     const outside = new World();
     outside.load(oakvale);
     const inside = new World();
@@ -785,18 +806,50 @@ describe('the old mine', () => {
     const step = 0.1;
     for (let lx = -1.5; lx <= 1.5; lx += 0.5) for (let lz = 3; lz > -3; lz -= step) expect(Math.abs(floor(lx, lz - step) - floor(lx, lz)), `(${lx}, ${lz})`).toBeLessThanOrEqual(0.2 * step + 1e-9);
     for (const { lx, lz } of spots(0.5)) {
-      expect(Math.abs(floor(lx + 0.5, lz) - floor(lx, lz))).toBeLessThanOrEqual(0.1 + 1e-9);
-      expect(Math.abs(floor(lx, lz + 0.5) - floor(lx, lz))).toBeLessThanOrEqual(0.1 + 1e-9);
+      expect(Math.abs(floor(lx + 0.5, lz) - floor(lx, lz)), `(${lx}, ${lz})`).toBeLessThanOrEqual(0.1 + 1e-9);
+      expect(Math.abs(floor(lx, lz + 0.5) - floor(lx, lz)), `(${lx}, ${lz})`).toBeLessThanOrEqual(0.1 + 1e-9);
     }
+    // Along the route: level to the gallery, down the bandits' ramp to the dig, level across it, down the carved passage to the hall.
+    const along: number[] = [];
+    const pts = route();
+    for (let k = 1; k < pts.length; k++) {
+      const [[ax, az], [bx, bz]] = [pts[k - 1], pts[k]];
+      const n = Math.ceil(Math.hypot(bx - ax, bz - az) / 0.1);
+      for (let i = 0; i < n; i++) along.push(floor(ax + ((bx - ax) * i) / n, Math.min(az + ((bz - az) * i) / n, -0.05)));
+    }
+    along.push(floor(...pts[pts.length - 1]));
+    const [top, bottom] = [along[0], along[along.length - 1]];
+    expect(top - bottom).toBeCloseTo(7, 6);
+    // Two ramps: the floor goes down in two runs, and never steps.
+    let ramps = 0;
+    let falling = false;
+    for (let i = 1; i < along.length; i++) {
+      const drop = along[i - 1] - along[i];
+      expect(drop, `step ${i}`).toBeGreaterThanOrEqual(-1e-9);
+      expect(drop, `step ${i}`).toBeLessThanOrEqual(0.02 + 1e-9);
+      if (drop > 1e-6 && !falling) ramps++;
+      if (drop > 1e-6) falling = true;
+      else if (drop < 1e-9 && Math.abs(along[i] - (top - 4)) < 1e-6) falling = false;
+    }
+    expect(ramps).toBe(2);
+    const steepest = Math.max(...MINE.pieces.map((p) => (p.slope ? Math.abs(p.slope.rise / (p.slope.to - p.slope.from)) : 0)));
+    expect(steepest).toBeGreaterThan(0.18);
+    expect(steepest).toBeLessThanOrEqual(0.2);
   });
 
-  it('gives the World its route: from the mouth through every part, clear of walls and props for every body', () => {
+  it('gives the World its route: one unbroken line of about 100 m from the mouth to the hall\'s gate through every part, on the floor and clear of walls and props for every body', () => {
     const w = new World();
     w.load(oakvale);
     w.settle('mine');
     const { route } = w.mine!;
     expect(route[0].x).toBeCloseTo(mouth().x, 9);
     expect(route[0].z).toBeCloseTo(mouth().z, 9);
+    const gate = inMine(MINE.hall.x, MINE.hall.z + CONFIG.arena.halfSize);
+    expect(route[route.length - 1].x).toBeCloseTo(gate.x, 9);
+    expect(route[route.length - 1].z).toBeCloseTo(gate.z, 9);
+    const length = route.slice(1).reduce((sum, b, i) => sum + Math.hypot(b.x - route[i].x, b.z - route[i].z), 0);
+    expect(length).toBeGreaterThan(95);
+    expect(length).toBeLessThan(130);
     let part = 0;
     for (let i = 1; i < route.length; i++) {
       const a = route[i - 1];
@@ -804,7 +857,10 @@ describe('the old mine', () => {
       const n = Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 0.25);
       for (let k = 0; k <= n; k++) {
         const p = new Vector3(a.x + ((b.x - a.x) * k) / n, 0, a.z + ((b.z - a.z) * k) / n);
-        if (worldToLocal(mouth(), p.x, p.z)[1] >= -0.5) continue;
+        const [lx, lz] = worldToLocal(mouth(), p.x, p.z);
+        if (lz >= -0.5) continue;
+        expect(hollow.contains(lx, lz), `(${lx.toFixed(2)}, ${lz.toFixed(2)}) in the open`).toBe(true);
+        expect(w.heightAt(p.x, p.z)).toBeCloseTo(mouth().y + hollow.floorAt(lx, lz), 9);
         for (const radius of RADII) expect(w.resolve(p.clone(), radius), `(${p.x.toFixed(2)}, ${p.z.toFixed(2)}) radius ${radius}`).toBe(false);
         const at = w.mine!.partAt(p.x, p.z);
         expect(at === part || at === part + 1, `parts in order at (${p.x.toFixed(2)}, ${p.z.toFixed(2)})`).toBe(true);
@@ -832,12 +888,15 @@ describe('the old mine', () => {
     // Along the adit, and not through the rock between the cart hall and the gallery.
     expect(sees(mouthLine()[1].x, mouthLine()[1].z, inMine(0, -9).x, inMine(0, -9).z)).toBe(true);
     expect(sees(inMine(-12, -7).x, inMine(-12, -7).z, inMine(-15.5, -27).x, inMine(-15.5, -27).z)).toBe(false);
-  });
+    // From the antechamber through the gate into the hall, but not from the carved passage.
+    const [hx, hz] = [MINE.hall.x, MINE.hall.z];
+    expect(sees(inMine(hx, -30).x, inMine(hx, -30).z, inMine(hx, hz).x, inMine(hx, hz).z)).toBe(true);
+    expect(sees(inMine(11.5, -40).x, inMine(11.5, -40).z, inMine(hx, hz).x, inMine(hx, hz).z)).toBe(false);
+  }, 60000);
 
   it("swaps to its light past the bend, and brings the sun back before you can see out; only what can be seen is drawn", () => {
     const { w, eye, walk, hold } = walkable();
-    const route = MINE.route.map(([x, z]) => [x, z] as const);
-    const parts = mine().root.children;
+    const drawn = () => mine().drawn;
     const outdoorSun = oakvale.atmosphere.sun.intensity;
     const checkView = () => {
       const seesOut = mouthLine().some((m) => mine().sees(eye.position.x, eye.position.z, m.x, m.z));
@@ -848,7 +907,7 @@ describe('the old mine', () => {
       if (!w.outdoorsShown) expect(seesOut).toBe(false);
       if (w.interior === 'mine') {
         const here = mine().partAt(eye.position.x, eye.position.z);
-        parts.forEach((p, i) => expect(p.visible, `part ${i} from part ${here}`).toBe(Math.abs(i - here) <= 1));
+        drawn().forEach((d, i) => expect(d, `part ${i} from part ${here}`).toBe(Math.abs(i - here) <= 1));
       }
     };
     // From outside only the adit.
@@ -856,8 +915,8 @@ describe('the old mine', () => {
       [0, 12],
       [0, 1],
     ]);
-    expect(parts.map((p) => p.visible)).toEqual([true, false, false]);
-    walk([[0, 1], ...route], CONFIG.player.moveSpeed, checkView);
+    expect(drawn()).toEqual(MINE.parts.map((_, i) => i === 0));
+    walk([[0, 1], ...route()], CONFIG.player.moveSpeed, checkView);
     hold(1);
     expect(w.interior).toBe('mine');
     expect(w.sun.intensity).toBe(0);
@@ -865,8 +924,11 @@ describe('the old mine', () => {
     expect([w.fog.near, w.fog.far]).toEqual([6, 18]);
     expect(oakvale.root.visible).toBe(false);
     expect(w.pool.filter((l) => l.intensity > 0)).toHaveLength(CONFIG.world.pool.size);
+    // In the Warden's hall, 7 m down, among its pillar torches.
+    expect(mine().partAt(eye.position.x, eye.position.z)).toBe(MINE.parts.length - 1);
+    expect(w.heightAt(eye.position.x, eye.position.z)).toBeCloseTo(mouth().y - 7, 9);
     // Back out at a run.
-    walk([...route].reverse(), 3.5, checkView);
+    walk([...route()].reverse(), 3.5, checkView);
     walk([
       [0, 0],
       [0, 6],
@@ -874,7 +936,7 @@ describe('the old mine', () => {
     hold(1);
     expect(w.interior).toBe(null);
     expect(w.sun.intensity).toBe(outdoorSun);
-    expect(parts.map((p) => p.visible)).toEqual([true, false, false]);
+    expect(drawn()).toEqual(MINE.parts.map((_, i) => i === 0));
   });
 
   it('settles in at once for a save made inside it, in the light of where you stood', () => {
@@ -893,6 +955,13 @@ describe('the old mine', () => {
     expect(adit.w.interior).toBe('mine');
     expect(adit.w.sun.intensity).toBe(oakvale.atmosphere.sun.intensity);
     expect(adit.w.heightAt(inMine(0, -4).x, inMine(0, -4).z)).toBe(mouth().y);
+    // Down in the Warden's hall, on its floor.
+    const hall = walkable();
+    hall.w.settle('mine');
+    hall.stand(MINE.hall.x, MINE.hall.z + 3);
+    hall.w.update(1 / 72, hall.eye);
+    expect([hall.w.interior, hall.w.sun.intensity, hall.w.outdoorsShown]).toEqual(['mine', 0, false]);
+    expect(hall.eye.position.y - 1.6).toBeCloseTo(mouth().y - 7, 9);
   });
 
   it("leaves Oakvale's ground out where the adit cuts in, and nothing of Oakvale's pokes into the adit", () => {
@@ -914,15 +983,17 @@ describe('the old mine', () => {
     expect(checked).toBeGreaterThan(1000);
   });
 
-  it('costs a few thousand triangles and two draw calls a part', () => {
-    const parts = mine().root.children;
-    expect(parts).toHaveLength(MINE.parts.length);
-    for (const part of parts) {
-      const meshes = part.children as Mesh[];
-      expect(meshes).toHaveLength(2);
-      const triangles = meshes.filter((m) => !(m as unknown as InstancedMesh).isInstancedMesh).reduce((n, m) => n + m.geometry.getAttribute('position').count / 3, 0);
-      expect(triangles, part.name).toBeGreaterThan(1000);
-      expect(triangles, part.name).toBeLessThan(6000);
-    }
+  it('costs at most a few thousand triangles a part, the whole mine merged to four draw calls, its flames within reach of the pool from every part (the passage has none of its own)', () => {
+    const meshes = mine().root.children as Mesh[];
+    // The rock, timbers and props; the crypt's flagstones; its bricks; the glows.
+    expect(meshes).toHaveLength(4);
+    MINE.parts.forEach((name, i) => {
+      expect(mine().triangles(i), name).toBeGreaterThan(500);
+      expect(mine().triangles(i), name).toBeLessThan(6000);
+    });
+    // The deep workings have the fewest flames: the passage none, the dig its fallen lantern.
+    const parts = mine().flames.map((f) => mine().partAt(f.x, f.z));
+    const count = (part: number) => parts.filter((p) => p === part).length;
+    expect(MINE.parts.map((_, i) => count(i))).toEqual([2, 3, 2, 3, 1, 0, 2, 4]);
   });
 });
