@@ -12,11 +12,9 @@ import { Card, FONT, parchment, wrap } from './card';
 
 const LABEL: Record<Button, string> = { accept: 'Accept', notNow: 'Not now', handIn: 'Hand in', goodbye: 'Goodbye' };
 /** The buttons that move the chain on are green; the ones that only end the talk are brown. */
-const GO: readonly Button[] = ['accept', 'handIn'];
+const MOVES_ON: readonly Button[] = ['accept', 'handIn'];
 /** A button's size, in metres. */
 const KEY = { w: 0.24, h: 0.09, d: 0.04 };
-/** How far outside a button's face still counts as touching it (m): a fist is fat, a tip needn't be exact. */
-const REACH = { side: 0.025, front: 0.03, back: 0.08 };
 const WOOD = 0x3a2716;
 const LIT = 0xf0c060;
 
@@ -146,7 +144,7 @@ export class TalkBoard {
     buttons.forEach((button, i) => {
       const face = new Card(KEY.w, KEY.h, { ppm: 1400 });
       face.paint(button, (c, w, h) => {
-        c.fillStyle = GO.includes(button) ? '#2f6a2a' : '#5a4632';
+        c.fillStyle = MOVES_ON.includes(button) ? '#2f6a2a' : '#5a4632';
         c.fillRect(0, 0, w, h);
         c.fillStyle = '#f4ead0';
         c.font = `bold 40px ${FONT}`;
@@ -198,11 +196,12 @@ export class TalkBoard {
 
 /** Is `at` (world) touching the button's face? */
 function inside(key: Key, at: Vector3): boolean {
+  const reach = CONFIG.talk.reach;
   key.mesh.worldToLocal(_local.copy(at));
   return (
-    Math.abs(_local.x) < KEY.w / 2 + REACH.side &&
-    Math.abs(_local.y) < KEY.h / 2 + REACH.side &&
-    _local.z < KEY.d / 2 + REACH.front &&
-    _local.z > -REACH.back
+    Math.abs(_local.x) < KEY.w / 2 + reach.side &&
+    Math.abs(_local.y) < KEY.h / 2 + reach.side &&
+    _local.z < KEY.d / 2 + reach.front &&
+    _local.z > -reach.back
   );
 }

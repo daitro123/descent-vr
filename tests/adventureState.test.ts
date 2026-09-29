@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { type AdventureEvent, AdventureState, type Effect, enemyNumbers, type Role } from '../src/adventureState';
 import { CONFIG } from '../src/config';
+import type { CampId } from '../src/maps/types';
 
 // The adventure state is the rules of progress with no three.js in it: the
 // Adventure feeds it events and reads its answers and effects. These tests
 // drive it the same way and check what a player would notice: XP, level,
 // health, damage and what they can use.
 
-const kill = (level: number, role: Role = 'ordinary', camp: string | null = 'farm'): AdventureEvent => ({ kind: 'kill', camp, level, role });
+const kill = (level: number, role: Role = 'ordinary', camp: CampId | null = 'farm'): AdventureEvent => ({ kind: 'kill', camp, level, role });
 
 /** The XP one kill pays a new character. */
 function paid(event: AdventureEvent): number {

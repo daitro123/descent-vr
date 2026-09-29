@@ -32,6 +32,12 @@ export interface Spot {
   readonly yaw: number;
 }
 
+/**
+ * Every camp in the zones, by id. The quest chain counts kills by these, so a
+ * camp built under another name would never count (quests.ts).
+ */
+export type CampId = 'farm' | 'lumberCamp' | 'patrol' | 'watchtower' | 'mine';
+
 /** One enemy's place in a camp: what it is, where it waits and which way it faces there. */
 export interface PostPlan {
   /** How it fights: the thug is a grunt, the bandit leader a brute. */
@@ -48,7 +54,7 @@ export interface PostPlan {
 
 /** A group of enemies waiting at one place, pulled a few at a time (enemies/camps.ts). */
 export interface CampPlan {
-  readonly id: string;
+  readonly id: CampId;
   /** Its clearing: a cleared camp refills only while you're well away from it. */
   readonly place: { readonly x: number; readonly z: number; readonly r: number };
   readonly level: number;

@@ -276,6 +276,7 @@ export const CONFIG = {
   },
 
   // Marshal Hale's quest chain (quests.ts): what each quest asks and pays.
+  // Hale's lines name the farm's count ("three"): change them with it.
   quests: {
     raiders: { bandits: 3, xp: 80 }, // Raiders in the Fields: defeat this many of the farm's camp
     lumber: { bandits: 5, xp: 120 }, // The Lumber Camp: this many of the lumber camp's camp, and the leader's orders
@@ -300,6 +301,7 @@ export const CONFIG = {
     facing: 50, // °: …while their head is within this of where you look
     close: 3.6, // m: it folds this far off; once folded it opens again only after you've been this far away
     board: { out: 0.6, side: 0.55, height: 1.2 }, // m from Hale towards you and to your right, and its middle's height
+    reach: { side: 0.025, front: 0.03, back: 0.08 }, // m round a button's face that still touch it: a fist is fat, a tip needn't be exact
     unfold: 0.2, // s it takes to unfold, or fold away
     arming: 0.4, // s after it unfolds before a button takes a press…
     rearm: 0.6, // …and after each press

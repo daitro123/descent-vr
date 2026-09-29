@@ -1,4 +1,4 @@
-import type { CampPlan, PostPlan, Spot } from '../types';
+import type { CampId, CampPlan, PostPlan, Spot } from '../types';
 import { Colliders } from './colliders';
 import { fbm, lerp, mulberry32, nearestOnPolyline, type P2, sampleCurve, smoothstep, valueNoise } from './noise';
 
@@ -63,7 +63,7 @@ const START: P2 = [0.2, 1.5];
  * pull of itself and out of the other's, so you can take them a pair at a time.
  */
 const CAMPS: {
-  id: string;
+  id: CampId;
   clearing: string;
   level: number;
   posts: (Omit<PostPlan, 'yaw'> & { face: P2 })[];

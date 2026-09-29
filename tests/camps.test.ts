@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CONFIG } from '../src/config';
 import { type Camp, type CampHooks, Camps, type You } from '../src/enemies/camps';
 import { mulberry32 } from '../src/maps/forest/noise';
-import type { CampPlan, PostPlan } from '../src/maps/types';
+import type { CampId, CampPlan, PostPlan } from '../src/maps/types';
 import type { Ground } from '../src/world/ground';
 
 // Camps drive real enemies (their rigs, steering and attack timelines)
@@ -29,7 +29,7 @@ const hooks: CampHooks = { sweep: () => null, slam: () => {}, shoot: () => {}, n
 const thug = (x: number, z: number): PostPlan => ({ behaviour: 'grunt', family: 'bandit', x, z, yaw: 0 });
 const archer = (x: number, z: number): PostPlan => ({ behaviour: 'archer', family: 'bandit', x, z, yaw: 0 });
 
-function camp(id: string, posts: PostPlan[], r = 8): CampPlan {
+function camp(id: CampId, posts: PostPlan[], r = 8): CampPlan {
   const x = posts.reduce((s, p) => s + p.x, 0) / posts.length;
   const z = posts.reduce((s, p) => s + p.z, 0) / posts.length;
   return { id, place: { x, z, r }, level: 1, posts };
@@ -94,7 +94,7 @@ describe('pulling', () => {
   });
 
   it("brings only its own camp, however close another camp's members stand", () => {
-    const { camps, step } = world([camp('farm', [thug(0, 0), thug(0, 6)]), camp('mill', [thug(4, 0)])], 0, 60);
+    const { camps, step } = world([camp('farm', [thug(0, 0), thug(0, 6)]), camp('watchtower', [thug(4, 0)])], 0, 60);
     const [farm, mill] = camps.camps;
     hit(farm, 0);
     step(DT);
@@ -202,13 +202,13 @@ describe('dying', () => {
 
 describe('kills and refilling', () => {
   it('reports each kill with its camp', () => {
-    const { camps, step, kills } = world([camp('farm', [thug(0, 0)]), camp('mill', [thug(30, 0)])], 0, 60);
+    const { camps, step, kills } = world([camp('farm', [thug(0, 0)]), camp('watchtower', [thug(30, 0)])], 0, 60);
     const [farm, mill] = camps.camps;
     hit(mill, 0, 999);
     step(DT);
     hit(farm, 0, 999);
     step(DT);
-    expect(kills).toEqual(['mill', 'farm']);
+    expect(kills).toEqual(['watchtower', 'farm']);
     expect(minds(farm)).toEqual(['dead']);
   });
 
@@ -254,7 +254,7 @@ describe('the pools', () => {
   it('lets three swing and two shoot at once, across every camp you pull', () => {
     // Two camps flanking you, each with two thugs and an archer.
     const { camps, step } = world(
-      [camp('west', [thug(-4, -1), thug(-4, 1), archer(-8, 0)]), camp('east', [thug(4, -1), thug(4, 1), archer(8, 0)])],
+      [camp('lumberCamp', [thug(-4, -1), thug(-4, 1), archer(-8, 0)]), camp('watchtower', [thug(4, -1), thug(4, 1), archer(8, 0)])],
       0,
       0,
     );
@@ -284,7 +284,7 @@ describe('camp enemies', () => {
   });
 
   it("take their camp's level on top: a level-2 camp's are 1.2 times stronger again", () => {
-    const { camps } = world([{ ...camp('lumber', [thug(0, 0), archer(5, 0)]), level: 2 }], 0, 60);
+    const { camps } = world([{ ...camp('lumberCamp', [thug(0, 0), archer(5, 0)]), level: 2 }], 0, 60);
     const [grunt, bowman] = camps.camps[0].members.map((m) => m.enemy);
     expect([grunt.level, bowman.level]).toEqual([2, 2]);
     expect(grunt.maxHp).toBe(76); // 45 × 1.2 × 1.4 = 75.6

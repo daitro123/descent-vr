@@ -25,6 +25,12 @@ const _gaze = new Vector3();
 const _haleHead = new Vector3();
 const _float = new Vector3();
 
+type FloatStyle = Parameters<FloatingText['spawn']>[2];
+/** "+N XP" where an enemy fell. */
+const KILL_XP_FLOAT: FloatStyle = { color: '#ffd23a', scale: 0.24, life: CONFIG.levels.xpFloat.time, rise: 0.5 };
+/** A hand-in's reward over Hale. */
+const HAND_IN_FLOAT: FloatStyle = { scale: 0.2, life: CONFIG.handIn.time, rise: 0.3 };
+
 /** What a level-up says about each ability it brings. */
 const UNLOCKED: Record<Ability, string> = {
   warCry: 'War Cry: press A or X',
@@ -253,12 +259,8 @@ export class Adventure {
     for (const e of effects) {
       switch (e.kind) {
         case 'xp':
-          if (handIn) this.floatOver(at, CONFIG.handIn.height, `+${e.amount} XP`, '#ffd23a');
-          else {
-            const { height, time } = CONFIG.levels.xpFloat;
-            _a.copy(at).setY(at.y + height);
-            this.text.spawn(`+${e.amount} XP`, _a, { color: '#ffd23a', scale: 0.24, life: time, rise: 0.5 });
-          }
+          if (handIn) this.floatOver(at, CONFIG.handIn.height, `+${e.amount} XP`, { color: '#ffd23a', ...HAND_IN_FLOAT });
+          else this.floatOver(at, CONFIG.levels.xpFloat.height, `+${e.amount} XP`, KILL_XP_FLOAT);
           break;
         case 'level':
           reached = e.level;
@@ -296,7 +298,10 @@ export class Adventure {
   private announceLevel(level: number, unlocks: readonly Ability[], overHale = false): void {
     const { player, text } = this;
     const { banner, lines } = CONFIG.levels.levelUp;
-    if (overHale) this.floatOver(this.hale.head(_haleHead), CONFIG.handIn.height + CONFIG.handIn.levelHeight, `LEVEL ${level}`, '#ffffff');
+    if (overHale) {
+      const { height, levelHeight } = CONFIG.handIn;
+      this.floatOver(this.hale.head(_haleHead), height + levelHeight, `LEVEL ${level}`, { color: '#ffffff', ...HAND_IN_FLOAT });
+    }
     else {
       sfx.levelUp();
       text.banner(player.camera, `LEVEL ${level}`, '#ffd23a', 0.34, 0.3, banner);
@@ -304,10 +309,9 @@ export class Adventure {
     unlocks.forEach((a, i) => text.banner(player.camera, UNLOCKED[a], '#f0e0b0', 0.09, 0.08 - i * 0.12, lines));
   }
 
-  /** A hand-in's words, `height` metres over `head`. */
-  private floatOver(head: Vector3, height: number, words: string, color: string): void {
-    _float.copy(head).setY(head.y + height);
-    this.text.spawn(words, _float, { color, scale: 0.2, life: CONFIG.handIn.time, rise: 0.3 });
+  /** Words floating up from `height` metres over `at`. */
+  private floatOver(at: Vector3, height: number, words: string, style: FloatStyle): void {
+    this.text.spawn(words, _float.copy(at).setY(at.y + height), style);
   }
 
   /** The level a hand-in landed floats over Hale a moment after its XP. */

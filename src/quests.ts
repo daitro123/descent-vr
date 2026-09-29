@@ -1,5 +1,6 @@
 import type { Role } from './adventureState';
 import { CONFIG } from './config';
+import type { CampId } from './maps/types';
 
 // Marshal Hale's quest chain, as data: what each quest asks, what it pays, and
 // what Hale says about it. The adventure state holds the rules that move you
@@ -16,8 +17,8 @@ export type Sword = 'plain' | 'hale';
 
 /** One thing a quest asks before it can be handed in. */
 export type Objective =
-  /** Kills of one camp's members (by its `CampPlan.id`), or of an enemy of one role (the Warden, who is in no camp). */
-  | { readonly kind: 'kill'; readonly text: string; readonly need: number; readonly camp?: string; readonly role?: Role }
+  /** Kills of one camp's members, or of an enemy of one role (the Warden, who is in no camp). */
+  | { readonly kind: 'kill'; readonly text: string; readonly need: number; readonly camp?: CampId; readonly role?: Role }
   /** Something picked up by hand. */
   | { readonly kind: 'pickup'; readonly text: string; readonly need: number; readonly item: Item };
 

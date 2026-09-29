@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { type AdventureEvent, AdventureState, type Effect, type Role } from '../src/adventureState';
+import type { CampId } from '../src/maps/types';
 
 // Marshal Hale's quest chain, at the adventure-state seam: events in (accept,
 // hand in, kills, the orders picked up), and what a player would notice out:
@@ -7,7 +8,7 @@ import { type AdventureEvent, AdventureState, type Effect, type Role } from '../
 // the tracker, XP, levels and the sword. The lumber camp, its patrol, the mine
 // and the Warden aren't built yet; their kills are events like any other.
 
-const kill = (camp: string | null, level: number, role: Role = 'ordinary'): AdventureEvent => ({ kind: 'kill', camp, level, role });
+const kill = (camp: CampId | null, level: number, role: Role = 'ordinary'): AdventureEvent => ({ kind: 'kill', camp, level, role });
 const ACCEPT: AdventureEvent = { kind: 'accept' };
 const HAND_IN: AdventureEvent = { kind: 'handIn' };
 const ORDERS: AdventureEvent = { kind: 'pickup', item: 'orders' };

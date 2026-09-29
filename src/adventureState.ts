@@ -1,4 +1,5 @@
 import { CONFIG, type EnemyConfig } from './config';
+import type { CampId } from './maps/types';
 import { CHAIN, CHAIN_DONE, type Item, type Objective, type QuestId, RETURN_TO_HALE, type Sword } from './quests';
 
 // The rules of progress in the Adventure, with no three.js in it: events in,
@@ -24,7 +25,7 @@ export type AdventureEvent =
   | {
       readonly kind: 'kill';
       /** The id of the camp it belonged to, or null for none (the Warden, what it raises). */
-      readonly camp: string | null;
+      readonly camp: CampId | null;
       /** The enemy's own level. */
       readonly level: number;
       readonly role: Role;
@@ -51,8 +52,8 @@ export type Effect =
 /** A button on Hale's board: Accept, Not now, Hand in, Goodbye. */
 export type Button = 'accept' | 'notNow' | 'handIn' | 'goodbye';
 
-/** The stages Hale shows a quest in: the chain's first quest not handed in is always in one. */
-type Showing = 'offered' | 'active' | 'ready';
+/** The stages Hale shows a quest in: the chain's first quest not handed in is always in one of them. */
+type ShownStage = 'offered' | 'active' | 'ready';
 
 /** What Marshal Hale shows you. */
 export interface HaleShows {
@@ -61,7 +62,7 @@ export interface HaleShows {
    * a gold "!" while it's offered, a grey "?" while it's under way, a gold "?"
    * once it's ready. None once the chain is done.
    */
-  readonly marker: Showing | null;
+  readonly marker: ShownStage | null;
   /** What they say on the board. */
   readonly line: string;
   readonly buttons: readonly Button[];
@@ -74,7 +75,7 @@ export interface Tracker {
   readonly lines: readonly string[];
 }
 
-const BUTTONS: Record<Showing, readonly Button[]> = {
+const BUTTONS: Record<ShownStage, readonly Button[]> = {
   offered: ['accept', 'notNow'],
   active: ['goodbye'],
   ready: ['handIn'],
@@ -113,7 +114,7 @@ export function enemyNumbers(def: EnemyConfig, level: number, inCamp: boolean): 
 }
 
 /** Does a kill count towards an objective? Only a kill objective's own camp, or its role. */
-const credits = (o: Objective, camp: string | null, role: Role) =>
+const credits = (o: Objective, camp: CampId | null, role: Role) =>
   o.kind === 'kill' && (o.camp === undefined || o.camp === camp) && (o.role === undefined || o.role === role);
 
 /** One character's progress. */
@@ -177,7 +178,7 @@ export class AdventureState {
   get hale(): HaleShows {
     const i = this.current;
     if (i < 0) return { marker: null, line: CHAIN_DONE, buttons: ['goodbye'] };
-    const stage = this.stages[i] as Showing;
+    const stage = this.stages[i] as ShownStage;
     return { marker: stage, line: CHAIN[i].says[stage], buttons: BUTTONS[stage] };
   }
 
