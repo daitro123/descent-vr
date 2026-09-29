@@ -102,6 +102,7 @@ export function buildForest(): Zone {
     camps: layout.camps,
     respawns: layout.respawns,
     hale: layout.hale,
+    pickups: layout.pickups,
     bounds: { minX: -play, maxX: play, minZ: -play, maxZ: play },
     landmarks: layout.landmarks,
     heightAt: layout.heightAt,

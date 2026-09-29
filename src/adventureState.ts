@@ -261,6 +261,17 @@ export class AdventureState {
     return { title: quest.title, lines };
   }
 
+  /**
+   * Does `item` lie where it's found, waiting to be picked up (the leader's
+   * orders in their tent)? From when its quest is taken until it's picked up,
+   * then gone for good.
+   */
+  lies(item: Item): boolean {
+    const i = this.current;
+    if (this.stages[i] !== 'active') return false;
+    return CHAIN[i].objectives.some((o, k) => o.kind === 'pickup' && o.item === item && this.counts[i][k] < o.need);
+  }
+
   /** Take in what happened; returns what it did. */
   apply(event: AdventureEvent): Effect[] {
     switch (event.kind) {

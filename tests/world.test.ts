@@ -1,8 +1,9 @@
 import { HemisphereLight, DirectionalLight, type Light, type Object3D, PointLight, Vector3 } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
+import { Camps, type You } from '../src/enemies/camps';
 import { buildForest } from '../src/maps/forest/forest';
-import { buildLayout, type ForestLayout, worldToLocal } from '../src/maps/forest/layout';
+import { buildLayout, type ForestLayout, localToWorld, worldToLocal } from '../src/maps/forest/layout';
 import type { Zone } from '../src/maps/types';
 import { World } from '../src/world/world';
 
@@ -99,6 +100,24 @@ describe('the World as Ground in Oakvale', () => {
     const straight = dir.clone();
     world.steer(from, dir, 0.4);
     expect(dir.angleTo(straight)).toBeGreaterThan(0.3);
+  });
+});
+
+describe("the lumber camp's tent", () => {
+  it('is no trap: the leader before its door comes round it and swings at you standing square behind it', () => {
+    const lumber = oakvale.camps.find((c) => c.id === 'lumberCamp')!;
+    const camps = new Camps([lumber], world, { sweep: () => null, slam: () => {}, shoot: () => {}, nock: () => {}, telegraph: () => {} });
+    const tent = plan.structures.find((s) => s.kind === 'tent')!;
+    const [x, z] = localToWorld(tent, 0, -tent.hd - 2.5);
+    const feet = new Vector3(x, world.heightAt(x, z), z);
+    const you: You = { feet, head: feet.clone().setY(feet.y + 1.6), sword: null, alive: true };
+    const leader = camps.camps[0].members.find((m) => m.plan.role === 'leader')!.enemy;
+    let took = Infinity;
+    for (let t = 0; t < 15 && took === Infinity; t += 1 / 72) {
+      camps.update(1 / 72, you);
+      if (leader.attacking) took = t;
+    }
+    expect(took).toBeLessThan(8);
   });
 });
 

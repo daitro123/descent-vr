@@ -69,11 +69,17 @@ describe.each(['grunt', 'archer', 'brute'] as const)('a bandit %s', (kind) => {
 it('a skeleton grunt falls to pieces when killed', () => {
   const g = createEnemy('grunt', 0, 0);
   for (let t = 0; t < 2; t += DT) g.update(DT, far());
-  const gap = () => g.rig.bones.head.getWorldPosition(new Vector3()).distanceTo(g.rig.bones.hips.getWorldPosition(new Vector3()));
-  const standing = gap();
+  // Each bone's distance from the hips: the pieces fly apart at random, so any
+  // one pair can land as far apart as it stood, but not the whole skeleton.
+  const gaps = () => {
+    const hips = g.rig.bones.hips.getWorldPosition(new Vector3());
+    return Object.values(g.rig.bones).map((b) => b.getWorldPosition(new Vector3()).distanceTo(hips));
+  };
+  const standing = gaps();
   g.takeHit(10_000, new Vector3(0, 0, -1));
   for (let t = 0; t < 1; t += DT) g.update(DT, far());
-  expect(Math.abs(gap() - standing)).toBeGreaterThan(0.1);
+  const moved = gaps().map((d, i) => Math.abs(d - standing[i]));
+  expect(Math.max(...moved)).toBeGreaterThan(0.1);
 });
 
 it('the Warden is only ever undead', () => {

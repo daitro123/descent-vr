@@ -179,6 +179,47 @@ describe('The Lumber Camp', () => {
     expect(state.apply(ORDERS)).toEqual([]);
   });
 
+  it("lays the orders in the tent from when it's taken until they're picked up, and never again", () => {
+    const state = new AdventureState();
+    const lie: [string, boolean][] = [];
+    const at = (when: string, ...events: AdventureEvent[]) => {
+      play(state, ...events);
+      lie.push([when, state.lies('orders')]);
+    };
+    at('a new character');
+    at('Raiders in the Fields under way', ACCEPT);
+    at('Raiders in the Fields ready', FARM, FARM, FARM);
+    at('The Lumber Camp offered', HAND_IN);
+    at('The Lumber Camp taken', ACCEPT);
+    at('the camp cleared', THUG, THUG, THUG, ARCHER, LEADER);
+    at('the orders picked up', ORDERS);
+    at('The Lumber Camp handed in', HAND_IN);
+    at('What Lies Below under way', ACCEPT);
+    at('What Lies Below ready', WARDEN);
+    at('the chain done', HAND_IN);
+    expect(lie).toEqual([
+      ['a new character', false],
+      ['Raiders in the Fields under way', false],
+      ['Raiders in the Fields ready', false],
+      ['The Lumber Camp offered', false],
+      ['The Lumber Camp taken', true],
+      ['the camp cleared', true],
+      ['the orders picked up', false],
+      ['The Lumber Camp handed in', false],
+      ['What Lies Below under way', false],
+      ['What Lies Below ready', false],
+      ['the chain done', false],
+    ]);
+  });
+
+  it('keeps the orders in the tent across a save until they are picked up', () => {
+    const taken = new AdventureState();
+    play(taken, ...RAIDERS, ACCEPT, THUG);
+    expect(new AdventureState(taken.snapshot()).lies('orders')).toBe(true);
+    play(taken, ORDERS);
+    expect(new AdventureState(taken.snapshot()).lies('orders')).toBe(false);
+  });
+
   it('is ready with the bandits first and the orders last', () => {
     const state = new AdventureState();
     play(state, ...RAIDERS, ACCEPT, THUG, THUG, THUG, ARCHER, LEADER);

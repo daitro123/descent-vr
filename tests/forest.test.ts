@@ -1,7 +1,8 @@
 import { Vector3 } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
-import { buildLayout, FOREST, type ForestLayout, HALE, localToWorld, worldToLocal } from '../src/maps/forest/layout';
+import { buildLayout, FOREST, type ForestLayout, HALE, localToWorld, type StructureKind, TENT, worldToLocal } from '../src/maps/forest/layout';
+import type { CampPlan } from '../src/maps/types';
 import { MAPS } from '../src/maps/registry';
 
 let layout: ForestLayout;
@@ -169,9 +170,25 @@ describe('forest layout', () => {
   });
 });
 
+const flat = (a: { x: number; z: number }, b: { x: number; z: number }) => Math.hypot(a.x - b.x, a.z - b.z);
+
+/** Posts that aren't on clear, dry, level ground you can walk to, and why. */
+function badPosts(camp: CampPlan): string[] {
+  const bad: string[] = [];
+  for (const p of camp.posts) {
+    const at = `(${p.x}, ${p.z})`;
+    // Room to stand and turn: nothing within a metre.
+    if (layout.colliders.blocked(p.x, p.z, 1)) bad.push(`${at} crowded`);
+    if (layout.heightAt(p.x, p.z) < FOREST.water + 0.3) bad.push(`${at} wet`);
+    const slope = Math.hypot(layout.heightAt(p.x + 1, p.z) - layout.heightAt(p.x - 1, p.z), layout.heightAt(p.x, p.z + 1) - layout.heightAt(p.x, p.z - 1)) / 2;
+    if (slope > 0.1) bad.push(`${at} on a slope`);
+    if (!onFoot(p.x, p.z)) bad.push(`${at} walled off`);
+  }
+  return bad;
+}
+
 describe("the farm's camp", () => {
   const farm = () => layout.camps.find((c) => c.id === 'farm')!;
-  const flat = (a: { x: number; z: number }, b: { x: number; z: number }) => Math.hypot(a.x - b.x, a.z - b.z);
 
   it('holds four bandit thugs at level 1, in the farm clearing', () => {
     const camp = farm();
@@ -183,17 +200,7 @@ describe("the farm's camp", () => {
   });
 
   it('stands every post on clear, dry, level ground you can walk to', () => {
-    const bad: string[] = [];
-    for (const p of farm().posts) {
-      const at = `(${p.x}, ${p.z})`;
-      // Room to stand and turn: nothing within a metre.
-      if (layout.colliders.blocked(p.x, p.z, 1)) bad.push(`${at} crowded`);
-      if (layout.heightAt(p.x, p.z) < FOREST.water + 0.3) bad.push(`${at} wet`);
-      const slope = Math.hypot(layout.heightAt(p.x + 1, p.z) - layout.heightAt(p.x - 1, p.z), layout.heightAt(p.x, p.z + 1) - layout.heightAt(p.x, p.z - 1)) / 2;
-      if (slope > 0.1) bad.push(`${at} on a slope`);
-      if (!onFoot(p.x, p.z)) bad.push(`${at} walled off`);
-    }
-    expect(bad).toEqual([]);
+    expect(badPosts(farm())).toEqual([]);
   });
 
   it('spreads the posts 5 to 18 m apart, in two pairs you can pull one at a time', () => {
@@ -216,6 +223,112 @@ describe("the farm's camp", () => {
     // Walking the road to its end, you're never within notice of a post before the last few metres.
     const early = east.line.slice(0, -4).filter(([x, z]) => farm().posts.some((p) => Math.hypot(p.x - x, p.z - z) < notice));
     expect(early).toEqual([]);
+  });
+});
+
+describe("the lumber camp's camp", () => {
+  const lumber = () => layout.camps.find((c) => c.id === 'lumberCamp')!;
+  const structure = (kind: StructureKind) => layout.structures.find((s) => s.kind === kind)!;
+
+  it('holds three thugs, an archer and their leader at level 2, in the camp clearing', () => {
+    const camp = lumber();
+    expect(camp.level).toBe(2);
+    expect(camp.posts.map((p) => `${p.family} ${p.behaviour} ${p.role ?? 'ordinary'}`)).toEqual([
+      ...Array(3).fill('bandit grunt ordinary'),
+      'bandit archer ordinary',
+      'bandit brute leader',
+    ]);
+    const clearing = layout.clearings.find((c) => c.id === 'camp')!;
+    expect(camp.place).toEqual({ x: clearing.x, z: clearing.z, r: clearing.r });
+    for (const p of camp.posts) expect(flat(p, clearing)).toBeLessThan(clearing.r);
+  });
+
+  it('puts a thug where the camp road comes in, one at the fire, one at the log pile, the archer to the north and the leader before the tent', () => {
+    const [road, fire, logs, archer, leader] = lumber().posts;
+    const campRoad = layout.paths.find((p) => p.id === 'camp')!.line;
+    const [ex, ez] = campRoad[campRoad.length - 1];
+    expect(Math.hypot(road.x - ex, road.z - ez)).toBeLessThan(5);
+    expect(flat(fire, structure('campfire'))).toBeLessThan(3);
+    expect(flat(logs, structure('logpile'))).toBeLessThan(4);
+    const clearing = lumber().place;
+    expect(clearing.z - archer.z).toBeGreaterThan(5); // north is −z
+    // Before the tent's door, and facing out of it.
+    const tent = structure('tent');
+    const [lx, lz] = worldToLocal(tent, leader.x, leader.z);
+    expect(Math.abs(lx)).toBeLessThan(1);
+    expect(lz).toBeGreaterThan(TENT.hd);
+    expect(lz).toBeLessThan(TENT.hd + 2);
+    expect(Math.cos(leader.yaw - tent.yaw)).toBeGreaterThan(0.5);
+  });
+
+  it('stands every post on clear, dry, level ground you can walk to', () => {
+    expect(badPosts(lumber())).toEqual([]);
+  });
+
+  it('spreads the posts 5 to 18 m apart, so no one pull brings the whole camp', () => {
+    const { posts } = lumber();
+    for (const a of posts) {
+      const others = posts.filter((b) => b !== a).map((b) => flat(a, b));
+      for (const d of others) {
+        expect(d).toBeGreaterThanOrEqual(5);
+        expect(d).toBeLessThanOrEqual(18);
+      }
+      expect(others.filter((d) => d < CONFIG.camps.pull).length).toBeLessThan(posts.length - 1);
+    }
+  });
+
+  it('sleeps while you walk the main road past it', () => {
+    const main = layout.paths.find((p) => p.id === 'main')!;
+    const woken = main.line.filter(([x, z]) => lumber().posts.some((p) => Math.hypot(p.x - x, p.z - z) < CONFIG.camps.notice));
+    expect(woken).toEqual([]);
+  });
+
+  it('has a tent, a log pile and a fire that nothing walks through', () => {
+    const tent = structure('tent');
+    const r = CONFIG.enemies.grunt.radius;
+    for (const [lx, lz] of [[0, 0], [-1.2, 0], [1.2, 0], [0, -1.6], [0, 1.6]]) {
+      const [x, z] = localToWorld(tent, lx, lz);
+      expect(layout.colliders.blocked(x, z, r), `(${lx}, ${lz}) in the tent`).toBe(true);
+    }
+    for (const kind of ['logpile', 'campfire'] as const) {
+      const s = structure(kind);
+      expect(layout.colliders.blocked(s.x, s.z, r)).toBe(true);
+    }
+  });
+});
+
+describe("the leader's orders", () => {
+  const orders = () => layout.pickups.find((p) => p.item === 'orders')!;
+  const tent = () => layout.structures.find((s) => s.kind === 'tent')!;
+
+  it("lie on the crates just inside the tent's door, at about the height of your hands", () => {
+    const o = orders();
+    const [lx, lz] = worldToLocal(tent(), o.x, o.z);
+    expect(Math.abs(lx)).toBeLessThan(0.2);
+    expect(lz).toBeLessThan(TENT.hd);
+    expect(lz).toBeGreaterThan(TENT.hd - 0.3);
+    // You can't stand where they are: they're on the crates, in the tent.
+    expect(layout.colliders.blocked(o.x, o.z, 0)).toBe(true);
+    const lift = o.y - layout.heightAt(o.x, o.z);
+    expect(lift).toBeGreaterThan(0.8);
+    expect(lift).toBeLessThan(1.2);
+  });
+
+  it("are in reach from the doorway, walking up to the tent's door", () => {
+    const o = orders();
+    const r = CONFIG.player.bodyRadius;
+    // Walk at the door along the tent's axis until the tent stops you.
+    let lz = TENT.hd + 2;
+    const p = new Vector3();
+    while (lz > 0) {
+      const [x, z] = localToWorld(tent(), 0, lz - 0.02);
+      if (layout.colliders.resolve(p.set(x, 0, z), r)) break;
+      lz -= 0.02;
+    }
+    const [sx, sz] = localToWorld(tent(), 0, lz);
+    expect(onFoot(sx, sz, 0.5)).toBe(true);
+    // A hand's reach from your head, which is over your feet.
+    expect(Math.hypot(o.x - sx, o.z - sz)).toBeLessThan(0.55);
   });
 });
 
