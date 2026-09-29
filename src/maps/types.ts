@@ -3,6 +3,7 @@ import type { Role } from '../adventureState';
 import type { RoadPoint } from '../enemies/patrol';
 import type { Item, VillagerId } from '../quests';
 import type { EnemyKind, Family } from '../models/characters';
+import type { PlaceSound, TreeCover } from '../world/ambience';
 import type { Atmosphere } from '../world/atmosphere';
 import type { Interior as InteriorId } from '../save/record';
 import type { Interior } from '../world/interiors';
@@ -122,6 +123,10 @@ export interface Zone extends MapBase {
   readonly villagers: readonly VillagerSpot[];
   /** What lies about to be picked up by hand, shown while the adventure state says it lies there. */
   readonly pickups: readonly Pickup[];
+  /** The places that sound where they are. */
+  readonly sounds: readonly PlaceSound[];
+  /** Its trees, which its birds call from. */
+  readonly trees: TreeCover;
 }
 
 /** A map built whole, lights and all: the crypt hall. */

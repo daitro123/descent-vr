@@ -2,6 +2,7 @@ import { type Camera, Group, Matrix4, Mesh, Quaternion, Vector3 } from 'three';
 import { ModelBuilder } from '../../models/kit';
 import { sharedModelMaterial } from '../../models/materials';
 import type { Interior as InteriorId } from '../../save/record';
+import { TreeCover } from '../../world/ambience';
 import type { Atmosphere } from '../../world/atmosphere';
 import type { Interior, InteriorPlan } from '../../world/interiors';
 import { Glows } from '../../world/glows';
@@ -121,6 +122,8 @@ export function buildForest(): Zone {
     hale: layout.hale,
     villagers: layout.villagers,
     pickups: layout.pickups,
+    sounds: layout.sounds,
+    trees: new TreeCover(layout.trees),
     bounds: { minX: -play, maxX: play, minZ: -play, maxZ: play },
     landmarks: layout.landmarks,
     heightAt: layout.heightAt,

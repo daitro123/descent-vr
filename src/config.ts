@@ -610,6 +610,56 @@ export const CONFIG = {
     lifetime: 20,
   },
 
+  // Oakvale's ambience and its places' sounds (world/ambience.ts, fx/ambience.ts,
+  // fx/loops.ts), all synthesised, and no music.
+  sound: {
+    // Which ambient sounds play (places' sounds and bird calls): the nearest,
+    // up to `most`, none past `reach`; the nearest `hrtf` places' sounds are
+    // placed by HRTF as combat's are, the rest (and every bird) panned cheaply.
+    ambient: {
+      most: 8,
+      hrtf: 3,
+      reach: 40, // m on the floor plane: a place's sound stops beyond this…
+      edge: 8, // m: …fading out over this much before it, so it never cuts off
+      fade: 0.4, // s a sound takes to fade out once it's dropped (it holds its slot till then)
+      level: 1, // the whole ambience, wind and all, before the master
+    },
+    // The light wind everywhere, not placed: two bands of noise, one to each side, gusting slowly.
+    wind: {
+      level: 0.5,
+      band: [380, 520], // Hz: each side's band's middle
+      gust: [0.07, 0.11], // Hz: how slowly each side's gusts come and go
+      depth: 0.6, // of the level the gusts swing by
+    },
+    // Birdsong: now and then a call from a tree `near` to `far` m off. Each try
+    // picks a spot at random and a bird calls only if a tree stands within
+    // `tree` m of it, so the open fields hear fewer.
+    birds: {
+      every: [0.8, 2.6], // s between tries (random in range)
+      near: 10,
+      far: 30,
+      tree: 4, // m
+      perch: [0.6, 0.95], // of the tree's height the bird calls from
+      last: 2.5, // s a call holds its slot
+      level: 1,
+      ref: 8, // m within which a call isn't quieter for distance
+    },
+    // Each place's sound: its loudness (1 plays a loop about as loud as the
+    // arena's drone), the distance within which it's no quieter (it falls
+    // off as 1/distance past it), and how often its one-shots come (random
+    // in range, s), if it has any.
+    places: {
+      stream: { level: 0.8, ref: 7 },
+      dock: { level: 0.6, ref: 4 },
+      windmill: { level: 0.6, ref: 6, every: [2.2, 5] },
+      forge: { level: 0.6, ref: 3 },
+      anvil: { level: 0.5, ref: 4 }, // the smith's hammer, struck by their work
+      hearth: { level: 0.6, ref: 2.5, every: [0.08, 0.7] },
+      campfire: { level: 0.7, ref: 3, every: [0.08, 0.6] },
+      mineMouth: { level: 0.8, ref: 4, every: [0.6, 2.8] },
+    },
+  },
+
   feel: {
     hitStop: 0.06, // s of frozen enemies on a solid hit
     hapticHit: { intensity: 0.8, ms: 60 },

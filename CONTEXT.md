@@ -111,3 +111,7 @@ _Avoid_: instance, dungeon (in WoW, a separate copy for a group), room, indoor z
 **Ambience**:
 The steady sound of a place that plays under everything else: wind, birds, water, fire. Each zone and each interior has its own, and it changes as you step indoors, go down the mine or cross a seam.
 _Avoid_: soundscape, background music, ambient noise
+
+**Place's sound**:
+A sound that comes from one spot in a zone, heard only near it: the stream under the bridge, the windmill's creak, the smith's hammer, the inn's hearth. Unlike the ambience it's placed in space, and it stops beyond about 40 m. Places' sounds and the birds' calls are the **ambient sounds**, at most 8 of which play at once.
+_Avoid_: emitter, sound source, point sound

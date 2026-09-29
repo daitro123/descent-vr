@@ -1,4 +1,5 @@
 import { PatrolWalk } from '../../enemies/patrol';
+import type { PlaceSound, Tree } from '../../world/ambience';
 import type { InteriorPlan } from '../../world/interiors';
 import type { MinePlan } from '../../world/mine';
 import type { CampId, CampPlan, Pickup, PostPlan, Respawn, Spot, VillagerSpot } from '../types';
@@ -408,6 +409,10 @@ export interface ForestLayout {
   camps: CampPlan[];
   /** What lies about to be picked up by hand: the leader's orders in their tent. */
   pickups: Pickup[];
+  /** The places that sound where they are: the stream under the bridge, the dock, the windmill, the smithy, the inn's hearth, the lumber camp's fire and the mine's mouth. */
+  sounds: PlaceSound[];
+  /** The trees in the play area, for birds to call from. */
+  trees: Tree[];
   landmarks: { label: string; x: number; z: number }[];
   /** Ground height, including the bridge and dock decks. */
   heightAt(x: number, z: number): number;
@@ -635,6 +640,10 @@ export function buildLayout(): ForestLayout {
   const tent = at('tent');
   const [ox, oz] = localToWorld(tent, TENT.orders.x, TENT.orders.z);
   const pickups: Pickup[] = [{ item: 'orders', x: ox, y: tent.y + TENT.crates.top, z: oz, yaw: tent.yaw }];
+  const sounds = placeSounds(structures, bridge, dock, interiors, mouth);
+  const trees: Tree[] = plants
+    .filter((p) => TREE_HEIGHT[p.kind] && Math.abs(p.x) <= play && Math.abs(p.z) <= play)
+    .map((p) => ({ x: p.x, y: p.y, z: p.z, height: TREE_HEIGHT[p.kind]! * p.scale }));
   const landmarks = [
     { label: 'Southern road', x: south[0], z: south[1] },
     { label: 'Inn', x: at('inn').x, z: at('inn').z },
@@ -668,9 +677,42 @@ export function buildLayout(): ForestLayout {
     villagers,
     camps,
     pickups,
+    sounds,
+    trees,
     landmarks,
     heightAt,
   };
+}
+
+/**
+ * Where each place's sound comes from: the water under the bridge's middle,
+ * the pond's water off the dock's end, the windmill's sails' hub, the smithy's
+ * forge and anvil, the inn's hearth (its first flame), the lumber camp's fire
+ * and just inside the mine's mouth.
+ */
+function placeSounds(structures: Structure[], bridge: Deck, dock: Deck, interiors: InteriorPlan[], mouth: { x: number; z: number; yaw: number; y: number }): PlaceSound[] {
+  const at = (kind: StructureKind) => structures.find((st) => st.kind === kind)!;
+  const on = (s: { x: number; z: number; yaw: number }, lx: number, lz: number) => localToWorld(s, lx, lz);
+  const mill = at('windmill');
+  const smithy = at('smithy');
+  const fire = at('campfire');
+  const inn = interiors.find((i) => i.id === 'inn')!;
+  const hearth = inn.flames[0];
+  const [hx, hz] = on(mill, 0, 2.1);
+  const [fx, fz] = on(smithy, SMITHY.forge.x, SMITHY.forge.z);
+  const [ax, az] = on(smithy, SMITHY.anvil.x, SMITHY.anvil.z);
+  const [dx, dz] = on(dock, 0, dock.hd + 0.8);
+  const [mx, mz] = on(mouth, 0, -1.5);
+  return [
+    { id: 'stream', x: bridge.x, y: FOREST.water, z: bridge.z, interior: null },
+    { id: 'dock', x: dx, y: FOREST.water, z: dz, interior: null },
+    { id: 'windmill', x: hx, y: mill.y + 7.4, z: hz, interior: null },
+    { id: 'forge', x: fx, y: smithy.y + 1, z: fz, interior: null },
+    { id: 'anvil', x: ax, y: smithy.y + 0.8, z: az, interior: null },
+    { id: 'hearth', x: hearth.x, y: hearth.y, z: hearth.z, interior: 'inn' },
+    { id: 'campfire', x: fire.x, y: fire.y + 0.3, z: fire.z, interior: null },
+    { id: 'mineMouth', x: mx, y: mouth.y + 1.5, z: mz, interior: null },
+  ];
 }
 
 /**
@@ -811,6 +853,14 @@ function buildFences(structures: Structure[]): P2[][] {
   }
   return out;
 }
+
+/** How tall each kind of tree stands, to its crown's top (scaled by the plant's scale): birds perch in it. */
+const TREE_HEIGHT: Partial<Record<PlantKind, number>> = {
+  oak: 5.5,
+  goldOak: 5.5,
+  pine: 7,
+  young: 3,
+};
 
 /** Trunk radius for things you can't walk through (scaled by the plant's scale). */
 const TRUNK_RADIUS: Partial<Record<PlantKind, number>> = {

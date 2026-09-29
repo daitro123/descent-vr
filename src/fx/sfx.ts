@@ -1,15 +1,24 @@
 import { type Object3D, Quaternion, Vector3 } from 'three';
+import { startLoop } from './loops';
 
 // Synthesised placeholder sounds — no assets, but audio feedback matters a
 // lot for how melee feels, so the white box should have *something*.
 //
 // Sounds with a position are spatialised (HRTF), which in a headset is how you
 // notice the archer drawing behind you. Player-centric sounds are left dry.
+//
+// Every sound is played by one name: a one-shot here as `sfx.<name>`, a
+// loop in fx/loops.ts as `startLoop('<name>', …)`. Where it plays never
+// says how it's made, so any one can later become a recording by changing
+// only its entry.
 
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
 let noiseBuf: AudioBuffer | null = null;
 let drone: { stop(): void } | null = null;
+
+/** Seconds of white noise every sound shares: long enough that a loop of it doesn't audibly repeat. */
+const NOISE_SECONDS = 4;
 
 export function unlockAudio(): void {
   if (!ctx) {
@@ -17,11 +26,23 @@ export function unlockAudio(): void {
     master = ctx.createGain();
     master.gain.value = 0.8;
     master.connect(ctx.destination);
-    noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+    noiseBuf = ctx.createBuffer(1, ctx.sampleRate * NOISE_SECONDS, ctx.sampleRate);
     const data = noiseBuf.getChannelData(0);
     for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
   }
   if (ctx.state === 'suspended') void ctx.resume();
+}
+
+/** What every sound is made with, once audio is unlocked: the context, the master bus and the shared noise. */
+export interface AudioKit {
+  readonly ctx: BaseAudioContext;
+  readonly master: AudioNode;
+  readonly noise: AudioBuffer;
+}
+
+/** The audio kit, or null until the first gesture unlocks audio. */
+export function audio(): AudioKit | null {
+  return ctx && master && noiseBuf ? { ctx, master, noise: noiseBuf } : null;
 }
 
 const _p = new Vector3();
@@ -53,9 +74,12 @@ export function updateListener(head: Object3D): void {
   }
 }
 
-/** Where a sound goes: through an HRTF panner at `at`, or straight out. */
-function output(at?: Vector3): AudioNode {
+/** Where a sound goes: through its own HRTF panner at a point, into a node (an ambient sound's voice), or straight out. */
+export type Where = Vector3 | AudioNode | undefined;
+
+function output(at: Where): AudioNode {
   if (!at) return master!;
+  if (!('isVector3' in at)) return at;
   const p = ctx!.createPanner();
   p.panningModel = 'HRTF';
   p.distanceModel = 'inverse';
@@ -68,7 +92,7 @@ function output(at?: Vector3): AudioNode {
   return p;
 }
 
-function tone(freq: number, endFreq: number, dur: number, type: OscillatorType, gain: number, at?: Vector3, delay = 0): void {
+function tone(freq: number, endFreq: number, dur: number, type: OscillatorType, gain: number, at?: Where, delay = 0): void {
   if (!ctx) return;
   const t = ctx.currentTime + delay;
   const osc = ctx.createOscillator();
@@ -84,7 +108,7 @@ function tone(freq: number, endFreq: number, dur: number, type: OscillatorType, 
   osc.stop(t + dur + 0.02);
 }
 
-function noise(dur: number, gain: number, freq: number, at?: Vector3, type: BiquadFilterType = 'lowpass', delay = 0, q = 1): void {
+function noise(dur: number, gain: number, freq: number, at?: Where, type: BiquadFilterType = 'lowpass', delay = 0, q = 1): void {
   if (!ctx || !noiseBuf) return;
   const t = ctx.currentTime + delay;
   const src = ctx.createBufferSource();
@@ -98,7 +122,7 @@ function noise(dur: number, gain: number, freq: number, at?: Vector3, type: Biqu
   g.gain.setValueAtTime(gain, t);
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   src.connect(filter).connect(g).connect(output(at));
-  src.start(t, Math.random() * 0.5);
+  src.start(t, Math.random() * (NOISE_SECONDS - 0.5));
   src.stop(t + dur + 0.02);
 }
 
@@ -227,31 +251,81 @@ export const sfx = {
   victory() {
     [262, 330, 392, 523].forEach((f, i) => tone(f, f, 0.9, 'triangle', 0.15, undefined, i * 0.18));
   },
+
+  // Oakvale's places and birds (fx/ambience.ts plays these into each one's voice).
+
+  /** The smith's hammer on the anvil: a clank and a bright, inharmonic ring. */
+  hammer(at?: Where) {
+    const pitch = 0.97 + Math.random() * 0.06;
+    noise(0.05, 0.5, 2600, at, 'bandpass', 0, 1.2);
+    for (const [f, g, d] of [[1180, 0.12, 0.9], [1745, 0.07, 0.7], [2630, 0.05, 0.5], [3540, 0.03, 0.35]] as const) {
+      tone(f * pitch, f * pitch * 0.995, d, 'sine', g, at);
+    }
+  },
+  /** The windmill's timbers under the sails: a slow, grinding groan. */
+  creak(at?: Where) {
+    const f = 95 + Math.random() * 50;
+    const dur = 0.5 + Math.random() * 0.5;
+    const steps = 6 + Math.floor(Math.random() * 6);
+    // A stutter of rubs, each a little higher, as wood drags on wood.
+    for (let i = 0; i < steps; i++) {
+      const t = (i / steps) * dur;
+      tone(f * (1 + i * 0.03), f * (1 + i * 0.03) * 0.97, dur / steps + 0.03, 'sawtooth', 0.05, at, t);
+    }
+    noise(dur, 0.12, 600, at, 'bandpass', 0, 4);
+  },
+  /** A drop of water into a puddle. */
+  drip(at?: Where) {
+    const f = 1300 + Math.random() * 900;
+    tone(f, f * 0.55, 0.07, 'sine', 0.22, at);
+    tone(f * 1.5, f * 1.1, 0.04, 'sine', 0.06, at, 0.02);
+  },
+  /** A fire's spit and pop. */
+  crackle(at?: Where) {
+    noise(0.012 + Math.random() * 0.02, 0.35 + Math.random() * 0.4, 1800 + Math.random() * 2600, at, 'bandpass', 0, 2);
+  },
+  /** A finch's trill: a quick run of bright notes. */
+  trill(at?: Where) {
+    const f = 3600 + Math.random() * 900;
+    const n = 7 + Math.floor(Math.random() * 7);
+    for (let i = 0; i < n; i++) tone(f, f * 0.8, 0.045, 'sine', 0.07, at, i * 0.06);
+  },
+  /** A blackbird's whistle: two or three fluted notes, gliding. */
+  whistle(at?: Where) {
+    const notes = 2 + Math.floor(Math.random() * 2);
+    let t = 0;
+    for (let i = 0; i < notes; i++) {
+      const f = 1700 + Math.random() * 900;
+      const d = 0.16 + Math.random() * 0.14;
+      tone(f, f * (0.8 + Math.random() * 0.45), d, 'sine', 0.08, at, t);
+      t += d + 0.05;
+    }
+  },
+  /** A sparrow's chirps: a few quick falling blips. */
+  chirps(at?: Where) {
+    const n = 2 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < n; i++) {
+      const f = 4200 + Math.random() * 1200;
+      tone(f, f * 0.62, 0.05, 'triangle', 0.05, at, i * (0.11 + Math.random() * 0.05));
+    }
+  },
+  /** A wood pigeon: coo, COO-coo, coo-coo. */
+  coo(at?: Where) {
+    const f = 430 + Math.random() * 60;
+    [[0, 0.25, 0.7], [0.38, 0.32, 1], [0.78, 0.22, 0.8], [1.12, 0.22, 0.7], [1.4, 0.3, 0.6]].forEach(([t, d, g]) => {
+      tone(f * 1.05, f * 0.93, d, 'sine', 0.1 * g, at, t);
+    });
+  },
 };
 
-/** A low, slowly beating drone under everything: the cheapest atmosphere there is. */
+/** The one-shot sounds, by name. */
+export type ShotName = keyof typeof sfx;
+
+/** The arena's low, slowly beating drone under everything: the cheapest atmosphere there is. */
 export function startAmbience(): void {
-  if (!ctx || drone) return;
-  const g = ctx.createGain();
-  g.gain.value = 0;
-  g.gain.linearRampToValueAtTime(0.05, ctx.currentTime + 4);
-  const filter = ctx.createBiquadFilter();
-  filter.type = 'lowpass';
-  filter.frequency.value = 220;
-  filter.connect(g).connect(master!);
-  const oscs = [55, 55.4, 82.6].map((f) => {
-    const o = ctx!.createOscillator();
-    o.type = 'sawtooth';
-    o.frequency.value = f;
-    o.connect(filter);
-    o.start();
-    return o;
-  });
-  drone = {
-    stop() {
-      for (const o of oscs) o.stop();
-    },
-  };
+  const kit = audio();
+  if (!kit || drone) return;
+  drone = startLoop('drone', kit, kit.master);
 }
 
 export function stopAmbience(): void {
