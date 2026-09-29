@@ -46,7 +46,7 @@ const HALE_STAND: Pose = {
 };
 
 /** Hale once they've handed you their sword: the left hand off the empty scabbard, hanging easy. */
-const HALE_UNARMED: Pose = {
+export const HALE_UNARMED_STAND: Pose = {
   ...HALE_STAND,
   upperArmL: [0.04, 0, 0.12],
   forearmL: [-0.25, 0, 0],
@@ -207,9 +207,6 @@ export const PEOPLE: Record<PersonId, Person> = {
   smith: { label: 'Smith', look: SMITH_LOOK, stand: HOLDING, dress: dressSmith, seed: 62 },
   farmer: { label: 'Farmer', look: FARMER_LOOK, stand: FORK, dress: dressFarmer, seed: 63 },
 };
-
-/** Hale once they've handed you their old longsword: the scabbard empty, and the pose to stand in without it. */
-export const HALE_UNARMED_STAND = HALE_UNARMED;
 
 /** Hale's body, with their sword at the hip or, once `given` to you, without it. One draw call. */
 export function buildHale(given: boolean, material?: Material): Rig {

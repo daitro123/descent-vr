@@ -134,6 +134,9 @@ export function enemyNumbers(def: EnemyConfig, level: number, inCamp: boolean): 
   return { ...def, hp: Math.round(def.hp * k), attacks: def.attacks.map((a) => ({ ...a, damage: Math.round(a.damage * k) })) };
 }
 
+/** The quest whose objective is the Warden: while it's under way, the Warden sits on its throne. */
+const WARDEN_QUEST = CHAIN.findIndex((q) => q.objectives.some((o) => o.kind === 'kill' && o.role === 'warden'));
+
 /** Does a kill count towards an objective? Only a kill objective's own camp, or its role. */
 const credits = (o: Objective, camp: CampId | null, role: Role) =>
   o.kind === 'kill' && (o.camp === undefined || o.camp === camp) && (o.role === undefined || o.role === role);
@@ -240,8 +243,7 @@ export class AdventureState {
 
   /** Does the Warden sit on its throne? Only while What Lies Below is under way and it stands: before, and once beaten, the throne is empty. */
   get wardenSeated(): boolean {
-    const i = CHAIN.findIndex((q) => q.objectives.some((o) => o.kind === 'kill' && o.role === 'warden'));
-    return !this.beaten && this.stages[i] === 'active';
+    return !this.beaten && this.stages[WARDEN_QUEST] === 'active';
   }
 
   /** Does Hale's old longsword still hang at their hip? Until they hand it to you. */

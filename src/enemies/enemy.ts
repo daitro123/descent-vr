@@ -286,7 +286,7 @@ export abstract class Enemy {
     return this.state !== 'dead' && this.state !== 'rising' && !this.seated && !this.post?.evading;
   }
 
-  /** On its seat, sitting down onto it or standing up from it: it stays where it's put, and nothing shoves it. */
+  /** On its seat, sitting down onto it or standing up from it (not only `state` 'seated'): it stays where it's put, and nothing shoves it. */
   get seated(): boolean {
     return this.seat !== null;
   }
@@ -903,21 +903,17 @@ export abstract class Enemy {
     this.position.z = this.seatFrom.z + (this.seatTo.z - this.seatFrom.z) * k;
   }
 
-  /** Turn towards facing `yaw`, at its turning speed. */
-  private faceYaw(yaw: number, dt: number): void {
+  /** Turn towards facing `yaw`, at its turning speed times `rate`. */
+  private faceYaw(yaw: number, dt: number, rate = 1): void {
     const delta = Math.atan2(Math.sin(yaw - this.root.rotation.y), Math.cos(yaw - this.root.rotation.y));
-    const maxStep = this.def.turnSpeed * dt;
+    const maxStep = this.def.turnSpeed * rate * dt;
     this.root.rotation.y += Math.max(-maxStep, Math.min(maxStep, delta));
   }
 
   protected faceToward(target: Vector3, dt: number, rate = 1): void {
     _to.subVectors(target, this.position).setY(0);
     if (_to.lengthSq() < 1e-6) return;
-    const want = Math.atan2(_to.x, _to.z);
-    let delta = want - this.root.rotation.y;
-    delta = Math.atan2(Math.sin(delta), Math.cos(delta));
-    const maxStep = this.def.turnSpeed * rate * dt;
-    this.root.rotation.y += Math.max(-maxStep, Math.min(maxStep, delta));
+    this.faceYaw(Math.atan2(_to.x, _to.z), dt, rate);
   }
 
   /** How fast to close in from `dist` away: its walk, or a run (chaseSpeed) when far behind. */

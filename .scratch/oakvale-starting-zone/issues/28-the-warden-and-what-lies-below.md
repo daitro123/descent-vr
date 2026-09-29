@@ -39,7 +39,9 @@ Calls **taken on Tom's behalf**, to revisit:
 - **Your starting sword's hilt is now plain iron** (it had the gold guard), so Hale's gilded guard reads as the reward. Hale's blade is a blued steel, noticeably darker than yours, with the same shape.
 - **Where the fight starts and ends**: it rises once you're 0.5 m into the hall past the gate's inner mouth, and resets once you're out past the gate's outer mouth in the antechamber. Standing in the gate (1.4 m deep) does neither, so a step back doesn't reset it; it can't follow you into the gate, but its reach still can.
 - **Leaving the mine resets it too** (you woke outside after dying, or walked out some other way): it doesn't wait by the gate.
-- **The melee pool is 2 only while it fights**: back to the camps' 3 as it walks home.
+- **The melee pool is 2 only while it fights**: back to the camps' 3 as it walks home. One already holding a turn as it rises (the antechamber's brute, chasing you in) keeps it for its blow.
+- **Walking back in while it resets doesn't turn it round**: as a camp's enemy walking home, it sits first, then rises again for you.
+- **What it raised crumbles in a burst of bone**, with a small death rattle, not the kill's full effect.
 - **It's whole the moment it resets**, and its summons at 70% and 40% come again next time.
 - **Standing up takes 2.4 s**, the arena Warden's rise from the floor, and it can't be hurt until it's up; it steps out to the arena's rising spot, 1.5 m before the throne.
 - **Slumped, not asleep**: seated, its back bowed, head down, forearms on the throne's arms, the greatsword's point on the floor before it.
@@ -47,6 +49,8 @@ Calls **taken on Tom's behalf**, to revisit:
 - **Hale's empty scabbard stays on their belt**, with their left hand off it.
 
 Left for later:
+
+- `checks/mine-deep.mjs` finds one new shader program on the way down (12 → 13) on main as it stood before this ticket too, so it came with the mine's undead (27); not chased here.
 
 - The drone at the breach and the crypt's sound (31); staging the Warden with the hall's meshes (34).
 

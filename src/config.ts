@@ -490,6 +490,7 @@ export const CONFIG = {
   warden: {
     summonAt: [0.7, 0.4], // HP fractions at which it raises grunts
     summonCount: 2,
+    summonRing: 3, // m round you they rise
     enrageAt: 0.35, // below this HP fraction, wind-ups are faster
     enrageWindup: 0.75,
     kneelTime: 2.6,

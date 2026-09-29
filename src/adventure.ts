@@ -1,4 +1,4 @@
-import { Euler, type PerspectiveCamera, Quaternion, type Scene, Vector3, type WebGLRenderer } from 'three';
+import { Euler, type Object3D, type PerspectiveCamera, Quaternion, type Scene, Vector3, type WebGLRenderer } from 'three';
 import { type Ability, type AdventureEvent, AdventureState, type Effect } from './adventureState';
 import { Combat } from './combat/combat';
 import { CONFIG } from './config';
@@ -23,6 +23,7 @@ import { type Probe, TalkBoard } from './ui/talkBoard';
 import { Orbs } from './world/orbs';
 import { Pickups } from './world/pickups';
 import { BlobShadows } from './world/shadows';
+import type { Mine } from './world/mine';
 import { World } from './world/world';
 
 const _a = new Vector3();
@@ -38,6 +39,11 @@ type FloatStyle = Parameters<FloatingText['spawn']>[2];
 const KILL_XP_FLOAT: FloatStyle = { color: '#ffd23a', scale: 0.24, life: CONFIG.levels.xpFloat.time, rise: 0.5 };
 /** A hand-in's reward over Hale. */
 const HAND_IN_FLOAT: FloatStyle = { scale: 0.2, life: CONFIG.handIn.time, rise: 0.3 };
+
+/** Each body under `root` drawn only in a part of the mine that's drawn. */
+function showInMine(mine: Mine, root: Object3D): void {
+  for (const body of root.children) body.visible = mine.drawn[mine.partAt(body.position.x, body.position.z)];
+}
 
 /** What a level-up says about each ability it brings. */
 const UNLOCKED: Record<Ability, string> = {
@@ -175,6 +181,10 @@ export class Adventure {
             onRise: (w) => this.wardenRises(w),
             onSummon: (w, at) => this.wardenSummons(w, at),
             onKill: (e, role) => this.apply({ kind: 'kill', camp: null, level: e.level, role }, e.position),
+            onCrumble: (e) => {
+              this.particles.burst('bone', _a.copy(e.position).setY(e.position.y + 0.9), 14);
+              sfx.death(_a, { big: false, bones: true });
+            },
           })
         : null;
     if (this.throne) scene.add(this.throne.root);
@@ -260,8 +270,8 @@ export class Adventure {
   private gatherFoes(): Enemy[] {
     const { foes } = this;
     foes.length = 0;
-    foes.push(...this.camps.enemies);
-    if (this.throne) foes.push(...this.throne.enemies);
+    for (const e of this.camps.enemies) foes.push(e);
+    if (this.throne) for (const e of this.throne.enemies) foes.push(e);
     return foes;
   }
 
@@ -272,14 +282,11 @@ export class Adventure {
    */
   private showCamps(outdoors: boolean): void {
     const mine = this.world.mine;
-    const inMine = (root: { children: readonly { position: Vector3; visible: boolean }[] }) => {
-      for (const body of root.children) body.visible = mine!.drawn[mine!.partAt(body.position.x, body.position.z)];
-    };
     for (const camp of this.camps.camps) {
       if (camp.plan.interior !== 'mine' || !mine) camp.root.visible = outdoors;
-      else inMine(camp.root);
+      else showInMine(mine, camp.root);
     }
-    if (this.throne && mine) inMine(this.throne.root);
+    if (this.throne && mine) showInMine(mine, this.throne.root);
   }
 
   /** The Warden stands up off its throne as you come through the gate, with a roar. */

@@ -30,6 +30,8 @@ export interface ThroneEvents {
   onSummon?(warden: Enemy, at: readonly Vector3[]): void;
   /** The Warden or one of the skeletons it raised fell to you (not one that crumbled). */
   onKill?(enemy: Enemy, role: Extract<Role, 'warden' | 'raised'>): void;
+  /** One it raised fell apart, its master gone or reset. */
+  onCrumble?(enemy: Enemy): void;
 }
 
 const flat = (a: { x: number; z: number }, b: { x: number; z: number }) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -76,11 +78,6 @@ export class Throne {
     return this.stage;
   }
 
-  /** Is the Warden up, rising, fighting or walking back to its throne? */
-  get up(): boolean {
-    return this.stage === 'fighting' || this.stage === 'resetting';
-  }
-
   /** The Warden, while it's there. */
   get body(): Enemy | null {
     return this.warden;
@@ -96,6 +93,12 @@ export class Throne {
     ctx.playerHead.copy(you.head);
     ctx.playerSword = you.alive ? you.sword : null;
     const here = you.alive && you.interior === 'mine';
+    // What it raised that fell to you, before anything crumbles this frame (what crumbled has gone from `raised`).
+    for (const e of this.raised) {
+      if (e.alive) continue;
+      this.raised.delete(e);
+      this.events.onKill?.(e, 'raised');
+    }
 
     switch (this.stage) {
       case 'absent':
@@ -117,14 +120,6 @@ export class Throne {
         if (w.state === 'seated') this.stage = 'seated';
         break;
       }
-    }
-    this.pools.melee.max = this.stage === 'fighting' ? CONFIG.warden.hall.melee : CONFIG.camps.tokens.melee;
-
-    // What it raised that fell to you (what crumbled has already gone from `raised`).
-    for (const e of this.raised) {
-      if (e.alive) continue;
-      this.raised.delete(e);
-      this.events.onKill?.(e, 'raised');
     }
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const e = this.enemies[i];
@@ -167,6 +162,7 @@ export class Throne {
     w.standDown(null);
     w.standUp(this.plan.front, CONFIG.warden.hall.stand);
     this.stage = 'fighting';
+    this.limitMelee(true);
     this.events.onRise?.(w);
   }
 
@@ -178,6 +174,7 @@ export class Throne {
     this.post.evading = true;
     w.standDown(this.post);
     this.stage = 'resetting';
+    this.limitMelee(false);
   }
 
   /** It fell: what it raised crumbles with it, and the throne is empty for good. */
@@ -186,10 +183,23 @@ export class Throne {
     this.events.onKill?.(this.warden!, 'warden');
     this.warden = null;
     this.stage = 'absent';
+    this.limitMelee(false);
+  }
+
+  /**
+   * While it fights, only `CONFIG.warden.hall.melee` of everyone may swing at
+   * you at once (those already holding a turn keep it for their blow); after,
+   * the camps' own number again.
+   */
+  private limitMelee(fighting: boolean): void {
+    this.pools.melee.max = fighting ? CONFIG.warden.hall.melee : CONFIG.camps.tokens.melee;
   }
 
   private crumbleRaised(): void {
-    for (const e of this.raised) e.crumble();
+    for (const e of this.raised) {
+      e.crumble();
+      this.events.onCrumble?.(e);
+    }
     this.raised.clear();
   }
 
@@ -200,7 +210,8 @@ export class Throne {
     const spots: Vector3[] = [];
     for (let i = 0; i < count; i++) {
       const a = Math.random() * Math.PI * 2;
-      const p = new Vector3(feet.x + Math.sin(a) * 3, 0, feet.z + Math.cos(a) * 3);
+      const ring = CONFIG.warden.summonRing;
+      const p = new Vector3(feet.x + Math.sin(a) * ring, 0, feet.z + Math.cos(a) * ring);
       const r = CONFIG.enemies.grunt.radius + 0.3;
       ctx.ground.resolve(p, r);
       this.plan.keepIn(p, r);
