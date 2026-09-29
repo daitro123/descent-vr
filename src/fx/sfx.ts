@@ -207,6 +207,15 @@ export const sfx = {
     [392, 494, 587, 784].forEach((f, i) => tone(f, f, 0.6, 'triangle', 0.16, undefined, i * 0.09));
     tone(1568, 1560, 1.4, 'sine', 0.06, undefined, 0.36);
   },
+  /** A quest handed in: three quick pickups and a held major chord, brassy. */
+  fanfare() {
+    [0, 0.11, 0.22].forEach((t) => tone(392, 392, 0.1, 'square', 0.06, undefined, t));
+    for (const f of [523, 659, 784]) {
+      tone(f, f, 1.1, 'square', 0.045, undefined, 0.34);
+      tone(f, f, 1.2, 'triangle', 0.1, undefined, 0.34);
+    }
+    tone(1047, 1047, 0.9, 'triangle', 0.08, undefined, 0.62);
+  },
   victory() {
     [262, 330, 392, 523].forEach((f, i) => tone(f, f, 0.9, 'triangle', 0.15, undefined, i * 0.18));
   },

@@ -1,6 +1,6 @@
 # Descent VR
 
-A single-player action RPG for VR that runs in the browser (Three.js + WebXR), growing into a WoW-style world of zones joined without loading screens. The plain URL is the **Adventure**: Oakvale, the starting zone, where you walk out from the crossroads with a sword and shield and take on the raiders camped at the farm (its quests, its other camps and the old mine are being built, see `.scratch/oakvale-starting-zone/`). The **arena** at `?arena` is the combat prototype that came first: one crypt hall, four enemy types including a boss, seven waves.
+A single-player action RPG for VR that runs in the browser (Three.js + WebXR), growing into a WoW-style world of zones joined without loading screens. The plain URL is the **Adventure**: Oakvale, the starting zone, where Marshal Hale waits at the crossroads with a quest chain and you walk out with a sword and shield to take on the raiders camped at the farm (the lumber camp, the old mine and the rest are being built, see `.scratch/oakvale-starting-zone/`). The **arena** at `?arena` is the combat prototype that came first: one crypt hall, four enemy types including a boss, seven waves.
 
 For why this stack, other options, and the pixel-art pipeline, see [docs/tech-research.md](docs/tech-research.md).
 
@@ -31,7 +31,7 @@ npm run dev          # http://localhost:5173
     - `?duel` fights practice duelists one at a time: grunts that block about nine swings in ten. After each one falls, a banner shows how many of your hits it blocked.
     - `?showcase` pins the title-screen camera on the bestiary lineup, for reviewing models without a headset.
   - `?perf` adds a readout of the frame rate, draw calls, triangles and shader programs, low on the left of your view, over Oakvale or the arena.
-  - `?emulate` forces the emulator even when a real headset is present. `?emulate&nodevui` runs it without the DevUI, so controller poses are driven only by code (for scripted tests). `window.__descent` is the debug handle; in Oakvale it has `camps`, `teleport(x, z, yaw)` and `step(seconds)`, which runs the game without waiting for frames.
+  - `?emulate` forces the emulator even when a real headset is present. `?emulate&nodevui` runs it without the DevUI, so controller poses are driven only by code (for scripted tests). `window.__descent` is the debug handle; in Oakvale it has `camps`, `state` (your level and XP, and what Hale and the tracker show), `teleport(x, z, yaw)` and `step(seconds)`, which runs the game without waiting for frames.
   - `?fly` opens the map viewer: fly freely through any map, with no enemies and no walls in the way. `?fly=crypt` opens one map. Walk mode drops you to eye height with the player's collision. R (desktop) or Y (headset) steps through the map's start, its landmarks and an overview from above. On the desktop, click to look around, WASD to move, Q/E for down and up, shift to go fast, M for the next map, G to walk, F for fog. In the headset, the left stick moves where you look, the right stick turns and rises, grip goes fast, A is the next map, B walks or flies, and X toggles fog. The readout floats over your left controller. On a phone or tablet, a stick (bottom left) moves, dragging anywhere else looks around, ▲ ▼ go up and down, and buttons under the readout switch map, walk, fog, fast and spot.
   - `?map=forest` walks Oakvale from its start with no enemies (`?map=crypt` for the crypt hall). Headset: left stick moves, right stick turns. Desktop: WASD or the arrow keys walk (Shift to hurry), dragging looks around.
 
@@ -53,7 +53,9 @@ Other commands: `npm test` runs the unit tests, `npm run typecheck`, `npm run bu
 
 The belt HUD (look down) shows health on the left orb and rage on the right orb, with pips for Earthshaker and War Cry beneath it. Between the orbs is the dash cooldown, and in the arena the wave and the enemies left. Rage builds from hits, blocks, parries and bashes.
 
-In Oakvale, enemies wait in camps. Come within 8 m of one, or hurt it, and it fights, bringing whoever of its camp stands near it; lead it 30 m from where it waited and it walks home untouchable ("Evade") and heals. A cleared camp fills again three minutes later, once you're well away. Out of a fight for 5 s, your health comes back. If you die, the view fades to black and you wake in the village in front of the inn, with nothing lost.
+In Oakvale, you start facing Marshal Hale, with a gold "!" over their head. Walk up looking at them and a board unfolds beside them; press its buttons with either fist or your sword's tip. The quest you're on floats at the top left of your view with its counts, and a gold "?" over Hale says it's ready to hand in. Kills pay XP and hand-ins pay more, and each level adds health and damage (the War Cry comes at level 2, Earthshaker at 3).
+
+Enemies wait in camps. Come within 8 m of one, or hurt it, and it fights, bringing whoever of its camp stands near it; lead it 30 m from where it waited and it walks home untouchable ("Evade") and heals. A cleared camp fills again three minutes later, once you're well away. Out of a fight for 5 s, your health comes back. If you die, the view fades to black and you wake in the village in front of the inn, with nothing lost.
 
 ### Reading enemies
 
@@ -78,7 +80,9 @@ src/
   config.ts          every gameplay number (enemy types, attacks, waves, abilities), for tuning
   route.ts           what the page runs, from its query string (unit tested)
   main.ts            renderer and XR settings, each mode's frame loop, emulator bootstrap, debug handles
-  adventure.ts       the plain URL: Oakvale in the World, the player, its camps, healing and death, the belt
+  adventure.ts       the plain URL: Oakvale in the World, the player, its camps, Hale, healing and death, the belt
+  adventureState.ts  levels, XP and Hale's quest chain: events in, effects and answers out (unit tested)
+  quests.ts          the quest chain as data: objectives, rewards and what Hale says
   game.ts            the arena (?arena): owns its systems; wave director, spawning, summons, death/victory
   showcase.ts        the arena's title-screen bestiary (?showcase)
   viewer/
@@ -106,6 +110,7 @@ src/
     poses.ts         keyframe poses; the arc between wind-up and strike is the blow
     tokens.ts        attack tokens: who may swing, and spacing between swings
     camps.ts         Oakvale's camps: pulls, the leash, refilling, one token pool (unit tested)
+  people/hale.ts     Marshal Hale at the crossroads: turns to you, waves, the "!" or "?" over their head
   world/             the World (one light rig, sky, fog and Ground for every zone), the arena's crypt hall
                      (merged geometry, colliders), glow sprites, blob shadows, pixel textures, orbs
   maps/
@@ -116,7 +121,8 @@ src/
     forest/          Oakvale, the outdoor map: layout.ts is the plan (heights, roads, what stands where,
                      colliders, unit tested); terrain, nature, buildings and sky turn it into chunked meshes
   fx/                particles, sword trail, shockwaves, floating text, spatial synthesised SFX
-  ui/                belt HUD and vignette, enemy health bars, debug text panel, ?perf readout
+  ui/                belt HUD and vignette, enemy health bars, Hale's talk board, the quest tracker,
+                     debug text panel, ?perf readout
 ```
 
 ## How the combat works

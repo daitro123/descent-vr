@@ -57,6 +57,19 @@ describe('the World as Ground in Oakvale', () => {
     expect(world.resolve(new Vector3(plan.spawn.x, 0, plan.spawn.z), r)).toBe(false);
   });
 
+  it('keeps a body out of someone standing in it, as it does from walls', () => {
+    const peopled = new World();
+    peopled.load(oakvale);
+    peopled.addBody({ x: plan.hale.x, z: plan.hale.z, r: 0.3 });
+    const r = CONFIG.player.bodyRadius;
+    const p = new Vector3(plan.hale.x + 0.2, 0, plan.hale.z + 0.1);
+    expect(peopled.resolve(p, r)).toBe(true);
+    expect(Math.hypot(p.x - plan.hale.x, p.z - plan.hale.z)).toBeCloseTo(0.3 + r, 6);
+    // A step away, nothing moves you; and the World with nobody in it lets you stand there.
+    expect(peopled.resolve(new Vector3(plan.hale.x + 1, 0, plan.hale.z), r)).toBe(false);
+    expect(world.resolve(new Vector3(plan.hale.x + 0.2, 0, plan.hale.z + 0.1), r)).toBe(false);
+  });
+
   it("blocks a sight line over the watchtower's hill", () => {
     const a = new Vector3(24, 0, -63.5);
     const b = new Vector3(56, 0, -63.5);
