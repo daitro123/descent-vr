@@ -287,7 +287,8 @@ export class Game {
     for (let i = 0; i < count; i++) {
       if (this.enemies.length >= CONFIG.waves.maxAlive) break;
       const a = Math.random() * Math.PI * 2;
-      const p = new Vector3(feet.x + Math.sin(a) * 3, 0, feet.z + Math.cos(a) * 3);
+      const r = CONFIG.warden.summonRing;
+      const p = new Vector3(feet.x + Math.sin(a) * r, 0, feet.z + Math.cos(a) * r);
       this.arena.resolve(p, CONFIG.enemies.grunt.radius + 0.3);
       this.particles.burst('magic', p.clone().setY(0.1), 16);
       this.addEnemy('grunt', p);

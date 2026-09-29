@@ -313,6 +313,26 @@ export const KNEEL: Pose = {
 /** Hip drop that goes with KNEEL, as a fraction of hip height. */
 export const KNEEL_DROP = 0.42;
 
+/**
+ * Slumped on a throne: thighs out level, shins hanging, the back bowed and
+ * the head down, the forearms on the arms of the seat. Goes with a hip
+ * height (`Enemy.sit`).
+ */
+export const SEATED: Pose = {
+  spine: [0.45, 0, 0],
+  head: [0.65, 0, 0],
+  upperArmR: [-0.35, 0, -0.32],
+  forearmR: [-0.95, 0, 0],
+  handR: [-0.2, 0, 0],
+  upperArmL: [-0.35, 0, 0.32],
+  forearmL: [-0.95, 0, 0],
+  handL: [0.1, 0, 0],
+  thighL: [-1.35, 0, 0.1],
+  shinL: [1.25, 0, 0],
+  thighR: [-1.35, 0, -0.1],
+  shinR: [1.25, 0, 0],
+};
+
 /** Rocked back by a blow. Mirrored in X for hits from the other side. */
 export const STAGGER: Pose = {
   spine: [-0.35, 0, 0.12],

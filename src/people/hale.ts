@@ -1,9 +1,9 @@
-import { Group, Vector3 } from 'three';
+import { Group, type Material, Vector3 } from 'three';
 import type { HaleShows } from '../adventureState';
 import { CONFIG } from '../config';
 import type { Spot } from '../maps/types';
 import { createModelMaterial } from '../models/materials';
-import { buildPerson, PEOPLE } from '../models/people';
+import { buildHale, HALE_UNARMED_STAND, PEOPLE } from '../models/people';
 import type { Rig } from '../models/rig';
 import { QuestMarker } from '../ui/questMarker';
 import type { Ground } from '../world/ground';
@@ -31,7 +31,9 @@ export class Hale {
   readonly body: { readonly x: number; readonly z: number; readonly r: number };
   /** Head centre above their feet. */
   readonly headY: number;
-  private readonly rig: Rig;
+  private rig: Rig;
+  /** Does their old longsword hang at their hip? Until they hand it to you. */
+  private armed: boolean;
   /** Which way they face at rest: the crossroads' centre. */
   private readonly rest: number;
   /** Seconds of wave left; 0 while not waving. */
@@ -40,9 +42,10 @@ export class Hale {
   private waveReady = true;
   private t = 0;
 
-  /** At `spot` on `ground`, showing `marker`. */
-  constructor(spot: Spot, ground: Ground, marker: HaleShows['marker']) {
-    this.rig = buildPerson('hale', createModelMaterial());
+  /** At `spot` on `ground`, showing `marker`, with their sword at the hip or not. */
+  constructor(spot: Spot, ground: Ground, marker: HaleShows['marker'], swordAtHip = true) {
+    this.armed = swordAtHip;
+    this.rig = buildHale(!swordAtHip, createModelMaterial());
     const p = this.rig.proportions;
     this.headY = p.hipY + 0.06 + p.neck + 0.12;
     this.root.name = 'hale';
@@ -50,8 +53,30 @@ export class Hale {
     this.root.position.set(spot.x, ground.heightAt(spot.x, spot.z), spot.z);
     this.root.rotation.y = this.rest = spot.yaw;
     this.body = { x: spot.x, z: spot.z, r: CONFIG.hale.radius };
-    this.rig.apply(PEOPLE.hale.stand);
+    this.rig.apply(this.stand);
     this.marker.update(0, marker, this.headY + CONFIG.hale.marker);
+  }
+
+  /** How they stand: a hand on the sword's pommel, or easy once it's yours. */
+  private get stand() {
+    return this.armed ? PEOPLE.hale.stand : HALE_UNARMED_STAND;
+  }
+
+  /** Does their sword hang at their hip? */
+  get swordAtHip(): boolean {
+    return this.armed;
+  }
+
+  /** Their sword at the hip, or gone from it (handed to you): the body is rebuilt without it. */
+  set swordAtHip(atHip: boolean) {
+    if (atHip === this.armed) return;
+    this.armed = atHip;
+    const old = this.rig;
+    this.rig = buildHale(!atHip, old.mesh.material as Material);
+    old.mesh.removeFromParent();
+    old.mesh.geometry.dispose();
+    this.root.add(this.rig.mesh);
+    this.rig.apply(this.stand);
   }
 
   get position(): Vector3 {
@@ -80,7 +105,7 @@ export class Hale {
     }
     this.waving = Math.max(0, this.waving - dt);
     const wave = this.waving > 0 ? { t: H.waveTime - this.waving, duration: H.waveTime } : undefined;
-    this.rig.apply(friendlyPose(PEOPLE.hale.stand, this.t, wave));
+    this.rig.apply(friendlyPose(this.stand, this.t, wave));
 
     this.marker.update(dt, marker, this.headY + H.marker);
   }

@@ -114,12 +114,12 @@ export interface Stats {
 /** The step a level brings, to your damage and to an enemy's health and damage: 1 at level 1. */
 const stepAt = (level: number) => 1 + CONFIG.levels.step * (level - 1);
 
-/** Your numbers at `level`. */
-export function statsAt(level: number): Stats {
+/** Your numbers at `level`, with `sword` in your hand: Hale's old longsword adds one level's step to your damage. */
+export function statsAt(level: number, sword: Sword = 'plain'): Stats {
   const L = CONFIG.levels;
   return {
     maxHp: CONFIG.player.maxHp + L.health * (level - 1),
-    damage: stepAt(level),
+    damage: stepAt(level) + L.swords[sword],
     abilities: ABILITIES.filter((a) => L.unlocks[a] <= level),
   };
 }
@@ -133,6 +133,9 @@ export function enemyNumbers(def: EnemyConfig, level: number, inCamp: boolean): 
   const k = stepAt(level) * (inCamp ? CONFIG.camps.strength : 1);
   return { ...def, hp: Math.round(def.hp * k), attacks: def.attacks.map((a) => ({ ...a, damage: Math.round(a.damage * k) })) };
 }
+
+/** The quest whose objective is the Warden: while it's under way, the Warden sits on its throne. */
+const WARDEN_QUEST = CHAIN.findIndex((q) => q.objectives.some((o) => o.kind === 'kill' && o.role === 'warden'));
 
 /** Does a kill count towards an objective? Only a kill objective's own camp, or its role. */
 const credits = (o: Objective, camp: CampId | null, role: Role) =>
@@ -225,7 +228,7 @@ export class AdventureState {
   }
 
   get stats(): Stats {
-    return statsAt(this.level);
+    return statsAt(this.level, this.held);
   }
 
   /** The sword in your hand. */
@@ -236,6 +239,16 @@ export class AdventureState {
   /** Has the Warden fallen? It stays beaten for good. */
   get wardenBeaten(): boolean {
     return this.beaten;
+  }
+
+  /** Does the Warden sit on its throne? Only while What Lies Below is under way and it stands: before, and once beaten, the throne is empty. */
+  get wardenSeated(): boolean {
+    return !this.beaten && this.stages[WARDEN_QUEST] === 'active';
+  }
+
+  /** Does Hale's old longsword still hang at their hip? Until they hand it to you. */
+  get haleSwordAtHip(): boolean {
+    return this.held !== 'hale';
   }
 
   /** The chain's quest Hale has for you (on offer, under way or ready), or -1 once it's all handed in. */

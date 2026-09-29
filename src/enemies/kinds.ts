@@ -156,6 +156,13 @@ export class Warden extends Enemy {
     return this.hpFraction < CONFIG.warden.enrageAt ? CONFIG.warden.enrageWindup : 1;
   }
 
+  /** Whole again, and every summon to cast again. */
+  recover(): void {
+    super.recover();
+    this.summonsDone = 0;
+    this.summonPending = false;
+  }
+
   protected onDamaged(): void {
     const at = CONFIG.warden.summonAt;
     if (this.summonsDone < at.length && this.hpFraction < at[this.summonsDone]) {

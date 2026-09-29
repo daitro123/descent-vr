@@ -2,6 +2,7 @@ import { Color, Group, Mesh, Object3D, Quaternion, Vector3 } from 'three';
 import { CONFIG } from '../config';
 import { buildHeaterShield, buildLongsword } from '../models/gear';
 import { createModelMaterial } from '../models/materials';
+import type { Sword as SwordId } from '../quests';
 import { SwingDetector } from './swing';
 
 const DEG = Math.PI / 180;
@@ -60,6 +61,9 @@ export class Sword {
   readonly hand = new TrackedPoint();
   readonly swing = new SwingDetector();
   private readonly pivot = new Group();
+  /** The sword's mesh: yours, or Hale's once they've handed it to you. */
+  private readonly blade: Mesh;
+  private look: SwordId = 'plain';
   /** Where the blade points out of the fist, in the model's space. */
   private readonly bladeAxis: Vector3;
   /** The heavy tip (see `follow`): rig-space position and velocity. */
@@ -78,10 +82,24 @@ export class Sword {
     const { bladeStart, bladeEnd, bladeHalfWidth, pitchDeg } = CONFIG.sword;
     this.pivot.rotation.x = pitchDeg * DEG;
     this.model.add(this.pivot);
-    this.pivot.add(new Mesh(buildLongsword(bladeStart, bladeEnd, bladeHalfWidth), this.material));
+    this.blade = new Mesh(buildLongsword(bladeStart, bladeEnd, bladeHalfWidth), this.material);
+    this.pivot.add(this.blade);
     this.localBase = new Vector3(0, 0, -bladeStart);
     this.localTip = new Vector3(0, 0, -bladeEnd);
     this.bladeAxis = new Vector3(0, 0, -1).applyEuler(this.pivot.rotation);
+  }
+
+  /** Which sword this is. Every sword has the same shape, so it handles alike. */
+  get sword(): SwordId {
+    return this.look;
+  }
+
+  set sword(sword: SwordId) {
+    if (sword === this.look) return;
+    this.look = sword;
+    const { bladeStart, bladeEnd, bladeHalfWidth } = CONFIG.sword;
+    this.blade.geometry.dispose();
+    this.blade.geometry = buildLongsword(bladeStart, bladeEnd, bladeHalfWidth, sword);
   }
 
   update(rig: Object3D, dt: number): void {

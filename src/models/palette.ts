@@ -9,6 +9,7 @@ export const PAL = {
   iron: 0x72757e,
   ironDark: 0x3a3b42,
   steel: 0xb8bec8,
+  blued: 0x656d7d,
   gold: 0xc99a3a,
 
   leather: 0x5c3d26,
