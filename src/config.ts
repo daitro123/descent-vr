@@ -658,6 +658,30 @@ export const CONFIG = {
       campfire: { level: 0.7, ref: 3, every: [0.08, 0.6] },
       mineMouth: { level: 0.8, ref: 4, every: [0.6, 2.8] },
     },
+    // The mix follows the light's cues (world/mix.ts): it moves as the
+    // Interiors switch's light does, so over the same half-second.
+    mix: {
+      open: 20000, // Hz: a lowpass this high muffles nothing
+      // Behind a shut door, the outdoors (the wind, the birds, the places outside) is this loud and muffled above `cutoff` Hz.
+      inside: { level: 0.3, cutoff: 500 },
+      // A room's own sounds (the inn's hearth) heard from outside through its shut door and walls…
+      walls: { level: 0.3, cutoff: 400 },
+      door: 0.6, // …and with its door open, this share of the way to how they sound in the room
+      // The drone at the breach into the crypt: it rises from `from` to `to` m on past the breach along the route,
+      // while the mine's creaking timbers fade out and its air drops to `air` of its level.
+      crypt: { from: -2, to: 6, air: 0.5 },
+      // While anything fights you, the whole ambience dips to `level`: over `attack` s, and back over `release` s once it's over.
+      fight: { level: 0.6, attack: 0.3, release: 1.5 },
+    },
+    // The mine's own ambience past the adit's bend, not placed: hollow air, and
+    // now and then a drip or a timber's creak from one side or the other.
+    mine: {
+      air: 0.9, // the hollow air's loudness (1 about as loud as the arena's drone)
+      drips: { level: 0.6, every: [0.5, 2.4] }, // s between drips (random in range)
+      timbers: { level: 0.7, every: [3, 9] }, // s between creaks
+      pan: 0.8, // how far to either side a drip or a creak can come from (1 all the way)
+      drone: 1, // the arena's drone in the crypt: 1 as loud as in the arena
+    },
   },
 
   feel: {

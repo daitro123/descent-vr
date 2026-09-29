@@ -18,6 +18,7 @@ import { type Ground, steerRound } from './ground';
 import { type Flame, type Interior, InteriorSwitch, toFrame } from './interiors';
 import { type Mine, type MineStanding, MineSwitch } from './mine';
 import { MineGround } from './mineGround';
+import type { Cues, RoomCue } from './mix';
 import { buildSky, type Sky } from './sky';
 
 const _probe = new Vector3();
@@ -25,7 +26,7 @@ const _eye = new Vector3();
 /** Where you stand in the interior being stepped, reused each frame. */
 const _standing = { x: 0, z: 0, within: false };
 /** Where you stand with respect to the mine, reused each frame. */
-const _underground: MineStanding = { ahead: 0, inMouth: false, past: 0, fromMouth: 0 };
+const _underground: MineStanding = { ahead: 0, inMouth: false, past: 0, crypt: 0, fromMouth: 0 };
 
 /** One of the pool's point lights: the flame it sits on, if any, and how far it has faded up on it. */
 interface PoolLight {
@@ -39,6 +40,8 @@ interface PoolLight {
 interface Held {
   readonly interior: Interior;
   readonly switch: InteriorSwitch;
+  /** Its switch's door and light, for the sound's mix. */
+  readonly cue: { -readonly [K in keyof RoomCue]: RoomCue[K] };
 }
 
 /** The mine the World holds, with its switch. */
@@ -85,6 +88,7 @@ export class World implements Ground {
   private readonly zones: Zone[] = [];
   private readonly interiors: Held[] = [];
   private underground: HeldMine | null = null;
+  private readonly heard: { rooms: RoomCue[]; mine: number; crypt: number } = { rooms: [], mine: 0, crypt: -Infinity };
   /** People standing about, whom nothing walks through: circles on the floor plane. */
   private readonly bodies: { readonly x: number; readonly z: number; readonly r: number }[] = [];
   private readonly resolveFn = (p: Vector3, radius: number) => this.resolve(p, radius);
@@ -144,7 +148,9 @@ export class World implements Ground {
       this.zones.push(zone);
       this.root.add(zone.root);
       for (const interior of zone.interiors) {
-        this.interiors.push({ interior, switch: new InteriorSwitch(interior.footprint.hd) });
+        const cue = { id: interior.id, door: 0, light: 0 };
+        this.interiors.push({ interior, switch: new InteriorSwitch(interior.footprint.hd), cue });
+        this.heard.rooms.push(cue);
         this.root.add(interior.root);
       }
       if (zone.mine && !this.underground) {
@@ -174,6 +180,15 @@ export class World implements Ground {
     return this.interiors.find((h) => h.switch.occupied)?.interior.id ?? (this.underground?.switch.occupied ? 'mine' : null);
   }
 
+  /**
+   * The light's cues, which the sound's mix follows (world/mix.ts): every
+   * building's door and light, the mine's light, and how far on past the
+   * breach into the crypt you are, as of the last update or settle.
+   */
+  get cues(): Cues {
+    return this.heard;
+  }
+
   /** The mine, for its route's centre line and its sight test through rock, if a loaded zone has one. */
   get mine(): Mine | null {
     return this.underground?.mine ?? null;
@@ -201,6 +216,7 @@ export class World implements Ground {
     }
     this.underground?.switch.settle(id === 'mine');
     this.blendLight();
+    this.hear();
     this.snapPool = true;
   }
 
@@ -283,9 +299,21 @@ export class World implements Ground {
       u.mine.update(dt, camera);
     }
     this.blendLight();
+    this.hear();
     this.updatePool(dt, _eye);
     this.sky.update(dt, camera);
     for (const zone of this.zones) if (zone.root.visible) zone.update(dt, camera);
+  }
+
+  /** The switches' doors and light, and the crypt, for the sound's mix. */
+  private hear(): void {
+    for (const h of this.interiors) {
+      h.cue.door = h.switch.door;
+      h.cue.light = h.switch.light;
+    }
+    const u = this.underground;
+    this.heard.mine = u?.switch.light ?? 0;
+    this.heard.crypt = u?.switch.entered ? _underground.crypt : -Infinity;
   }
 
   /** An interior's switch, drawn: its door and its room. */

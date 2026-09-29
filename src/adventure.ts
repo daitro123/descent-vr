@@ -61,7 +61,9 @@ const UNLOCKED: Record<Ability, string> = {
  * Marshal Hale stands at the crossroads with the quest chain: walk up and
  * their board unfolds, and the tracker shows the quest you're on. The
  * innkeeper, the smith and the farmer are at work, and bark as you pass; the
- * wind blows, birds call from the trees and each place sounds where it is. Kills and
+ * wind blows, birds call from the trees and each place sounds where it is,
+ * muffled behind a shut door, giving way to the mine's own air past its bend
+ * and dipping while anything fights you. Kills and
  * the board's buttons go into the adventure state, whose levels set your
  * health, damage and abilities. What a quest has you find (the leader's
  * orders) lies where it's found while the state says so, taken with a touch.
@@ -250,7 +252,6 @@ export class Adventure {
     this.hitStop = Math.max(0, this.hitStop - dt);
     player.feetPosition(you.feet);
     player.headPosition(you.head);
-    this.ambience.update(dt, you.head);
     you.alive = player.alive;
     you.interior = this.world.interior;
     const { sword, rig } = player;
@@ -264,6 +265,8 @@ export class Adventure {
     this.combat.update(dt, foes);
     this.camps.update(enemyDt, you);
     this.throne?.update(enemyDt, you, this.state.wardenSeated);
+    // The ambience's mix follows the light's cues, and dips while anything fights you.
+    this.ambience.update(dt, you.head, this.world.cues, this.camps.fighting || this.throne?.state === 'fighting');
     this.combat.projectiles.render();
     this.heal(dt);
     this.updateDeath(dt);

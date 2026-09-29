@@ -1,8 +1,9 @@
 import { CONFIG } from '../config';
 import type { AudioKit } from './sfx';
 
-// The sounds that go on: the arena's drone, Oakvale's wind, and its places'
-// water, fires and draught. Each is played by its name (as the one-shots in
+// The sounds that go on: the arena's drone (which the mine's crypt plays
+// too), Oakvale's wind, its places' water, fires and draught, and the mine's
+// hollow air. Each is played by its name (as the one-shots in
 // sfx.ts are), made of filtered noise and slow wobbles, no audio files. Each
 // comes out about as loud as the arena's drone (RMS about 0.05); whoever
 // plays it sets how loud it is where it plays.
@@ -114,6 +115,18 @@ const LOOPS = {
     const f = filter(kit, 'bandpass', 420, 5);
     src.connect(f).connect(gain(kit, 1.1)).connect(into);
     return [src, wobble(kit, 0.13, 110, f.frequency), ...band(kit, into, 'lowpass', 140, 0.8, 0.5, 0.09, 0.2)];
+  },
+  /** The mine's hollow air past the adit's bend: a low, boxy resonance drifting over a deeper rumble, and a faint breath of air. */
+  hollow(kit, into) {
+    const src = noise(kit);
+    const f = filter(kit, 'bandpass', 190, 4);
+    src.connect(f).connect(gain(kit, 1)).connect(into);
+    return [
+      src,
+      wobble(kit, 0.05, 35, f.frequency),
+      ...band(kit, into, 'lowpass', 95, 0.9, 0.55, 0.07, 0.15),
+      ...band(kit, into, 'bandpass', 2200, 0.5, 0.012, 0.11, 0.008),
+    ];
   },
 } satisfies Record<string, Maker>;
 

@@ -110,6 +110,8 @@ export const MINE = {
   ] as readonly (readonly [number, number])[],
   /** The route's point at the adit's bend. */
   bend: 1,
+  /** The route's point at the breach into the crypt, on the dig's side of it. */
+  breach: 10,
   /** The timber sets along the tunnels: posts in the walls and a cap beam, every `every` m. */
   sets: { every: 2, post: 0.22, cap: 0.24 },
   /** The rails: from the mouth round the bend (on an arc of `turn` m) to the turntable. */
@@ -358,6 +360,7 @@ export function planMine(mouth: Frame): MinePlan {
   const along = [0];
   for (let i = 1; i < route.length; i++) along.push(along[i - 1] + Math.hypot(route[i][0] - route[i - 1][0], route[i][1] - route[i - 1][1]));
   const bendAt = along[MINE.bend];
+  const breachAt = along[MINE.breach];
   const routeDistance = (x: number, z: number) => {
     let best = Infinity;
     let at = 0;
@@ -421,7 +424,9 @@ export function planMine(mouth: Frame): MinePlan {
       const o = out as { -readonly [K in keyof MineStanding]: MineStanding[K] };
       o.ahead = -local.z;
       o.inMouth = Math.abs(local.x) < hw && y - mouth.y < height;
-      o.past = routeDistance(local.x, local.z) - bendAt;
+      const d = routeDistance(local.x, local.z);
+      o.past = d - bendAt;
+      o.crypt = d - breachAt;
       o.fromMouth = Math.hypot(local.x, local.z);
       return out;
     },

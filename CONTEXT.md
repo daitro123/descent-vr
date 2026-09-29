@@ -115,3 +115,7 @@ _Avoid_: soundscape, background music, ambient noise
 **Place's sound**:
 A sound that comes from one spot in a zone, heard only near it: the stream under the bridge, the windmill's creak, the smith's hammer, the inn's hearth. Unlike the ambience it's placed in space, and it stops beyond about 40 m. Places' sounds and the birds' calls are the **ambient sounds**, at most 8 of which play at once.
 _Avoid_: emitter, sound source, point sound
+
+**Mix**:
+How loud and how muffled each part of the ambience is right now, following the light's cues: behind a shut door the outdoors goes quiet and muffled and the room's fires come up, past the mine's bend the outdoors gives way to the mine's own air, at the crypt's breach the drone rises, and while anything fights you it all dips.
+_Avoid_: mixer, ducking, audio state
