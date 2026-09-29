@@ -53,21 +53,25 @@ export class PatrolWalk {
     this.resting = 0;
   }
 
-  /** Walk on `dt` s at the patrol's pace; at an end, stand a while, then turn back. */
-  step(dt: number): void {
-    const { speed, pause } = CONFIG.camps.patrol;
+  /**
+   * Walk on `dt` s at the patrol's pace; at an end, stand a while, then turn
+   * back. `standing` says which members still stand: the file walks until
+   * the first of them standing reaches the road's start, or the last its end.
+   */
+  step(dt: number, standing?: readonly boolean[]): void {
+    const { speed, pause, gap } = CONFIG.camps.patrol;
     if (this.resting > 0) {
       this.resting = Math.max(0, this.resting - dt);
       if (this.resting === 0) this.heading = -this.heading;
       return;
     }
-    const lo = Math.min(this.half, this.length / 2);
-    const hi = this.length - lo;
-    this.middle += this.heading * speed * dt;
-    if (this.middle >= hi || this.middle <= lo) {
-      this.middle = Math.max(lo, Math.min(hi, this.middle));
-      this.resting = pause;
-    }
+    const first = standing ? Math.max(0, standing.indexOf(true)) : 0;
+    const last = standing ? Math.max(first, standing.lastIndexOf(true)) : this.count - 1;
+    const mid = (this.count - 1) / 2;
+    const lo = (mid - first) * gap;
+    const hi = Math.max(lo, this.length - (last - mid) * gap);
+    this.middle = Math.max(lo, Math.min(hi, this.middle + this.heading * speed * dt));
+    if (this.heading > 0 ? this.middle >= hi : this.middle <= lo) this.resting = pause;
   }
 
   /**

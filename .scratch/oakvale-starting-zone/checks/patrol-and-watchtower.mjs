@@ -250,15 +250,16 @@ await step(3);
     }
   }
   check(woken === 0, `walking the main road's near edge past the junction, the patrol never notices you`);
-  // A look at it from where the camp road leaves the main road.
-  for (let t = 0; t < 30; t += 0.5) {
+  // A look at it from the woods beside its road, as it walks by.
+  const length = along(ROAD.at(-1));
+  for (let t = 0; t < 40; t += 0.25) {
     const m = await members('patrol');
-    if (!(await pausing()) && m.every((e) => along(e) < 4)) break;
-    await step(0.5);
+    if (!(await pausing()) && Math.abs((along(m[0]) + along(m[1])) / 2 - length / 2) < 0.5) break;
+    await step(0.25);
   }
-  const [x0, z0] = [ROAD[0].x + 9.5, ROAD[0].z - 1.2];
-  await standFacing(x0, z0, ROAD.at(-1).x, ROAD.at(-1).z);
-  await tilt(-0.06);
+  const mid = ROAD[Math.floor(ROAD.length / 2)];
+  await standFacing(mid.x + 1, mid.z + 8.6, mid.x - 1, mid.z);
+  await tilt(-0.12);
   await shot('01-the-patrol-on-the-camp-road');
   await tilt(0);
 }

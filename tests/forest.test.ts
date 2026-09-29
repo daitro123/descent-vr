@@ -300,7 +300,8 @@ describe("the lumber camp's camp", () => {
 
 describe("the lumber camp's patrol", () => {
   const patrol = () => layout.camps.find((c) => c.id === 'patrol')!;
-  const along = (line: readonly (readonly [number, number])[], x: number, z: number) => nearestOnPolyline(line, x, z).d;
+  /** How far (x, z) is from a line. */
+  const off = (line: readonly (readonly [number, number])[], x: number, z: number) => nearestOnPolyline(line, x, z).d;
 
   it('is two bandit thugs at level 2, walking a road', () => {
     const camp = patrol();
@@ -313,14 +314,14 @@ describe("the lumber camp's patrol", () => {
     const road = patrol().road!;
     const camp = layout.paths.find((p) => p.id === 'camp')!.line;
     const main = layout.paths.find((p) => p.id === 'main')!.line;
-    for (const p of road) expect(along(camp, p.x, p.z)).toBeLessThan(0.05);
+    for (const p of road) expect(off(camp, p.x, p.z)).toBeLessThan(0.05);
     // One unbroken stretch of it, samples about a metre apart.
     for (let i = 1; i < road.length; i++) expect(flat(road[i], road[i - 1])).toBeLessThan(1.5);
     const [a, b] = [road[0], road.at(-1)!];
     expect(flat(a, b)).toBeGreaterThan(10);
     // It starts at the main road's end and heads for the lumber camp.
     const clearing = layout.clearings.find((c) => c.id === 'camp')!;
-    expect(along(main, a.x, a.z)).toBeLessThan(along(main, b.x, b.z));
+    expect(off(main, a.x, a.z)).toBeLessThan(off(main, b.x, b.z));
     expect(flat(b, clearing)).toBeLessThan(flat(a, clearing));
   });
 
@@ -329,7 +330,7 @@ describe("the lumber camp's patrol", () => {
     const [a, b] = posts;
     expect(flat(a, b)).toBeCloseTo(CONFIG.camps.patrol.gap, 5);
     for (const p of posts) {
-      expect(along(road!.map((q) => [q.x, q.z] as const), p.x, p.z)).toBeLessThan(0.05);
+      expect(off(road!.map((q) => [q.x, q.z] as const), p.x, p.z)).toBeLessThan(0.05);
       expect(flat(p, road![0])).toBeLessThan(CONFIG.camps.patrol.gap + 0.01);
     }
     // Towards the lumber camp, the way it first walks.
@@ -352,7 +353,7 @@ describe("the lumber camp's patrol", () => {
     const lumber = layout.camps.find((c) => c.id === 'lumberCamp')!;
     for (const p of patrol().road!) {
       // From the main road's near edge, 2 m off its middle.
-      expect(along(main.line, p.x, p.z) - main.width / 2).toBeGreaterThanOrEqual(notice);
+      expect(off(main.line, p.x, p.z) - main.width / 2).toBeGreaterThanOrEqual(notice);
       for (const q of lumber.posts) expect(flat(p, q)).toBeGreaterThan(notice);
     }
   });
@@ -423,7 +424,7 @@ describe('the safe places', () => {
     }
   });
 
-  it("are Oakvale's every camp: the farm, the lumber camp, its patrol and the watchtower", () => {
+  it("are Oakvale's every camp: the farm, the lumber camp, the watchtower and the lumber camp's patrol", () => {
     expect(layout.camps.map((c) => c.id)).toEqual(['farm', 'lumberCamp', 'watchtower', 'patrol']);
   });
 });

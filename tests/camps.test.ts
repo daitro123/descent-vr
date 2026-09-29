@@ -444,7 +444,7 @@ describe('the patrol', () => {
     expect(along(first.enemy.position) - from).toBeGreaterThan(1.5);
   });
 
-  it('walks on alone once one of it falls', () => {
+  it('walks on alone once one of it falls, still to the ends of its road', () => {
     const { camps, step } = world([patrol()], 60, -10);
     const [walkers] = camps.camps;
     hit(walkers, 0);
@@ -459,6 +459,15 @@ describe('the patrol', () => {
     const from = along(survivor.enemy.position);
     step(2);
     expect(Math.abs(along(survivor.enemy.position) - from)).toBeGreaterThan(1);
+    // It pauses at each end of the road itself, not where its place in the pair would stop.
+    const walk = walkers.patrol!;
+    const ends: number[] = [];
+    for (let t = 0; t < 80 && ends.length < 2; t += DT) {
+      const was = walk.pausing;
+      step(DT);
+      if (walk.pausing && !was) ends.push(along(survivor.post));
+    }
+    expect(ends.map((e) => Math.round(e) + 0).sort((a, b) => a - b)).toEqual([0, 20]);
   });
 
   it('refills only while you are at least 30 m from its road, wherever its place is', () => {

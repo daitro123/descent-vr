@@ -585,7 +585,7 @@ export function buildLayout(): ForestLayout {
   const [a, b] = [road[0], road[road.length - 1]];
   camps.push({
     id: 'patrol',
-    // Round its road, for what needs a place; it refills by its road itself.
+    // A circle round its road, for anything asking where a camp is (its refill goes by the road itself).
     place: { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2, r: Math.hypot(b.x - a.x, b.z - a.z) / 2 },
     level: PATROL.level,
     posts: Array.from({ length: PATROL.count }, (_, i) => ({ behaviour: 'grunt', family: 'bandit', ...walk.spot(i) }) as const),

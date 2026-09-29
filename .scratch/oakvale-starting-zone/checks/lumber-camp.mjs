@@ -326,15 +326,16 @@ const ROAD = { x: -29.5, z: -44.6 };
   });
   check(height > 1.85 && height < 2.1, `the leader stands about 1.97 m (${height.toFixed(2)} m to the crown)`);
   // The patrol walks this road; stand there while it's at the far end.
-  for (let t = 0; t < 60; t += 0.5) {
-    const far = await page.evaluate(
+  let far = false;
+  for (let t = 0; t < 60 && !far; t += 0.5) {
+    far = await page.evaluate(
       (at) =>
         window.__descent.camps.camps.find((c) => c.plan.id === 'patrol').members.every((m) => Math.hypot(m.enemy.position.x - at.x, m.enemy.position.z - at.z) > 9),
       ROAD,
     );
-    if (far) break;
-    await step(0.5);
+    if (!far) await step(0.5);
   }
+  check(far, `the patrol walks off to the main road's end of its road`);
   await standFacing(ROAD.x, ROAD.z, -48, -43);
   await step(0.1);
   await page.evaluate(() => window.__descent.device.quaternion.set(Math.sin(-0.04), 0, 0, Math.cos(-0.04)));

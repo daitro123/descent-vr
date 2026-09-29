@@ -149,7 +149,7 @@ export class Camp {
       if (m.mind === 'dead') continue;
       if (m.mind !== 'idle' || flat(m.enemy.position, m.post) > keepUp) return;
     }
-    walk.step(dt);
+    walk.step(dt, this.members.map((m) => m.mind !== 'dead'));
     this.members.forEach((m, i) => walk.spot(i, m.post));
   }
 
@@ -162,9 +162,11 @@ export class Camp {
   }
 
   private fight(m: Member): void {
-    // A patrol's member is jumped wherever it is on its road: its leash runs from there, and it walks home there.
-    if (this.patrol) m.post.x = m.enemy.position.x;
-    if (this.patrol) m.post.z = m.enemy.position.z;
+    if (this.patrol) {
+      // A patrol's member is jumped wherever it is on its road: its leash runs from there, and it walks home there.
+      m.post.x = m.enemy.position.x;
+      m.post.z = m.enemy.position.z;
+    }
     m.mind = 'fight';
     m.enemy.standDown(null);
   }

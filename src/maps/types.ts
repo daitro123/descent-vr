@@ -1,5 +1,6 @@
 import type { Camera, Object3D, Vector3 } from 'three';
 import type { Role } from '../adventureState';
+import type { RoadPoint } from '../enemies/patrol';
 import type { Item } from '../quests';
 import type { EnemyKind, Family } from '../models/characters';
 import type { Atmosphere } from '../world/atmosphere';
@@ -66,7 +67,7 @@ export interface CampPlan {
    * standing at their posts (enemies/patrol.ts), and it refills only while
    * you're well away from the road rather than from its place.
    */
-  readonly road?: readonly { readonly x: number; readonly z: number }[];
+  readonly road?: readonly RoadPoint[];
 }
 
 /** Something lying in a zone to pick up by hand (the leader's orders): where, and which way it lies. */
