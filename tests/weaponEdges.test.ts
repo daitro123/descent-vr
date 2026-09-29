@@ -2,7 +2,7 @@ import { Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
 import { attackClip, type MutablePose } from '../src/inspector/clips';
-import { buildCharacter, type EnemyKind } from '../src/models/characters';
+import { buildCharacter, type EnemyKind, type Family } from '../src/models/characters';
 import { buildLongsword } from '../src/models/gear';
 
 // Blades should land edge first. These play each melee swing with the game's
@@ -10,18 +10,21 @@ import { buildLongsword } from '../src/models/gear';
 // the hand's -Z (see rig.ts), with the direction the blade is travelling. A
 // pose that swings the flat into the player, a slap, fails here.
 
-const WIELDERS: [string, EnemyKind, number][] = [
-  ['grunt (sword)', 'grunt', 0],
-  ['grunt (axe)', 'grunt', 1],
-  ['brute', 'brute', 0],
-  ['warden', 'warden', 0],
+const WIELDERS: [string, EnemyKind, number, Family][] = [
+  ['grunt (sword)', 'grunt', 0, 'undead'],
+  ['grunt (axe)', 'grunt', 1, 'undead'],
+  ['brute', 'brute', 0, 'undead'],
+  ['warden', 'warden', 0, 'undead'],
+  ['bandit thug (sword)', 'grunt', 0, 'bandit'],
+  ['bandit thug (hatchet)', 'grunt', 1, 'bandit'],
+  ['bandit leader (felling axe)', 'brute', 0, 'bandit'],
 ];
 
 /** Angles (degrees) between the cutting side and the blade's travel, across the swing. */
-function edgeAngles(kind: EnemyKind, variant: number, pose: string): number[] {
+function edgeAngles(kind: EnemyKind, variant: number, family: Family, pose: string): number[] {
   const attack = CONFIG.enemies[kind].attacks.find((a) => a.pose === pose)!;
   const clip = attackClip(kind, attack);
-  const { rig, weapon } = buildCharacter(kind, { variant });
+  const { rig, weapon } = buildCharacter(kind, { variant, family });
   const bone = rig.bones[weapon.bone];
   const out: MutablePose = {};
   const mid = new Vector3();
@@ -42,11 +45,11 @@ function edgeAngles(kind: EnemyKind, variant: number, pose: string): number[] {
   return angles;
 }
 
-describe.each(WIELDERS)('%s', (_name, kind, variant) => {
+describe.each(WIELDERS)('%s', (_name, kind, variant, family) => {
   const poses = [...new Set(CONFIG.enemies[kind].attacks.filter((a) => a.kind === 'melee').map((a) => a.pose))];
 
   it.each(poses)('%s leads with the edge, not the flat', (pose) => {
-    const angles = edgeAngles(kind, variant, pose);
+    const angles = edgeAngles(kind, variant, family, pose);
     const mean = angles.reduce((s, a) => s + a, 0) / angles.length;
     // 0° is edge first, 90° is flat first.
     expect(mean).toBeLessThan(40);
@@ -55,7 +58,7 @@ describe.each(WIELDERS)('%s', (_name, kind, variant) => {
 
   it('carries its striking end on the cutting side', () => {
     // An axe's bit, say: off the haft toward -Z, never behind it.
-    expect(buildCharacter(kind, { variant }).weapon.tip[2]).toBeLessThanOrEqual(0);
+    expect(buildCharacter(kind, { variant, family }).weapon.tip[2]).toBeLessThanOrEqual(0);
   });
 });
 

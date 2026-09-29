@@ -3,7 +3,7 @@ import { closestSegmentSegment, type SegmentHit } from '../combat/geometry';
 import type { BladeTarget } from '../combat/strike';
 import type { AttackConfig, EnemyConfig } from '../config';
 import { CONFIG } from '../config';
-import { buildCharacter, type EnemyKind, type WeaponSpec } from '../models/characters';
+import { buildCharacter, type EnemyKind, type Family, type WeaponSpec } from '../models/characters';
 import { createModelMaterial, type ModelMaterial } from '../models/materials';
 import { BONES, type BoneName, blendPoses, type Pose, type Rig } from '../models/rig';
 import { HealthBar } from '../ui/healthBar';
@@ -51,6 +51,18 @@ export interface EnemyContext {
 
 type MutablePose = Record<string, [number, number, number]>;
 
+/** What sets an enemy apart from others with its behaviour: its family and look, its numbers and level (createEnemy fills it in). */
+export interface EnemyTraits {
+  /** Who it is: the undead (the default) are skeletons; bandits wear the human body. */
+  family?: Family;
+  /** Which of its family's looks for its behaviour. */
+  variant?: number;
+  /** Its numbers, already made at its level. */
+  def?: EnemyConfig;
+  /** Its level, which `def`'s numbers were made at: what its kill pays for. */
+  level?: number;
+}
+
 /** Where an enemy waits when it isn't fighting (see Enemy.post). */
 export interface EnemyPost {
   x: number;
@@ -91,14 +103,14 @@ function rand(lo: number, hi: number): number {
   return lo + Math.random() * (hi - lo);
 }
 
-/** Where a slash crosses the enemy's front, measured once per kind at its bind proportions. */
+/** Where a slash crosses the enemy's front, measured once per body (family and behaviour) at its bind proportions. */
 interface AimCalibration {
   angle: number; // elevation of that crossing seen from the right shoulder
   shoulderY: number;
 }
 const aimCache = new Map<string, AimCalibration>();
 
-/** The nocked arrow at full draw, facing +Z from the origin, measured once per kind. */
+/** The nocked arrow at full draw, facing +Z from the origin, measured once per body. */
 interface DrawCalibration {
   nock: Vector3;
   yaw: number;
@@ -126,7 +138,11 @@ interface Shard {
 export abstract class Enemy {
   readonly root = new Group();
   readonly position: Vector3; // feet, alias of root.position
+  /** Who it is: undead or bandit. Its body, how it dies and what flies when it's hit. */
+  readonly family: Family;
   readonly def: EnemyConfig;
+  /** Its level, which `def`'s numbers were made at (createEnemy): what its kill pays for. */
+  readonly level: number;
   readonly rig: Rig;
   readonly weapon: WeaponSpec;
   readonly material: ModelMaterial;
@@ -200,18 +216,19 @@ export abstract class Enemy {
   private shards: Shard[] | null = null;
 
   constructor(
+    /** Its behaviour: how it fights. */
     readonly kind: EnemyKind,
     x: number,
     z: number,
-    variant = 0,
-    def: EnemyConfig = CONFIG.enemies[kind],
-    /** Its level, which `def`'s numbers were made at (createEnemy): what its kill pays for. */
-    readonly level = 1,
+    traits: EnemyTraits = {},
   ) {
+    const { family = 'undead', variant = 0, def = CONFIG.enemies[kind], level = 1 } = traits;
+    this.family = family;
     this.def = def;
+    this.level = level;
     this.hp = this.maxHp = this.def.hp;
     this.material = createModelMaterial();
-    const model = buildCharacter(kind, { material: this.material, variant });
+    const model = buildCharacter(kind, { material: this.material, family, variant });
     this.rig = model.rig;
     this.weapon = model.weapon;
     this.position = this.root.position;
@@ -219,8 +236,15 @@ export abstract class Enemy {
     this.root.add(this.visual);
     this.visual.add(this.rig.mesh);
     this.riseTime = kind === 'warden' ? 2.4 : 1.1;
-    this.visual.position.y = -RISE_DEPTH * this.heightScale;
-    copyPose(RISE, this.pose); // copies: poses are shared constants, and this.pose is eased in place
+    if (family === 'undead') {
+      // The dead claw their way up out of the ground.
+      this.visual.position.y = -RISE_DEPTH * this.heightScale;
+      copyPose(RISE, this.pose); // copies: poses are shared constants, and this.pose is eased in place
+    } else {
+      // The living are simply there, standing.
+      this.state = 'move';
+      copyPose(IDLE[kind], this.pose);
+    }
 
     const big = kind === 'warden';
     this.healthBar = big ? new HealthBar(1.4, 0.1, 0x6ad0ff, 'THE BONE WARDEN') : new HealthBar(0.5, 0.05, 0xc81e1e);
@@ -392,7 +416,7 @@ export abstract class Enemy {
     this.enter('dead');
     this.releaseTokens();
     this.root.updateMatrixWorld(true);
-    if (this.def.death === 'shatter') {
+    if (this.family === 'undead' && this.def.death === 'shatter') {
       // Rigid skinning means every bone can fly free: the skeleton collapses
       // into a pile of its own parts, still in one draw call.
       this.shards = [];
@@ -442,7 +466,7 @@ export abstract class Enemy {
   }
 
   private calibrate(attack: AttackConfig): AimCalibration {
-    const key = `${this.kind}:${attack.pose}`;
+    const key = `${this.family}:${this.kind}:${attack.pose}`;
     const hit = aimCache.get(key);
     if (hit) return hit;
     // Sample the arc at bind proportions, facing +Z from the origin, and find
@@ -501,7 +525,7 @@ export abstract class Enemy {
 
   private calibrateDraw(): DrawCalibration {
     const pose = this.attack!.pose;
-    const key = `${this.kind}:${pose}`;
+    const key = `${this.family}:${this.kind}:${pose}`;
     const hit = drawCache.get(key);
     if (hit) return hit;
     const cal = this.atOrigin(() => {

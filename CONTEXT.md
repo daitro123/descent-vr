@@ -64,6 +64,14 @@ _Avoid_: kind, type, class, AI
 Who an enemy is, whatever its behaviour: the bandits or the undead. A bandit archer and an undead archer share a behaviour but not a family.
 _Avoid_: faction, race, type
 
+**Human body**:
+The one body every person wears, bandits and friendly characters alike, dressed per character. The undead are skeletons instead.
+_Avoid_: human model, NPC mesh
+
+**Build**:
+A human body's size and shape: average, stout, broad or big.
+_Avoid_: body type, size
+
 **Camp**:
 A group of enemies that lives at one place and refills some time after it is cleared: the bandits at the farm, at the lumber camp and at the watchtower, and the undead in the mine. A boss is never part of a camp. (The lumber camp is a place; the bandits there are its camp.)
 _Avoid_: spawn, pack, mob

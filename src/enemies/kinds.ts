@@ -1,7 +1,7 @@
 import { Vector3 } from 'three';
 import { enemyNumbers } from '../adventureState';
 import { type AttackConfig, CONFIG, type EnemyConfig } from '../config';
-import type { EnemyKind } from '../models/characters';
+import type { EnemyKind, Family } from '../models/characters';
 import { Enemy, type EnemyContext } from './enemy';
 
 // Each enemy type exists to test the player in a different way:
@@ -185,28 +185,30 @@ export interface EnemyOptions {
   level?: number;
   /** In a camp, it's stronger again (`CONFIG.camps.strength`). */
   inCamp?: boolean;
-  /** Which of its behaviour's looks. */
+  /** Who it is: the undead (skeletons, the default) or the bandits (the human body). */
+  family?: Family;
+  /** Which of its family's looks for its behaviour. */
   variant?: number;
   /** Its behaviour's level-1 numbers, if not the usual ones (the `?duel` duelist). */
   def?: EnemyConfig;
 }
 
 /**
- * An enemy with the behaviour `kind`, standing at (x, z), at its level and in a
- * camp or not. The arena's are level 1 and in none, so they play with the
- * numbers in CONFIG as they are.
+ * An enemy with the behaviour `kind` and its family's body, standing at (x, z),
+ * at its level and in a camp or not. The arena's are undead, level 1 and in no
+ * camp, so they play with the numbers in CONFIG as they are.
  */
 export function createEnemy(kind: EnemyKind, x: number, z: number, options: EnemyOptions = {}): Enemy {
-  const { level = 1, inCamp = false, variant = 0 } = options;
-  const def = enemyNumbers(options.def ?? CONFIG.enemies[kind], level, inCamp);
+  const { level = 1, inCamp = false, family = 'undead', variant = 0 } = options;
+  const traits = { family, variant, level, def: enemyNumbers(options.def ?? CONFIG.enemies[kind], level, inCamp) };
   switch (kind) {
     case 'grunt':
-      return new Grunt(kind, x, z, variant, def, level);
+      return new Grunt(kind, x, z, traits);
     case 'archer':
-      return new Archer(kind, x, z, variant, def, level);
+      return new Archer(kind, x, z, traits);
     case 'brute':
-      return new Brute(kind, x, z, variant, def, level);
+      return new Brute(kind, x, z, traits);
     case 'warden':
-      return new Warden(kind, x, z, variant, def, level);
+      return new Warden(kind, x, z, traits);
   }
 }

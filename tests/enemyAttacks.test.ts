@@ -147,7 +147,9 @@ const RIGHT = (dist: number, headY = 1.6): Shield => ({ at: [0.28, headY - 0.3, 
 
 describe.each([
   ['grunt', () => new TestGrunt('grunt', 0, 0)],
-  ['grunt with an axe', () => new TestGrunt('grunt', 0, 0, 1)],
+  ['grunt with an axe', () => new TestGrunt('grunt', 0, 0, { variant: 1 })],
+  ['bandit thug with a sword', () => new TestGrunt('grunt', 0, 0, { family: 'bandit' })],
+  ['bandit thug with a hatchet', () => new TestGrunt('grunt', 0, 0, { family: 'bandit', variant: 1 })],
   ['brute', () => new TestBrute('brute', 0, 0)],
   ['warden', () => new TestWarden('warden', 0, 0)],
 ] as const)('%s melee', (_name, make) => {
@@ -231,8 +233,8 @@ describe('slams and shots', () => {
     expect(r.slams[0].z).toBeGreaterThan(1.7);
   });
 
-  it('an archer looses one arrow at full draw, from about head height', () => {
-    const a = new TestArcher('archer', 0, 0);
+  it.each(['undead', 'bandit'] as const)('an %s archer looses one arrow at full draw, from about head height', (family) => {
+    const a = new TestArcher('archer', 0, 0, { family });
     const r = run(a, a.def.attacks[0], player(6, 1.6), 6);
     expect(r.shots).toHaveLength(1);
     expect(r.shots[0].y).toBeGreaterThan(1.2);
@@ -240,7 +242,7 @@ describe('slams and shots', () => {
   });
 });
 
-describe('archer aim', () => {
+describe.each(['undead', 'bandit'] as const)('%s archer aim', (family) => {
   /**
    * Draw one arrow at a player whose head starts at `head` (and moves by
    * `move` per second), from an archer at the origin facing `yaw`. Returns how
@@ -248,7 +250,7 @@ describe('archer aim', () => {
    * frame of the draw.
    */
   function drawAt(head: Vector3, opts: { yaw?: number; move?: Vector3 } = {}): number {
-    const a = new TestArcher('archer', 0, 0);
+    const a = new TestArcher('archer', 0, 0, { family });
     a.root.rotation.y = opts.yaw ?? 0;
     let nock = new Vector3();
     let grip = new Vector3();

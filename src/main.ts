@@ -228,7 +228,7 @@ async function startInspector(renderer: WebGLRenderer, scene: Scene, camera: Per
   // Desktop view: stepped back far enough to see the Warden and the readout.
   camera.position.set(0, 1.5, 1.2);
   camera.lookAt(-0.2, 1.2, -1.8);
-  Object.assign(window, { __descent: { inspector, renderer } });
+  Object.assign(window, { __descent: { inspector, renderer, camera } });
 
   const timer = new Timer();
   renderer.setAnimationLoop((time) => {

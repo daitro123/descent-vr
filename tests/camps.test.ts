@@ -51,7 +51,7 @@ function world(plans: CampPlan[], x: number, z: number, ground = hill) {
       camps.update(DT, you);
     }
   };
-  // Let everyone finish rising at their posts.
+  // Let everyone settle at their posts.
   step(2);
   return { camps, you, stand, step, kills };
 }
@@ -231,7 +231,7 @@ describe('kills and refilling', () => {
     stand(0, edge + C.refillAway + 1);
     step(DT);
     expect(minds(farm)).toEqual(['idle', 'idle']);
-    step(2); // they rise
+    step(2); // they settle at their posts
     for (const m of farm.members) {
       expect(m.enemy.alive).toBe(true);
       expect(m.enemy.hp).toBe(m.enemy.maxHp);

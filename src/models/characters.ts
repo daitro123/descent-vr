@@ -1,12 +1,22 @@
 import type { Material } from 'three';
+import { BANDIT_BUILDS, type BanditKind, dressBandit } from './bandits';
+import { bow } from './bow';
+import { BUILDS } from './human';
 import type { Vec3 } from './kit';
 import { PAL } from './palette';
 import { type BoneName, type DressContext, type Proportions, Rig } from './rig';
 
 // The bestiary's bodies. Each is a Rig (one draw call) dressed from simple
-// primitives. Sizes are in metres; `s` scales bone thickness, not length.
+// primitives. Sizes are in metres; `s` scales bone thickness, not length. An
+// enemy's body comes from its family as well as its behaviour: the undead are
+// the skeletons here (and the brute's stitched flesh), and bandits wear the
+// human body (people.ts).
 
+/** An enemy's behaviour: how it fights. */
 export type EnemyKind = 'grunt' | 'archer' | 'brute' | 'warden';
+
+/** Who an enemy is, whatever its behaviour. The Warden is only ever undead. */
+export type Family = 'undead' | 'bandit';
 
 /** The business end of a weapon, in its bone's space. Enemy strikes sweep this segment. */
 export interface WeaponSpec {
@@ -159,36 +169,6 @@ function rustyAxe(ctx: DressContext): WeaponSpec {
   return { bone: 'handR', base: [0, -0.3, 0], tip: [0, -0.68, -0.2], radius: 0.06 };
 }
 
-function bow(ctx: DressContext): void {
-  // Held in the left fist with limbs along the hand's Z. With the arm raised
-  // forward the bow stands upright; its back faces the target (hand -Y).
-  const b = ctx.on('handL');
-  const pts: Vec3[] = [
-    [0, -0.06, 0],
-    [0, -0.04, 0.2],
-    [0, 0.0, 0.38],
-    [0, 0.07, 0.54],
-  ];
-  for (const sign of [1, -1]) {
-    for (let i = 0; i < pts.length - 1; i++) {
-      const [a, c] = [pts[i], pts[i + 1]];
-      b.bar([a[0], a[1], a[2] * sign], [c[0], c[1], c[2] * sign], 0.03 - i * 0.005, 0.025 - i * 0.004, {
-        color: i === 0 ? PAL.leatherDark : PAL.wood,
-        mask: 1,
-      });
-    }
-    b.box(0.025, 0.03, 0.03, { at: [0, 0.075, 0.55 * sign], color: PAL.boneShade, mask: 1 });
-  }
-  // String: its ends ride the bow tips, its middle rides the drawing hand.
-  const nock = ctx.point('handR', 0, -0.06, 0.02);
-  for (const sign of [1, -1]) {
-    ctx.builder.stretch(ctx.index('handL'), ctx.point('handL', 0, 0.075, 0.55 * sign), ctx.index('handR'), nock, 0.006, {
-      color: PAL.boneShade,
-      jitter: 0,
-    });
-  }
-}
-
 function maul(ctx: DressContext): WeaponSpec {
   ctx
     .on('handR')
@@ -283,9 +263,7 @@ function dressArcher(ctx: DressContext): WeaponSpec {
     .cyl(0.05, 0.045, 0.42, 6, { at: [-0.06, ctx.p.spine - 0.2, -0.14], rot: [0, 0, -0.35], color: PAL.leather })
     .box(0.03, 0.1, 0.03, { at: [-0.14, ctx.p.spine + 0.04, -0.14], rot: [0, 0, -0.35], color: PAL.cloth })
     .box(0.03, 0.1, 0.03, { at: [-0.1, ctx.p.spine + 0.05, -0.15], rot: [0, 0, -0.3], color: PAL.boneShade });
-  bow(ctx);
-  // Bows have no strike segment; a placeholder keeps the type uniform.
-  return { bone: 'handL', base: [0, 0, 0], tip: [0, -0.1, 0], radius: 0 };
+  return bow(ctx, { tips: PAL.boneShade, string: PAL.boneShade });
 }
 
 function dressBrute(ctx: DressContext): WeaponSpec {
@@ -395,14 +373,33 @@ function dressWarden(ctx: DressContext): WeaponSpec {
 
 export interface BuildOptions {
   material?: Material;
-  /** Varies helmets, cloth and weapons among grunts. */
+  /** Its body: a skeleton (the default) or a bandit in the human body. */
+  family?: Family;
+  /** Varies helmets, cloth and weapons among grunts, and looks and weapons among thugs. */
   variant?: number;
+}
+
+/** The bone lengths of an enemy with this behaviour and family. */
+export function proportionsOf(kind: EnemyKind, family: Family = 'undead'): Proportions {
+  if (family === 'undead') return PROPORTIONS[kind];
+  return BUILDS[BANDIT_BUILDS[banditOnly(kind)]].proportions;
+}
+
+/** Bandits fight as thugs, archers and a leader; the Warden is only ever undead. */
+function banditOnly(kind: EnemyKind): BanditKind {
+  if (kind === 'warden') throw new Error('The Warden is undead');
+  return kind;
 }
 
 export function buildCharacter(kind: EnemyKind, opts: BuildOptions = {}): CharacterModel {
   let weapon: WeaponSpec | undefined;
   const variant = opts.variant ?? 0;
+  const family = opts.family ?? 'undead';
   const dress = (ctx: DressContext) => {
+    if (family === 'bandit') {
+      weapon = dressBandit(ctx, banditOnly(kind), variant);
+      return;
+    }
     switch (kind) {
       case 'grunt':
         weapon = dressGrunt(ctx, variant);
@@ -418,6 +415,7 @@ export function buildCharacter(kind: EnemyKind, opts: BuildOptions = {}): Charac
         break;
     }
   };
-  const rig = new Rig(PROPORTIONS[kind], dress, opts.material, 11 + variant * 7);
+  const seed = (family === 'bandit' ? 21 : 11) + variant * 7;
+  const rig = new Rig(proportionsOf(kind, family), dress, opts.material, seed);
   return { rig, weapon: weapon! };
 }

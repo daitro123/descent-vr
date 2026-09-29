@@ -1,6 +1,6 @@
 import type { Camera, Object3D, Vector3 } from 'three';
 import type { Role } from '../adventureState';
-import type { EnemyKind } from '../models/characters';
+import type { EnemyKind, Family } from '../models/characters';
 import type { Atmosphere } from '../world/atmosphere';
 
 // A map is a place the game can put you. A zone (Oakvale) is loaded into the
@@ -44,8 +44,8 @@ export interface PostPlan {
   readonly behaviour: Exclude<EnemyKind, 'warden'>;
   /** What its kill pays for, if not an ordinary member: the bandit leader or one of the mine's deep brutes. */
   readonly role?: Extract<Role, 'leader' | 'deepBrute'>;
-  /** Bandits wear today's skeletons until the human body lands (ticket 20). */
-  readonly family: 'bandit' | 'undead';
+  /** Who it is: bandits wear the human body, the undead are skeletons. */
+  readonly family: Family;
   readonly x: number;
   readonly z: number;
   /** As a model turns about +Y: its front faces (sin yaw, cos yaw), so 0 faces +Z. */
