@@ -146,8 +146,11 @@ await enterVR();
   await page.evaluate(() => window.__descent.device.quaternion.set(0, 0, 0, 1));
   await xrFrames(2);
 
-  // Walk: the left stick forward for 2 s of game time.
+  // Walk: the left stick forward for 2 s of game time, turned away from Hale,
+  // who has stood in the way since ticket 18.
   await page.evaluate(() => (window.__descent.paused = true));
+  await page.evaluate(({ x, z }) => window.__descent.teleport(0.2, 1.5, Math.atan2(x - 0.2, z - 1.5)), HALE);
+  await xrFrames(2);
   const before = await stance();
   await page.evaluate(() => window.__descent.device.controllers.left.updateAxes('thumbstick', 0, -1));
   await xrFrames(2);
