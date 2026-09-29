@@ -10,7 +10,9 @@
 // it. The Lumber Camp is taken and handed in with a fist on the board's
 // buttons, its bandits are felled with a blow big enough to kill (their camp
 // reports the kill as for any other), and the orders are taken by moving the
-// left controller until its fist touches them.
+// left controller until its fist touches them. Step 3 stands at the camp end
+// of the patrol's road, so it waits for the patrol to walk off to the other
+// end first.
 //
 // 1. With The Lumber Camp on offer at level 2, nothing lies in the leader's
 //    tent, and a fist where the orders will be takes nothing. (Standing there
@@ -323,6 +325,16 @@ const ROAD = { x: -29.5, z: -44.6 };
     return e.rig.bones.head.getWorldPosition(e.position.clone()).y + 0.2 - e.position.y;
   });
   check(height > 1.85 && height < 2.1, `the leader stands about 1.97 m (${height.toFixed(2)} m to the crown)`);
+  // The patrol walks this road; stand there while it's at the far end.
+  for (let t = 0; t < 60; t += 0.5) {
+    const far = await page.evaluate(
+      (at) =>
+        window.__descent.camps.camps.find((c) => c.plan.id === 'patrol').members.every((m) => Math.hypot(m.enemy.position.x - at.x, m.enemy.position.z - at.z) > 9),
+      ROAD,
+    );
+    if (far) break;
+    await step(0.5);
+  }
   await standFacing(ROAD.x, ROAD.z, -48, -43);
   await step(0.1);
   await page.evaluate(() => window.__descent.device.quaternion.set(Math.sin(-0.04), 0, 0, Math.cos(-0.04)));

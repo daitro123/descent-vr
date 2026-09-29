@@ -4,15 +4,17 @@ import type { CampPlan, PostPlan } from '../maps/types';
 import type { Ground } from '../world/ground';
 import { type Enemy, type EnemyContext, type EnemyPost, keepApart, type PlayerSword } from './enemy';
 import { createEnemy } from './kinds';
+import { fromRoad, PatrolWalk } from './patrol';
 import { AttackTokens } from './tokens';
 
 // The Adventure's enemies wait in camps, as in WoW: each at its post until
 // you come close or hurt it, then it fights and brings whoever of its camp
 // stands near it. Walk away and it chases at your pace until it's too far
 // from its post, then it walks home untouchable and heals. A cleared camp
-// fills again a while later, once you're well away. The brain is the `?camp`
-// prototype's rule A (in history at merge 1135338), driving enemies through
-// their `post`, `standDown` and `chaseSpeed` hooks.
+// fills again a while later, once you're well away. A patrol is a camp whose
+// posts walk a road (patrol.ts). The brain is the `?camp` prototype's rule A
+// (in history at merge 1135338), driving enemies through their `post`,
+// `standDown` and `chaseSpeed` hooks.
 
 /** What a camp's member is doing. */
 export type Mind = 'idle' | 'fight' | 'home' | 'dead';
@@ -56,6 +58,8 @@ export class Camp {
   readonly members: Member[] = [];
   /** Seconds until it refills, once every member has fallen; null while any stands. */
   private refillIn: number | null = null;
+  /** A patrol's walk along its road; null for a camp that stands. */
+  readonly patrol: PatrolWalk | null;
 
   constructor(
     readonly plan: CampPlan,
@@ -63,6 +67,7 @@ export class Camp {
     private readonly raise: (post: PostPlan, at: EnemyPost) => Enemy,
     private readonly events: CampEvents,
   ) {
+    this.patrol = plan.road ? new PatrolWalk(plan.road, plan.posts.length) : null;
     this.fill();
   }
 
@@ -71,12 +76,17 @@ export class Camp {
     return this.members.some((m) => m.mind === 'fight');
   }
 
-  /** Everyone back at their posts, freshly raised. */
+  /** Everyone back at their posts, freshly raised (a patrol at its road's start). */
   private fill(): void {
     this.refillIn = null;
     this.members.length = 0;
-    for (const plan of this.plan.posts) {
+    this.patrol?.reset();
+    for (const [i, plan] of this.plan.posts.entries()) {
       const post: EnemyPost = { x: plan.x, z: plan.z, yaw: plan.yaw, evading: false };
+      if (this.patrol) {
+        this.patrol.spot(i, post);
+        post.pace = CONFIG.camps.patrol.speed;
+      }
       const enemy = this.raise(plan, post);
       this.members.push({ plan, post, enemy, mind: 'idle', hp: enemy.hp, nearest: 0, stalled: 0 });
     }
@@ -121,7 +131,26 @@ export class Camp {
         }
       }
     }
+    this.walkOn(dt);
     this.updateRefill(dt, you);
+  }
+
+  /**
+   * A patrol walks on while all of it that stands is calm and keeping up. The
+   * file holds where it is while any of it fights or walks home, so a jumped
+   * patrol's leash runs from where it was jumped, and that's where it walks
+   * home to before it walks on.
+   */
+  private walkOn(dt: number): void {
+    const walk = this.patrol;
+    if (!walk) return;
+    const { keepUp } = CONFIG.camps.patrol;
+    for (const m of this.members) {
+      if (m.mind === 'dead') continue;
+      if (m.mind !== 'idle' || flat(m.enemy.position, m.post) > keepUp) return;
+    }
+    walk.step(dt);
+    this.members.forEach((m, i) => walk.spot(i, m.post));
   }
 
   /** Start fighting, and bring every idle member within a pull of it. */
@@ -133,6 +162,9 @@ export class Camp {
   }
 
   private fight(m: Member): void {
+    // A patrol's member is jumped wherever it is on its road: its leash runs from there, and it walks home there.
+    if (this.patrol) m.post.x = m.enemy.position.x;
+    if (this.patrol) m.post.z = m.enemy.position.z;
     m.mind = 'fight';
     m.enemy.standDown(null);
   }
@@ -152,8 +184,9 @@ export class Camp {
     }
     const { refillTime, refillAway } = CONFIG.camps;
     this.refillIn = Math.max(0, (this.refillIn ?? refillTime) - dt);
-    const { place } = this.plan;
-    if (this.refillIn <= 0 && flat(place, you.feet) - place.r >= refillAway) this.fill();
+    const { place, road } = this.plan;
+    const away = road ? fromRoad(road, you.feet.x, you.feet.z) : flat(place, you.feet) - place.r;
+    if (this.refillIn <= 0 && away >= refillAway) this.fill();
   }
 }
 

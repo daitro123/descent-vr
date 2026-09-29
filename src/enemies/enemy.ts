@@ -71,6 +71,8 @@ export interface EnemyPost {
   yaw: number;
   /** Walking home after giving up a chase: it can't be hurt. */
   evading: boolean;
+  /** m/s it walks after a post that moves on (a patrol's), rather than strolling back to it. */
+  pace?: number;
 }
 
 const RISE_DEPTH = 1.9;
@@ -857,7 +859,7 @@ export abstract class Enemy {
     _way.subVectors(_home, this.position).setY(0);
     const d = _way.length();
     if (d > 0.3) {
-      const speed = p.evading ? Math.max(this.def.speed, this.chaseSpeed) : this.def.speed * 0.6;
+      const speed = p.evading ? Math.max(this.def.speed, this.chaseSpeed) : (p.pace ?? this.def.speed * 0.6);
       this.walk(_way.divideScalar(d), speed * Math.min(1, 0.3 + d), dt, ctx);
       this.faceToward(_home, dt);
     } else this.faceToward(this.postFacing(_home), dt, 0.5);

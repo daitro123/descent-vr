@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
 import { buildLayout, FOREST, type ForestLayout, HALE, localToWorld, type StructureKind, TENT, worldToLocal } from '../src/maps/forest/layout';
 import type { CampPlan } from '../src/maps/types';
+import { nearestOnPolyline } from '../src/maps/forest/noise';
 import { MAPS } from '../src/maps/registry';
 
 let layout: ForestLayout;
@@ -294,6 +295,136 @@ describe("the lumber camp's camp", () => {
       const s = structure(kind);
       expect(layout.colliders.blocked(s.x, s.z, r)).toBe(true);
     }
+  });
+});
+
+describe("the lumber camp's patrol", () => {
+  const patrol = () => layout.camps.find((c) => c.id === 'patrol')!;
+  const along = (line: readonly (readonly [number, number])[], x: number, z: number) => nearestOnPolyline(line, x, z).d;
+
+  it('is two bandit thugs at level 2, walking a road', () => {
+    const camp = patrol();
+    expect(camp.level).toBe(2);
+    expect(camp.posts.map((p) => `${p.family} ${p.behaviour} ${p.role ?? 'ordinary'}`)).toEqual(Array(2).fill('bandit grunt ordinary'));
+    expect(camp.road?.length).toBeGreaterThan(1);
+  });
+
+  it('walks the camp road, between the main road and the lumber camp, over 10 m of it', () => {
+    const road = patrol().road!;
+    const camp = layout.paths.find((p) => p.id === 'camp')!.line;
+    const main = layout.paths.find((p) => p.id === 'main')!.line;
+    for (const p of road) expect(along(camp, p.x, p.z)).toBeLessThan(0.05);
+    // One unbroken stretch of it, samples about a metre apart.
+    for (let i = 1; i < road.length; i++) expect(flat(road[i], road[i - 1])).toBeLessThan(1.5);
+    const [a, b] = [road[0], road.at(-1)!];
+    expect(flat(a, b)).toBeGreaterThan(10);
+    // It starts at the main road's end and heads for the lumber camp.
+    const clearing = layout.clearings.find((c) => c.id === 'camp')!;
+    expect(along(main, a.x, a.z)).toBeLessThan(along(main, b.x, b.z));
+    expect(flat(b, clearing)).toBeLessThan(flat(a, clearing));
+  });
+
+  it('stands in file where its road starts, 1.8 m apart, facing along it', () => {
+    const { posts, road } = patrol();
+    const [a, b] = posts;
+    expect(flat(a, b)).toBeCloseTo(CONFIG.camps.patrol.gap, 5);
+    for (const p of posts) {
+      expect(along(road!.map((q) => [q.x, q.z] as const), p.x, p.z)).toBeLessThan(0.05);
+      expect(flat(p, road![0])).toBeLessThan(CONFIG.camps.patrol.gap + 0.01);
+    }
+    // Towards the lumber camp, the way it first walks.
+    const clearing = layout.clearings.find((c) => c.id === 'camp')!;
+    const toCamp = Math.atan2(clearing.x - a.x, clearing.z - a.z);
+    expect(Math.cos(a.yaw - toCamp)).toBeGreaterThan(0.9);
+  });
+
+  it('keeps to clear ground you can walk', () => {
+    for (const p of patrol().road!) {
+      expect(layout.colliders.blocked(p.x, p.z, CONFIG.enemies.grunt.radius + 0.3), `(${p.x}, ${p.z})`).toBe(false);
+      expect(layout.heightAt(p.x, p.z)).toBeGreaterThan(FOREST.water + 0.3);
+      expect(onFoot(p.x, p.z)).toBe(true);
+    }
+  });
+
+  it("never notices you on the main road, and is out of the lumber camp's notice at the camp's end", () => {
+    const main = layout.paths.find((p) => p.id === 'main')!;
+    const { notice } = CONFIG.camps;
+    const lumber = layout.camps.find((c) => c.id === 'lumberCamp')!;
+    for (const p of patrol().road!) {
+      // From the main road's near edge, 2 m off its middle.
+      expect(along(main.line, p.x, p.z) - main.width / 2).toBeGreaterThanOrEqual(notice);
+      for (const q of lumber.posts) expect(flat(p, q)).toBeGreaterThan(notice);
+    }
+  });
+});
+
+describe("the watchtower's camp", () => {
+  const tower = () => layout.camps.find((c) => c.id === 'watchtower')!;
+  const structure = (kind: StructureKind) => layout.structures.find((s) => s.kind === kind)!;
+
+  it('holds two thugs and an archer at level 2, on the flat top of the tower\'s hill', () => {
+    const camp = tower();
+    expect(camp.level).toBe(2);
+    expect(camp.posts.map((p) => `${p.family} ${p.behaviour}`)).toEqual(['bandit grunt', 'bandit archer', 'bandit grunt']);
+    const clearing = layout.clearings.find((c) => c.id === 'towerTop')!;
+    expect(camp.place).toEqual({ x: clearing.x, z: clearing.z, r: clearing.r });
+    const top = structure('tower');
+    for (const p of camp.posts) {
+      expect(flat(p, clearing)).toBeLessThan(clearing.r);
+      // Up on the hill with the tower, not down its slopes.
+      expect(Math.abs(layout.heightAt(p.x, p.z) - top.y)).toBeLessThan(0.3);
+    }
+  });
+
+  it('puts a thug at the door where the road comes up, facing down it', () => {
+    const [door] = tower().posts;
+    const road = layout.paths.find((p) => p.id === 'tower')!.line;
+    const [ex, ez] = road[road.length - 1];
+    expect(Math.hypot(door.x - ex, door.z - ez)).toBeLessThan(2.5);
+    const [dx, dz] = road[road.length - 8];
+    const downRoad = Math.atan2(dx - door.x, dz - door.z);
+    expect(Math.cos(door.yaw - downRoad)).toBeGreaterThan(0.8);
+  });
+
+  it('stands every post on clear, dry, level ground you can walk to', () => {
+    expect(badPosts(tower())).toEqual([]);
+  });
+
+  it('spreads the posts 5 to 18 m apart, so the door and the archer come as a pair', () => {
+    const [door, archer, back] = tower().posts;
+    const { pull } = CONFIG.camps;
+    for (const [a, b] of [[door, archer], [door, back], [archer, back]]) {
+      expect(flat(a, b)).toBeGreaterThanOrEqual(5);
+      expect(flat(a, b)).toBeLessThanOrEqual(18);
+    }
+    expect(flat(door, archer)).toBeLessThan(pull);
+    expect(flat(door, back)).toBeGreaterThan(pull);
+    expect(flat(archer, back)).toBeGreaterThan(pull);
+  });
+});
+
+describe('the safe places', () => {
+  /** How far (x, z) is from the village, the bridge, the pond's shore and the standing stones, whichever is nearest. */
+  function fromSafety(x: number, z: number): number {
+    const places = ['village', 'pondShore', 'stones'].map((id) => layout.clearings.find((c) => c.id === id)!);
+    let d = Math.min(...places.map((c) => Math.hypot(x - c.x, z - c.z) - c.r));
+    const { bridge } = layout;
+    const [lx, lz] = worldToLocal(bridge, x, z);
+    d = Math.min(d, Math.hypot(Math.max(0, Math.abs(lx) - bridge.hw), Math.max(0, Math.abs(lz) - bridge.hd)));
+    return d;
+  }
+
+  it('have no camp in them, nor a patrol walking through: nothing notices you there', () => {
+    const { notice } = CONFIG.camps;
+    for (const camp of layout.camps) {
+      for (const p of [...camp.posts, ...(camp.road ?? [])]) {
+        expect(fromSafety(p.x, p.z), `${camp.id} at (${p.x.toFixed(1)}, ${p.z.toFixed(1)})`).toBeGreaterThan(notice);
+      }
+    }
+  });
+
+  it("are Oakvale's every camp: the farm, the lumber camp, its patrol and the watchtower", () => {
+    expect(layout.camps.map((c) => c.id)).toEqual(['farm', 'lumberCamp', 'watchtower', 'patrol']);
   });
 });
 

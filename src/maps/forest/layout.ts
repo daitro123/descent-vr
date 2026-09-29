@@ -1,3 +1,4 @@
+import { PatrolWalk } from '../../enemies/patrol';
 import type { CampId, CampPlan, Pickup, PostPlan, Spot } from '../types';
 import { Colliders } from './colliders';
 import { fbm, lerp, mulberry32, nearestOnPolyline, type P2, sampleCurve, smoothstep, valueNoise } from './noise';
@@ -68,6 +69,12 @@ const START: P2 = [0.2, 1.5];
  * prototype's stood on the stream bank), the archer to the north watching the
  * woods (the stream bank takes the south), and the leader before their tent's
  * door. A pull brings two to four of them rather than the lot.
+ *
+ * The watchtower's gang holds the flat top of its hill: a thug at the tower's
+ * door where the road comes up, facing down it; the archer on the hill's
+ * south-west brow, looking down over the road; and a thug round the back,
+ * watching the woods. The archer is within a pull of the door's thug, the
+ * back's thug of neither, so you can take the pair first.
  */
 const CAMPS: {
   id: CampId;
@@ -98,7 +105,26 @@ const CAMPS: {
       { behaviour: 'brute', role: 'leader', family: 'bandit', x: -50, z: -44.3, face: [-44, -41] },
     ],
   },
+  {
+    id: 'watchtower',
+    clearing: 'towerTop',
+    level: 2,
+    posts: [
+      { behaviour: 'grunt', family: 'bandit', x: 35, z: -59.5, face: [28, -57.5] },
+      { behaviour: 'archer', family: 'bandit', x: 37.5, z: -53, face: [28, -55] },
+      { behaviour: 'grunt', family: 'bandit', x: 45, z: -62, face: [52, -66] },
+    ],
+  },
 ];
+
+/**
+ * The lumber camp's patrol: two thugs walking the camp road in single file,
+ * level 2. Their road is the stretch of the camp road at least `clearMain` m
+ * from the main road's middle, so walking the main road (4 m wide) never
+ * wakes them, and at least `clearCamp` m from every one of the lumber camp's
+ * posts, so jumping them at the camp's end doesn't wake the camp too.
+ */
+const PATROL = { path: 'camp', level: 2, count: 2, clearMain: 10, clearCamp: 9 } as const;
 
 /**
  * The lumber camp leader's tent, in its own frame (its door faces +Z): a
@@ -549,6 +575,21 @@ export function buildLayout(): ForestLayout {
       level: c.level,
       posts: c.posts.map(({ face, ...p }) => ({ ...p, yaw: facing(p.x, p.z, face[0], face[1]) })),
     };
+  });
+  const lumber = camps.find((c) => c.id === 'lumberCamp')!;
+  const road = paths
+    .find((p) => p.id === PATROL.path)!
+    .line.filter(([x, z]) => nearestOnPolyline(main.line, x, z).d >= PATROL.clearMain && lumber.posts.every((p) => Math.hypot(p.x - x, p.z - z) >= PATROL.clearCamp))
+    .map(([x, z]) => ({ x, z }));
+  const walk = new PatrolWalk(road, PATROL.count);
+  const [a, b] = [road[0], road[road.length - 1]];
+  camps.push({
+    id: 'patrol',
+    // Round its road, for what needs a place; it refills by its road itself.
+    place: { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2, r: Math.hypot(b.x - a.x, b.z - a.z) / 2 },
+    level: PATROL.level,
+    posts: Array.from({ length: PATROL.count }, (_, i) => ({ behaviour: 'grunt', family: 'bandit', ...walk.spot(i) }) as const),
+    road,
   });
   const tent = at('tent');
   const [ox, oz] = localToWorld(tent, TENT.orders.x, TENT.orders.z);

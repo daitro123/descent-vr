@@ -262,10 +262,14 @@ export const CONFIG = {
     // once you're at least `away` m from it, so it doesn't vanish under your nose.
     stuck: { progress: 1, time: 3, away: 12 },
     refillTime: 180, // s after the last member falls, the camp refills whole…
-    refillAway: 30, // m: …but only while you're this far from its clearing
+    refillAway: 30, // m: …but only while you're this far from its clearing (a patrol's: its road)
     strength: 1.4, // health and damage, on top of its level
     // One pool for the player across every camp: three may swing, two shoot.
     tokens: { melee: 3, ranged: 2 },
+    // A patrol (enemies/patrol.ts) walks its road in single file and pauses at
+    // each end. It holds where it is while any of it lags this far behind its
+    // place in the file, so nobody is left behind.
+    patrol: { speed: 0.8, gap: 1.8, pause: 3, keepUp: 1.2 }, // m/s, m apart, s at each end, m
   },
 
   // Levels (adventureState.ts): the Adventure's character climbs from 1 to the

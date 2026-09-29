@@ -59,7 +59,14 @@ export interface CampPlan {
   /** Its clearing: a cleared camp refills only while you're well away from it. */
   readonly place: { readonly x: number; readonly z: number; readonly r: number };
   readonly level: number;
+  /** Who stands where. A patrol's members stand here, in file on its road, when it fills. */
   readonly posts: readonly PostPlan[];
+  /**
+   * A patrol's road: its members walk it end to end in single file instead of
+   * standing at their posts (enemies/patrol.ts), and it refills only while
+   * you're well away from the road rather than from its place.
+   */
+  readonly road?: readonly { readonly x: number; readonly z: number }[];
 }
 
 /** Something lying in a zone to pick up by hand (the leader's orders): where, and which way it lies. */
