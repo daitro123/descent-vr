@@ -51,8 +51,8 @@ export interface EnemyContext {
 
 type MutablePose = Record<string, [number, number, number]>;
 
-/** What an enemy is made of, besides its behaviour and where it stands (createEnemy fills it in). */
-export interface EnemyMake {
+/** What sets an enemy apart from others with its behaviour: its family and look, its numbers and level (createEnemy fills it in). */
+export interface EnemyTraits {
   /** Who it is: the undead (the default) are skeletons; bandits wear the human body. */
   family?: Family;
   /** Which of its family's looks for its behaviour. */
@@ -220,9 +220,9 @@ export abstract class Enemy {
     readonly kind: EnemyKind,
     x: number,
     z: number,
-    make: EnemyMake = {},
+    traits: EnemyTraits = {},
   ) {
-    const { family = 'undead', variant = 0, def = CONFIG.enemies[kind], level = 1 } = make;
+    const { family = 'undead', variant = 0, def = CONFIG.enemies[kind], level = 1 } = traits;
     this.family = family;
     this.def = def;
     this.level = level;

@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import type { EnemyContext } from '../src/enemies/enemy';
 import { createEnemy } from '../src/enemies/kinds';
 import { AttackTokens } from '../src/enemies/tokens';
+import { BANDIT_BUILDS } from '../src/models/bandits';
+import { BUILDS } from '../src/models/human';
 import { Arena } from '../src/world/arena';
 import type { Ground } from '../src/world/ground';
 
@@ -36,8 +38,9 @@ const hipsY = (e: ReturnType<typeof createEnemy>) => e.rig.bones.hips.getWorldPo
 
 describe.each(['grunt', 'archer', 'brute'] as const)('a bandit %s', (kind) => {
   it('wears the human body, not a skeleton', () => {
-    expect(createEnemy(kind, 0, 0, { family: 'bandit' }).family).toBe('bandit');
-    expect(createEnemy(kind, 0, 0).family).toBe('undead');
+    const human = BUILDS[BANDIT_BUILDS[kind]].proportions;
+    expect(createEnemy(kind, 0, 0, { family: 'bandit' }).rig.proportions).toEqual(human);
+    expect(createEnemy(kind, 0, 0).rig.proportions).not.toEqual(human);
   });
 
   it('is standing where it is made, and can be hit at once, where the undead rise from the ground', () => {

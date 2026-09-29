@@ -248,7 +248,7 @@ export class Combat implements ArrowResolver {
     enemy.capsule(_a, _b);
     _a.lerp(_b, 0.5);
     const bandit = enemy.family === 'bandit';
-    sfx.death(_a, enemy.kind === 'warden' || enemy.kind === 'brute', !bandit);
+    sfx.death(_a, { big: enemy.kind === 'warden' || enemy.kind === 'brute', bones: !bandit });
     if (bandit) this.fx.particles.burst('blood', _a, 12, undefined, HUMAN_BLOOD);
     else if (enemy.kind === 'brute') this.fx.particles.burst('blood', _a, 24);
     else this.fx.particles.burst('bone', _a, enemy.kind === 'warden' ? 40 : 14);

@@ -346,9 +346,9 @@ export function kerchief(ctx: DressContext, color: number, knot = true): void {
     .box(0.03, 0.08, 0.012, { at: [0.02, 0.055, -0.12], rot: [0.2, 0, -0.2], color });
 }
 
-/** A sash round the waist, its end hanging at the right hip, so the mark reads from behind too. */
-export function sash(ctx: DressContext, l: Look, color: number): void {
-  const k = thick(l);
+/** A sash round the waist, its end hanging at the right hip, so the mark reads from behind too. A larger `girth` winds it over a coat. */
+export function sash(ctx: DressContext, l: Look, color: number, girth = thick(l)): void {
+  const k = girth;
   ctx
     .on('hips')
     .box(0.35 * k, 0.07, 0.25 * k, { at: [0, 0.07, 0.005], rot: [0, 0, 0.1], color })
@@ -381,6 +381,11 @@ export function quiver(ctx: DressContext, fletching: number): void {
     .bar([0.18, L, 0.12], [-0.16, 0.05, -0.13], 0.03, 0.02, { color: PAL.leatherDark });
 }
 
+/** Where the sheathed sword's pommel sits, in the hips' space. */
+export function pommelOf(l: Look): Vec3 {
+  return [0.19 * thick(l) - 0.01, 0.215, 0.215];
+}
+
 /** A sheathed sword at the left hip, hilt forward and up; its guard and pommel in `guard`. */
 export function sheathedSword(ctx: DressContext, l: Look, guard: number): void {
   const x = 0.19 * thick(l);
@@ -391,7 +396,7 @@ export function sheathedSword(ctx: DressContext, l: Look, guard: number): void {
     .box(0.05, 0.08, 0.07, { at: [x + 0.02, -0.73, -0.055], rot: tilt, color: guard })
     .box(0.035, 0.035, 0.18, { at: [x, 0.04, 0.165], rot: tilt, color: guard })
     .box(0.035, 0.15, 0.035, { at: [x - 0.005, 0.13, 0.19], rot: tilt, color: PAL.leather })
-    .ball(0.03, { at: [x - 0.01, 0.215, 0.215], color: guard });
+    .ball(0.03, { at: pommelOf(l), color: guard });
 }
 
 /** Cuffs over the wrists: gloves' gauntlets or bracers. */

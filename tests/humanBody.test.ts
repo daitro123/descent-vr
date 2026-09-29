@@ -1,12 +1,13 @@
 import { Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
-import { clipsFor, type MutablePose } from '../src/inspector/clips';
+import { type Clip, clipsFor, type MutablePose } from '../src/inspector/clips';
 import { buildCharacter, type EnemyKind, proportionsOf } from '../src/models/characters';
-import { BUILDS, type BuildName, body, head, type Look } from '../src/models/human';
+import { BUILDS, type BuildName, body, head, type Look, pommelOf } from '../src/models/human';
 import { buildPerson, PEOPLE, type PersonId } from '../src/models/people';
 import { BONES, Rig } from '../src/models/rig';
 
-// The human body (models/human.ts) and everyone who wears it (models/people.ts).
+// The human body (models/human.ts) and everyone who wears it: the bandits
+// (models/bandits.ts) and the friendly characters (models/people.ts).
 // These check what a player would notice of a body: it stands on its soles at
 // its height, it plays every enemy animation as the skeletons do, and each
 // character stays inside the triangle budget.
@@ -22,6 +23,13 @@ function plain(build: BuildName): Rig {
     head(ctx, look);
   });
 }
+
+/** The bandits, dressed: each thug look, the archer and the leader. */
+const BANDITS: [string, EnemyKind, number][] = [
+  ...[0, 1, 2].map((v): [string, EnemyKind, number] => [`thug v${v}`, 'grunt', v]),
+  ['bandit archer', 'archer', 0],
+  ['bandit leader', 'brute', 0],
+];
 
 /** Every character that wears the human body, as the game builds them. */
 const HUMANS: [string, () => Rig][] = [
@@ -50,6 +58,36 @@ function extent(rig: Rig, bones?: readonly string[]): { low: number; high: numbe
   return { low, high };
 }
 
+/** The lower ankle's height, as a share of the hip's, with `rig` in a clip's frame of `kind`. */
+function ankles(rig: Rig, kind: EnemyKind, frame: { pose: object; hipY: number }): number {
+  rig.apply(frame.pose);
+  // The clip's hip drop (a kneel, the walk's bob) is sized for its own behaviour's body.
+  rig.setHipOffset(0, (frame.hipY * rig.proportions.hipY) / proportionsOf(kind).hipY, 0);
+  rig.mesh.updateMatrixWorld(true);
+  const shin = rig.proportions.shin;
+  const left = _v.set(0, -shin, 0).applyMatrix4(rig.bones.shinL.matrixWorld).y;
+  const right = _v.set(0, -shin, 0).applyMatrix4(rig.bones.shinR.matrixWorld).y;
+  return Math.min(left, right) / rig.proportions.hipY;
+}
+
+/** Plays `clips` on `human` and on a skeleton grunt: every bone stays finite and the feet go where the skeleton's do, scaled. */
+function playsLikeASkeleton(human: Rig, kind: EnemyKind, clips: Clip[]): void {
+  const grunt = buildCharacter('grunt').rig;
+  const out: MutablePose = {};
+  for (const clip of clips) {
+    for (let i = 0; i <= 24; i++) {
+      const frame = clip.sample((clip.duration * i) / 24, out);
+      const feet = ankles(human, kind, frame);
+      const skeletonFeet = ankles(grunt, kind, frame);
+      for (const name of BONES) {
+        human.bones[name].getWorldPosition(_v);
+        expect(Number.isFinite(_v.x + _v.y + _v.z), `${clip.name}: ${name}`).toBe(true);
+      }
+      expect(Math.abs(feet - skeletonFeet) * human.proportions.hipY, `${clip.name} at ${i}/24`).toBeLessThan(0.02);
+    }
+  }
+}
+
 describe('the human body', () => {
   it.each(BUILD_NAMES)('stands on its soles in the %s build', (build) => {
     expect(Math.abs(extent(plain(build)).low)).toBeLessThan(0.01);
@@ -65,45 +103,36 @@ describe('the human body', () => {
   // puts a skeleton grunt's (which the poses were made on), scaled to size.
   describe.each(BUILD_NAMES)('in the %s build', (build) => {
     it.each(KINDS)('plays every %s animation with its feet where a skeleton grunt has them', (kind) => {
-      const human = plain(build);
-      const grunt = buildCharacter('grunt').rig;
-      const out: MutablePose = {};
-      /** The lower ankle's height, as a share of the hip's. */
-      const ankles = (rig: Rig, frame: { pose: object; hipY: number }) => {
-        rig.apply(frame.pose);
-        // The clip's hip drop (a kneel, the walk's bob) is in its own kind's size.
-        rig.setHipOffset(0, (frame.hipY * rig.proportions.hipY) / proportionsOf(kind).hipY, 0);
-        rig.mesh.updateMatrixWorld(true);
-        const shin = rig.proportions.shin;
-        const left = _v.set(0, -shin, 0).applyMatrix4(rig.bones.shinL.matrixWorld).y;
-        const right = _v.set(0, -shin, 0).applyMatrix4(rig.bones.shinR.matrixWorld).y;
-        return Math.min(left, right) / rig.proportions.hipY;
-      };
-      for (const clip of clipsFor(kind)) {
-        for (let i = 0; i <= 24; i++) {
-          const frame = clip.sample((clip.duration * i) / 24, out);
-          const feet = ankles(human, frame);
-          const skeletonFeet = ankles(grunt, frame);
-          for (const name of BONES) {
-            human.bones[name].getWorldPosition(_v);
-            expect(Number.isFinite(_v.x + _v.y + _v.z), `${clip.name}: ${name}`).toBe(true);
-          }
-          expect(Math.abs(feet - skeletonFeet) * human.proportions.hipY, `${clip.name} at ${i}/24`).toBeLessThan(0.02);
-        }
-      }
+      playsLikeASkeleton(plain(build), kind, clipsFor(kind));
     });
+  });
+});
+
+describe('every bandit', () => {
+  it.each(BANDITS)('%s plays each of its animations dressed, feet where a skeleton’s go', (_name, kind, variant) => {
+    playsLikeASkeleton(buildCharacter(kind, { family: 'bandit', variant }).rig, kind, clipsFor(kind, 'bandit'));
   });
 });
 
 describe('every human character', () => {
   it.each(HUMANS)('%s is one body under 900 triangles', (_name, build) => {
     const rig = build();
-    const triangles = rig.mesh.geometry.getAttribute('position').count / 3;
-    expect(triangles).toBeLessThan(900);
+    expect(rig.triangles).toBeLessThan(900);
     expect(Array.isArray(rig.mesh.material)).toBe(false);
   });
 
   it.each(HUMANS)('%s stands with their soles on the floor', (_name, build) => {
     expect(Math.abs(extent(build(), ['shinL', 'shinR']).low)).toBeLessThan(0.01);
   });
+});
+
+it('Marshal Hale stands with the left hand on their sword’s pommel', () => {
+  const hale = PEOPLE.hale;
+  const rig = buildPerson('hale');
+  rig.apply(hale.stand);
+  rig.mesh.updateMatrixWorld(true);
+  const pommel = new Vector3(...pommelOf(hale.look)).applyMatrix4(rig.bones.hips.matrixWorld);
+  const palm = new Vector3(0, -0.045, 0).applyMatrix4(rig.bones.handL.matrixWorld);
+  expect(palm.distanceTo(pommel)).toBeLessThan(0.06);
+  expect(palm.y).toBeGreaterThan(pommel.y);
 });

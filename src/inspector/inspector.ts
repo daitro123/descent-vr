@@ -315,7 +315,7 @@ export class Inspector {
     const a = clip.attack;
     const timing = a ? `wind ${a.windup}s  swing ${a.active}s  recover ${a.recover}s` : '';
     const height = b.rig.proportions.hipY / 0.92;
-    const tris = b.rig.mesh.geometry.getAttribute('position').count / 3;
+    const tris = b.rig.triangles;
     return [
       `${e.label.toUpperCase()}   ${this.entry + 1}/${ENTRIES.length}   ×${height.toFixed(2)} height   ${tris} tris`,
       `${clip.name}   ${this.clip + 1}/${b.clips.length}   ${this.phase}`,

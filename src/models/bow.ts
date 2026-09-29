@@ -1,3 +1,4 @@
+import type { WeaponSpec } from './characters';
 import type { Vec3 } from './kit';
 import { PAL } from './palette';
 import type { DressContext } from './rig';
@@ -12,9 +13,10 @@ export interface BowTrim {
  * Today's bow, held in the left fist with its limbs along the hand's Z. With
  * the arm raised forward the bow stands upright; its back faces the target
  * (hand -Y). The string's ends ride the tips and its middle rides the drawing
- * hand, so it follows the hand back to the cheek.
+ * hand, so it follows the hand back to the cheek. A bow strikes nothing, so
+ * the spec it returns is a placeholder that keeps the weapon type uniform.
  */
-export function bow(ctx: DressContext, trim: BowTrim): void {
+export function bow(ctx: DressContext, trim: BowTrim): WeaponSpec {
   const b = ctx.on('handL');
   const pts: Vec3[] = [
     [0, -0.06, 0],
@@ -39,4 +41,5 @@ export function bow(ctx: DressContext, trim: BowTrim): void {
       jitter: 0,
     });
   }
+  return { bone: 'handL', base: [0, 0, 0], tip: [0, -0.1, 0], radius: 0 };
 }

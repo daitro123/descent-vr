@@ -112,12 +112,11 @@ export function attackClip(kind: EnemyKind, attack: AttackConfig, name: string =
   };
 }
 
-/** Idle → pose → hold → idle, for the reaction poses the game eases into. */
-function holdClip(kind: EnemyKind, name: string, pose: Pose, hold: number, hipDrop = 0, p?: Proportions): Clip {
+/** Idle → pose → hold → idle, for the reaction poses the game eases into; `drop` lowers the hips (m). */
+function holdClip(kind: EnemyKind, name: string, pose: Pose, hold: number, drop = 0): Clip {
   const idle = IDLE[kind];
   const IN = 0.3;
   const OUT = 0.5;
-  const drop = hipDrop * (p?.hipY ?? 0);
   return {
     name,
     duration: REST + IN + hold + OUT + REST,
@@ -133,7 +132,7 @@ function holdClip(kind: EnemyKind, name: string, pose: Pose, hold: number, hipDr
   };
 }
 
-/** Every animation the game plays for this kind in this family's body, in a stable order. */
+/** Every animation the game plays for this behaviour, in this family's body, in a stable order. */
 export function clipsFor(kind: EnemyKind, family: Family = 'undead'): Clip[] {
   const def: EnemyConfig = CONFIG.enemies[kind];
   const p = proportionsOf(kind, family);
@@ -150,7 +149,7 @@ export function clipsFor(kind: EnemyKind, family: Family = 'undead'): Clip[] {
     for (const side of ['high', 'left', 'right', 'low'] as GuardSide[]) clips.push(holdClip(kind, `guard ${side}`, GUARD[side], def.guard.hold[1]));
   }
   clips.push(holdClip(kind, 'stagger', STAGGER, def.staggerTime * 0.6));
-  if (kind === 'warden') clips.push(holdClip(kind, 'kneel', KNEEL, CONFIG.warden.kneelTime, KNEEL_DROP, p));
+  if (kind === 'warden') clips.push(holdClip(kind, 'kneel', KNEEL, CONFIG.warden.kneelTime, KNEEL_DROP * p.hipY));
   // Only the dead claw up out of the ground.
   if (family === 'undead') clips.push(holdClip(kind, 'rise', RISE, 0.8));
   return clips;

@@ -1,9 +1,9 @@
 import type { Material } from 'three';
+import { BANDIT_BUILDS, type BanditKind, dressBandit } from './bandits';
 import { bow } from './bow';
 import { BUILDS } from './human';
 import type { Vec3 } from './kit';
 import { PAL } from './palette';
-import { BANDIT_BUILDS, dressBandit } from './people';
 import { type BoneName, type DressContext, type Proportions, Rig } from './rig';
 
 // The bestiary's bodies. Each is a Rig (one draw call) dressed from simple
@@ -263,9 +263,7 @@ function dressArcher(ctx: DressContext): WeaponSpec {
     .cyl(0.05, 0.045, 0.42, 6, { at: [-0.06, ctx.p.spine - 0.2, -0.14], rot: [0, 0, -0.35], color: PAL.leather })
     .box(0.03, 0.1, 0.03, { at: [-0.14, ctx.p.spine + 0.04, -0.14], rot: [0, 0, -0.35], color: PAL.cloth })
     .box(0.03, 0.1, 0.03, { at: [-0.1, ctx.p.spine + 0.05, -0.15], rot: [0, 0, -0.3], color: PAL.boneShade });
-  bow(ctx, { tips: PAL.boneShade, string: PAL.boneShade });
-  // Bows have no strike segment; a placeholder keeps the type uniform.
-  return { bone: 'handL', base: [0, 0, 0], tip: [0, -0.1, 0], radius: 0 };
+  return bow(ctx, { tips: PAL.boneShade, string: PAL.boneShade });
 }
 
 function dressBrute(ctx: DressContext): WeaponSpec {
@@ -384,8 +382,13 @@ export interface BuildOptions {
 /** The bone lengths of an enemy with this behaviour and family. */
 export function proportionsOf(kind: EnemyKind, family: Family = 'undead'): Proportions {
   if (family === 'undead') return PROPORTIONS[kind];
+  return BUILDS[BANDIT_BUILDS[banditOnly(kind)]].proportions;
+}
+
+/** Bandits fight as thugs, archers and a leader; the Warden is only ever undead. */
+function banditOnly(kind: EnemyKind): BanditKind {
   if (kind === 'warden') throw new Error('The Warden is undead');
-  return BUILDS[BANDIT_BUILDS[kind]].proportions;
+  return kind;
 }
 
 export function buildCharacter(kind: EnemyKind, opts: BuildOptions = {}): CharacterModel {
@@ -393,8 +396,8 @@ export function buildCharacter(kind: EnemyKind, opts: BuildOptions = {}): Charac
   const variant = opts.variant ?? 0;
   const family = opts.family ?? 'undead';
   const dress = (ctx: DressContext) => {
-    if (family === 'bandit' && kind !== 'warden') {
-      weapon = dressBandit(ctx, kind, variant);
+    if (family === 'bandit') {
+      weapon = dressBandit(ctx, banditOnly(kind), variant);
       return;
     }
     switch (kind) {

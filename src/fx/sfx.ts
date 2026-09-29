@@ -139,7 +139,7 @@ export const sfx = {
     tone(200, 80, 0.3, 'sawtooth', 0.2);
   },
   /** An enemy falls: bones clatter apart, or a body (`bones` false) thuds to the ground. */
-  death(at?: Vector3, big = false, bones = true) {
+  death(at?: Vector3, { big = false, bones = true } = {}) {
     tone(big ? 120 : 300, 40, big ? 1.2 : 0.5, 'square', 0.12, at);
     if (bones) rattle(at, big ? 18 : 10, big ? 0.9 : 0.45, 0.35);
     else noise(0.3, 0.45, 220, at, 'lowpass', big ? 0.75 : 0.6);

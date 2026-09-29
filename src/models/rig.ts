@@ -143,6 +143,11 @@ export class Rig {
     this.bind = bind;
   }
 
+  /** What the body costs to draw. */
+  get triangles(): number {
+    return this.mesh.geometry.getAttribute('position').count / 3;
+  }
+
   /** Set every bone from a pose; bones the pose omits return to bind. */
   apply(pose: Pose): void {
     for (const name of BONES) {

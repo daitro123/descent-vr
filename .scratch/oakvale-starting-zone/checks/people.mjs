@@ -79,7 +79,7 @@ const HUMANS = ['Bandit thug v0', 'Bandit thug v1', 'Bandit thug v2', 'Bandit th
             for (const bone of Object.values(b.rig.bones)) if (!bone.matrixWorld.elements.every(Number.isFinite)) placed = false;
           }
         }
-        return { clips: b.clips.map((c) => c.name), triangles: b.rig.mesh.geometry.getAttribute('position').count / 3, placed, meshes: b.rig.mesh.isSkinnedMesh };
+        return { clips: b.clips.map((c) => c.name), triangles: b.rig.triangles, placed, meshes: b.rig.mesh.isSkinnedMesh };
       },
       label,
     );
@@ -151,7 +151,7 @@ const HUMANS = ['Bandit thug v0', 'Bandit thug v1', 'Bandit thug v2', 'Bandit th
       rig.apply(pose);
       row.push(rig.mesh);
       inspector.root.add(rig.mesh);
-      return rig.mesh.geometry.getAttribute('position').count / 3;
+      return rig.triangles;
     };
     const tris = [];
     for (const id of ['hale', 'innkeeper', 'smith', 'farmer']) tris.push(add(buildPerson(id, createModelMaterial()), PEOPLE[id].stand));
@@ -211,7 +211,7 @@ const farm = () =>
         state: e.state,
         mind: m.mind,
         hittable: e.hittable,
-        triangles: e.rig.mesh.geometry.getAttribute('position').count / 3,
+        triangles: e.rig.triangles,
         hipsUp: hips.y - world.heightAt(e.position.x, e.position.z),
         overHead: e.healthBar.root.children.length,
         barShown: e.healthBar.root.visible,
@@ -253,9 +253,9 @@ await step(2);
   const h = await page.evaluate(() => {
     const { hale } = window.__descent.adventure;
     const mesh = hale.root.children.find((c) => c.isSkinnedMesh);
-    return { triangles: mesh.geometry.getAttribute('position').count / 3, hipY: hale.rig.proportions.hipY };
+    return { triangles: mesh.geometry.getAttribute('position').count / 3, hipY: mesh.skeleton.getBoneByName('hips').position.y };
   });
-  check(h.triangles < 900 && h.hipY === 0.95, `Hale is the human body in the average build (${h.triangles} triangles, hips at ${h.hipY} m)`);
+  check(h.triangles < 900 && Math.abs(h.hipY - 0.95) < 0.001, `Hale is the human body in the average build (${h.triangles} triangles, hips at ${h.hipY} m)`);
   await xrFrames(2);
   await shot('11-hale-from-the-start');
   const spot = await page.evaluate(() => {

@@ -200,15 +200,15 @@ export interface EnemyOptions {
  */
 export function createEnemy(kind: EnemyKind, x: number, z: number, options: EnemyOptions = {}): Enemy {
   const { level = 1, inCamp = false, family = 'undead', variant = 0 } = options;
-  const make = { family, variant, level, def: enemyNumbers(options.def ?? CONFIG.enemies[kind], level, inCamp) };
+  const traits = { family, variant, level, def: enemyNumbers(options.def ?? CONFIG.enemies[kind], level, inCamp) };
   switch (kind) {
     case 'grunt':
-      return new Grunt(kind, x, z, make);
+      return new Grunt(kind, x, z, traits);
     case 'archer':
-      return new Archer(kind, x, z, make);
+      return new Archer(kind, x, z, traits);
     case 'brute':
-      return new Brute(kind, x, z, make);
+      return new Brute(kind, x, z, traits);
     case 'warden':
-      return new Warden(kind, x, z, make);
+      return new Warden(kind, x, z, traits);
   }
 }
