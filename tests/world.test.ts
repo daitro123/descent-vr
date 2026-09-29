@@ -983,7 +983,7 @@ describe('the old mine', () => {
     expect(checked).toBeGreaterThan(1000);
   });
 
-  it('costs at most a few thousand triangles a part, the whole mine merged to four draw calls, with a flame for the pool in every part', () => {
+  it('costs at most a few thousand triangles a part, the whole mine merged to four draw calls, its flames within reach of the pool from every part (the passage has none of its own)', () => {
     const meshes = mine().root.children as Mesh[];
     // The rock, timbers and props; the crypt's flagstones; its bricks; the glows.
     expect(meshes).toHaveLength(4);

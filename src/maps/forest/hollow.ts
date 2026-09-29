@@ -2,13 +2,17 @@
 // lengths of tunnel), each with its floor and ceiling, in some frame of its
 // own (x across, z along, as a building's frame). A floor is level, or
 // slopes straight along one axis between level ends (a ramp), its ceiling
-// keeping its height over it. Pieces meet by overlapping or edge to edge. From the pieces come the walls: every side of every piece,
-// less where another piece opens off it. The walls are what you bump into
-// and what you can't see through; nothing is solid but rock. Pure numbers,
-// no meshes, so it runs in unit tests (mine.ts, mineModel.ts).
+// keeping its height over it. Pieces meet by overlapping or edge to edge.
+// From the pieces come the walls: every side of every piece, less where
+// another piece opens off it. The walls are what you bump into and what you
+// can't see through; nothing is solid but rock. Pure numbers, no meshes, so
+// it runs in unit tests (mine.ts, mineModel.ts).
 
 /** A side of a piece: north is −z, south +z, east +x, west −x. */
 export type Side = 'north' | 'south' | 'east' | 'west';
+
+/** Across (x) or along (z) the frame. */
+export type Axis = 'x' | 'z';
 
 /** A room or a length of tunnel. */
 export interface Piece {
@@ -34,7 +38,7 @@ export interface Piece {
 
 /** How a piece's floor slopes: see `Piece.slope`. */
 export interface Slope {
-  readonly axis: 'x' | 'z';
+  readonly axis: Axis;
   readonly from: number;
   readonly to: number;
   readonly rise: number;
@@ -49,7 +53,7 @@ export function floorOf(p: Piece, x: number, z: number): number {
 }
 
 /** Where a piece's floor bends along `axis` inside [a, b]: the ends of its slope. */
-export function bends(p: Piece, axis: 'x' | 'z', a: number, b: number): number[] {
+export function bends(p: Piece, axis: Axis, a: number, b: number): number[] {
   const s = p.slope;
   if (!s || s.axis !== axis) return [];
   return [s.from, s.to].filter((m) => m > Math.min(a, b) + EPS && m < Math.max(a, b) - EPS).sort((u, v) => (a < b ? u - v : v - u));

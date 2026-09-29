@@ -5,7 +5,7 @@ import { ModelBuilder } from '../models/kit';
 import { sharedModelMaterial } from '../models/materials';
 import type { Ground } from './ground';
 import { Glows } from './glows';
-import { buildHall, hallMaterials, toCentre, torchPosition } from './hall';
+import { buildHall, hallMaterials, torchLight } from './hall';
 
 const _p = new Vector3();
 
@@ -41,7 +41,7 @@ export class Arena implements Ground {
     for (const p of CONFIG.arena.pillars) {
       const { color, intensity, distance, decay } = CONFIG.world.pool;
       const light = new PointLight(color, intensity, distance, decay);
-      light.position.copy(torchPosition(p)).add(toCentre(p).multiplyScalar(0.25));
+      light.position.copy(torchLight(p));
       this.root.add(light);
       this.lights.push({ light, base: intensity, seed: Math.random() * 100 });
     }

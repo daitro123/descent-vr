@@ -38,7 +38,7 @@ export interface HallBuilders {
 }
 
 /** Flagstones and bricks: white, so the texture is all the colour. */
-const TEXTURED: PartOpts = { color: 0xffffff, jitter: 0 };
+export const TEXTURED: PartOpts = { color: 0xffffff, jitter: 0 };
 
 /** A wall with a gate, and its side: which way into the room is −side along its axis. */
 const WALLS = [
@@ -59,6 +59,7 @@ export function buildHall(b: HallBuilders, gates: HallGates): void {
   const { halfSize } = CONFIG.arena;
   const size = halfSize * 2;
   b.floor.shape(new PlaneGeometry(size, size), { ...TEXTURED, rot: [-PI / 2, 0, 0] });
+  buildGateFloors(b.floor, gates);
   buildWalls(b.walls, gates);
   buildTrim(b.props, gates);
   buildGates(b.props, gates);
@@ -102,7 +103,25 @@ export function torchPosition(p: Pillar): Vector3 {
   return new Vector3(p.x, 2.2, p.z).addScaledVector(toCentre(p), p.r + 0.12);
 }
 
+/** Where a pillar torch's light is: a little out from its flame, so it falls on the pillar too. */
+export function torchLight(p: Pillar): Vector3 {
+  return torchPosition(p).add(toCentre(p).multiplyScalar(0.25));
+}
+
 // ---------------------------------------------------------------- walls
+
+/** Flagstones down each gate's tunnel, to its end. */
+function buildGateFloors(b: ModelBuilder, gates: HallGates): void {
+  const { halfSize: h, gate } = CONFIG.arena;
+  for (const wall of WALLS) {
+    if (!gateOf(gates, wall)) continue;
+    const g = new PlaneGeometry(wall.axis === 'z' ? gate.width : gate.depth, wall.axis === 'z' ? gate.depth : gate.width);
+    g.rotateX(-PI / 2);
+    const out = wall.sign * (h + gate.depth / 2);
+    g.translate(wall.axis === 'x' ? out : 0, 0, wall.axis === 'z' ? out : 0);
+    b.shape(g, TEXTURED);
+  }
+}
 
 /** Brick walls as quads, split round each gate, and each gate's tunnel back from the wall. */
 function buildWalls(b: ModelBuilder, gates: HallGates): void {
@@ -144,6 +163,10 @@ function buildWalls(b: ModelBuilder, gates: HallGates): void {
   }
 }
 
+/** The stone plinth along the foot of a wall and the cornice along its top: how tall, and how far out from it. */
+export const PLINTH = { height: 0.28, depth: 0.16 } as const;
+export const CORNICE = { height: 0.24, depth: 0.2 } as const;
+
 /** Stone plinth, cornice and pilasters around the walls. */
 function buildTrim(b: ModelBuilder, gates: HallGates): void {
   const { halfSize: h, wallHeight: H, gate } = CONFIG.arena;
@@ -164,8 +187,8 @@ function buildTrim(b: ModelBuilder, gates: HallGates): void {
       b.box(dims[0], dims[1], dims[2], { ...o, at });
     };
     for (const [a0, a1] of runs) {
-      place((a0 + a1) / 2, 0.14, 0.08, a1 - a0, 0.28, 0.16, dark);
-      place((a0 + a1) / 2, H - 0.12, 0.1, a1 - a0, 0.24, 0.2, stone);
+      place((a0 + a1) / 2, PLINTH.height / 2, PLINTH.depth / 2, a1 - a0, PLINTH.height, PLINTH.depth, dark);
+      place((a0 + a1) / 2, H - CORNICE.height / 2, CORNICE.depth / 2, a1 - a0, CORNICE.height, CORNICE.depth, stone);
     }
     for (const along of [-4.8, 4.8]) {
       place(along, H / 2, 0.1, 0.6, H, 0.2, stone);
@@ -187,12 +210,7 @@ function buildGates(b: ModelBuilder, gates: HallGates): void {
       return [v.x, v.y, v.z];
     };
     const rot: [number, number, number] = [0, yaw, 0];
-    // Jambs, lintel and keystone.
-    for (const side of [-1, 1]) {
-      b.box(0.34, gate.height + 0.2, 0.34, { at: put(side * (gw + 0.14), (gate.height + 0.2) / 2, h - 0.1), rot, color: PAL.stoneLight });
-    }
-    b.box(gate.width + 0.7, 0.36, 0.36, { at: put(0, gate.height + 0.16, h - 0.1), rot, color: PAL.stoneLight })
-      .box(0.34, 0.46, 0.4, { at: put(0, gate.height + 0.2, h - 0.12), rot, color: PAL.stone });
+    gateFrame(b, (x, y, inset) => put(x, y, h - inset), rot);
     // The dark beyond, unless it's the way in.
     if (kind !== 'through') b.box(gate.width, gate.height, 0.05, { at: put(0, gate.height / 2, h + gate.depth), rot, color: 0x050404, jitter: 0 });
     if (kind === 'choked') {
@@ -211,8 +229,23 @@ function buildGates(b: ModelBuilder, gates: HallGates): void {
 }
 
 /**
+ * A gate's jambs, lintel and keystone on the face of its wall, `put` taking a
+ * point across the gate, up from the floor and out from the wall into the room
+ * to where it goes, and `rot` turning a box square to the wall.
+ */
+export function gateFrame(b: ModelBuilder, put: (x: number, y: number, inset: number) => [number, number, number], rot: [number, number, number]): void {
+  const { gate } = CONFIG.arena;
+  const gw = gate.width / 2;
+  for (const side of [-1, 1]) {
+    b.box(0.34, gate.height + 0.2, 0.34, { at: put(side * (gw + 0.14), (gate.height + 0.2) / 2, 0.1), rot, color: PAL.stoneLight });
+  }
+  b.box(gate.width + 0.7, 0.36, 0.36, { at: put(0, gate.height + 0.16, 0.1), rot, color: PAL.stoneLight })
+    .box(0.34, 0.46, 0.4, { at: put(0, gate.height + 0.2, 0.12), rot, color: PAL.stone });
+}
+
+/**
  * Fallen stone heaped in a gate's tunnel, to its lintel at the back and
- * spilling a little into the room (as far as `CONFIG.arena.choked`, which a
+ * spilling a little into the room (as far as `CONFIG.arena.choked.spill`, which a
  * collider flush with the wall covers), with the portcullis fallen across it.
  */
 function chokeGate(b: ModelBuilder, put: (x: number, y: number, z: number) => [number, number, number], gw: number, h: number): void {
@@ -222,7 +255,7 @@ function chokeGate(b: ModelBuilder, put: (x: number, y: number, z: number) => [n
   for (let i = 0; i < 22; i++) {
     // From the tunnel's back (deep, piled to the lintel) to the spill's edge (low).
     const back = rand();
-    const z = h - choked + back * (gate.depth + choked);
+    const z = h - choked.spill + back * (gate.depth + choked.spill);
     const top = 0.3 + back * (gate.height - 0.3);
     const r = 0.25 + rand() * 0.35;
     const x = (rand() * 2 - 1) * (gw + (back < 0.3 ? 0.3 : 0) - r * 0.5);

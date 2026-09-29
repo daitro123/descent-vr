@@ -4,11 +4,11 @@ import { ModelBuilder, type PartOpts } from '../../models/kit';
 import { type ModelMaterial, sharedModelMaterial } from '../../models/materials';
 import { PAL } from '../../models/palette';
 import { Glows } from '../../world/glows';
-import { brazier, buildHall, hallMaterials } from '../../world/hall';
+import { brazier, buildHall, CORNICE, gateFrame, hallMaterials, PLINTH, TEXTURED } from '../../world/hall';
 import type { Mine, MinePlan } from '../../world/mine';
-import { bends, floorOf, Hollow, type Piece } from './hollow';
+import { type Axis, bends, floorOf, Hollow, type Piece } from './hollow';
 import { FLAME } from './interiorModel';
-import { type Finish, MINE, type MinePiece } from './mine';
+import { type Finish, MINE, type MinePiece, minePiece } from './mine';
 import { mulberry32, valueNoise } from './noise';
 import { BUILD, EARTH } from './palette';
 
@@ -33,8 +33,6 @@ const DUG_FLOOR: PartOpts = { color: EARTH.mud, jitter: 0.14 };
 const VAULT: PartOpts = { color: PAL.stoneDark, jitter: 0.08 };
 const TIMBER: PartOpts = { color: PAL.woodDark, jitter: 0.12 };
 const IRON: PartOpts = { color: PAL.ironDark, jitter: 0.05 };
-/** Flagstones and bricks: white, so the texture is all the colour. */
-const TEXTURED: PartOpts = { color: 0xffffff, jitter: 0 };
 const BRICK = 0x6e463a;
 /** Room for every glow in the mine. */
 const MAX_GLOWS = 24;
@@ -102,7 +100,7 @@ export function buildMine(plan: MinePlan): Mine {
   buildGallery(builders[2].model);
   buildRamp(at, floorAt);
   buildDig(builders[4], glowIn(4));
-  buildCrypt(builders, glowIn, floorAt);
+  buildCrypt(hollow, builders, glowIn, floorAt);
   for (const [x, y, z] of MINE.lanterns) lantern(at(x, z), glowAt(x, z), x, floorAt(x, z) + y, z);
 
   const ao = { from: 0, to: 1.4, min: 0.6, floor: floorAt };
@@ -201,7 +199,7 @@ function roughQuad(
 }
 
 /** Where along [a, b] a piece's floor bends: its ends and its slope's, in order. */
-function stops(p: Piece, axis: 'x' | 'z', a: number, b: number): number[] {
+function stops(p: Piece, axis: Axis, a: number, b: number): number[] {
   return [a, ...bends(p, axis, a, b), b];
 }
 
@@ -309,7 +307,7 @@ function buildSets(at: (x: number, z: number) => ModelBuilder): void {
   const { every, post, cap } = MINE.sets;
   // Sunk into the rock but for a hand's breadth.
   const inset = hw + post / 2 - 0.07;
-  const set = (x: number, z: number, across: 'x' | 'z') => {
+  const set = (x: number, z: number, across: Axis) => {
     const b = at(x, z);
     for (const s of [-1, 1]) {
       const [px, pz] = across === 'x' ? [x + s * inset, z] : [x, z + s * inset];
@@ -401,7 +399,7 @@ function oreCart(b: ModelBuilder, x: number, z: number, full: boolean): void {
 
 /** The cart hall: props and beams under its roof, the winch over the shaft, the bandits' camp. */
 function buildCartHall(b: ModelBuilder, glow: Glow): void {
-  const hall = MINE.pieces[2];
+  const hall = minePiece('cart hall');
   const top = hall.floor + hall.height;
   const { props, propRadius, winch, brazier, crates, bedrolls } = MINE;
   // Each prop holds up a beam that runs the hall's width under its roof.
@@ -460,7 +458,7 @@ function buildCartHall(b: ModelBuilder, glow: Glow): void {
 
 /** The gallery: timbers on its west wall, the scaffolding on its east, and a streak of the vein. */
 function buildGallery(b: ModelBuilder): void {
-  const gallery = MINE.pieces[4];
+  const gallery = minePiece('gallery');
   const top = gallery.floor + gallery.height;
   const { scaffold, sets } = MINE;
   // Props against the west wall, sunk into it, with lanterns on some.
@@ -502,9 +500,9 @@ function buildRamp(at: (x: number, z: number) => ModelBuilder, floorAt: (x: numb
   const { hw, height } = MINE.tunnel;
   const { post, cap, first, second } = MINE.ramp;
   const inset = hw + post / 2 - 0.06;
-  const [legA, legB] = [MINE.pieces[6], MINE.pieces[7]];
+  const [legA, legB] = [minePiece('ramp east'), minePiece('ramp north')];
   const mid = (a: number, b: number) => (a + b) / 2;
-  const set = (x: number, z: number, across: 'x' | 'z', lean: number) => {
+  const set = (x: number, z: number, across: Axis, lean: number) => {
     const b = at(x, z);
     const y = floorAt(x, z);
     for (const s of [-1, 1]) {
@@ -520,7 +518,7 @@ function buildRamp(at: (x: number, z: number) => ModelBuilder, floorAt: (x: numb
 
 /** The dig: the silver vein glinting in its walls, and what the bandits dropped. */
 function buildDig(b: PartBuilders, glow: Glow): void {
-  const dig = MINE.pieces[8];
+  const dig = minePiece('dig');
   const { strongbox, picks, cloak, lantern: fallen, vein } = MINE.dig;
   const y = dig.floor;
   const m = b.model;
@@ -579,9 +577,9 @@ function buildDig(b: PartBuilders, glow: Glow): void {
  * breach, the carved passage's stone ribs, the antechamber's braziers and
  * the frame of the hall's gate, and the Warden's hall itself, the arena's.
  */
-function buildCrypt(builders: PartBuilders[], glowIn: (part: number) => Glow, floorAt: (x: number, z: number) => number): void {
-  const dig = MINE.pieces[8];
-  const breach = MINE.pieces[9];
+function buildCrypt(hollow: Hollow, builders: PartBuilders[], glowIn: (part: number) => Glow, floorAt: (x: number, z: number) => number): void {
+  const dig = minePiece('dig');
+  const breach = minePiece('breach');
   const { masonry } = MINE;
   // The crypt's wall on the dig's side, round the hole, and loose bricks at its foot.
   const b4 = builders[4];
@@ -605,7 +603,7 @@ function buildCrypt(builders: PartBuilders[], glowIn: (part: number) => Glow, fl
   }
 
   // Stone ribs across the carved passage's vault, every few metres, following its slope.
-  const passage = MINE.pieces[11];
+  const passage = minePiece('carved passage');
   for (let z = passage.z0 + 1.5; z < passage.z1 - 0.5; z += 3) {
     const cx = (passage.x0 + passage.x1) / 2;
     const top = floorAt(cx, z) + passage.height;
@@ -615,9 +613,9 @@ function buildCrypt(builders: PartBuilders[], glowIn: (part: number) => Glow, fl
   }
 
   // The antechamber: a brazier either side of the gate, and the gate's frame on this side.
-  const ante = MINE.pieces[13];
+  const ante = minePiece('antechamber');
   const b6 = builders[ante.part].model;
-  const gate = MINE.pieces[14];
+  const gate = minePiece('gate');
   const lift = (b: ModelBuilder, dy: number, fn: () => void) => {
     b.on(0, new Matrix4().makeTranslation(0, dy, 0));
     fn();
@@ -626,28 +624,31 @@ function buildCrypt(builders: PartBuilders[], glowIn: (part: number) => Glow, fl
   lift(b6, ante.floor, () => {
     for (const [bx, bz] of MINE.braziers) brazier(b6, (gx, gy, gz, size, color) => glowIn(ante.part)(gx, ante.floor + gy, gz, size, color), bx, bz);
     const gx = (gate.x0 + gate.x1) / 2;
-    const gw = (gate.x1 - gate.x0) / 2;
-    for (const s of [-1, 1]) b6.box(0.34, gate.height + 0.2, 0.34, { at: [gx + s * (gw + 0.14), (gate.height + 0.2) / 2, ante.z0 + 0.1], color: PAL.stoneLight });
-    b6.box(gate.x1 - gate.x0 + 0.7, 0.36, 0.36, { at: [gx, gate.height + 0.16, ante.z0 + 0.1], color: PAL.stoneLight });
-    // Plinth and cornice round the room.
-    for (const [x0, x1, z0, z1] of [
-      [ante.x0, ante.x1, ante.z0, ante.z0 + 0.16],
-      [ante.x0, ante.x1, ante.z1 - 0.16, ante.z1],
-      [ante.x0, ante.x0 + 0.16, ante.z0, ante.z1],
-      [ante.x1 - 0.16, ante.x1, ante.z0, ante.z1],
+    gateFrame(b6, (x, y, inset) => [gx + x, y, ante.z0 + inset], [0, 0, 0]);
+    // Plinth and cornice along its walls, as the hall's: the plinth broken where the passage and the gate open, the cornice running on over them.
+    const walls = hollow.walls.filter((w) => hollow.pieces[w.piece] === ante);
+    const over = hollow.lintels.filter((l) => hollow.pieces[l.wall.piece] === ante).map((l) => l.wall);
+    for (const [{ height, depth }, y, color, along] of [
+      [PLINTH, PLINTH.height / 2, PAL.stoneDark, walls],
+      [CORNICE, ante.height - CORNICE.height / 2, PAL.stone, [...walls, ...over]],
     ] as const) {
-      b6.box(x1 - x0, 0.28, z1 - z0, { color: PAL.stoneDark, at: [(x0 + x1) / 2, 0.14, (z0 + z1) / 2] });
-      b6.box(x1 - x0, 0.24, z1 - z0, { color: PAL.stone, at: [(x0 + x1) / 2, ante.height - 0.12, (z0 + z1) / 2] });
+      for (const w of along) {
+        const length = Math.hypot(w.bx - w.ax, w.bz - w.az);
+        const [cx, cz] = [(w.ax + w.bx) / 2 + (w.nx * depth) / 2, (w.az + w.bz) / 2 + (w.nz * depth) / 2];
+        const [sx, sz] = w.nx === 0 ? [length, depth] : [depth, length];
+        b6.box(sx, height, sz, { color, at: [cx, y, cz] });
+      }
     }
   });
 
   // The Warden's hall, as the arena's, come in by its south gate; its east and west gates are choked.
   const { hall } = MINE;
-  const hallPart = builders[MINE.pieces[15].part];
+  const hallPiece = minePiece('hall');
+  const hallPart = builders[hallPiece.part];
   const offset = new Matrix4().makeTranslation(hall.x, hall.floor, hall.z);
   for (const b of [hallPart.model, hallPart.floor, hallPart.walls]) b.on(0, offset);
   buildHall(
-    { floor: hallPart.floor, walls: hallPart.walls, props: hallPart.model, glow: (gx, gy, gz, size, color) => glowIn(MINE.pieces[15].part)(hall.x + gx, hall.floor + gy, hall.z + gz, size, color) },
+    { floor: hallPart.floor, walls: hallPart.walls, props: hallPart.model, glow: (gx, gy, gz, size, color) => glowIn(hallPiece.part)(hall.x + gx, hall.floor + gy, hall.z + gz, size, color) },
     { south: 'through', east: 'choked', west: 'choked' },
   );
   for (const b of [hallPart.model, hallPart.floor, hallPart.walls]) b.on(0, new Matrix4());

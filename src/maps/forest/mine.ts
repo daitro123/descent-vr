@@ -4,7 +4,7 @@ import { type Flame, type Frame, toFrame } from '../../world/interiors';
 import type { MinePlan, MineStanding } from '../../world/mine';
 import type { Respawn } from '../types';
 import { CONFIG } from '../../config';
-import { BRAZIER_FIRE, toCentre, torchPosition } from '../../world/hall';
+import { BRAZIER_FIRE, torchLight } from '../../world/hall';
 import { Colliders } from './colliders';
 import { Hollow, type Piece } from './hollow';
 import { type Shapes, toWorld } from './interiorPlan';
@@ -28,7 +28,12 @@ export type Finish = 'timbered' | 'dug' | 'dressed' | 'hall';
 /** A piece of the mine: its open space and how it's finished. */
 export interface MinePiece extends Piece {
   readonly finish: Finish;
+  /** What the meshes call it, for the pieces they furnish. */
+  readonly name?: PieceName;
 }
+
+/** The pieces the meshes furnish, by name. */
+export type PieceName = 'cart hall' | 'gallery' | 'ramp east' | 'ramp north' | 'dig' | 'breach' | 'carved passage' | 'antechamber' | 'gate' | 'hall';
 
 const { halfSize: HALL_HALF, wallHeight: HALL_HEIGHT, gate: HALL_GATE } = CONFIG.arena;
 /** The Warden's hall's middle, on its floor: its south gate opens off the antechamber's north wall. */
@@ -52,32 +57,32 @@ export const MINE = {
     // …then bends west to the cart hall.
     { x0: -6.5, x1: 1.75, z0: -11.75, z1: -8.25, floor: 0, height: 3, part: 0, finish: 'timbered' },
     // The cart hall, level with the mouth, its roof on timber props.
-    { x0: -18, x1: -6, z0: -15, z1: -5, floor: 0, height: 3.6, part: 1, finish: 'timbered' },
+    { x0: -18, x1: -6, z0: -15, z1: -5, floor: 0, height: 3.6, part: 1, finish: 'timbered', name: 'cart hall' },
     // A short passage north out of its far corner, so the gallery can't be seen from the adit.
     { x0: -17.25, x1: -13.75, z0: -19.5, z1: -14.5, floor: 0, height: 3, part: 1, finish: 'timbered' },
     // The gallery, long and tall where the old miners followed the vein.
-    { x0: -19, x1: -12, z0: -35, z1: -19, floor: 0, height: 6, part: 2, finish: 'timbered' },
+    { x0: -19, x1: -12, z0: -35, z1: -19, floor: 0, height: 6, part: 2, finish: 'timbered', name: 'gallery' },
     // The head of the bandits' ramp, out of the gallery's far corner…
     { x0: -12, x1: -10, z0: -35, z1: -31.5, floor: 0, height: 3, part: 2, finish: 'dug' },
     // …which winds east down 2 m to a landing, out of sight of the cart hall…
-    { x0: -10, x1: 4.5, z0: -35, z1: -31.5, floor: 0, height: 3, part: 3, slope: { axis: 'x', from: -9.5, to: 1, rise: -2 }, finish: 'dug' },
+    { x0: -10, x1: 4.5, z0: -35, z1: -31.5, floor: 0, height: 3, part: 3, slope: { axis: 'x', from: -9.5, to: 1, rise: -2 }, finish: 'dug', name: 'ramp east' },
     // …then north down 2 m more to their dig.
-    { x0: 1, x1: 4.5, z0: -46.5, z1: -35, floor: -2, height: 3, part: 3, slope: { axis: 'z', from: -35.5, to: -46, rise: -2 }, finish: 'dug' },
+    { x0: 1, x1: 4.5, z0: -46.5, z1: -35, floor: -2, height: 3, part: 3, slope: { axis: 'z', from: -35.5, to: -46, rise: -2 }, finish: 'dug', name: 'ramp north' },
     // The dig: a rough cave where the bandits followed the silver.
-    { x0: -3, x1: 9, z0: -56.5, z1: -46.5, floor: -4, height: 4.5, part: 4, finish: 'dug' },
+    { x0: -3, x1: 9, z0: -56.5, z1: -46.5, floor: -4, height: 4.5, part: 4, finish: 'dug', name: 'dig' },
     // The breach: a hole through the crypt's wall in the dig's east wall…
-    { x0: 9, x1: 10, z0: -54.5, z1: -52.5, floor: -4, height: 2.6, part: 4, finish: 'dressed' },
+    { x0: 9, x1: 10, z0: -54.5, z1: -52.5, floor: -4, height: 2.6, part: 4, finish: 'dressed', name: 'breach' },
     // …into the head of the carved passage, which turns south out of sight of the ramp.
     { x0: 10, x1: 13, z0: -55, z1: -51.5, floor: -4, height: 2.8, part: 4, finish: 'dressed' },
     // The carved passage, sloping south down 3 m…
-    { x0: 10, x1: 13, z0: -51.5, z1: -31.5, floor: -4, height: 2.8, part: 5, slope: { axis: 'z', from: -50.5, to: -34.75, rise: -3 }, finish: 'dressed' },
+    { x0: 10, x1: 13, z0: -51.5, z1: -31.5, floor: -4, height: 2.8, part: 5, slope: { axis: 'z', from: -50.5, to: -34.75, rise: -3 }, finish: 'dressed', name: 'carved passage' },
     // …turning east at its foot, out of its sight, into the antechamber.
     { x0: 13, x1: 18, z0: -34.5, z1: -31.5, floor: -7, height: 2.8, part: 6, finish: 'dressed' },
-    { x0: 18, x1: 26, z0: -37, z1: -29, floor: -7, height: 3.6, part: 6, finish: 'dressed' },
+    { x0: 18, x1: 26, z0: -37, z1: -29, floor: -7, height: 3.6, part: 6, finish: 'dressed', name: 'antechamber' },
     // The hall's south gate, through the antechamber's north wall…
-    { x0: HALL.x - HALL_GATE.width / 2, x1: HALL.x + HALL_GATE.width / 2, z0: HALL.z + HALL_HALF, z1: HALL.z + HALL_HALF + HALL_GATE.depth, floor: HALL.floor, height: HALL_GATE.height, part: 7, finish: 'hall' },
+    { x0: HALL.x - HALL_GATE.width / 2, x1: HALL.x + HALL_GATE.width / 2, z0: HALL.z + HALL_HALF, z1: HALL.z + HALL_HALF + HALL_GATE.depth, floor: HALL.floor, height: HALL_GATE.height, part: 7, finish: 'hall', name: 'gate' },
     // …and the Warden's hall.
-    { x0: HALL.x - HALL_HALF, x1: HALL.x + HALL_HALF, z0: HALL.z - HALL_HALF, z1: HALL.z + HALL_HALF, floor: HALL.floor, height: HALL_HEIGHT, part: 7, finish: 'hall' },
+    { x0: HALL.x - HALL_HALF, x1: HALL.x + HALL_HALF, z0: HALL.z - HALL_HALF, z1: HALL.z + HALL_HALF, floor: HALL.floor, height: HALL_HEIGHT, part: 7, finish: 'hall', name: 'hall' },
   ] as readonly MinePiece[],
   parts: ['adit', 'cart hall', 'gallery', 'ramp', 'dig', 'passage', 'antechamber', 'hall'] as readonly string[],
   /**
@@ -187,6 +192,11 @@ export const MINE = {
   cut: 0.3,
 } as const;
 
+/** The piece called `name`. */
+export function minePiece(name: PieceName): MinePiece {
+  return MINE.pieces.find((p) => p.name === name)!;
+}
+
 /** Past the adit's bend: the crypt hall's cool fill, no sun, and fog closing in at 6 to 18 m. */
 export const MINE_ATMOSPHERE_BASE: Omit<Atmosphere, 'flames'> = {
   background: 0x0c0a0e,
@@ -214,7 +224,7 @@ export function mineFlames(): readonly { x: number; y: number; z: number; part: 
     at(dig.lantern.x, dig.lantern.light, dig.lantern.z),
     ...braziers.map(([x, z]) => at(x, BRAZIER_FIRE, z)),
     ...CONFIG.arena.pillars.map((p) => {
-      const t = torchPosition(p).add(toCentre(p).multiplyScalar(0.25));
+      const t = torchLight(p);
       return at(hall.x + t.x, t.y, hall.z + t.z);
     }),
   ].sort((a, b) => a.part - b.part);
@@ -233,7 +243,7 @@ export function mineColliders(): Shapes {
       box(scaffold),
       box(dig.strongbox),
       // The fallen stone spilling out of the hall's east and west gates, flush with its walls.
-      ...[-1, 1].map((s) => [hall.x + s * (halfSize - choked / 2), hall.z, choked / 2, gate.width / 2 + 0.4] as const),
+      ...[-1, 1].map((s) => [hall.x + s * (halfSize - choked.spill / 2), hall.z, choked.spill / 2, gate.width / 2 + choked.beyond] as const),
     ],
     circles: [
       [brazier.x, brazier.z, brazier.r],
