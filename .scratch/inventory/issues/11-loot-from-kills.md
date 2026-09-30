@@ -2,7 +2,7 @@
 
 **What to build:** every kill in the Adventure rolls loot by the spec's role table: a pouch of coins where the enemy fell, junk and gear at the enemy's level and for your class as models beside it, a rim glow in each rarity's colour, and beams for green and blue. Touching them takes them, "Bag full" leaves an item on the ground, drops last 5 minutes (at most 12 lie), and healing orbs keep dropping. Bandit and undead junk exist in the catalogue.
 
-**Blocked by:** 09.
+**Blocked by:** 08. (Loosened from 09 on Tom's behalf, so it can run beside the bag: taking loot goes through the inventory module, and the check can read the bag through the debug handle.)
 
 **Status:** ready-for-agent
 
