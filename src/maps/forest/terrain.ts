@@ -1,30 +1,35 @@
-import {
-  BufferAttribute,
-  BufferGeometry,
-  CanvasTexture,
-  Color,
-  LinearMipmapLinearFilter,
-  Mesh,
-  MeshLambertMaterial,
-  NearestFilter,
-  RepeatWrapping,
-  SRGBColorSpace,
-  type Material,
-  Matrix4,
-  type Texture,
-  Vector3,
-} from 'three';
+import { BufferAttribute, BufferGeometry, Color, Matrix4, Vector3 } from 'three';
+import { CONFIG } from '../../config';
 import { FOREST, type ForestLayout, worldToLocal } from './layout';
-import { mulberry32, smoothstep, valueNoise } from './noise';
-import { EARTH, GREEN, WATER } from './palette';
+import { hash01, mulberry32, smoothstep, valueNoise } from './noise';
+import { EARTH, GREEN } from './palette';
 
-// Ground, dirt roads and water. The ground is a height-field mesh with one
-// colour per triangle (the same faceted look as the models), cut into square
-// chunks so the headset only draws the ones in view. Each chunk also carries
-// every tree and building standing on it: one draw call per chunk.
+// Ground and dirt roads, a chunk at a time. The ground is a height-field mesh
+// with one colour per triangle (the same faceted look as the models); a
+// stand-in's is coarser and colours the roads into it. Every random choice is
+// fixed by where it is, not by what was built before, so a chunk comes out
+// the same whenever and wherever it's built.
 
 const _c = new Color();
 const _n = new Vector3();
+
+/** A chunk's square, and whether a point belongs to it. */
+export interface Region {
+  readonly minX: number;
+  readonly maxX: number;
+  readonly minZ: number;
+  readonly maxZ: number;
+  owns(x: number, z: number): boolean;
+}
+
+/** One merged mesh's vertices, in the model material's layout: position, normal, colour, fx and uv. */
+export interface MeshArrays {
+  readonly position: Float32Array;
+  readonly normal: Float32Array;
+  readonly color: Float32Array;
+  readonly fx: Float32Array;
+  readonly uv: Float32Array;
+}
 
 /**
  * The vertices of one merged mesh, in the model material's layout (position,
@@ -51,12 +56,21 @@ export class MeshBuffer {
     for (let i = 0; i < 3; i++) this.col.push(color.r, color.g, color.b);
   }
 
+  /** One upright triangle, wound to face (ox, 0, oz) whatever order the corners come in. */
+  wall(a: readonly number[], b: readonly number[], c: readonly number[], ox: number, oz: number, color: Color): void {
+    const [ux, uy, uz] = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    const [vx, vy, vz] = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+    const facing = (uy * vz - uz * vy) * ox + (ux * vy - uy * vx) * oz >= 0;
+    this.pos.push(...a, ...(facing ? b : c), ...(facing ? c : b));
+    for (let i = 0; i < 3; i++) this.col.push(color.r, color.g, color.b);
+  }
+
   /** A copy of `g` (a built kit model) placed by `m`, its colours scaled by `tint`. */
   stamp(g: BufferGeometry, m: Matrix4, tint = 1): void {
     this.stamps.push({ g, m, tint });
   }
 
-  geometry(): BufferGeometry {
+  arrays(): MeshArrays {
     const own = this.pos.length / 3;
     const total = own + this.stamps.reduce((n, s) => n + s.g.getAttribute('position').count, 0);
     const pos = new Float32Array(total * 3);
@@ -111,79 +125,71 @@ export class MeshBuffer {
       uv.set(su, v * 2);
       v += n;
     }
+    return { position: pos, normal: nrm, color: col, fx, uv };
+  }
+
+  geometry(): BufferGeometry {
+    const a = this.arrays();
     const geo = new BufferGeometry();
-    geo.setAttribute('position', new BufferAttribute(pos, 3));
-    geo.setAttribute('normal', new BufferAttribute(nrm, 3));
-    geo.setAttribute('color', new BufferAttribute(col, 3));
-    geo.setAttribute('fx', new BufferAttribute(fx, 2));
-    geo.setAttribute('uv', new BufferAttribute(uv, 2));
+    geo.setAttribute('position', new BufferAttribute(a.position, 3));
+    geo.setAttribute('normal', new BufferAttribute(a.normal, 3));
+    geo.setAttribute('color', new BufferAttribute(a.color, 3));
+    geo.setAttribute('fx', new BufferAttribute(a.fx, 2));
+    geo.setAttribute('uv', new BufferAttribute(a.uv, 2));
     geo.computeBoundingSphere();
     return geo;
   }
 }
 
-/** Square chunks of the map, each gathering its ground, plants and buildings into one mesh. */
-export class Chunks {
-  readonly count: number;
-  private readonly buffers: MeshBuffer[];
-
-  constructor(
-    private readonly half: number,
-    private readonly size: number,
-  ) {
-    this.count = Math.ceil((2 * half) / size);
-    this.buffers = Array.from({ length: this.count * this.count }, () => new MeshBuffer());
-  }
-
-  /** The chunk that owns the point (x, z). */
-  at(x: number, z: number): MeshBuffer {
-    const clamp = (v: number) => Math.min(this.count - 1, Math.max(0, Math.floor((v + this.half) / this.size)));
-    return this.buffers[clamp(z) * this.count + clamp(x)];
-  }
-
-  meshes(material: Material): Mesh[] {
-    return this.buffers.flatMap((b, i) => {
-      if (b.empty) return [];
-      const mesh = new Mesh(b.geometry(), material);
-      mesh.name = `forest-chunk-${i}`;
-      mesh.matrixAutoUpdate = false;
-      return [mesh];
-    });
-  }
-}
-
 // ------------------------------------------------------------------ ground
 
-export function addTerrain(chunks: Chunks, layout: ForestLayout): void {
+/** How far each kind of tree's canopy shades the ground under it (scaled by the plant's scale). */
+function canopy(kind: string, scale: number): number {
+  return kind === 'oak' || kind === 'goldOak' ? 3 * scale : kind === 'pine' ? 2.3 * scale : kind === 'young' ? 1.3 : 0;
+}
+
+/**
+ * The ground over `region`: every height-field cell at full detail, or at a
+ * stand-in's coarser spacing with the roads coloured in (it has no ribbons)
+ * and a skirt round its edge. The skirt hangs below wherever the coarse edge
+ * strays from the full ground beside it, so no crack opens between the two.
+ */
+export function addGround(raw: MeshBuffer, layout: ForestLayout, region: Region, coarse: boolean): void {
   const { ground, fields, plants, mine } = layout;
   const { n, cell, half } = ground;
   const { water } = FOREST;
+  const step = coarse ? Math.round(CONFIG.streaming.standIn.cell / cell) : 1;
+  const index = (v: number) => Math.min(n - 1, Math.max(0, Math.round((v + half) / cell)));
+  const [i0, i1, j0, j1] = [index(region.minX), index(region.maxX), index(region.minZ), index(region.maxZ)];
+  if (i1 <= i0 || j1 <= j0) return;
+  const w = i1 - i0 + 1;
+  const local = (i: number, j: number) => (j - j0) * w + (i - i0);
 
   // Per-vertex extras: shade under canopies, and how close a road is.
-  const shade = new Float32Array(n * n);
+  const shade = new Float32Array(w * (j1 - j0 + 1));
   for (const t of plants) {
-    const reach = t.kind === 'oak' || t.kind === 'goldOak' ? 3 * t.scale : t.kind === 'pine' ? 2.3 * t.scale : t.kind === 'young' ? 1.3 : 0;
+    const reach = canopy(t.kind, t.scale);
     if (!reach) continue;
-    const i0 = Math.max(0, Math.floor((t.x - reach + half) / cell));
-    const i1 = Math.min(n - 1, Math.ceil((t.x + reach + half) / cell));
-    const j0 = Math.max(0, Math.floor((t.z - reach + half) / cell));
-    const j1 = Math.min(n - 1, Math.ceil((t.z + reach + half) / cell));
-    for (let j = j0; j <= j1; j++) {
-      for (let i = i0; i <= i1; i++) {
+    const a0 = Math.max(i0, Math.floor((t.x - reach + half) / cell));
+    const a1 = Math.min(i1, Math.ceil((t.x + reach + half) / cell));
+    const b0 = Math.max(j0, Math.floor((t.z - reach + half) / cell));
+    const b1 = Math.min(j1, Math.ceil((t.z + reach + half) / cell));
+    for (let j = b0; j <= b1; j++) {
+      for (let i = a0; i <= a1; i++) {
         const d = Math.hypot(-half + i * cell - t.x, -half + j * cell - t.z);
-        if (d < reach) shade[j * n + i] += 1 - d / reach;
+        if (d < reach) shade[local(i, j)] += 1 - d / reach;
       }
     }
   }
-  const road = new Float32Array(n * n);
-  ground.each((x, z, k) => (road[k] = layout.roadDistance.at(x, z)));
+  const road = new Float32Array(shade.length);
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) road[local(i, j)] = layout.roadDistance.at(-half + i * cell, -half + j * cell);
 
-  const rand = mulberry32(77);
   const grass = new Color(GREEN.grass);
   const grassLight = new Color(GREEN.grassLight);
   const grassDry = new Color(GREEN.grassDry);
   const floor = new Color(GREEN.forestFloor);
   const verge = new Color(EARTH.dirt).lerp(grass, 0.5);
+  const dirt = new Color(EARTH.dirt);
   const dirtDark = new Color(EARTH.dirtDark);
   const cliff = new Color(EARTH.cliff);
   const moss = new Color(GREEN.moss);
@@ -193,7 +199,7 @@ export function addTerrain(chunks: Chunks, layout: ForestLayout): void {
   const soil = new Color(EARTH.soil);
   const color = new Color();
 
-  const colourAt = (x: number, z: number, h: number, ny: number, sh: number, rd: number): Color => {
+  const colourAt = (x: number, z: number, h: number, ny: number, sh: number, rd: number, jitter: number): Color => {
     color.copy(grass).lerp(grassLight, valueNoise(x * 0.09, z * 0.09, 41));
     color.lerp(grassDry, smoothstep(0.55, 0.8, valueNoise(x * 0.02, z * 0.02, 43)) * 0.6);
     color.lerp(floor, Math.min(1, sh * 0.55));
@@ -202,31 +208,32 @@ export function addTerrain(chunks: Chunks, layout: ForestLayout): void {
     if (h > 12) color.lerp(_c.copy(moss).lerp(rock, valueNoise(x * 0.05, z * 0.05, 47) * 0.6), smoothstep(12, 30, h) * 0.7);
     // Worn verges: the ribbon draws the road itself, this just browns the grass beside it.
     if (rd < 2) color.lerp(verge, smoothstep(2, 0, rd) * 0.5);
+    // A stand-in has no ribbons, so its ground is the road.
+    if (coarse && layout.roadDistance.at(x, z) < 0) color.lerp(dirt, 0.85);
     color.lerp(sand, smoothstep(water + 0.4, water + 0.1, h));
     color.lerp(mud, smoothstep(water - 0.05, water - 0.4, h));
     for (const f of fields) {
       const [lx, lz] = worldToLocal(f, x, z);
       if (Math.abs(lx) < f.hw + 0.4 && Math.abs(lz) < f.hd + 0.4) color.copy(soil);
     }
-    return color.multiplyScalar((1 - Math.min(0.25, sh * 0.1)) * (0.95 + rand() * 0.1));
+    return color.multiplyScalar((1 - Math.min(0.25, sh * 0.1)) * (0.95 + jitter * 0.1));
   };
 
   const v = (i: number, j: number): [number, number, number] => [-half + i * cell, ground.get(i, j), -half + j * cell];
-  for (let j = 0; j < n - 1; j++) {
-    for (let i = 0; i < n - 1; i++) {
+  for (let j = j0; j < j1; j += step) {
+    for (let i = i0; i < i1; i += step) {
       const a = v(i, j);
-      const b = v(i + 1, j);
-      const c = v(i, j + 1);
-      const d = v(i + 1, j + 1);
-      const raw = chunks.at(a[0] + cell / 2, a[2] + cell / 2);
-      const ka = j * n + i;
-      const kb = j * n + i + 1;
-      const kc = (j + 1) * n + i;
-      const kd = (j + 1) * n + i + 1;
+      const b = v(i + step, j);
+      const c = v(i, j + step);
+      const d = v(i + step, j + step);
+      const ka = local(i, j);
+      const kb = local(i + step, j);
+      const kc = local(i, j + step);
+      const kd = local(i + step, j + step);
       // The same split as HeightField.at: a-b-c and b-d-c.
-      for (const [p, q, r, ks] of [
-        [a, b, c, [ka, kb, kc]],
-        [b, d, c, [kb, kd, kc]],
+      for (const [p, q, r, ks, t] of [
+        [a, b, c, [ka, kb, kc], 0],
+        [b, d, c, [kb, kd, kc], 1],
       ] as const) {
         // Where the mine's adit cuts into the hillside, the ground is left out.
         if (mine.cuts([p, q, r])) continue;
@@ -236,8 +243,41 @@ export function addTerrain(chunks: Chunks, layout: ForestLayout): void {
         const ny = faceUp(p, q, r);
         const sh = (shade[ks[0]] + shade[ks[1]] + shade[ks[2]]) / 3;
         const rd = Math.min(road[ks[0]], road[ks[1]], road[ks[2]]);
-        raw.tri(p, q, r, colourAt(cx, cz, cy, ny, sh, rd));
+        raw.tri(p, q, r, colourAt(cx, cz, cy, ny, sh, rd, hash01(i, j, 77 + t + (coarse ? 2 : 0))));
       }
+    }
+  }
+  if (!coarse) return;
+
+  // The skirt: down from each coarse edge by how far the full ground's midpoints stray from it.
+  const drop = CONFIG.streaming.standIn.skirt;
+  const sides: [number, number, number, number, number, number][] = [
+    // Start (i, j), step along the edge (di, dj), and which way is out (ox, oz).
+    [i0, j0, 1, 0, 0, -1],
+    [i0, j1, 1, 0, 0, 1],
+    [i0, j0, 0, 1, -1, 0],
+    [i1, j0, 0, 1, 1, 0],
+  ];
+  for (const [si, sj, di, dj, ox, oz] of sides) {
+    const len = di ? i1 - i0 : j1 - j0;
+    for (let s = 0; s < len; s += step) {
+      const [ai, aj] = [si + di * s, sj + dj * s];
+      const [bi, bj] = [ai + di * step, aj + dj * step];
+      const a = v(ai, aj);
+      const b = v(bi, bj);
+      let stray = 0;
+      for (let k = 1; k < step; k++) {
+        const f = k / step;
+        stray = Math.max(stray, Math.abs(ground.get(ai + di * k, aj + dj * k) - (a[1] + (b[1] - a[1]) * f)));
+      }
+      const depth = stray + drop;
+      const a1 = [a[0], a[1] - depth, a[2]];
+      const b1 = [b[0], b[1] - depth, b[2]];
+      const mx = (a[0] + b[0]) / 2;
+      const mz = (a[2] + b[2]) / 2;
+      const col = colourAt(mx, mz, (a[1] + b[1]) / 2, 1, 0, Infinity, 0.5);
+      raw.wall(a, b, b1, ox, oz, col);
+      raw.wall(a, b1, a1, ox, oz, col);
     }
   }
 }
@@ -259,11 +299,11 @@ function faceUp(a: readonly number[], b: readonly number[], c: readonly number[]
 
 /**
  * Each path is a ribbon laid a few centimetres above the ground: grassy
- * edges, darker wheel ruts on the wider roads, a lighter crown.
+ * edges, darker wheel ruts on the wider roads, a lighter crown. A stretch
+ * goes in the chunk its start is in.
  */
-export function addPaths(chunks: Chunks, layout: ForestLayout): void {
+export function addPaths(raw: MeshBuffer, layout: ForestLayout, region: Region): void {
   const { ground, bridge } = layout;
-  const rand = mulberry32(5);
   const edge = new Color(EARTH.dirt).lerp(new Color(GREEN.grass), 0.2);
   const rut = new Color(EARTH.dirt).lerp(new Color(EARTH.dirtDark), 0.7);
   const crown = new Color(EARTH.dirt);
@@ -278,51 +318,56 @@ export function addPaths(chunks: Chunks, layout: ForestLayout): void {
     const wide = path.width > 3;
     const across = wide ? [-0.5, -0.36, -0.25, 0.25, 0.36, 0.5] : [-0.5, -0.3, 0.3, 0.5];
     const strips = wide ? [edge, rut, crown, rut, edge] : [edge, crown, edge];
-    const rows = path.line.map(([x, z], i) => {
+    const row = (i: number) => {
+      const [x, z] = path.line[i];
       const [px, pz] = path.line[Math.max(0, i - 1)];
       const [nx, nz] = path.line[Math.min(path.line.length - 1, i + 1)];
       const len = Math.hypot(nx - px, nz - pz) || 1;
       const sx = -(nz - pz) / len;
       const sz = (nx - px) / len;
       return across.map((f, k) => {
-        const ragged = k === 0 || k === across.length - 1 ? rand() * 0.35 : 0;
+        const ragged = k === 0 || k === across.length - 1 ? hash01(pi * 4096 + i, k, 5) * 0.35 : 0;
         const off = f * path.width + Math.sign(f) * ragged;
         const vx = x + sx * off;
         const vz = z + sz * off;
         return [vx, ground.at(vx, vz) + lift, vz];
       });
-    });
-    for (let i = 0; i < rows.length - 1; i++) {
+    };
+    for (let i = 0; i < path.line.length - 1; i++) {
       const [x, z] = path.line[i];
+      if (!region.owns(x, z)) continue;
       if (onBridge(x, z) || onBridge(...path.line[i + 1])) continue;
-      const raw = chunks.at(x, z);
+      const [here, next] = [row(i), row(i + 1)];
       for (let k = 0; k < strips.length; k++) {
         col.copy(strips[k]);
         if (strips[k] === crown) col.lerp(light, valueNoise(x * 0.3, z * 0.3, 3) * 0.6);
-        col.multiplyScalar(0.94 + rand() * 0.12);
-        raw.tri(rows[i][k], rows[i + 1][k], rows[i][k + 1], col);
-        raw.tri(rows[i][k + 1], rows[i + 1][k], rows[i + 1][k + 1], col);
+        col.multiplyScalar(0.94 + hash01(pi * 4096 + i, k, 6) * 0.12);
+        raw.tri(here[k], next[k], here[k + 1], col);
+        raw.tri(here[k + 1], next[k], next[k + 1], col);
       }
     }
   });
 }
 
 /** Worn earth where people gather: the village square, the farmyard, the camp. */
-export function addPatches(chunks: Chunks, layout: ForestLayout): void {
-  const patches: [number, number, number][] = [
-    [0, 0, 7.5],
-    [54, 27, 7],
-    [-48, -42, 5],
-    [40, -58, 5.5],
-    [-14, -73.5, 4.5],
-    [-30, 52, 3],
-  ];
-  const rand = mulberry32(9);
+const PATCHES: readonly (readonly [number, number, number])[] = [
+  [0, 0, 7.5],
+  [54, 27, 7],
+  [-48, -42, 5],
+  [40, -58, 5.5],
+  [-14, -73.5, 4.5],
+  [-30, 52, 3],
+];
+
+/** Each patch of worn earth whose middle is in `region`. */
+export function addPatches(raw: MeshBuffer, layout: ForestLayout, region: Region): void {
   const dirt = new Color(EARTH.dirt);
   const light = new Color(EARTH.dirtLight);
   const edge = new Color(EARTH.dirt).lerp(new Color(GREEN.grass), 0.4);
   const col = new Color();
-  for (const [cx, cz, r] of patches) {
+  PATCHES.forEach(([cx, cz, r], index) => {
+    if (!region.owns(cx, cz)) return;
+    const rand = mulberry32(9 + index * 7919);
     const segs = 28;
     const rings = [0, 0.45, 0.8, 1];
     const pts = rings.map((f) =>
@@ -334,7 +379,6 @@ export function addPatches(chunks: Chunks, layout: ForestLayout): void {
         return [x, layout.ground.at(x, z) + 0.04, z];
       }),
     );
-    const raw = chunks.at(cx, cz);
     for (let ring = 0; ring < rings.length - 1; ring++) {
       for (let s = 0; s < segs; s++) {
         const t = (s + 1) % segs;
@@ -343,75 +387,5 @@ export function addPatches(chunks: Chunks, layout: ForestLayout): void {
         if (ring > 0) raw.tri(pts[ring][s], pts[ring + 1][t], pts[ring][t], col);
       }
     }
-  }
-}
-
-// ------------------------------------------------------------------ water
-
-let rippleTexture: Texture | null = null;
-
-/** 32×32 ripples: a mid tone with scattered light dashes, magnified crisp like every other texture. */
-function ripples(): Texture {
-  if (rippleTexture) return rippleTexture;
-  const size = 32;
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = size;
-  const ctx = canvas.getContext('2d')!;
-  const rand = mulberry32(3);
-  ctx.fillStyle = 'rgb(214,214,214)';
-  ctx.fillRect(0, 0, size, size);
-  for (let i = 0; i < 70; i++) {
-    const v = rand() < 0.5 ? 255 : 190;
-    ctx.fillStyle = `rgb(${v},${v},${v})`;
-    ctx.fillRect(Math.floor(rand() * size), Math.floor(rand() * size), 2 + Math.floor(rand() * 3), 1);
-  }
-  const tex = new CanvasTexture(canvas);
-  tex.magFilter = NearestFilter;
-  tex.minFilter = LinearMipmapLinearFilter;
-  tex.wrapS = tex.wrapT = RepeatWrapping;
-  tex.colorSpace = SRGBColorSpace;
-  tex.anisotropy = 4;
-  rippleTexture = tex;
-  return tex;
-}
-
-/**
- * One flat sheet at the water line, only over cells where the ground dips
- * below it. Shallows are lighter than the deeps.
- */
-export function buildWater(layout: ForestLayout): { mesh: Mesh; update(dt: number): void } {
-  const { ground } = layout;
-  const { n, cell, half } = ground;
-  const { water } = FOREST;
-  const raw = new MeshBuffer();
-  const deep = new Color(WATER.deep);
-  const shallow = new Color(WATER.shallow);
-  const col = new Color();
-  for (let j = 0; j < n - 1; j++) {
-    for (let i = 0; i < n - 1; i++) {
-      const hs = [ground.get(i, j), ground.get(i + 1, j), ground.get(i, j + 1), ground.get(i + 1, j + 1)];
-      if (Math.min(...hs) >= water) continue;
-      const x = -half + i * cell;
-      const z = -half + j * cell;
-      const depth = water - (hs[0] + hs[1] + hs[2] + hs[3]) / 4;
-      col.copy(shallow).lerp(deep, smoothstep(0.1, 1.1, depth));
-      raw.tri([x, water, z], [x + cell, water, z], [x, water, z + cell], col);
-      raw.tri([x + cell, water, z], [x + cell, water, z + cell], [x, water, z + cell], col);
-    }
-  }
-  const geometry = raw.geometry();
-  const uv = geometry.getAttribute('uv') as BufferAttribute;
-  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) / 3, uv.getY(i) / 3);
-  const map = typeof document === 'undefined' ? null : ripples();
-  const material = new MeshLambertMaterial({ vertexColors: true, map, emissive: 0x0c1c24 });
-  const mesh = new Mesh(geometry, material);
-  mesh.name = 'forest-water';
-  let t = 0;
-  return {
-    mesh,
-    update(dt) {
-      t += dt;
-      if (map) map.offset.set(t * 0.02, Math.sin(t * 0.3) * 0.05);
-    },
-  };
+  });
 }

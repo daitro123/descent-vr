@@ -200,6 +200,8 @@ export class MapViewer {
     if (!this.renderer.xr.isPresenting) this.camera.rotation.set(s.pitch, 0, 0);
     if (s.clear) this.fog = false;
     this.applyAtmosphere();
+    // A jump shows the zone round where you land at once, rather than streaming in a few chunks a frame.
+    if (this.map?.kind === 'zone') this.world.fill(s.x, s.z);
   }
 
   /** Turn the view: `yaw` to the right and `pitch` down, in radians. */
@@ -212,6 +214,8 @@ export class MapViewer {
   toggleFog(): void {
     this.fog = !this.fog;
     this.applyAtmosphere();
+    // Lifting the fog shows the whole zone, so every chunk comes in at once.
+    if (this.map?.kind === 'zone') this.world.fill(this.rig.position.x, this.rig.position.z);
   }
 
   toggleWalk(): void {

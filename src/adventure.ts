@@ -152,9 +152,6 @@ export class Adventure {
     this.saves = new SaveController(save.store, () => saveRecord(this.state.snapshot(), this.standing));
     this.world.attach(scene, camera);
     this.world.load(zone);
-    // Compile what the zone draws now, not when it first comes into view: the smoke over the
-    // village behind you at the start, and the signposts' names and the map board after a load elsewhere.
-    renderer.compile(zone.root, camera, scene);
     this.respawns = zone.respawns;
     this.respawn = zone.respawns.village;
     this.player = new Player(camera, renderer, this.world);
@@ -214,6 +211,9 @@ export class Adventure {
           })
         : null;
     if (this.throne) scene.add(this.throne.root);
+    // The mine's undead and the Warden are uploaded with the mine's meshes, as you come near its mouth.
+    for (const camp of this.camps.camps) if (camp.plan.interior === 'mine') this.world.stageWith('mine', camp.root);
+    if (this.throne) this.world.stageWith('mine', this.throne.root);
 
     this.pickups = new Pickups(zone.pickups);
     scene.add(this.pickups.root);
@@ -230,6 +230,8 @@ export class Adventure {
     });
     for (const v of this.villagers.all) this.world.addBody(v.body);
     scene.add(this.villagers.root);
+    // The outdoors' villagers with the chunks round you; the innkeeper is the inn's (its room's).
+    this.world.stageWith(null, this.villagers.root);
     this.villagers.warm(renderer, camera, scene);
     // The smith's hammer rings on the anvil with each blow of their work.
     this.ambience = new Ambience(zone.sounds, zone.trees);
@@ -246,6 +248,11 @@ export class Adventure {
     this.world.settle(interior);
     this.player.reset(x, z, yaw);
     this.lastHp = this.player.hp;
+    // Oakvale round where you stand, all at once behind the page, and compiled now rather than when
+    // it first comes into view: the smoke over the village behind you at the start, and the
+    // signposts' names and the map board after a load elsewhere.
+    this.world.fill(x, z);
+    renderer.compile(zone.root, camera, scene);
   }
 
   update(dt: number): void {
@@ -562,6 +569,8 @@ export class Adventure {
     const { x, z, yaw, interior } = this.respawn;
     this.world.settle(interior);
     this.player.reset(x, z, yaw);
+    // Behind the fade, the chunks round where you wake, at once.
+    this.world.fill(x, z);
     this.lastHp = this.player.hp;
     this.combat.projectiles.clear();
     this.deadFor = null;

@@ -19,6 +19,9 @@ export interface Box {
   yaw: number;
 }
 
+/** No edge to keep inside: for colliders within a room or the mine, whose walls do that. */
+export const UNBOUNDED = { keepInside: () => false };
+
 const CELL = 8;
 /** Largest body radius a query may pass; shapes are bucketed with this much slack. */
 const MAX_BODY = 1;
@@ -28,7 +31,7 @@ export class Colliders {
   readonly circles: Circle[] = [];
   readonly boxes: Box[] = [];
 
-  constructor(private readonly bounds: { minX: number; maxX: number; minZ: number; maxZ: number }) {}
+  constructor(private readonly walkable: { keepInside(p: Vector3, radius: number): boolean }) {}
 
   addCircle(c: Circle): void {
     this.circles.push(c);
@@ -40,7 +43,7 @@ export class Colliders {
     this.bucket(b.x, b.z, Math.hypot(b.hw, b.hd), (k) => k.boxes.push(b));
   }
 
-  /** Push a floor point out of every shape, then back inside the bounds. True if it moved. */
+  /** Push a floor point out of every shape, then back inside the walkable area. True if it moved. */
   resolve(p: Vector3, radius: number): boolean {
     let moved = false;
     const bucket = this.buckets.get(key(Math.floor(p.x / CELL), Math.floor(p.z / CELL)));
@@ -58,11 +61,7 @@ export class Colliders {
       }
       for (const b of bucket.boxes) if (pushOutOfBox(p, b, radius)) moved = true;
     }
-    const { minX, maxX, minZ, maxZ } = this.bounds;
-    if (p.x < minX + radius) (p.x = minX + radius), (moved = true);
-    if (p.x > maxX - radius) (p.x = maxX - radius), (moved = true);
-    if (p.z < minZ + radius) (p.z = minZ + radius), (moved = true);
-    if (p.z > maxZ - radius) (p.z = maxZ - radius), (moved = true);
+    if (this.walkable.keepInside(p, radius)) moved = true;
     return moved;
   }
 

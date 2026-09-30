@@ -105,6 +105,7 @@ async function startAdventure(
   const oakvale = await findMap('forest')!.load();
   if (oakvale.kind !== 'zone') throw new Error('Oakvale should be a zone');
   const adventure = new Adventure(scene, camera, renderer, oakvale, save);
+  if (perf) perf.chunks = () => adventure.world.chunkCounts;
   document.querySelector('#intro .loading')?.remove();
   // Keep where you stand when you go: the page hidden, VR ended, or the headset
   // put down or its menu opened (the session no longer visible).
@@ -130,6 +131,7 @@ async function startAdventure(
     renderer,
     camera,
     CONFIG,
+    perf,
     paused: false,
     /** Stand at (x, z) facing `yaw` (0 looks down −Z), keeping health and rage. */
     teleport: (x: number, z: number, yaw = 0) => adventure.player.place(x, z, yaw),

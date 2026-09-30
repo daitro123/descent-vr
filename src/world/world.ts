@@ -5,6 +5,7 @@ import {
   Fog,
   Group,
   HemisphereLight,
+  type Object3D,
   type PerspectiveCamera,
   PointLight,
   type Scene,
@@ -12,6 +13,7 @@ import {
 } from 'three';
 import { CONFIG } from '../config';
 import type { Zone } from '../maps/types';
+import { sharedModelMaterial } from '../models/materials';
 import type { Interior as InteriorId } from '../save/record';
 import { type Atmosphere, blendAtmospheres } from './atmosphere';
 import { type Ground, steerRound } from './ground';
@@ -20,6 +22,9 @@ import { type Mine, type MineStanding, MineSwitch } from './mine';
 import { MineGround } from './mineGround';
 import type { Cues, RoomCue } from './mix';
 import { buildSky, type Sky } from './sky';
+import { Stager } from './staging';
+import { type ChunkCounts, Streamer } from './streamer';
+import { type Reach, reachTo } from './streaming';
 
 const _probe = new Vector3();
 const _eye = new Vector3();
@@ -42,6 +47,10 @@ interface Held {
   readonly switch: InteriorSwitch;
   /** Its switch's door and light, for the sound's mix. */
   readonly cue: { -readonly [K in keyof RoomCue]: RoomCue[K] };
+  /** Have its meshes been uploaded, as you came near its door? */
+  staged: boolean;
+  /** What else is uploaded with it (whoever works in it). */
+  readonly extras: Object3D[];
 }
 
 /** The mine the World holds, with its switch. */
@@ -50,6 +59,10 @@ interface HeldMine {
   readonly switch: MineSwitch;
   /** Its own ground, for its undead. */
   readonly ground: MineGround;
+  /** Have its meshes been uploaded, as you came near its mouth? */
+  staged: boolean;
+  /** What else is uploaded with it (its undead, the Warden). */
+  readonly extras: Object3D[];
 }
 
 /**
@@ -69,6 +82,10 @@ interface HeldMine {
  * adit's bend the same switch runs as at a door, and only the part of the
  * mine you're in and its neighbours are drawn.
  *
+ * It streams every zone's chunks in round you (world/streamer.ts), and
+ * uploads an interior's or the mine's meshes, unseen, as you come near its
+ * door or mouth, so neither lands in the frame it's first seen.
+ *
  * It is also the `Ground` for wherever you stand, answering from the zone
  * underfoot, from an interior inside its footprint, or from the mine once
  * you've come in by its mouth, so enemies, arrows and the player never learn
@@ -86,6 +103,14 @@ export class World implements Ground {
   private readonly lights: readonly PoolLight[];
   private readonly sky: Sky;
   private readonly zones: Zone[] = [];
+  private readonly stager = new Stager();
+  private readonly streamer = new Streamer(this.stager, sharedModelMaterial());
+  /** Each zone's streamed chunks. */
+  private readonly chunkRoots = new Map<Zone, Group>();
+  /** Build every chunk wanted where you stand on the next update, rather than a few a frame (on loading in). */
+  private filling = true;
+  /** What else is uploaded with the outdoors' chunks each time they're filled in (people standing about). */
+  private readonly outdoorExtras: Object3D[] = [];
   private readonly interiors: Held[] = [];
   private underground: HeldMine | null = null;
   private readonly heard: { rooms: RoomCue[]; mine: number; crypt: number } = { rooms: [], mine: 0, crypt: -Infinity };
@@ -125,6 +150,9 @@ export class World implements Ground {
     scene.fog = this.fog;
     scene.background = this.background;
     scene.add(this.root);
+    // Staging happens round the render alone, whatever changes what's shown before it.
+    scene.onBeforeRender = () => this.stager.apply();
+    scene.onAfterRender = () => this.stager.restore();
     this.camera = camera;
     this.applyView();
   }
@@ -134,6 +162,7 @@ export class World implements Ground {
     scene.remove(this.root);
     if (scene.fog === this.fog) scene.fog = null;
     if (scene.background === this.background) scene.background = null;
+    scene.onBeforeRender = scene.onAfterRender = () => {};
     this.camera = null;
   }
 
@@ -146,15 +175,20 @@ export class World implements Ground {
   load(zone: Zone): void {
     if (!this.zones.includes(zone)) {
       this.zones.push(zone);
-      this.root.add(zone.root);
+      // Its chunks are the World's to stream, in a group of their own beside the zone's extras.
+      const chunks = new Group();
+      chunks.name = `${zone.id}-chunks`;
+      this.chunkRoots.set(zone, chunks);
+      this.root.add(zone.root, chunks);
+      this.streamer.add(zone.chunks, chunks);
       for (const interior of zone.interiors) {
         const cue = { id: interior.id, door: 0, light: 0 };
-        this.interiors.push({ interior, switch: new InteriorSwitch(interior.footprint.hd), cue });
+        this.interiors.push({ interior, switch: new InteriorSwitch(interior.footprint.hd), cue, staged: false, extras: [] });
         this.heard.rooms.push(cue);
         this.root.add(interior.root);
       }
       if (zone.mine && !this.underground) {
-        this.underground = { mine: zone.mine, switch: new MineSwitch(), ground: new MineGround(zone.mine, this) };
+        this.underground = { mine: zone.mine, switch: new MineSwitch(), ground: new MineGround(zone.mine, this), staged: false, extras: [] };
         this.root.add(zone.mine.root);
       }
     }
@@ -201,6 +235,58 @@ export class World implements Ground {
    */
   get mineGround(): Ground | null {
     return this.underground?.ground ?? null;
+  }
+
+  /** Loaded chunks, by detail, for `?perf`. */
+  get chunkCounts(): ChunkCounts {
+    return this.streamer.counts;
+  }
+
+  /** The group `zone`'s chunks are streamed into, once it's loaded. */
+  chunksOf(zone: Zone): Group | undefined {
+    return this.chunkRoots.get(zone);
+  }
+
+  /** Chunks still to build or change where you stood at the last update. */
+  get chunksPending(): number {
+    return this.streamer.pending;
+  }
+
+  /**
+   * Build every chunk wanted standing at (x, z) now, at once, rather than a
+   * few a frame: on loading in, or waking somewhere else (behind the fade).
+   */
+  fill(x: number, z: number): void {
+    this.filling = false;
+    this.streamer.fill(x, z, this.reach);
+    // All of it uploaded at the next render, in view or not, so turning round uploads nothing.
+    for (const zone of this.zones) {
+      this.stager.stage(zone.root);
+      this.stager.stage(this.chunkRoots.get(zone)!);
+    }
+    for (const extra of this.outdoorExtras) this.stager.stage(extra);
+  }
+
+  /**
+   * Upload `object`'s meshes with a place's, unseen: with the inn's, the
+   * house's or the mine's as you come near its door or mouth, or with the
+   * outdoors' chunks (null) each time they're filled in.
+   */
+  stageWith(place: InteriorId | null, object: Object3D): void {
+    if (place === null) {
+      this.outdoorExtras.push(object);
+      return;
+    }
+    const held = place === 'mine' ? this.underground : this.interiors.find((h) => h.interior.id === place);
+    if (!held) throw new Error(`Nothing to stage with in the ${place}`);
+    held.extras.push(object);
+    // Already near it: now.
+    if (held.staged) this.stager.stage(object);
+  }
+
+  /** How far the streamer keeps chunks: out to the zone's fog's far edge, or as far as you see with the fog lifted. */
+  private get reach(): Reach {
+    return reachTo(this.liftedTo ?? this.atmosphere?.fog.far ?? 0);
   }
 
   /**
@@ -269,16 +355,18 @@ export class World implements Ground {
     let best: Zone | undefined;
     let bestGap = Infinity;
     for (const zone of this.zones) {
-      const b = zone.bounds;
-      const gap = Math.hypot(Math.max(b.minX - x, 0, x - b.maxX), Math.max(b.minZ - z, 0, z - b.maxZ));
+      const gap = zone.walkable.distance(x, z);
       if (gap < bestGap) [best, bestGap] = [zone, gap];
     }
     return best;
   }
 
   update(dt: number, camera: Camera): void {
+    // Never backwards: a first frame's time can come from before its timer started.
+    dt = Math.max(0, dt);
     this.time += dt;
     camera.getWorldPosition(_eye);
+    if (this.filling) this.fill(_eye.x, _eye.z);
     for (const h of this.interiors) {
       const { frame, footprint, floor, height, door } = h.interior;
       toFrame(frame, _eye.x, _eye.z, _standing);
@@ -303,6 +391,29 @@ export class World implements Ground {
     this.updatePool(dt, _eye);
     this.sky.update(dt, camera);
     for (const zone of this.zones) if (zone.root.visible) zone.update(dt, camera);
+    // With the outdoors hidden, chunks wait until you're back out; staging goes last, after all that's shown is settled.
+    this.streamer.update(_eye, this.reach, this.outdoors);
+    this.stageNear(_eye);
+  }
+
+  /** Upload a building's room, or the mine, unseen, the first time you come within CONFIG.interiors.stage of its door or mouth. */
+  private stageNear(eye: Vector3): void {
+    const near = CONFIG.interiors.stage;
+    for (const h of this.interiors) {
+      if (h.staged) continue;
+      const { frame, footprint, door } = h.interior;
+      toFrame(frame, eye.x, eye.z, _standing);
+      if (Math.hypot(_standing.x - door.x, _standing.z - footprint.hd) > near) continue;
+      h.staged = true;
+      this.stager.stage(h.interior.root);
+      for (const extra of h.extras) this.stager.stage(extra);
+    }
+    const u = this.underground;
+    if (u && !u.staged && Math.hypot(eye.x - u.mine.mouth.x, eye.z - u.mine.mouth.z) <= near) {
+      u.staged = true;
+      this.stager.stage(u.mine.root);
+      for (const extra of u.extras) this.stager.stage(extra);
+    }
   }
 
   /** The switches' doors and light, and the crypt, for the sound's mix. */
@@ -328,7 +439,7 @@ export class World implements Ground {
     for (const h of this.interiors) if (h.switch.outdoorsHidden) outdoors = false;
     if (this.underground?.switch.outdoorsHidden) outdoors = false;
     this.outdoors = outdoors;
-    for (const zone of this.zones) zone.root.visible = outdoors;
+    for (const zone of this.zones) zone.root.visible = this.chunkRoots.get(zone)!.visible = outdoors;
     this.sky.root.visible = outdoors;
   }
 

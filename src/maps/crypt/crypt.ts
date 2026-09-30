@@ -1,9 +1,9 @@
 import { CONFIG } from '../../config';
 import { Arena } from '../../world/arena';
-import type { GameMap } from '../types';
+import type { WholeMap } from '../types';
 
 /** The combat prototype's crypt hall, as a map. */
-export function buildCrypt(): GameMap {
+export function buildCrypt(): WholeMap {
   const arena = new Arena();
   const h = CONFIG.arena.halfSize;
   return {

@@ -19,6 +19,11 @@ function hash2(ix: number, iz: number, seed: number): number {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 
+/** A random number in [0, 1) fixed by three integers: the same whatever else was drawn first. */
+export function hash01(a: number, b: number, seed: number): number {
+  return hash2(a, b, seed);
+}
+
 /** Smooth value noise in [0, 1]. */
 export function valueNoise(x: number, z: number, seed = 0): number {
   const ix = Math.floor(x);
