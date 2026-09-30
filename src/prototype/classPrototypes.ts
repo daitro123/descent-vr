@@ -11,6 +11,7 @@ export interface ClassPrototype {
 }
 
 const PROTOTYPES: Record<string, () => Promise<(game: Game, scene: Scene) => ClassPrototype>> = {
+  ranger: async () => (await import('./ranger/rangerPrototype')).startRangerPrototype,
   mage: async () => (await import('./mage/mageKit.prototype')).startMagePrototype,
 };
 
