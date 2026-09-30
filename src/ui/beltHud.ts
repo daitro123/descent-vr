@@ -21,7 +21,7 @@ import type { Player } from '../player/player';
 
 const W = 64;
 const H = 24;
-/** Where the first ability's pip sits: five fit under the rage orb. */
+/** Where the first ability's pip sits: five fit under the right orb. */
 const PIPS = 44;
 const _head = new Vector3();
 const _fwd = new Vector3();
@@ -61,10 +61,12 @@ export interface HudStatus {
 /**
  * Diablo's health and resource orbs, body-locked at belt height: glance down
  * to read them. Follows head yaw only, so it does not swim when you look around.
- * Between the orbs: the dash cooldown, in the arena the wave and the enemies
- * left, and in the Adventure your level and a thin XP bar. The rage orb and
- * each ability's pip show once your level has brought them; a pip is lit
- * while its ability is off cooldown and you have the rage for it.
+ * Between the orbs: the dash's (or the blink's) cooldown, in the arena the
+ * wave and the enemies left, and in the Adventure your level and a thin XP
+ * bar. The right orb is your class's bar in its colour: rage, once the War
+ * Cry has brought it, or mana in blue from the start. Each ability's pip
+ * shows once your level has brought it, lit while it's off cooldown and you
+ * can pay for it.
  *
  * Also owns the head-locked vignette: red when hurt (and pulsing at low HP),
  * dark during a dash to cut peripheral motion.
@@ -196,14 +198,16 @@ export class BeltHud {
   private redraw(): void {
     const p = this.player;
     const hp = p.hp / p.maxHp;
-    const rage = p.rage / CONFIG.player.maxRage;
+    const bar = p.bar;
+    const rage = p.resource / bar.size;
     const dash = 1 - p.dashCooldown / CONFIG.dash.cooldown;
     const s = this.status;
     const frenzyBlink = p.frenzy > 0 && (p.frenzy > 2 || Math.sin(this.time * 12) > 0);
-    const canCry = p.can('warCry');
+    // Rage shows once the War Cry has brought it; focus and mana always.
+    const canCry = bar.kind !== 'rage' || p.can('warCry');
     // A pip per ability your level has brought, in the order they came, then one per ability your talents grant:
     // lit when it's ready and you can pay for it.
-    const pips = p.stats.abilities.map((a) => p.abilities.refuses(a, p.rage, p.costOf(a)) === null);
+    const pips = p.stats.abilities.map((a) => p.abilities.refuses(a, p.resource, p.costOf(a)) === null);
     const base = p.stats.abilities.filter((a) => !ABILITY[a].byTalent).length;
     const key = [
       Math.round(hp * 18),
@@ -226,8 +230,11 @@ export class BeltHud {
     c.fillStyle = 'rgba(10,8,8,0.55)';
     c.fillRect(20, 2, 24, 20);
     this.orb(10, hp, '#c81e1e', '#3a0c0c');
-    const warCry = rage >= p.costOf('warCry') / CONFIG.player.maxRage;
-    if (canCry) this.orb(W - 11, rage, p.frenzy > 0 ? '#ff5a10' : warCry ? '#ffb020' : '#b86a10', '#2e1a06');
+    if (bar.kind === 'rage') {
+      const warCry = rage >= p.costOf('warCry') / CONFIG.player.maxRage;
+      if (canCry) this.orb(W - 11, rage, p.frenzy > 0 ? '#ff5a10' : warCry ? '#ffb020' : '#b86a10', '#2e1a06');
+    } else if (bar.kind === 'mana') this.orb(W - 11, rage, '#2f7bff', '#0a1430');
+    else this.orb(W - 11, rage, '#e0b030', '#2a2008');
 
     if (this.waves) {
       // Wave (or BOSS), then a skull and the enemies left.

@@ -244,6 +244,33 @@ export const sfx = {
     tone(160, 90, 0.6, 'triangle', 0.22, at);
     noise(0.3, 0.35, 2200, at, 'bandpass', 0, 0.6);
   },
+  /** Frost Nova: a glassy crack, then a cold hiss spreading out. */
+  frostNova() {
+    tone(1800, 900, 0.25, 'triangle', 0.12);
+    tone(2600, 1400, 0.18, 'sine', 0.06, undefined, 0.03);
+    noise(0.6, 0.3, 5000, undefined, 'highpass');
+  },
+  /** Fireball is on your next bolt: a low flare catching. */
+  fireballReady() {
+    noise(0.35, 0.25, 700, undefined, 'bandpass', 0, 0.8);
+    tone(110, 220, 0.35, 'sawtooth', 0.08);
+  },
+  /** A burning bolt leaves the hand: a roar over the throw. */
+  fireball(at: Vector3) {
+    noise(0.3, 0.35, 500, at, 'bandpass', 0, 0.7);
+    tone(90, 60, 0.3, 'sawtooth', 0.1, at);
+  },
+  /** A Fireball bursts: a deep thump and a crackle. */
+  fireballBurst(at: Vector3) {
+    tone(70, 30, 0.5, 'sine', 0.45, at);
+    noise(0.45, 0.5, 900, at);
+    noise(0.3, 0.2, 3000, at, 'bandpass', 0.05, 2);
+  },
+  /** The mage's blink: a soft rush in and a chime out. */
+  blink() {
+    noise(0.14, 0.2, 2200, undefined, 'bandpass', 0, 0.8);
+    tone(880, 1320, 0.2, 'sine', 0.08, undefined, 0.04);
+  },
   /** A gesture read but not cast (not enough rage, not ready, nothing to throw at): a dull, short hum. */
   gestureDull() {
     tone(150, 120, 0.18, 'sine', 0.12);

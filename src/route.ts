@@ -13,7 +13,7 @@ export type Route =
   | { kind: 'walk'; map: string }
   /**
    * `?arena`: the wave game. `?duel`, `?wave=N` and `?showcase` alone open it too.
-   * `&class=<name>` swaps the warrior for a class prototype (`src/prototype/`), when one exists.
+   * `&class=<name>` plays a built class (warrior, mage), or swaps the warrior for a class prototype (`src/prototype/`) of one not built yet.
    * `&gestures` swaps the game's gestures for their prototype (`src/prototype/gestures/`).
    */
   | { kind: 'arena'; firstWave: number; duel: boolean; showcase: boolean; playerClass?: string; gestures?: true }

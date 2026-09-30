@@ -111,7 +111,8 @@ describe("Hale's chain beside the other givers'", () => {
       expect(beside.tracker).toEqual(alone.tracker);
       expect(beside.arrow).toEqual(alone.arrow);
     }
-    expect(beside.sword).toBe('hale');
+    expect(beside.pickedAt('below')).toBe('hale-longsword');
+    expect(beside.haleSwordAtHip).toBe(false);
   });
 
   it("goes on while the other givers' quests are under way", () => {
@@ -127,8 +128,8 @@ describe("Hale's chain beside the other givers'", () => {
 describe("another giver's quest", () => {
   it("isn't offered before Raiders in the Fields is handed in: no marker, their closed line, and Accept does nothing", () => {
     const state = withGivers(accept(), ...times(3, FARM));
-    expect(state.giver('smith')).toEqual({ marker: null, line: 'Not now, the bandits come first.', buttons: ['goodbye'] });
-    expect(state.giver('herbalist')).toEqual({ marker: null, line: '', buttons: ['goodbye'] });
+    expect(state.giver('smith')).toEqual({ marker: null, line: 'Not now, the bandits come first.', buttons: ['goodbye'], picks: [] });
+    expect(state.giver('herbalist')).toEqual({ marker: null, line: '', buttons: ['goodbye'], picks: [] });
     expect(state.apply(accept('smith'))).toEqual([]);
     expect(state.apply(VEIN)).toEqual([]);
   });
@@ -141,14 +142,14 @@ describe("another giver's quest", () => {
       { kind: 'quest', quest: 'test-ore', stage: 'offered' },
       { kind: 'quest', quest: 'test-leaves', stage: 'offered' },
     ]);
-    expect(state.giver('smith')).toEqual({ marker: 'offered', line: 'Fetch me ore.', buttons: ['accept', 'notNow'] });
+    expect(state.giver('smith')).toEqual({ marker: 'offered', line: 'Fetch me ore.', buttons: ['accept', 'notNow'], picks: [] });
   });
 
   it("is taken on its giver's board, not Hale's", () => {
     const state = withGivers(...RAIDERS);
     expect(state.apply(accept('smith'))).toEqual([{ kind: 'quest', quest: 'test-ore', stage: 'active' }]);
     expect(markers(state)).toEqual({ hale: 'offered', smith: 'active', herbalist: 'offered' });
-    expect(state.giver('smith')).toEqual({ marker: 'active', line: 'Still no ore?', buttons: ['goodbye'] });
+    expect(state.giver('smith')).toEqual({ marker: 'active', line: 'Still no ore?', buttons: ['goodbye'], picks: [] });
     expect(state.tracker).toEqual([{ title: 'Test Ore', lines: ['Copper veins broken: 0/2', 'Whetstone made: 0/1'] }]);
     expect(state.apply(accept('smith'))).toEqual([]);
   });
@@ -166,7 +167,7 @@ describe("another giver's quest", () => {
       { kind: 'quest', quest: 'test-ore', stage: 'ready' },
     ]);
     expect(state.tracker).toEqual([{ title: 'Test Ore', lines: ['Return to the smith'] }]);
-    expect(state.giver('smith')).toEqual({ marker: 'ready', line: 'Good ore.', buttons: ['handIn'] });
+    expect(state.giver('smith')).toEqual({ marker: 'ready', line: 'Good ore.', buttons: ['handIn'], picks: [] });
   });
 
   it("doesn't count gathering or making done before it's taken", () => {
@@ -181,7 +182,7 @@ describe("another giver's quest", () => {
       { kind: 'quest', quest: 'test-ore', stage: 'handedIn' },
       { kind: 'xp', amount: 20 },
     ]);
-    expect(state.giver('smith')).toEqual({ marker: null, line: 'Keep your edge sharp.', buttons: ['goodbye'] });
+    expect(state.giver('smith')).toEqual({ marker: null, line: 'Keep your edge sharp.', buttons: ['goodbye'], picks: [] });
     expect(state.tracker).toEqual([]);
     expect(state.apply(handIn('smith'))).toEqual([]);
   });

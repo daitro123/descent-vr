@@ -9,11 +9,13 @@
 // it. The roster and each character are read back from IndexedDB itself.
 //
 // 1. Nothing saved: three slots, the first a new warrior with a suggested
-//    name (picked, not saved yet), the others "New character". Nothing is
-//    written before VR; taking a quest writes the character under today's key
-//    and the roster listing it.
-// 2. "New character" in an empty slot opens the form: one class card (the
-//    warrior, the only class built) and a suggested name. "Make" with a name
+//    name (picked, not saved yet), the new-character form open under it
+//    (class cards, the warrior checked, and that name), the others "New
+//    character". Nothing is written before VR; Enter VR without "Make" plays
+//    the warrior, and taking a quest writes it under today's key and the
+//    roster listing it.
+// 2. "New character" in an empty slot opens the form: a class card for each
+//    class built, the warrior first and picked, and a suggested name. "Make" with a name
 //    typed makes the character, and the page plays it: level 1 at the start,
 //    Hale offering his first quest.
 // 3. The second warrior takes a quest and walks; the first one's record is
@@ -27,7 +29,9 @@
 //    characters it says so instead.
 // 8. A record from before the roster (version 3) becomes the first character:
 //    a warrior named "Warrior", with their level and things.
-// 9. No errors on the page.
+// 9. A first visit's form: the mage chosen and "Make" plays a level 1 mage
+//    with the name typed.
+// 10. No errors on the page.
 //
 // Playwright is the global install; Chromium is the pre-installed one.
 
@@ -150,6 +154,12 @@ let first;
   check(s.length === 3, `three slots (${s.length})`);
   check(s[0].picked && s[0].text.startsWith(y.name) && /Level 1 warrior, new: saved once you play/.test(s[0].text), `the first: a new warrior, picked ("${s[0].text}")`);
   check(s[1].text === 'New character' && s[2].text === 'New character', `the others: "${s[1].text}", "${s[2].text}"`);
+  const form = await page.evaluate(() => ({
+    cards: [...document.querySelectorAll('#first-character .class-card')].map((c) => c.innerText.replace(/\s+/g, ' ').trim()),
+    picked: document.querySelector('#first-character input[name=class]:checked')?.value,
+    name: document.querySelector('#first-character input[name=name]')?.value,
+  }));
+  check(form.cards[0]?.startsWith('Warrior') && form.cards.some((c) => c.startsWith('Mage')) && form.picked === 'warrior' && form.name === y.name, `the form open under it: ${form.cards.map((c) => c.split(' ')[0]).join(', ')}, the ${form.picked} checked, "${form.name}"`);
   check((await idb('roster')) === null && (await idb('character')) === null, 'nothing written before VR');
   await shot('01-nothing-saved');
   await enterVR();
@@ -171,7 +181,8 @@ await open();
     cards: [...document.querySelectorAll('#new-character .class-card')].map((c) => c.innerText.replace(/\s+/g, ' ').trim()),
     name: document.querySelector('#new-character input[name=name]').value,
   }));
-  check(form.cards.length === 1 && form.cards[0].startsWith('Warrior Sword and shield'), `the form's class cards: ${form.cards.join(' | ')}`);
+  const picked = await page.$eval('#new-character input[name=class]:checked', (i) => i.value);
+  check(form.cards[0].startsWith('Warrior Sword and shield') && form.cards.some((c) => c.startsWith('Mage')) && picked === 'warrior', `the form's class cards, the warrior picked: ${form.cards.join(' | ')}`);
   check(form.name.length > 0 && form.name !== first.name, `a suggested name, not the first's ("${form.name}")`);
   await shot('02-new-character-form');
   await page.fill('#new-character input[name=name]', 'Second');
@@ -285,6 +296,25 @@ watch(page);
   const r = await saved('character');
   check(r?.version === 5 && r.name === 'Warrior' && r.inventory.coins === 23, `the first write is version ${r?.version}, ${r?.name}, ${r?.inventory.coins} coins`);
   check(JSON.stringify(await idb('roster')) === JSON.stringify({ version: 1, characters: ['character'], last: 'character' }), 'with the roster listing them');
+}
+
+// 9. A first visit's form, the mage chosen.
+await context.close();
+context = await browser.newContext({ viewport: { width: 1200, height: 800 } });
+page = await context.newPage();
+watch(page);
+{
+  await open();
+  await page.check('#first-character input[value=mage]');
+  const line = (await page.locator('#characters .slot').first().innerText()).replace(/\s+/g, ' ').trim();
+  check(/Level 1 mage, new: press Make to play/.test(line), `choosing the mage says to press Make ("${line}")`);
+  await page.fill('#first-character input[name=name]', 'Ember');
+  await shot('08-first-visit-mage');
+  await pressAndReload(() => page.click('#first-character button[value=make]'));
+  const y = await you();
+  const s = await slots();
+  check(y.class === 'mage' && y.name === 'Ember' && y.level === 1 && s[0].text === 'Ember Level 1 mage, Oakvale', `"Make" plays ${y.name}, a level ${y.level} ${y.class} ("${s[0].text}")`);
+  check((await page.locator('#first-character').count()) === 0 && (await idb('character'))?.class === 'mage', 'saved, and the form gone');
 }
 
 const pageErrors = errors.filter((e) => !/WebGL|GPU stall/.test(e));

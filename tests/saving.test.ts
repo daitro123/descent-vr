@@ -92,9 +92,14 @@ describe("the adventure state's snapshot", () => {
     expect(state.snapshot()).toEqual({
       level: 2,
       xp: 130,
-      inventory: startingInventory('warrior'),
+      // Raiders in the Fields' first pick in the bag, and the orders on the quest page.
+      inventory: {
+        ...startingInventory('warrior'),
+        bag: [{ id: 'farmstead-gloves-strength', count: 1 }, ...startingInventory('warrior').bag.slice(1)],
+        quest: ['leaders-orders'],
+      },
       quests: {
-        raiders: { stage: 'handedIn', counts: [3] },
+        raiders: { stage: 'handedIn', counts: [3], picked: 'farmstead-gloves-strength' },
         // The Lumber Camp's second count is its orders: taken. It's the first (and only) quest under way.
         lumber: { stage: 'active', counts: [1, 1], taken: 1 },
         below: { stage: 'locked', counts: [0] },
@@ -109,10 +114,10 @@ describe("the adventure state's snapshot", () => {
     const state = new AdventureState();
     ROUTE.forEach((e) => state.apply(e));
     expect(state.snapshot()).toMatchObject({
-      inventory: { gear: { mainHand: 'hale-longsword' } },
       wardenBeaten: true,
-      quests: { below: { stage: 'handedIn', counts: [1] } },
+      quests: { below: { stage: 'handedIn', counts: [1], picked: 'hale-longsword' } },
     });
+    expect(state.snapshot().inventory.bag[2]).toEqual({ id: 'hale-longsword', count: 1 });
   });
 
   it("never loses a level it recorded, even if a new build's levels need more XP", () => {
@@ -353,9 +358,9 @@ describe('the in-memory store', () => {
     ROUTE.forEach((e) => state.apply(e));
     const { inventory } = state;
     inventory.take([{ id: 'torn-cloth-1', count: 3 }, { id: 'minor-healing-potion', count: 12 }, { id: 'leaders-orders', count: 1 }], 42);
-    // The plain sword Hale's replaced is in the bag's first slot, the cloth in its second.
-    inventory.move({ in: 'bag', slot: 3 }, { in: 'stash', slot: 20 });
-    inventory.move({ in: 'bag', slot: 2 }, { in: 'belt', slot: 0 });
+    // The three picks are in the bag's first three slots, the cloth in its fourth.
+    inventory.move({ in: 'bag', slot: 5 }, { in: 'stash', slot: 20 });
+    inventory.move({ in: 'bag', slot: 4 }, { in: 'belt', slot: 0 });
     inventory.drink(1);
     inventory.tick(15);
     inventory.openChest('watchtower', [{ id: 'worn-boots', count: 1 }], 10);
@@ -372,8 +377,10 @@ describe('the in-memory store', () => {
       chests: ['watchtower'],
       cooldown: 45,
       quest: ['leaders-orders'],
-      gear: { mainHand: 'hale-longsword' },
+      gear: { mainHand: 'plain-sword' },
     });
+    expect(restored.inventory.bag[2]).toEqual({ id: 'hale-longsword', count: 1 });
+    expect(restored.pickedAt('below')).toBe('hale-longsword');
     expect(restored.inventory.stash[20]).toEqual({ id: 'minor-healing-potion', count: 2 });
   });
 
@@ -736,7 +743,7 @@ describe('the save controller', () => {
     'a quest becoming ready': [{ kind: 'quest', quest: 'raiders', stage: 'ready' }],
     'a hand-in': [{ kind: 'quest', quest: 'raiders', stage: 'handedIn' }, { kind: 'xp', amount: 80 }],
     'a level-up': [{ kind: 'xp', amount: 10 }, { kind: 'level', level: 2, unlocks: ['warCry'] }],
-    'a reward worn at once': [{ kind: 'slot', where: { in: 'gear', slot: 'mainHand' }, stack: { id: 'hale-longsword', count: 1 } }],
+    'something worn': [{ kind: 'slot', where: { in: 'gear', slot: 'mainHand' }, stack: { id: 'hale-longsword', count: 1 } }],
     'loot taken': [{ kind: 'coins', coins: 5 }, { kind: 'slot', where: { in: 'bag', slot: 0 }, stack: { id: 'torn-cloth-1', count: 1 } }],
     'a potion drunk': [{ kind: 'drank', id: 'minor-healing-potion', heal: 0.4 }],
     'a chest opened': [{ kind: 'chest', chest: 'watchtower' }],

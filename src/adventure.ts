@@ -14,7 +14,8 @@ import { sfx, updateListener } from './fx/sfx';
 import { Shockwaves } from './fx/shockwave';
 import { SwordTrail } from './fx/trail';
 import { Vines } from './fx/vines';
-import { itemOf } from './items';
+import type { Refusal, Where } from './inventory';
+import { itemOf, type ItemId } from './items';
 import { lootSeed } from './loot';
 import { findMap } from './maps/registry';
 import type { Respawn, StartingZone, Zone } from './maps/types';
@@ -23,6 +24,7 @@ import { Villagers } from './people/villagers';
 import { type AlchemyBench, type Herbalist, standInHouse } from './professions/bench';
 import { PROFESSION_NAMES } from './professions/professions';
 import { Gestures } from './player/gestures/gestures';
+import { MageHands } from './player/mage';
 import { Player } from './player/player';
 import { Run } from './player/run';
 import { Anvil } from './professions/anvil/anvil';
@@ -35,7 +37,8 @@ import { arrowHides, arrowPoint, arrowTurn, type ArrowSpots } from './ui/questAr
 import { type ArrowShown, QuestTracker } from './ui/questTracker';
 import { ZoneName } from './ui/zoneName';
 import { RunVignette } from './ui/runVignette';
-import { Bag, type BagHand } from './ui/bag/bag';
+import { Bag, type BagHand, type Shelf } from './ui/bag/bag';
+import { cardText } from './ui/bag/cardLines';
 import { IconAtlas, lookOf } from './ui/bag/looks';
 import { StashPanel } from './ui/bag/stashPanel';
 import { type Probe, TalkBoard } from './ui/talkBoard';
@@ -92,7 +95,9 @@ function showInMine(mine: Mine, root: Object3D): void {
  * touch, as an orb is. What a quest has you find (the leader's
  * orders) lies where it's found while the state says so, taken with a touch.
  * At the old mine's foot the Warden waits on its throne while you're on What
- * Lies Below, and Hale's old longsword comes into your hand when you hand it in.
+ * Lies Below. Each hand-in lays a pick of two items for your class on Hale's
+ * board, and carrying one into the bag hands the quest in; Hale's old
+ * longsword leaves their hip only if a warrior picks it.
  * Out of a fight your health comes back; a death fades to black and wakes you
  * by the inn's hearth, inside with the door shut; which building you're in is
  * the World's to say. South over the pass lies Brackenmoor: walk over the
@@ -116,6 +121,8 @@ export class Adventure {
   readonly combat: Combat;
   /** Abilities by gesture: the shapes your slots hold, once your level brings one. */
   readonly gestures: Gestures;
+  /** The mage's hands (bolts, the ward and the blink), when you play a mage. */
+  readonly mage: MageHands | null;
   /** Marshal Hale, the quest giver, at the crossroads. */
   readonly hale: Hale;
   /** The innkeeper, the smith and the farmer, at work. */
@@ -141,6 +148,17 @@ export class Adventure {
   readonly bag: Bag;
   /** What you've let go of off the bag's panel, lying on the ground. */
   readonly dropped: Dropped;
+  /** A hand-in's pick on Hale's board, carried into the bag to hand the quest in. */
+  private readonly picks: Shelf = {
+    itemAt: (at) => this.board.pickAt(at, CONFIG.bag.touch),
+    stackAt: (i) => {
+      const id = this.board.picks[i];
+      return id ? { id, count: 1 } : null;
+    },
+    check: (i, to) => this.state.pickRefusal(this.board.picks[i] ?? '', to),
+    take: (i, to) => this.handInPick(this.board.picks[i] ?? '', to),
+    show: (hover, lifted) => this.board.highlight(hover, lifted),
+  };
   /** The smith's anvil: step up to it with Smithing learned, and make things with the hammer and tongs. Null in a zone without a smith. */
   readonly anvil: Anvil | null;
   /** The stash's chest by the inn's hearth: touch its lid and the stash panel opens beside the bag's. */
@@ -203,13 +221,15 @@ export class Adventure {
   ) {
     const { key, record, who } = played;
     this.state = new AdventureState(record ?? undefined, CHAINS, { class: who.class, character: key, cap });
+    const { inventory } = this.state;
+    this.board.describe = (id) => cardText(id, 1, inventory.wearing, inventory.gear);
     this.saves = new SaveController(played, () => saveRecord(this.state.snapshot(), this.standing, Date.now(), who));
     this.world.attach(scene, camera, renderer);
     for (const n of neighbours) this.world.add(n);
     this.world.load(zone);
     this.respawns = zone.respawns;
     this.respawn = zone.respawns.village;
-    this.player = new Player(camera, renderer, this.world);
+    this.player = new Player(camera, renderer, this.world, who.class);
     this.player.run = new Run();
     scene.add(this.player.rig, this.orbs.root, this.drops.root, this.shadows.mesh, this.vines.mesh);
     this.drops.warm(renderer, camera, scene);
@@ -273,6 +293,7 @@ export class Adventure {
       },
       scene,
     );
+    this.mage = who.class === 'mage' ? new MageHands(this.player, this.combat, this.particles) : null;
     this.gestures = new Gestures({
       player: this.player,
       text: this.text,
@@ -282,7 +303,8 @@ export class Adventure {
       drawn: (shape) => this.apply({ kind: 'drawn', shape }, this.you.head),
       use: (ability, aim) => this.combat.use(ability, aim),
       // Your hands are the bag's while it's open, and the bench's while you work at it.
-      held: () => this.bag.isOpen || this.bench?.bare === true,
+      held: () => this.handsHeld,
+      busy: () => this.mage?.charging('right') ?? false,
     });
     // The mine's undead stand on the mine's own ground, whether or not you've come in.
     const below = this.world.mineGround;
@@ -420,11 +442,12 @@ export class Adventure {
     this.showCamps(outdoors);
     player.fighting = this.fighting;
     player.update(dt);
+    this.mage?.update(dt, this.handsHeld);
     this.runVignette.update(dt, player.running);
     updateListener(player.camera);
     const { hands } = player.input;
     const foes = this.gatherFoes();
-    if (hands.left.primaryPressed || hands.right.primaryPressed) this.combat.warCry(foes);
+    if (hands.left.primaryPressed || hands.right.primaryPressed) this.combat.press(foes);
 
     // Hit-stop freezes enemies (not you) for a few frames on impact.
     const enemyDt = this.hitStop > 0 ? 0 : dt;
@@ -498,6 +521,11 @@ export class Adventure {
     if (!arrow || !to || arrowHides(arrow.target, { x: head.x, z: head.z, interior: this.world.interior }, this.arrowSpots)) return null;
     const yaw = _turn.setFromQuaternion(this.player.camera.getWorldQuaternion(_look), 'YXZ').y;
     return { line: arrow.line, turn: arrowTurn({ x: head.x, z: head.z, yaw }, to) };
+  }
+
+  /** Are your hands the bag's (it's open) or the bench's (you work at it) now, not your weapons'? */
+  private get handsHeld(): boolean {
+    return this.bag.isOpen || this.bench?.bare === true;
   }
 
   /** Is anything fighting you: a camp's (not walking home), or the Warden and what it raised? */
@@ -653,7 +681,8 @@ export class Adventure {
       sfx.chest(lid.at);
       bag.openBeside(this.stash, you.head, _gaze, this.touching(), `the stash, ${lid.hand} hand on its lid`);
     }
-    bag.update({ dt, head: you.head, gaze: _gaze, rig: player.rig, hands: bagHands, probes: this.touching(), alive: player.alive });
+    const shelf = this.board.picks.length ? this.picks : null;
+    bag.update({ dt, head: you.head, gaze: _gaze, rig: player.rig, hands: bagHands, probes: this.touching(), alive: player.alive, shelf });
     const [left, right] = this.touching();
     const taken = this.dropped.update(dt, [left?.at ?? null, right?.at ?? null], (stack) => {
       const effects = this.state.inventory.take([stack]);
@@ -666,6 +695,21 @@ export class Adventure {
     const { intensity, ms } = CONFIG.bag.buzz.takeBack;
     player.input.pulse(taken.hand === 0 ? 'left' : 'right', intensity, ms);
     sfx.pickup();
+  }
+
+  /**
+   * A pick carried from Hale's board into bag slot `to`: the quest is handed
+   * in, with its fanfare over Hale, and the talk goes on. Refused (a full
+   * bag), the pick and the quest wait on the board.
+   */
+  private handInPick(pick: ItemId, to: Where): Refusal | null {
+    const effects = this.state.apply({ kind: 'handIn', pick, to });
+    this.saves.onEffects(effects);
+    this.show(effects, this.hale.head(_haleHead), true);
+    const refused = effects.find((e) => e.kind === 'refused');
+    if (refused) return refused.reason as Refusal;
+    this.board.show(this.state.hale);
+    return null;
   }
 
   /** The anvil: your hands on it while you stand at it, and the work under way. */
@@ -709,6 +753,7 @@ export class Adventure {
     player.sword.sword = state.sword ?? 'plain';
     player.sword.model.visible = gear.mainHand !== null;
     player.shield.model.visible = gear.offHand !== null;
+    this.mage?.wear(itemOf(gear.mainHand ?? ''), itemOf(gear.offHand ?? ''));
     const gloves = itemOf(gear.hands ?? '');
     const tint = gloves ? lookOf(gloves).tint : null;
     for (const fist of Object.values(player.fists ?? {})) fist.tint(tint);
@@ -794,7 +839,10 @@ export class Adventure {
           break;
         case 'quest':
           if (e.stage === 'active' || e.stage === 'ready') this.tracker.flash();
-          if (e.stage === 'handedIn') sfx.fanfare();
+          if (e.stage !== 'handedIn') break;
+          sfx.fanfare();
+          // A pick of Hale's old longsword takes it off their hip.
+          this.hale.swordAtHip = this.state.haleSwordAtHip;
           break;
         case 'loot':
           // What a kill dropped, lying where it fell.
@@ -802,11 +850,11 @@ export class Adventure {
           break;
         case 'slot':
           this.bag.changed();
-          // Something worn or taken off (Hale's old longsword, straight into your hand, off their hip):
-          // your hands show what you wear, and your numbers read it.
+          // Something worn or taken off: your hands show what you wear, your numbers read it,
+          // and a pick's card on Hale's board compares against it.
           if (e.where.in !== 'gear') break;
           this.dressHands();
-          this.hale.swordAtHip = this.state.haleSwordAtHip;
+          this.board.repaintPicks();
           break;
         case 'coins':
           this.bag.changed();
@@ -910,6 +958,8 @@ export class Adventure {
     this.lastHp = this.player.hp;
     this.combat.projectiles.clear();
     this.combat.axes.clear();
+    this.combat.bolts.clear();
+    this.mage?.clear();
     this.deadFor = null;
     this.wakingFor = 0;
   }
