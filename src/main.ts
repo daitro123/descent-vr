@@ -1,6 +1,7 @@
 import { Color, Fog, PerspectiveCamera, Scene, Timer, WebGLRenderer } from 'three';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
 import { Adventure } from './adventure';
+import { playable } from './classes';
 import { combatStats } from './combat/combat';
 import { CONFIG } from './config';
 import { enemiesDebug } from './enemies/debug';
@@ -219,7 +220,9 @@ function startArena(
 
   // ?wave=N starts the run at wave N (7 is the Warden) for testing.
   // ?duel fights one practice duelist after another (CONFIG.duelist) instead.
-  const game = new Game(scene, camera, renderer, firstWave, duel);
+  // &class= plays a built class; one that isn't built yet is its prototype over the warrior.
+  const built = playable(playerClass);
+  const game = new Game(scene, camera, renderer, firstWave, duel, built ? playerClass : 'warrior');
   const showcase = buildShowcase();
   scene.add(showcase.root);
   if (pinned) pinShowcaseCamera(camera);
@@ -240,7 +243,8 @@ function startArena(
   Object.assign(window, { __descent: debug });
   // The gesture prototype takes the right grip for its own modes: the game's gestures stand aside.
   if (gestures) game.gestures.enabled = false;
-  if (playerClass || gestures) void loadClassPrototype(playerClass, game, scene, gestures).then((kit) => (debug.classKit = kit));
+  const prototype = built ? undefined : playerClass;
+  if (prototype || gestures) void loadClassPrototype(prototype, game, scene, gestures, playerClass).then((kit) => (debug.classKit = kit));
 
   const timer = new Timer();
   renderer.setAnimationLoop((time) => {
