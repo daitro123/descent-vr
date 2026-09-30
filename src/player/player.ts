@@ -1,4 +1,4 @@
-import { Group, type PerspectiveCamera, Vector3, type WebGLRenderer } from 'three';
+import { Group, type Object3D, type PerspectiveCamera, Vector3, type WebGLRenderer } from 'three';
 import { type Ability, type Stats, statsAt } from '../adventureState';
 import { abilitiesOf } from '../classes';
 import { CONFIG } from '../config';
@@ -29,6 +29,8 @@ export class Player {
   readonly shield = new Shield();
   /** Your hands, closed on what they hold: the Adventure's (see `showFists`); the arena shows only the weapons. */
   fists: Readonly<Record<Handedness, Fist>> | null = null;
+  /** A station's tools in your hands in place of the sword and shield (the smith's hammer and tongs), or null. */
+  private tools: { readonly right: Object3D; readonly left: Object3D } | null = null;
   /** Your level's health, damage and abilities: the arena's, unless the Adventure sets them from your level. */
   stats: Stats = ARENA;
   hp: number = this.maxHp;
@@ -65,12 +67,35 @@ export class Player {
   }
 
   private attachWeapons(): void {
-    this.input.hands.right.grip.add(this.sword.model);
-    this.input.hands.left.grip.add(this.shield.model);
+    const { left, right } = this.input.hands;
+    // A station's tools replace the weapons: with no sword or shield in a grip, neither hits nor blocks.
+    if (this.tools) {
+      this.sword.model.removeFromParent();
+      this.shield.model.removeFromParent();
+      right.grip.add(this.tools.right);
+      left.grip.add(this.tools.left);
+    } else {
+      right.grip.add(this.sword.model);
+      left.grip.add(this.shield.model);
+    }
     if (this.fists) {
       this.input.hands.right.grip.add(this.fists.right.mesh);
       this.input.hands.left.grip.add(this.fists.left.mesh);
     }
+  }
+
+  /** Hold a station's tools in place of your sword and shield, or your weapons again (null). */
+  holdTools(tools: { readonly right: Object3D; readonly left: Object3D } | null): void {
+    if (tools === this.tools) return;
+    this.tools?.right.removeFromParent();
+    this.tools?.left.removeFromParent();
+    this.tools = tools;
+    this.attachWeapons();
+  }
+
+  /** Are a station's tools in your hands? */
+  get holdingTools(): boolean {
+    return this.tools !== null;
   }
 
   /** Show your hands, closed on what they hold. */

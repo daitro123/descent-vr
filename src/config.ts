@@ -592,6 +592,25 @@ export const CONFIG = {
       whetstone: { price: 2, damage: 0.05, seconds: 10 * 60 }, // rubbed along a blade or arrowheads; never on the belt
       copperGauntlets: { level: 5, rarity: 'green' }, // as good as a green drop at level 5, each version with Stamina
     },
+    // One rule for hands at a station: step within `near` m of it, looking within `facing` rad of
+    // it and out of a fight, and both hands become the station's; past `far` m they're yours again.
+    station: { near: 1.3, far: 2, facing: Math.PI / 3 },
+    // The smith's anvil (professions/anvil/), promoted from ?proto=anvil variant A.
+    anvil: {
+      tapSpeed: 1.2, // m/s the hammer's face comes down under which a strike is only a tap…
+      greatSpeed: 2.2, // …and from which it's great, working a mark at once (a good one works it halfway)
+      minTravel: 0.08, // m the face must come down onto the work for a strike to count
+      rearm: 0.04, // m it must lift off again before the next strike
+      markReach: 0.04, // m from a mark a strike must land to work it
+      heatUp: 1.5, // s in the fire from cold to full heat…
+      coolDown: 14, // …and out of it from full heat to cold: over `workingHeat` for about 10 s
+      workingHeat: 0.3, // hot enough to work (0 cold to 1 fresh from the fire)
+      smelt: 3, // s two ore take in the crucible to become a bar
+      flight: 0.35, // s what's made takes to fly to your bag…
+      settle: { made: 0.5, smelted: 0.9 }, // …after resting this long in the tongs or on the anvil, or on the mould
+      retry: 1, // s between tries to bag a thing left waiting on the anvil with the bag full
+      tongs: { grab: 0.6, release: 0.35, reach: 0.15 }, // squeeze to close the tongs and to let go; m from a piece they take it
+    },
   },
 
   // The alchemy bench in the house by the well (professions/bench/), promoted
@@ -649,6 +668,7 @@ export const CONFIG = {
       face: 0.8, // s turning to the bellows after the last burst, and back
       pumps: 3, // pulls on the bellows' handle…
       pump: 1.2, // …each this long
+      aside: { speed: 0.9, back: 2 }, // m/s they step aside from the anvil while you work at it; s after you leave before they go back
     },
     // The innkeeper's loop: wiping the bar, polishing a tankard, setting it down and picking up another.
     innkeeper: { wipe: 5, polish: 5, setDown: 1.4, pickUp: 1.6, rubs: 1.6 }, // s each; rubs per s of the rag

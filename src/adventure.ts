@@ -23,6 +23,7 @@ import { type AlchemyBench, type Herbalist, standInHouse } from './professions/b
 import { PROFESSION_NAMES } from './professions/professions';
 import { Player } from './player/player';
 import { Run } from './player/run';
+import { Anvil } from './professions/anvil/anvil';
 import { SaveController } from './save/controller';
 import { type Interior, saveRecord } from './save/record';
 import type { Save } from './save/store';
@@ -135,6 +136,8 @@ export class Adventure {
   readonly bag: Bag;
   /** What you've let go of off the bag's panel, lying on the ground. */
   readonly dropped: Dropped;
+  /** The smith's anvil: step up to it with Smithing learned, and make things with the hammer and tongs. Null in a zone without a smith. */
+  readonly anvil: Anvil | null;
   /** The stash's chest by the inn's hearth: touch its lid and the stash panel opens beside the bag's. */
   readonly stashChest: StashChest;
   readonly stash: StashPanel;
@@ -316,6 +319,26 @@ export class Adventure {
     // The smith's hammer rings on the anvil with each blow of their work.
     this.ambience = new Ambience([zone, ...neighbours]);
     this.villagers.onStrike = () => this.ambience.strike('anvil');
+    // The smith's anvil, drawn with the outdoors.
+    const smith = zone.villagers.find((v) => v.id === 'smith');
+    this.anvil = smith
+      ? new Anvil(
+          scene,
+          this.world,
+          smith,
+          {
+            professions: this.state.professions,
+            inventory: this.state.inventory,
+            hands: (tools) => this.player.holdTools(tools),
+            buzz: (hand, intensity, ms) => this.player.input.pulse(hand, intensity, ms),
+            apply: (effects, at) => this.applyMade(effects, at),
+            smithAside: (to) => this.villagers.get('smith')?.stepAside(to),
+          },
+          { particles: this.particles, text: this.text },
+        )
+      : null;
+    if (this.anvil) this.world.stageWith(null, this.anvil.frame);
+
     // The alchemy bench and its herbalist hang from the house's room, drawn while it is.
     const house = zone.interiors.find((i) => i.id === 'house');
     if (house) {
@@ -367,6 +390,7 @@ export class Adventure {
     // With a door shut behind you, what stands outside isn't drawn either.
     const outdoors = this.world.outdoorsShown;
     this.pickups.root.visible = this.hale.root.visible = this.villagers.root.visible = this.chests.outdoors.visible = outdoors;
+    if (this.anvil) this.anvil.frame.visible = outdoors;
     this.showCamps(outdoors);
     player.fighting = this.fighting;
     player.update(dt);
@@ -409,6 +433,7 @@ export class Adventure {
     this.orbs.update(dt, player);
     this.loot(dt, outdoors);
     this.talk(dt);
+    this.updateAnvil(dt);
     this.updateBag(dt);
     this.villagers.update(dt, you.head, this.state);
     this.herbalist?.update(dt, you.head);
@@ -614,6 +639,24 @@ export class Adventure {
     const { intensity, ms } = CONFIG.bag.buzz.takeBack;
     player.input.pulse(taken.hand === 0 ? 'left' : 'right', intensity, ms);
     sfx.pickup();
+  }
+
+  /** The anvil: your hands on it while you stand at it, and the work under way. */
+  private updateAnvil(dt: number): void {
+    const { anvil, player, you } = this;
+    if (!anvil) return;
+    const [left, right, tip] = this.touching();
+    player.camera.getWorldDirection(_gaze);
+    anvil.update({
+      dt,
+      head: you.head,
+      gaze: _gaze,
+      fighting: this.fighting,
+      alive: player.alive,
+      squeeze: player.input.hands.left.squeeze,
+      fists: [left?.at ?? null, right?.at ?? null],
+      tip: tip?.at ?? null,
+    });
   }
 
   /** What an operation on your things did: saved, and shown at `at`. */
