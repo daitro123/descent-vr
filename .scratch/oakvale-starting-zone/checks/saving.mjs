@@ -144,7 +144,8 @@ const you = () =>
       level: state.level,
       xp: state.xp,
       marker: state.hale.marker,
-      tracker: state.tracker.at(-1) ?? null, // the quest taken last (the tracker's a list since PR #79)
+      // The quest you took last: the tracker lists every one under way (quests from more than one giver).
+      tracker: state.tracker.at(-1) ?? null,
       hp: player.hp,
       maxHp: player.maxHp,
       rage: player.rage,

@@ -2,7 +2,7 @@
 
 **What to build:** the ranger's and mage's items: their white starting kits, their class-locked weapons and off hands in loot and in the smith's stock, their hand-in picks, and their blue weapon at What Lies Below. The weapon models in the hands follow what's worn, as the warrior's do.
 
-**Blocked by:** 12, 14, and the Abilities map's build tickets for how the ranger and the mage fight (their weapons must exist in the hands first).
+**Blocked by:** 12, 14, and the Abilities map's build tickets [21: The ranger](../../abilities/issues/21-the-ranger.md) and [23: The mage](../../abilities/issues/23-the-mage.md) (their weapons must exist in the hands first; each tells this ticket when it merges).
 
 **Status:** ready-for-agent
 
