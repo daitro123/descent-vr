@@ -2,16 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { type AdventureEvent, AdventureState, type Effect, type Role } from '../src/adventureState';
 import type { CampId } from '../src/maps/types';
 import type { ProfessionsEffects, RecipeId, SpotKind } from '../src/professions/professions';
-import { type Chain, CHAINS, type GiverId } from '../src/quests';
+import { type Chain, type GiverId, HALE } from '../src/quests';
 import { readSave, saveRecord } from '../src/save/record';
 
 // Quests from more than one giver, at the adventure-state seam: a chain per
 // giver, up to three quests under way at once (one per giver), the gather and
 // make objectives, the tracker listing every quest you're on (the newest last)
-// and the quest arrow on the one taken most recently. The trainers' real
-// chains come later (.scratch/professions/issues/18-trainers-and-intro-quests.md),
-// so two made-up one-quest chains stand in for them here, opening as theirs
-// will once Raiders in the Fields is handed in.
+// and the quest arrow on the one taken most recently. Two made-up one-quest
+// chains stand in for the trainers' here, opening as theirs do once Raiders in
+// the Fields is handed in, so the machinery stands on its own; the trainers'
+// real chains have their own tests (trainers.test.ts).
 
 const kill = (camp: CampId | null, level: number, role: Role = 'ordinary'): AdventureEvent => ({
   kind: 'kill',
@@ -81,7 +81,7 @@ const HERBALIST: Chain = {
   returnTo: 'Return to the herbalist',
 };
 
-const THREE = [...CHAINS, SMITH, HERBALIST];
+const THREE = [HALE, SMITH, HERBALIST];
 
 /** A character in a world with the smith's and the herbalist's stand-in chains beside Hale's. */
 const withGivers = (...events: AdventureEvent[]) => {
@@ -103,7 +103,7 @@ const markers = (state: AdventureState) => ({ hale: state.hale.marker, smith: st
 describe("Hale's chain beside the other givers'", () => {
   it('plays exactly as before, event by event, whatever the other chains do', () => {
     const route = [...RAIDERS, ...LUMBER, accept(), WARDEN, handIn()];
-    const alone = new AdventureState();
+    const alone = new AdventureState(undefined, [HALE]);
     const beside = new AdventureState(undefined, THREE);
     for (const event of route) {
       expect(hales(beside.apply(event))).toEqual(alone.apply(event));

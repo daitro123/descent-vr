@@ -820,7 +820,7 @@ export function buildLayout(): ForestLayout {
   const respawns = { village: { ...interiors[0].respawn!, interior: interiors[0].id }, mine: mineRespawn(mouth) };
   const stash = placeStash(at('inn'));
   const hale = { ...HALE, yaw: facing(HALE.x, HALE.z, 0, 0) };
-  const villagers = placeVillagers(at('inn'), at('smithy'));
+  const villagers = placeVillagers(at('inn'), at('smithy'), houseSite);
   const clearing = (id: string) => {
     const { x, z, r } = CLEARINGS.find((c) => c.id === id)!;
     return { x, z, r };
@@ -829,6 +829,7 @@ export function buildLayout(): ForestLayout {
     farm: { ...clearing('farm'), clearing: clearing('farm') },
     lumberCamp: { ...clearing('camp'), clearing: clearing('camp') },
     mine: { x: mouth.x, z: mouth.z, clearing: clearing('mineFront') },
+    ...trainerPlaces(at('smithy'), houseSite),
   };
   const camps: CampPlan[] = CAMPS.map((c) => {
     const clearing = CLEARINGS.find((cl) => cl.id === c.clearing)!;
@@ -995,12 +996,35 @@ function placeStash(inn: Structure): StashSpot {
 }
 
 /**
+ * Where the trainers' intro quests send you: the two copper veins by the
+ * smithy, the smith's anvil, the farm's three clumps of Hearthleaf round its
+ * fields, and the alchemy bench in the house by the well. Each place's
+ * clearing is where the quest arrow hides, since you're there.
+ */
+function trainerPlaces(smithy: Structure, house: Structure): Record<'veins' | 'anvil' | 'fields' | 'bench', QuestPlace> {
+  const round = (points: readonly { readonly x: number; readonly z: number }[], pad: number): QuestPlace => {
+    const x = points.reduce((a, p) => a + p.x, 0) / points.length;
+    const z = points.reduce((a, p) => a + p.z, 0) / points.length;
+    const r = Math.max(...points.map((p) => Math.hypot(p.x - x, p.z - z))) + pad;
+    return { x, z, clearing: { x, z, r } };
+  };
+  const [ax, az] = localToWorld(smithy, SMITHY.anvil.x, SMITHY.anvil.z);
+  return {
+    veins: round(VEINS.outdoors.filter((v) => v.id.startsWith('smithy-')), 4),
+    anvil: round([{ x: ax, z: az }], 3),
+    fields: round(HERBS.hearthleaf.filter((h) => h.id.startsWith('farm-')), 3),
+    bench: round([{ x: house.x, z: house.z }], Math.hypot(HOUSE.hw, HOUSE.hd) + 1),
+  };
+}
+
+/**
  * The villagers at work, each facing their work: the innkeeper behind the
  * bar, facing the room; the smith at the anvil, facing it and the smithy's
  * open front, the bellows round behind them on their right; the farmer by the well,
- * facing the farm.
+ * facing the farm; and the herbalist at the alchemy bench's end in the house
+ * by the well, turned to the room.
  */
-function placeVillagers(inn: Structure, smithy: Structure): VillagerSpot[] {
+function placeVillagers(inn: Structure, smithy: Structure, house: Structure): VillagerSpot[] {
   const [kx, kz] = localToWorld(inn, INN.keeper.x, INN.keeper.z);
   const { smith, bellows } = SMITHY;
   const [sx, sz] = localToWorld(smithy, smith.x, smith.z);
@@ -1008,10 +1032,13 @@ function placeVillagers(inn: Structure, smithy: Structure): VillagerSpot[] {
   // and the fire beyond before their left, whose tongs hold the piece in it.
   const handle = Math.atan2(bellows.handle.x - smith.x, bellows.handle.z - smith.z);
   const [fx, fz] = FARMER;
+  const { herbalist } = HOUSE.bench;
+  const [hx, hz] = localToWorld(house, herbalist.x, herbalist.z);
   return [
     { id: 'innkeeper', x: kx, z: kz, yaw: inn.yaw, interior: 'inn', turn: 0 },
     { id: 'smith', x: sx, z: sz, yaw: smithy.yaw, interior: null, turn: handle + 0.35 },
     { id: 'farmer', x: fx, z: fz, yaw: facing(fx, fz, FARM[0], FARM[1]), interior: null, turn: 0 },
+    { id: 'herbalist', x: hx, z: hz, yaw: house.yaw + herbalist.yaw, interior: 'house', turn: 0 },
   ];
 }
 

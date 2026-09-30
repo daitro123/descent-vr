@@ -9,7 +9,7 @@ import { Sip } from '../../player/sip';
 import { Sharpen } from '../../professions/sharpen';
 import { type Page, type Reach, sameSpot, type Spot } from './layout';
 import { type IconAtlas, modelOf } from './looks';
-import { BagPanel, nothingShown, type PanelShows } from './panel';
+import { BagPanel, type Ledger, nothingShown, type PanelShows } from './panel';
 import { ShoulderReach } from './reach';
 import { sameButton, type TalentActs, type TalentButton } from './talentPage';
 import { TALENT, type TalentRefusal } from '../../talents';
@@ -104,6 +104,8 @@ export interface BagWorld {
   drop(stack: Stack, at: Vector3, velocity: Vector3): void;
   /** Your talents and gesture slots, for the Talents tab's page; without them it says there are none. */
   readonly talents?: TalentActs;
+  /** Your professions, a line each under your coins; none without them. */
+  readonly professions?: Ledger;
   /** The hip slot of the belt at `at`, if any: a potion let go there goes onto the belt. */
   beltAt?(at: Vector3): number | null;
   /** Your mouth now, where a carried potion is drunk. */
@@ -258,7 +260,7 @@ export class Bag {
     private readonly world: BagWorld,
     atlas: IconAtlas,
   ) {
-    this.panel = new BagPanel(world.inventory, atlas, world.talents ?? null);
+    this.panel = new BagPanel(world.inventory, atlas, world.talents ?? null, world.professions ?? null);
     this.held.visible = false;
     this.held.name = 'carried-item';
     this.root.add(this.panel.root, this.held);

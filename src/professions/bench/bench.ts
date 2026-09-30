@@ -11,6 +11,7 @@ import { Sip } from '../../player/sip';
 import { lookOf } from '../../ui/bag/looks';
 import { type Professions, type ProfessionsEffects, RECIPES, type RecipeId } from '../professions';
 import { HERBS, MORTAR_HOLDS, recipeFor, Turns } from './brew';
+import { atStation, stationHands } from '../stationHands';
 import { Note } from './note';
 import {
   bench,
@@ -360,17 +361,20 @@ export class AlchemyBench {
 
   // --- The frame -------------------------------------------------------------
 
-  /** One frame. Nothing here while `fighting`: your weapons stay yours. */
-  update(dt: number, fighting: boolean): void {
+  /**
+   * One frame. Nothing here while `fighting`: your weapons stay yours. While
+   * you're `talking` to the herbalist beside it, it doesn't take your hands.
+   */
+  update(dt: number, fighting: boolean, talking = false): void {
     const { player } = this.ctx;
     const head = player.camera.getWorldPosition(_a);
     const front = this.root.localToWorld(_b.copy(FRONT));
-    const far = Math.hypot(head.x - front.x, head.z - front.z);
-    player.camera.getWorldDirection(_c).setY(0).normalize();
-    const facing = far > 1e-3 ? (_c.x * (front.x - head.x) + _c.z * (front.z - head.z)) / far : 1;
-    const drawn = this.drawn();
-    if (!this.bare && drawn && !fighting && player.alive && far < B.near && facing > B.facing) this.stepUp();
-    else if (this.bare && (fighting || !player.alive || !drawn || far > B.far)) this.stepAway();
+    player.camera.getWorldDirection(_c);
+    // The stations' one rule for hands, measured from its front, while the house is drawn and you stand.
+    const want =
+      this.drawn() && player.alive && !(talking && !this.bare) && stationHands(this.bare, atStation(front.x, front.z, head.x, head.z, _c.x, _c.z, fighting));
+    if (want && !this.bare) this.stepUp();
+    else if (!want && this.bare) this.stepAway();
 
     if (this.bare) this.dressBare();
     for (const side of ['left', 'right'] as const) {

@@ -297,18 +297,29 @@ export class Professions {
     ];
   }
 
+  /**
+   * Why buying `recipe` from its trainer would be refused, or null if it
+   * would go: for the Train list to grey a row out before you press it.
+   */
+  buyRefusal(id: RecipeId): ProfessionRefusal | null {
+    const recipe = recipeOf(id);
+    if (!recipe) return 'unknown';
+    if (!this.known.has(recipe.profession)) return 'unlearned';
+    if (lessonOf(recipe).every((r) => this.knows(r.id))) return 'known';
+    if (recipe.price === null) return 'unknown';
+    if (GRADES.indexOf(recipe.grade) > GRADES.indexOf(this.grade(recipe.profession)!)) return 'grade';
+    if (this.proficiency(recipe.profession) < recipe.needs) return 'proficiency';
+    if (this.inventory.coins < recipe.price) return 'coins';
+    return null;
+  }
+
   /** Buy `recipe` from its trainer, with every recipe of its lesson, for its price. */
   buy(id: RecipeId): ProfessionsEffects {
-    const recipe = recipeOf(id);
-    if (!recipe) return refuse('unknown');
-    if (!this.known.has(recipe.profession)) return refuse('unlearned');
+    const reason = this.buyRefusal(id);
+    if (reason) return refuse(reason);
+    const recipe = recipeOf(id)!;
     const lesson = lessonOf(recipe).filter((r) => !this.knows(r.id));
-    if (!lesson.length) return refuse('known');
-    if (recipe.price === null) return refuse('unknown');
-    if (GRADES.indexOf(recipe.grade) > GRADES.indexOf(this.grade(recipe.profession)!)) return refuse('grade');
-    if (this.proficiency(recipe.profession) < recipe.needs) return refuse('proficiency');
-    if (this.inventory.coins < recipe.price) return refuse('coins');
-    const effects: ProfessionsEffects = this.inventory.spend([], recipe.price);
+    const effects: ProfessionsEffects = this.inventory.spend([], recipe.price!);
     for (const r of lesson) {
       this.book.push(r.id);
       effects.push({ kind: 'recipe', recipe: r.id });

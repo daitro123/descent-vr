@@ -589,6 +589,14 @@ export const CONFIG = {
     raiders: { bandits: 3, xp: 80 }, // Raiders in the Fields: defeat this many of the farm's camp
     lumber: { bandits: 5, xp: 120 }, // The Lumber Camp: this many of the lumber camp's camp, and the leader's orders
     below: { xp: 300 }, // What Lies Below: the Warden, for this and Hale's old longsword
+    // The trainers' intro quests, open once Raiders in the Fields is handed in: each pays XP as a
+    // level-2 quest (The Lumber Camp's) and a few coins, and what you made for it stays yours.
+    trainers: {
+      xp: 120,
+      coins: 5,
+      oreAndFire: { veins: 2 }, // the smith's: break this many copper veins, then make a whetstone at the anvil
+      leavesForThePot: { clumps: 2 }, // the herbalist's: cut this many clumps of Hearthleaf (2 leaves each), then brew a minor healing potion
+    },
   },
 
   // Items and their numbers (items.ts). No item's numbers are hand-tuned: its
@@ -917,9 +925,7 @@ export const CONFIG = {
   // from `?proto=brew` variant B: you drop the herbs, grind and stir; the bench
   // tips the mortar and pours the pot. Its herbalist stands at its end.
   alchemyBench: {
-    near: 1.3, // m from the bench's front (your head, over the floor), facing it and out of a fight: your hands go bare…
-    far: 2, // m: …until you step back past this, and your weapons come back
-    facing: 0.3, // how squarely you must face it to step up: the dot of your gaze with the way to it, over the floor
+    // Stepping up to it and away is the stations' one rule for hands (CONFIG.professions.station), measured from its front.
     reach: 0.02, // m past a thing's own size a hand takes it from
     back: 0.25, // s a thing you let go glides back to its place
     drop: 0.1, // m from the mortar's mouth, over the floor, that a herb let go drops in
@@ -988,6 +994,9 @@ export const CONFIG = {
     arming: 0.4, // s after it unfolds before a button takes a press…
     rearm: 0.6, // …and after each press
     buzz: { intensity: 0.8, ms: 50 }, // in the hand that pressed
+    // A trainer's Train list (ui/talkBoard.ts): pressing a lit row buys its lesson with this buzz on top
+    // of the press's; a grey row buys nothing and buzzes hard.
+    train: { bought: { intensity: 0.8, ms: 60 }, refused: { intensity: 1, ms: 120 } },
   },
 
   // The quest tracker at the top left of your view: the talk prototype's variant C.

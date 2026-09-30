@@ -1,26 +1,18 @@
-import { Group, Vector3 } from 'three';
+import { Group } from 'three';
 import { HOUSE } from '../../maps/forest/house';
 import type { Interior } from '../../world/interiors';
 import { AlchemyBench, type BenchContext } from './bench';
-import { Herbalist } from './herbalist';
 
-// The alchemy bench and its herbalist, stood in the house by the well: hung
-// from its room in the house's frame, so both are drawn only while the room is
-// (.scratch/professions/issues/16-the-herbalist-and-the-alchemy-bench.md).
+// The alchemy bench, stood in the house by the well: hung from its room in the
+// house's frame, so it's drawn only while the room is. The herbalist at its end
+// is a villager like the others (people/villagers.ts), placed by the zone's
+// plan (.scratch/professions/issues/16-the-herbalist-and-the-alchemy-bench.md,
+// 18-trainers-and-intro-quests.md).
 
 export { AlchemyBench } from './bench';
-export { Herbalist } from './herbalist';
 
-/** The bench, the herbalist and the circle nothing walks through where they stand. */
-export interface HouseBench {
-  readonly bench: AlchemyBench;
-  readonly herbalist: Herbalist;
-  /** The herbalist's body, in the world: stand it in the World. */
-  readonly body: { readonly x: number; readonly z: number; readonly r: number };
-}
-
-/** Put the bench against `house`'s right wall and the herbalist at its end. */
-export function standInHouse(house: Interior, ctx: BenchContext, radius: number): HouseBench {
+/** Put the bench against `house`'s right wall. */
+export function standInHouse(house: Interior, ctx: BenchContext): AlchemyBench {
   const { room, bench: b } = HOUSE;
   const frame = new Group();
   frame.name = 'house-frame';
@@ -33,13 +25,6 @@ export function standInHouse(house: Interior, ctx: BenchContext, radius: number)
   bench.root.position.set(room.hw - b.depth, 0, b.z);
   bench.root.rotation.y = -Math.PI / 2;
   frame.add(bench.root);
-
-  const herbalist = new Herbalist();
-  herbalist.root.position.set(b.herbalist.x, 0, b.herbalist.z);
-  herbalist.root.rotation.y = b.herbalist.yaw;
-  frame.add(herbalist.root);
-
   frame.updateMatrixWorld(true);
-  const at = herbalist.root.getWorldPosition(new Vector3());
-  return { bench, herbalist, body: { x: at.x, z: at.z, r: radius } };
+  return bench;
 }
