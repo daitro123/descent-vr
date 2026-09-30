@@ -64,6 +64,13 @@ export const INN = {
   keeper: { x: 0, z: -2.72 },
   /** Where you wake: before the hearth, facing the door. */
   wake: { x: 3.5, z: -0.8 },
+  /**
+   * The stash's chest, against the right wall between the hearth and the
+   * barrels, clear of where you wake and of the way round the room a big body
+   * takes along the wall on the door's side: its middle along the wall, its
+   * width along it, how far it stands out, and its height to the lid's top.
+   */
+  stash: { z: -2.25, width: 0.8, depth: 0.45, height: 0.64 },
 } as const;
 
 /** The taproom with the door shut: the fire's warm dark, a low fill instead of the sky, fog close in. */
@@ -94,11 +101,12 @@ export function innFlames(): readonly [number, number, number][] {
  * its old solid box did.
  */
 export function innColliders(): Shapes {
-  const { hw, hd, room, door, hearth, fireplace, bar, shelves, barrels, barrelRadius, tables, table } = INN;
+  const { hw, hd, room, door, hearth, fireplace, bar, shelves, barrels, barrelRadius, tables, table, stash } = INN;
   return {
     boxes: [
       ...wallShapes(hw, hd, room, door),
       [room.hw - hearth.depth / 2, hearth.z, hearth.depth / 2, hearth.width / 2],
+      [room.hw - stash.depth / 2, stash.z, stash.depth / 2, stash.width / 2],
       [-room.hw + fireplace.depth / 2, fireplace.z, fireplace.depth / 2, fireplace.width / 2],
       [(bar.x0 + bar.x1) / 2, bar.z - bar.depth / 2, (bar.x1 - bar.x0) / 2, bar.depth / 2],
       [0, -room.hd + shelves.depth / 2, shelves.half, shelves.depth / 2],

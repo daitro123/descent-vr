@@ -1,13 +1,14 @@
 import type { Vector3 } from 'three';
 import { CONFIG } from '../../config';
-import type { Reach } from '../bag/layout';
+import { BOARD as BAG_BOARD, type Reach } from '../bag/layout';
 
 // Where everything sits on a vendor's wares board, in the board's own space
 // (metres, +X to your right, +Y up, +Z out of its face towards you), and what
 // a point there touches: the vendor's name and the "Sell junk" button along
 // the top, their stock in a grid of four across with each price under its
 // slot, and the Sold row of six along the bottom. The slots are the bag
-// panel's size, so an item looks the same on both.
+// panel's size, so an item looks the same on both. The board stands on the
+// bag panel's left, turned in towards you as the stash's panel is.
 
 const { slot: S, pitch: P } = CONFIG.bag.panel;
 export const SLOT = S;
@@ -65,4 +66,12 @@ export function overBoard(l: Vector3, reach: Reach): boolean {
 /** Is `l` on the "Sell junk" button? */
 export function sellJunkAt(l: Vector3, reach: Reach): boolean {
   return nearFace(l, reach) && Math.abs(l.x - SELL_JUNK.x) < SELL_JUNK.w / 2 + reach.margin && Math.abs(l.y - SELL_JUNK.y) < SELL_JUNK.h / 2 + reach.margin;
+}
+
+/** Where the board stands in the bag panel's space: left of it, turned in as the stash's is, its right edge the stash's gap off the bag's. */
+export function waresPlacement(): { x: number; z: number; yaw: number } {
+  const { gap, turn } = CONFIG.bag.stashPanel;
+  const yaw = (turn * Math.PI) / 180;
+  const half = (BOARD.right - BOARD.left) / 2;
+  return { x: BAG_BOARD.left - gap - half * Math.cos(yaw), z: half * Math.sin(yaw), yaw };
 }

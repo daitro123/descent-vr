@@ -1,4 +1,4 @@
-import { Euler, type Object3D, type PerspectiveCamera, Quaternion, type Scene, Vector3, type WebGLRenderer } from 'three';
+import { Euler, Object3D, type PerspectiveCamera, Quaternion, type Scene, Vector3, type WebGLRenderer } from 'three';
 import { type Ability, type AdventureEvent, AdventureState, type Effect } from './adventureState';
 import { unlockLine } from './classes';
 import { Combat } from './combat/combat';
@@ -33,10 +33,11 @@ import { type ArrowShown, QuestTracker } from './ui/questTracker';
 import { ZoneName } from './ui/zoneName';
 import { RunVignette } from './ui/runVignette';
 import { Bag, type BagHand } from './ui/bag/bag';
-import { BOARD as BAG_BOARD } from './ui/bag/layout';
 import { IconAtlas, lookOf } from './ui/bag/looks';
-import { type Probe, TalkBoard, type TalkButton } from './ui/talkBoard';
+import { StashPanel } from './ui/bag/stashPanel';
+import { placeBeside, type Probe, TalkBoard, type TalkButton } from './ui/talkBoard';
 import { type VendorAt, WaresBoard } from './ui/wares/board';
+import { waresPlacement } from './ui/wares/layout';
 import { giverOf, isVendor, opensWith, type VendorId, vendorTalk } from './vendors';
 import { PEOPLE } from './models/people';
 import type { GiverId } from './quests';
@@ -46,6 +47,7 @@ import { Chests } from './world/chests';
 import { Pickups } from './world/pickups';
 import { BlobShadows } from './world/shadows';
 import { Dropped } from './world/dropped';
+import { StashChest } from './world/stashChest';
 import type { Mine } from './world/mine';
 import { World } from './world/world';
 
@@ -53,6 +55,8 @@ const _a = new Vector3();
 const _b = new Vector3();
 const _gaze = new Vector3();
 const _haleHead = new Vector3();
+/** Where the wares board would stand beside a vendor. */
+const _spot = new Object3D();
 const _vendor: { -readonly [K in keyof VendorAt]: VendorAt[K] } = { id: 'smith', feet: new Vector3(), head: new Vector3() };
 const _float = new Vector3();
 const _look = new Quaternion();
@@ -143,6 +147,9 @@ export class Adventure {
   readonly bag: Bag;
   /** What you've let go of off the bag's panel, lying on the ground. */
   readonly dropped: Dropped;
+  /** The stash's chest by the inn's hearth: touch its lid and the stash panel opens beside the bag's. */
+  readonly stashChest: StashChest;
+  readonly stash: StashPanel;
   /** Each hand's controller, for the bag. */
   private readonly bagHands: Record<'left' | 'right', { -readonly [K in keyof BagHand]: BagHand[K] }>;
   /** Where the quest arrow's targets are: each quest's place, and Hale. */
@@ -233,14 +240,24 @@ export class Adventure {
       },
       atlas,
     );
+    // The wares open beside the bag's panel, hung from it as the stash's is.
     this.wares = new WaresBoard(this.state.inventory, atlas);
-    scene.add(this.wares.root, this.vendorBoard.root);
+    this.bag.panel.root.add(this.wares.root);
+    scene.add(this.vendorBoard.root);
     this.wares.warm(renderer, camera, scene);
     const { left, right } = this.player.input.hands;
     this.bagHands = { left: { grip: left.grip, tracked: false, squeeze: 0 }, right: { grip: right.grip, tracked: false, squeeze: 0 } };
     scene.add(this.bag.root, this.dropped.root);
     this.bag.warm(renderer, camera, scene);
     this.dropped.warm(renderer, camera, scene);
+    // The stash's chest stands in the inn's room, drawn while it is; its panel opens beside the bag's.
+    this.stash = new StashPanel(this.state.inventory, atlas);
+    this.stashChest = new StashChest(zone.stash);
+    const stashRoom = zone.interiors.find((i) => i.id === zone.stash.interior)?.room;
+    if (!stashRoom) throw new Error(`No room for the stash in the ${zone.stash.interior}`);
+    stashRoom.add(this.stashChest.root);
+    this.bag.panel.root.add(this.stash.root);
+    this.stash.warm(renderer, camera, scene);
 
     this.combat = new Combat(
       this.player,
@@ -594,23 +611,28 @@ export class Adventure {
    */
   private trade(dt: number): void {
     const { player, you, state, wares, vendorBoard, bag } = this;
+    const T = CONFIG.talk;
     player.camera.getWorldDirection(_gaze);
     const vendor = this.vendorNear();
     const giver = giverOf(vendor.id);
     const shows = giver ? state.giver(giver) : null;
     const eyes = { head: you.head, gaze: _gaze };
     const probes = this.touching();
+    const d = Math.hypot(you.head.x - vendor.feet.x, you.head.z - vendor.feet.z);
+    // Walked off (or another vendor's nearer): the wares close, and the bag's panel with them.
+    if (wares.isOpen && (d > T.close || wares.vendor !== vendor.id)) bag.close(`walked away from ${wares.name}`);
+    if (d > T.close) wares.walkedAway();
     const talkFirst = !wares.isOpen && opensWith(shows) === 'talk';
     if (talkFirst && !vendorBoard.isOpen) vendorBoard.name = PEOPLE[vendor.id].label;
     const talk = shows ? vendorTalk(shows) : { line: '', buttons: ['trade'] as const };
     const press = vendorBoard.update(dt, eyes, vendor, probes, talk, talkFirst);
     if (press) this.vendorPress(press.button, press.hand, vendor, giver);
-
-    const happened = wares.update(dt, eyes, vendor, !talkFirst && !vendorBoard.isOpen, probes);
-    if (happened?.kind === 'unfolded') this.openBagBeside();
-    else if (happened?.kind === 'folded' && bag.isPinned) bag.close(`${wares.name} folded`);
-    else if (happened?.kind === 'sellJunk') this.sellJunk(happened.hand);
-    bag.beside = wares.isOpen ? wares : null;
+    else if (!wares.isOpen && !wares.held && !talkFirst && !vendorBoard.isOpen && d < T.open) {
+      const angle = (_gaze.angleTo(_b.subVectors(vendor.head, you.head)) * 180) / Math.PI;
+      if (angle < T.facing) this.openWares(vendor, `walked up to ${PEOPLE[vendor.id].label.toLowerCase()}`);
+    }
+    const hand = wares.press(dt, probes);
+    if (hand) this.sellJunk(hand);
   }
 
   /** The vendor nearest you that's drawn (the innkeeper only with the inn), where they stand. */
@@ -640,8 +662,7 @@ export class Adventure {
     switch (button) {
       case 'trade':
         vendorBoard.fold();
-        wares.unfold(this.you.head, vendor);
-        this.openBagBeside();
+        this.openWares(vendor, 'traded');
         break;
       case 'accept':
         vendorBoard.fold();
@@ -660,9 +681,19 @@ export class Adventure {
     }
   }
 
-  /** The bag panel opens beside the wares board, turned to you: no reach needed. */
-  private openBagBeside(): void {
-    this.bag.openAt(this.wares.bagSpot(_a, BAG_BOARD.left), this.you.head, `beside ${this.wares.name}`);
+  /**
+   * The vendor's wares open as a panel beside the bag's, which stands where
+   * Hale's board would, turned to you, with the wares on its left: no reach needed.
+   */
+  private openWares(vendor: VendorAt, why: string): void {
+    const { you, wares } = this;
+    const { out, side, height } = CONFIG.vendors.board;
+    wares.stock(vendor.id);
+    placeBeside(_spot, you.head, vendor.feet, out, side, height);
+    _spot.updateMatrixWorld(true);
+    const beside = waresPlacement();
+    const at = _spot.localToWorld(_a.set(-beside.x, 0, -beside.z));
+    this.bag.openBeside(wares, you.head, _gaze, this.touching(), `${wares.name}, ${why}`, at);
   }
 
   /** "Sell junk": every grey in the bag sold at once, with a buzz and the coins' sound; a light buzz with none. */
@@ -688,6 +719,14 @@ export class Adventure {
       Object.assign(bagHands[side], { grip: hand.grip, tracked: hand.grip.visible, squeeze: hand.squeeze });
     }
     player.camera.getWorldDirection(_gaze);
+    // Touching the stash chest's lid opens the stash beside the bag.
+    const lid = this.stashChest.update(dt, this.stash.isOpen, this.touching());
+    if (lid) {
+      const { intensity, ms } = CONFIG.bag.stashChest.buzz;
+      player.input.pulse(lid.hand, intensity, ms);
+      sfx.chest(lid.at);
+      bag.openBeside(this.stash, you.head, _gaze, this.touching(), `the stash, ${lid.hand} hand on its lid`);
+    }
     bag.update({ dt, head: you.head, gaze: _gaze, rig: player.rig, hands: bagHands, probes: this.touching(), alive: player.alive });
     const [left, right] = this.touching();
     const taken = this.dropped.update(dt, [left?.at ?? null, right?.at ?? null], (stack) => {

@@ -200,6 +200,10 @@ _Avoid_: gold, money, currency
 A friendly character who buys and sells: in Oakvale, the smith (gear, and anything you bring) and the innkeeper (the minor healing potion).
 _Avoid_: merchant, shopkeeper, trader
 
+**Wares board**:
+A vendor's board, unfolding beside them as you walk up, with what they sell and a **Sold row** of the last six things you sold, to buy back until you leave the zone. You buy by carrying from it into the bag, and sell by carrying onto it.
+_Avoid_: shop, store, trade window, buyback tab
+
 **Stash**:
 The chest at the inn where you keep items you aren't carrying.
 _Avoid_: bank, storage, vault

@@ -233,10 +233,10 @@ const state = () =>
       card: wares.card.mesh.visible ? (wares.card.ctx.__texts ?? []) : null,
       bagCard: bag.panel.card.mesh.visible ? (bag.panel.card.ctx.__texts ?? []) : null,
       frames: Array.from({ length: 22 }, (_, i) => {
-        wares.frames.getColorAt(i, d.__c ??= wares.card.mesh.material.color.clone());
+        wares.slots.frames.getColorAt(i, d.__c ??= wares.card.mesh.material.color.clone());
         return d.__c.r + d.__c.g + d.__c.b;
       }),
-      icons: Array.from(wares.icons.geometry.getAttribute('color').array.filter((_, k) => k % 12 === 0).slice(0, 22)),
+      icons: Array.from(wares.slots.icons.geometry.getAttribute('color').array.filter((_, k) => k % 12 === 0).slice(0, 22)),
       bagOpen: bag.isOpen,
       pinned: bag.isPinned,
       apart: Math.hypot(bp.x - wp.x, bp.z - wp.z),
@@ -268,8 +268,8 @@ await page.evaluate(() => {
   await xrFrames(4);
   const s = await state();
   check(s.waresOpen && s.vendor === 'smith', `walking up to the smith unfolds their wares board (${s.vendor})`);
-  check(s.bagOpen && s.pinned && s.lines.some((l) => /opened: beside the smith's wares/.test(l)), `the bag panel opens beside it, no reach (${s.lines.at(-1)})`);
-  check(s.apart > 0.45 && s.apart < 0.8 && s.facing > 0.9, `side by side, ${(s.apart * 100).toFixed(0)} cm apart, facing the same way (${s.facing.toFixed(2)})`);
+  check(s.bagOpen && s.pinned && s.lines.some((l) => /opened: the smith's wares, walked up/.test(l)), `the bag panel opens beside it, no reach (${s.lines.at(-1)})`);
+  check(s.apart > 0.45 && s.apart < 0.8 && s.facing > 0.85, `side by side, ${(s.apart * 100).toFixed(0)} cm apart, the board turned in to you (${s.facing.toFixed(2)})`);
   const levels = s.wares.map((id) => id?.replace(/.*-/, '')).join(',');
   check(s.wares.filter(Boolean).length === 16 && s.wares.includes('iron-longsword-5') && s.wares.includes('padded-jerkin-4'), `sixteen wares: ${s.wares.slice(0, 6).join(', ')}… (levels ${levels})`);
   const prices = s.board.filter((t) => /coins?$/.test(t.text));

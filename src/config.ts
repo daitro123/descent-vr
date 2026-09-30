@@ -484,6 +484,19 @@ export const CONFIG = {
       take: 0.25, // m from a hand to take it back, the orb's pickup radius
       settle: 0.6, // s after it's let go before a hand can take it back
     },
+    // The stash panel (ui/bag/stashPanel.ts): opened with the bag's by touching the stash chest's lid,
+    // on the bag panel's left, turned in towards you. It closes with the bag's.
+    stashPanel: {
+      gap: 0.03, // m between its edge and the bag panel's
+      turn: 25, // ° turned in towards you
+    },
+    // The stash's chest by the inn's hearth (world/stashChest.ts).
+    stashChest: {
+      touch: 0.05, // m round its lid a fist or the weapon's tip counts as touching it
+      lid: 105, // ° its lid swings up while the stash is open…
+      swing: 0.35, // …over this many s
+      buzz: { intensity: 0.6, ms: 50 }, // the lid touched
+    },
   },
 
   // The smith's and the innkeeper's wares (vendors.ts, ui/wares/)
@@ -491,14 +504,10 @@ export const CONFIG = {
   vendors: {
     // The smith's white stock: each class's weapon and off hand at these item levels, and armour for every slot at these.
     smith: { hands: [1, 3, 5], armour: [2, 4] },
-    // The wares board unfolds where Hale's talk board would, as `talk` says when; this is where it sits
-    // from the vendor: m towards you, to your right, and its middle's height.
-    board: { out: 0.6, side: 0.45, height: 1.35 },
-    // The bag panel opens on the board's right, this far from its edge (m), turned to you.
-    bagGap: 0.04,
-    // Touching a ware, or a bag item let go over the board: as the bag panel's slots are touched.
-    touch: { margin: 0.006, front: 0.035, back: 0.07 },
-    over: { margin: 0.03, front: 0.12, back: 0.1 },
+    // The wares board stands where Hale's talk board would, opening as `talk` says when: m from the
+    // vendor towards you, to your right, and its middle's height. The bag panel opens pinned on its
+    // right, the board hanging on the bag's left and turned in, as the stash's does.
+    board: { out: 0.6, side: 0.55, height: 1.35 },
     // "Sell junk" is pressed like the talk board's buttons: m round its face, in front of it and behind
     // it that still touch it, and s after the board unfolds, and after a press, before it takes one.
     button: { margin: 0.025, front: 0.03, back: 0.08 },

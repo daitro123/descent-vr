@@ -8,8 +8,14 @@ import { GEAR_SLOTS, type GearSlot } from '../../items';
 // seven gear slots round the figure of you on the left, and the page tabs
 // along the top. From the bag prototype's panel (ui/bag-prototype/panel.ts).
 
-/** A slot on the panel: one of the page's sixteen (the bag's, or the quest page's), or a gear slot. */
-export type Spot = { readonly in: 'grid'; readonly i: number } | { readonly in: 'gear'; readonly slot: GearSlot };
+/**
+ * A slot on the panel: one of the page's sixteen (the bag's, or the quest
+ * page's), or a gear slot; or one of the page's slots on the panel open beside
+ * it (the stash's).
+ */
+export type Spot = BagSpot | { readonly in: 'beside'; readonly i: number };
+/** A slot on the bag's own panel. */
+export type BagSpot = { readonly in: 'grid'; readonly i: number } | { readonly in: 'gear'; readonly slot: GearSlot };
 
 /** The pages the tabs switch between. The talent page is the Abilities map's to fill. */
 export const PAGES = ['bag', 'quest', 'talents'] as const;
@@ -49,25 +55,25 @@ export const COINS = { x: GRID_MIDDLE, y: -0.19 };
 export const CARD = { w: 0.28, h: 0.2, y: BOARD.top + 0.11 };
 
 /** Every slot, in the order the panel draws them: the gear slots, then the page's sixteen. */
-export const SPOTS: readonly Spot[] = [
+export const SPOTS: readonly BagSpot[] = [
   ...GEAR_SLOTS.map((slot) => ({ in: 'gear', slot }) as const),
   ...Array.from({ length: CONFIG.bag.slots }, (_, i) => ({ in: 'grid', i }) as const),
 ];
 
-export function spotXY(spot: Spot): readonly [number, number] {
+export function spotXY(spot: BagSpot): readonly [number, number] {
   return spot.in === 'grid' ? [GRID_X[spot.i % 4], ROWS[Math.floor(spot.i / 4)]] : GEAR_AT[spot.slot];
 }
 
 export function sameSpot(a: Spot | null, b: Spot | null): boolean {
   if (!a || !b) return a === b;
-  return a.in === 'grid' ? b.in === 'grid' && a.i === b.i : b.in === 'gear' && a.slot === b.slot;
+  return a.in === 'gear' ? b.in === 'gear' && a.slot === b.slot : b.in === a.in && a.i === b.i;
 }
 
 /** Is `l` near the face, within `reach`? */
-const nearFace = (l: Vector3, reach: Reach) => l.z < FACE + reach.front && l.z > -reach.back;
+export const nearFace = (l: Vector3, reach: Reach) => l.z < FACE + reach.front && l.z > -reach.back;
 
 /** The slot `l` touches, if any; the page's sixteen only if `grid` (the talent page has none). */
-export function spotAt(l: Vector3, reach: Reach, grid: boolean): Spot | null {
+export function spotAt(l: Vector3, reach: Reach, grid: boolean): BagSpot | null {
   if (!nearFace(l, reach)) return null;
   for (const spot of SPOTS) {
     if (spot.in === 'grid' && !grid) continue;
@@ -83,9 +89,9 @@ export function figureAt(l: Vector3, reach: Reach): boolean {
 }
 
 /** The slot whose centre is nearest `l`, within `near` of it: a carried item is aimed by eye, not by the hand. */
-export function nearestSpot(l: Vector3, reach: Reach, grid: boolean, near: number): Spot | null {
+export function nearestSpot(l: Vector3, reach: Reach, grid: boolean, near: number): BagSpot | null {
   if (!nearFace(l, reach)) return null;
-  let best: Spot | null = null;
+  let best: BagSpot | null = null;
   let bestD = near;
   for (const spot of SPOTS) {
     if (spot.in === 'grid' && !grid) continue;
