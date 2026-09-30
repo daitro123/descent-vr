@@ -420,8 +420,10 @@ export const CONFIG = {
         frostbolt: { level: 6, use: 'z', cost: 15, cooldown: 0, slow: 0.4, time: 5 },
         // The next bolt arcs on to `jumps` more enemies within `reach` m, at `share` each.
         chainLightning: { level: 8, use: 'v', cost: 30, cooldown: 8, jumps: 2, reach: 4, share: 0.7 },
-        // Ice falls for `time` s over a `radius` m circle where you point: `damage` every `every` s and a `slow` slow.
-        blizzard: { level: 10, use: 's', cost: 40, cooldown: 30, time: 5, radius: 4, damage: 6, every: 0.5, slow: 0.5, aimDeg: 15 },
+        // Ice falls for `time` s over a `radius` m circle where you point: `damage` every `every` s and a `slow` slow,
+        // which lingers `linger` s after the last tick that caught it. The circle centres on the nearest enemy within
+        // `aimDeg`° of where the right hand faces and `range` m, or else where the hand's line meets the floor (at most `range` m off).
+        blizzard: { level: 10, use: 's', cost: 40, cooldown: 30, time: 5, radius: 4, damage: 6, every: 0.5, slow: 0.5, linger: 1, aimDeg: 15, range: 15 },
       },
     },
   },

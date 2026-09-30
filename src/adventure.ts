@@ -959,6 +959,7 @@ export class Adventure {
     this.combat.projectiles.clear();
     this.combat.axes.clear();
     this.combat.bolts.clear();
+    this.combat.blizzard.clear();
     this.mage?.clear();
     this.deadFor = null;
     this.wakingFor = 0;
