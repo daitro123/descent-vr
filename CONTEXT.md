@@ -169,7 +169,7 @@ The one currency. They take no slot in the bag.
 _Avoid_: gold, money, currency
 
 **Vendor**:
-A villager who buys and sells: in Oakvale, the smith (gear, and anything you bring) and the innkeeper (food and potions).
+A villager who buys and sells: in Oakvale, the smith (gear, and anything you bring) and the innkeeper (healing potions).
 _Avoid_: merchant, shopkeeper, trader
 
 **Stash**:
