@@ -37,7 +37,7 @@ A friendly character who hands out quests and takes them back when they're done.
 _Avoid_: NPC (too broad: every friendly character is an NPC), questgiver
 
 **Villager**:
-A friendly character who lives in a zone and gives no quests. Oakvale has three: the innkeeper, the smith and the farmer.
+A friendly character who lives in a zone and gives no quests. Oakvale has two: the innkeeper and the farmer (the smith is a trainer).
 _Avoid_: NPC (too broad), townsfolk, civilian
 
 **Bark**:
@@ -169,9 +169,37 @@ The one currency. They take no slot in the bag.
 _Avoid_: gold, money, currency
 
 **Vendor**:
-A villager who buys and sells: in Oakvale, the smith (gear, and anything you bring) and the innkeeper (food and potions).
+A friendly character who buys and sells: in Oakvale, the smith (gear, and anything you bring) and the innkeeper (food and potions).
 _Avoid_: merchant, shopkeeper, trader
 
 **Stash**:
 The chest at the inn where you keep items you aren't carrying.
 _Avoid_: bank, storage, vault
+
+**Profession**:
+A trade a character learns from a trainer and practises by hand between fights: gathering (Mining, Herbalism) or making (Smithing, Alchemy). Every character can learn all of them.
+_Avoid_: skill (abilities are what you fight with), job, trade skill, craft (as a noun for the profession)
+
+**Material**:
+Something gathered or made to be used up in making something else: ore, an herb, a bar.
+_Avoid_: resource (a class's rage, focus or mana), reagent, component, mat
+
+**Gathering spot**:
+A fixed place in a zone where a material can be taken by hand, such as a vein of ore or a clump of herbs. It refills some time after it's taken.
+_Avoid_: node, resource node, spawn
+
+**Station**:
+The place in the world where a making profession is done: the smithy's forge and anvil, the alchemy table.
+_Avoid_: crafting bench, workbench
+
+**Trainer**:
+A friendly character who teaches a profession, gives its intro quest and sells its recipes. Oakvale has two: the smith (Mining and Smithing) and the herbalist (Herbalism and Alchemy).
+_Avoid_: teacher, master, NPC
+
+**Proficiency**:
+How practised a character is at one profession: a number that climbs by gathering and making.
+_Avoid_: skill, level, experience
+
+**Grade**:
+A step of proficiency, from Apprentice through Journeyman and Expert to Artisan, each capped until a trainer teaches the next. Each grade goes with a zone's materials; Oakvale's is Apprentice.
+_Avoid_: rank, tier, level
