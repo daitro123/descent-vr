@@ -94,6 +94,7 @@ export function buildForest(given?: ForestLayout): StartingZone {
     pickups: plan.pickups,
     sounds: plan.sounds,
     trees: new TreeCover(plan.trees),
+    ambience: 'woods',
     bounds: plan.walkable.bounds,
     landmarks: plan.landmarks,
     heightAt: plan.heightAt,

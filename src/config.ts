@@ -151,6 +151,14 @@ export const CONFIG = {
       // and within this of a zone's land the World asks it too (its trunks and rocks by the line)
       seam: 1,
     },
+    // Crossing a seam into the next zone (world/seams.ts): the light, haze, sky
+    // and ambience blend by where you stand across `band` m either side of its
+    // line, and the current zone (its name, the save, the sound) changes once
+    // you're `past` m over it, either way.
+    crossing: {
+      band: 40, // m either side of the line
+      past: 2, // m over the line
+    },
   },
 
   player: {
@@ -395,6 +403,19 @@ export const CONFIG = {
       size: 0.022, // m across, on the tracker
       nearHale: 10, // m: it hides this close to Hale, when it points at them (their gold "?" shows the way)
     },
+  },
+
+  // The zone's name (ui/zoneName.ts), floating up a little above your eye line
+  // as you cross into a zone and when you load in, as in WoW. It lags your
+  // head like the tracker.
+  zoneName: {
+    direction: [0, 0.2, -1], // where it sits from your eyes (x right, y up, −z ahead)…
+    distance: 1.6, // …this far out (m)
+    lag: 3, // per s: how quickly it catches up as you turn your head
+    size: [1.1, 0.22], // m across and high
+    fadeIn: 0.4, // s it takes to come up…
+    hold: 3, // …s it holds…
+    fadeOut: 1.2, // …and s it takes to fade
   },
 
   // Smoke over the zone (world/smoke.ts): the inn's and the cottages'
@@ -683,6 +704,27 @@ export const CONFIG = {
       band: [380, 520], // Hz: each side's band's middle
       gust: [0.07, 0.11], // Hz: how slowly each side's gusts come and go
       depth: 0.6, // of the level the gusts swing by
+    },
+    // Brackenmoor's own ambience, placed nowhere: a stronger, lower wind than
+    // Oakvale's, over a low rumble, and now and then a lone curlew's call from
+    // somewhere out over the moor, on the wing.
+    moor: {
+      wind: {
+        level: 0.75,
+        band: [210, 300], // Hz: each side's band's middle, lower than the woods'
+        gust: [0.09, 0.14], // Hz: its gusts come and go a little quicker…
+        depth: 0.75, // …and swing it further
+        rumble: 0.35, // the rumble under it (1 as loud as a side's band)
+      },
+      call: {
+        every: [9, 24], // s between calls (random in range)
+        near: 30, // m off, at the nearest…
+        far: 70, // …and the farthest
+        height: [5, 14], // m over your head
+        last: 3, // s a call holds its slot
+        level: 1,
+        ref: 30, // m within which it isn't quieter for distance: it carries
+      },
     },
     // Birdsong: now and then a call from a tree `near` to `far` m off. Each try
     // picks a spot at random and a bird calls only if a tree stands within

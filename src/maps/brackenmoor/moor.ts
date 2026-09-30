@@ -38,6 +38,7 @@ export function buildBrackenmoor(given?: MoorPlan): Zone {
     pickups: [],
     sounds: [],
     trees: new TreeCover(plan.trees),
+    ambience: 'moor',
     bounds: plan.walkable.bounds,
     landmarks: plan.landmarks,
     heightAt: plan.heightAt,

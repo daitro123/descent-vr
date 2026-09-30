@@ -10,7 +10,13 @@ import { type Cues, mix, type RoomCue } from '../src/world/mix';
 const { open, inside, walls, door, crypt, fight } = CONFIG.sound.mix;
 
 const inn = (d: number, light: number): RoomCue => ({ id: 'inn', door: d, light });
-const cues = (over: Partial<Cues> = {}): Cues => ({ rooms: [inn(0, 0), { id: 'house', door: 0, light: 0 }], mine: 0, crypt: -Infinity, ...over });
+const cues = (over: Partial<Cues> = {}): Cues => ({
+  rooms: [inn(0, 0), { id: 'house', door: 0, light: 0 }],
+  mine: 0,
+  crypt: -Infinity,
+  zones: [{ id: 'forest', share: 1 }],
+  ...over,
+});
 
 describe('the mix', () => {
   it('outside: the outdoors as it is, a room heard faintly and muffled through its walls, nothing of the mine', () => {
@@ -83,6 +89,26 @@ describe('the mix', () => {
     // At the breach itself it's on its way up.
     expect(at(0).drone).toBeGreaterThan(0);
     expect(at(0).drone).toBeLessThan(1);
+  });
+
+  it("across a seam: each zone's own air at its share of where you stand, crossfading at equal power", () => {
+    const at = (moor: number) =>
+      mix(cues({ zones: [{ id: 'forest', share: 1 - moor }, { id: 'brackenmoor', share: moor }] }), false).zones;
+    expect(at(0)).toEqual([1, 0]);
+    expect(at(1)).toEqual([0, 1]);
+    // On the line both are heard, and together no quieter than either alone (their winds are unrelated noise).
+    const [f, b] = at(0.5);
+    expect(f).toBeCloseTo(Math.SQRT1_2, 12);
+    expect(f ** 2 + b ** 2).toBeCloseTo(1, 12);
+    let last = at(0);
+    for (let t = 0.1; t <= 1; t += 0.1) {
+      const now = at(t);
+      expect(now[1]).toBeGreaterThan(last[1]);
+      expect(now[0]).toBeLessThan(last[0]);
+      last = now;
+    }
+    // Indoors or in the mine the outdoors as a whole is what's muffled; the airs' shares don't change.
+    expect(mix(cues({ rooms: [inn(0, 1)], zones: [{ id: 'forest', share: 1 }] }), false).zones).toEqual([1]);
   });
 
   it('in a fight: the whole ambience dips a little, wherever you are', () => {

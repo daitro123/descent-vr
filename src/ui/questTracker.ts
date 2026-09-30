@@ -1,11 +1,8 @@
-import { type Camera, Quaternion, Vector3 } from 'three';
+import type { Camera } from 'three';
 import type { Tracker } from '../adventureState';
 import { CONFIG } from '../config';
 import { Card, FONT, roundRect } from './card';
-
-const _head = new Vector3();
-const _want = new Vector3();
-const _q = new Quaternion();
+import { HeadFollow } from './follow';
 
 /**
  * The quest you're on, at the top left of your view: the talk prototype's
@@ -33,9 +30,8 @@ export class QuestTracker {
   private readonly card = new Card(0.46, 0.17, { ppm: PPM, overlay: true });
   /** The quest arrow: a small gold arrow drawn once, turned on the tracker as you turn; a card like the tracker, so drawn with its shader. */
   private readonly arrow = new Card(CONFIG.tracker.arrow.size, CONFIG.tracker.arrow.size, { ppm: 3000, overlay: true });
-  /** Where it floats from your eyes, lagging where it wants to be. */
-  private readonly dir = new Vector3();
-  private placed = false;
+  /** Where it floats in your view, lagging your head. */
+  private readonly follow = new HeadFollow(CONFIG.tracker);
   private flashFor = 0;
 
   constructor() {
@@ -79,22 +75,15 @@ export class QuestTracker {
 
   /** Follow your head, show the quest you're on, and the arrow beside its line if it's shown. */
   update(dt: number, camera: Camera, tracker: Tracker | null, arrow: ArrowShown | null = null): void {
-    const T = CONFIG.tracker;
     const { mesh } = this.card;
     mesh.visible = tracker !== null;
     this.placeArrow(arrow);
     this.flashFor = Math.max(0, this.flashFor - dt);
     if (!tracker) {
-      this.placed = false;
+      this.follow.reset();
       return;
     }
-    camera.getWorldPosition(_head);
-    _want.set(...T.direction).normalize().applyQuaternion(camera.getWorldQuaternion(_q));
-    if (this.placed) this.dir.lerp(_want, Math.min(1, dt * T.lag)).normalize();
-    else this.dir.copy(_want);
-    this.placed = true;
-    mesh.position.copy(_head).addScaledVector(this.dir, T.distance);
-    mesh.lookAt(_head);
+    this.follow.place(mesh, camera, dt);
 
     const flash = this.flashFor > 0 && Math.floor(this.flashFor * 5) % 2 === 0;
     this.card.paint(`${tracker.title}|${tracker.lines.join('|')}|${flash}`, (c, w, h) => {

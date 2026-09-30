@@ -151,7 +151,7 @@ export async function startWalk(renderer: WebGLRenderer, scene: Scene, camera: P
   let animate: (dt: number, camera: Camera) => void;
   let world: World | null = null;
   if (map.kind === 'zone') {
-    const w = new World();
+    const w = new World(findMap);
     w.attach(scene, camera, renderer);
     // Its neighbours too, so you can walk over into them.
     for (const n of await loadNeighbours(map)) w.add(n);
