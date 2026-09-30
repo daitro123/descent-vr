@@ -13,6 +13,8 @@ export type Route =
   | { kind: 'walk'; map: string }
   /** `?arena`: the wave game. `?duel`, `?wave=N` and `?showcase` alone open it too. */
   | { kind: 'arena'; firstWave: number; duel: boolean; showcase: boolean }
+  /** `?proto=<name>`: a throwaway professions prototype (src/professions/prototypes). */
+  | { kind: 'proto'; name: string }
   /** `?belt=a|b|c`: PROTOTYPE, inventory ticket 04's belt, fighting duelists (`&calm`: only a drain on health). */
   | { kind: 'belt'; variant: BeltVariant; calm: boolean }
   /** `?bag` or `?bag=a|b|c`: PROTOTYPE of the bag and the gear panel, starting on that way to move items. */
@@ -55,6 +57,7 @@ export function readPage(search: string): Page {
 function chooseRoute(params: URLSearchParams): Route {
   if (params.has('inspect')) return { kind: 'inspect' };
   if (params.has('fly')) return { kind: 'fly', map: params.get('fly') ?? '' };
+  if (params.has('proto')) return { kind: 'proto', name: params.get('proto') ?? '' };
   if (params.has('map')) return { kind: 'walk', map: params.get('map') || 'forest' };
   if (params.has('belt')) {
     const v = params.get('belt') as BeltVariant;

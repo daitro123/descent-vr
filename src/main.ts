@@ -69,6 +69,8 @@ async function start(): Promise<void> {
       return startMapViewer(renderer, scene, camera, device, r.map);
     case 'walk':
       return (await import('./maps/walk')).startWalk(renderer, scene, camera, r.map);
+    case 'proto':
+      return startPrototype(renderer, scene, camera, device, r.name);
     case 'arena':
       return startArena(renderer, scene, camera, device, perf, r);
     case 'belt': // PROTOTYPE: inventory ticket 04
@@ -266,6 +268,14 @@ async function startMapViewer(
     viewer.update(timer.getDelta());
     renderer.render(scene, camera);
   });
+}
+
+/** `?proto=<name>`: a throwaway professions prototype, or the Adventure's page for a name it doesn't know. */
+async function startPrototype(renderer: WebGLRenderer, scene: Scene, camera: PerspectiveCamera, device: unknown, name: string): Promise<void> {
+  // ?proto=brew: PROTOTYPE of brewing at the alchemy table (.scratch/professions/issues/07-…).
+  if (name === 'brew') return (await import('./professions/prototypes/brew')).startBrewPrototype(renderer, scene, camera, device);
+  const intro = document.getElementById('intro');
+  if (intro) intro.textContent = `No prototype called "${name}".`;
 }
 
 void start();
