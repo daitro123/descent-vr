@@ -1,8 +1,9 @@
 // PROTOTYPE (abilities ticket 06, "How the mage fights"): throwaway code kept in
-// the repo so Tom can read it. It swapped the warrior's sword and shield for
-// the mage's hands at `?arena&class=mage`, until the mage was built from its
-// kit A (abilities ticket 23: src/player/mage.ts, src/combat/bolts.ts); that
-// flag now plays the built mage, and nothing loads this any more.
+// the repo so Tom can compare it with the built mage. It swaps the warrior's
+// sword and shield for the mage's hands at `?arena&class=mage-prototype`
+// (`&kit=A|B|C`, and the kits' axes `&cast=`, `&focus=`, `&move=`, `&mana=`).
+// The mage was built from its kit A (abilities ticket 23: src/player/mage.ts,
+// src/combat/bolts.ts); `&class=mage` plays the built one.
 //
 // The kits and the axes they pick on are in mageVariants.prototype.ts, the
 // numbers in mageNumbers.prototype.ts, the bolts in flight in
@@ -454,7 +455,7 @@ export class MageKit implements ClassPrototype {
   }
 }
 
-/** `?arena&class=mage` (src/prototype/classPrototypes.ts): the kit, its variant read from the page's query string. */
+/** `?arena&class=mage-prototype` (src/prototype/classPrototypes.ts): the kit, its variant read from the page's query string. */
 export function startMagePrototype(game: Game): MageKit {
   return new MageKit(game, readMageVariant(location.search));
 }
