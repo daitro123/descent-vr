@@ -45,6 +45,12 @@ export const HOUSE = {
   rug: { x: 1.4, z: -0.9, hw: 0.85, hd: 0.6 },
   /** The broom, leant in the front right corner. */
   broom: { x: 2.95, z: 2.45 },
+  /**
+   * The alchemy bench against the right wall, the hearth behind it along the wall
+   * (professions/bench/): its middle along the wall, its half length and depth.
+   * Its herbalist stands at its front end, turned to the room.
+   */
+  bench: { z: -0.1, hw: 0.8, depth: 0.6, herbalist: { x: 2.7, z: 1.2, yaw: -2.2 } },
 } as const;
 
 /** The house with the door shut: the hearth's warm dark, a low fill instead of the sky, fog close in. */
@@ -76,14 +82,16 @@ export function houseFlames(): readonly [number, number, number][] {
  * The house's colliders, in its frame. The walls are the outer walls'
  * footprint, with the doorway left open, so from outside the house collides
  * as its old solid box did. The rug and the broom (in a corner no body
- * reaches) don't collide.
+ * reaches) don't collide; the alchemy bench does, and its herbalist stands
+ * in the World as the villagers do.
  */
 export function houseColliders(): Shapes {
-  const { hw, hd, room, door, hearth, bed, chest, table, shelf } = HOUSE;
+  const { hw, hd, room, door, hearth, bed, chest, table, shelf, bench } = HOUSE;
   return {
     boxes: [
       ...wallShapes(hw, hd, room, door),
       [room.hw - hearth.depth / 2, hearth.z, hearth.depth / 2, hearth.width / 2],
+      [room.hw - bench.depth / 2, bench.z, bench.depth / 2, bench.hw],
       [bed.x, bed.z, bed.hw, bed.hd],
       [chest.x, chest.z, chest.hw, chest.hd],
       [table.x, table.z, table.set.hw, table.set.hd],

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { type AdventureEvent, AdventureState, type Effect, type Progress } from '../src/adventureState';
+import { type AdventureEvent, AdventureState, type Effect, type Progress, xpToReach } from '../src/adventureState';
 import { CONFIG } from '../src/config';
 import { SaveController } from '../src/save/controller';
 import { startingInventory } from '../src/inventory';
@@ -103,7 +103,7 @@ describe("the adventure state's snapshot", () => {
     [ACCEPT, FARM, FARM, FARM, HAND_IN].forEach((e) => state.apply(e));
     const restored = new AdventureState({ ...state.snapshot(), xp: 60 });
     expect(restored.level).toBe(2);
-    expect(restored.xp).toBe(CONFIG.levels.xp[0]);
+    expect(restored.xp).toBe(xpToReach(2));
   });
 
   it("keeps the chain's rules whatever a record says", () => {

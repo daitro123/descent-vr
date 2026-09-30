@@ -74,7 +74,7 @@ You start at the crossroads a few steps from **Marshal Hale**, the village's gua
 | The Lumber Camp | Defeat the 5 bandits of the lumber camp across the bridge, their leader included, and take the leader's orders from the tent by touching them | 120 XP (level 3) |
 | What Lies Below | Go down the old mine at the end of the north road and defeat what woke the dead: the Bone Warden, who rises from its throne as you step into its hall | 300 XP and Hale's old longsword (level 5) |
 
-Only kills of the quest's own camp, made while it's active, count. Every kill pays 10 XP per enemy level (triple for the bandit leader, the mine's brutes and the Warden) and floats what it paid. Each level adds 20 health and 20% damage; the War Cry arrives at level 2 (with rage and its orb) and Earthshaker at 3, and level 5 is the cap. The longsword swaps into your hand at the last hand-in, a darker blade with a gilded guard that handles like yours and hits one level harder. Afterwards Hale points you south, to Brackenmoor.
+Only kills of the quest's own camp, made while it's active, count. Every kill pays 10 XP per enemy level (triple for the bandit leader, the mine's brutes and the Warden) and floats what it paid. Each level adds 2 Stamina and 2 of your class's main attribute (Strength for the warrior), which make 20 health and 20% damage; enemies five or more levels below you pay no XP; the War Cry arrives at level 2 (with rage and its orb) and Earthshaker at 3, and level 5 is the cap. The longsword swaps into your hand at the last hand-in, a darker blade with a gilded guard that handles like yours and hits one level harder. Afterwards Hale points you south, to Brackenmoor.
 
 **Enemies** wait in camps at the farm, the lumber camp, on the lumber camp's road (a patrol) and at the watchtower, and the undead fill the mine. Come within 8 m of one, or hurt it, and it fights, bringing whoever of its camp stands near it; lead it 30 m from where it waited and it walks home untouchable ("Evade") and heals. A cleared camp fills again three minutes later, once you're well away. The village, the bridge, the pond, the standing stones and Brackenmoor are safe. Out of a fight for 5 s, your health comes back over about 10 s, and a click of the left stick runs while nothing fights you (the edges of your view darken a little).
 
@@ -114,7 +114,8 @@ src/
   route.ts           what the page runs, from its query string (unit tested)
   main.ts            renderer and XR settings, each mode's frame loop, emulator bootstrap, debug handles
   adventure.ts       the plain URL: Oakvale in the World, the player, its camps, Hale, healing and death, the belt
-  adventureState.ts  levels, XP and Hale's quest chain: events in, effects and answers out (unit tested)
+  adventureState.ts  levels, XP, attributes and the quest givers' chains: events in, effects and answers out (unit tested)
+  classes.ts         each class's main attribute, resource (rage, focus, mana) and base abilities by level, as data (unit tested)
   save/
     record.ts        the save record, its version and the migrations that bring older ones up (unit tested)
     store.ts         the save store port, its in-memory adapter, and opening the save with its fallback (unit tested)

@@ -5,13 +5,13 @@ import type { Atmosphere } from '../../world/atmosphere';
 import type { InteriorPlan } from '../../world/interiors';
 import type { MinePlan } from '../../world/mine';
 import type { Place } from '../../quests';
-import type { CampId, CampPlan, Pickup, PostPlan, QuestPlace, Respawn, Seam, Spot, StashSpot, VillagerSpot } from '../types';
+import type { CampId, CampPlan, ChestPlan, Pickup, PostPlan, QuestPlace, Respawn, Seam, Spot, StashSpot, VillagerSpot } from '../types';
 import { HeightGrid } from '../heightGrid';
 import { Walkable } from '../walkable';
 import { Colliders } from './colliders';
 import { HOUSE, planHouse } from './house';
 import { INN, planInn } from './inn';
-import { mineCamp, mineRespawn, mouthColliders, mouthOf, planMine } from './mine';
+import { mineCamp, mineChest, mineRespawn, mouthColliders, mouthOf, planMine } from './mine';
 import { SMITHY, smithyColliders } from './smithy';
 import { fbm, lerp, mulberry32, nearestOnPolyline, type P2, sampleCurve, smoothstep, valueNoise } from './noise';
 import { LIGHT, SKY } from './palette';
@@ -186,6 +186,28 @@ export const TENT = {
   crates: { z: 1.55, half: 0.3, top: 1.0 },
   /** Where the orders lie on the top crate, near its front edge: a hand's reach from the doorway. */
   orders: { x: 0, z: 1.75 },
+} as const;
+
+/**
+ * Oakvale's chests out of doors (.scratch/inventory/issues/07-oakvales-items.md;
+ * the third, the bandits' strongbox, is the mine's: mine.ts). Where each one's
+ * contents come out is in its own frame (its front faces +Z): beside it, out
+ * of your feet's way as you stand before it to lift the lid.
+ */
+export const CHESTS = {
+  /**
+   * On the watchtower's hilltop, its back to the tower's wall `r` m from its
+   * middle, `a` rad round from its door (the tower's +Z): the far side from
+   * the door's thug and the archer, and well clear of the thug round the back.
+   */
+  watchtower: { id: 'oakvale-watchtower', level: 2, a: 2.36, r: 3.95, drop: { x: 0.95, z: 0.15 } },
+  /**
+   * In the lumber camp leader's tent, in its frame: beside the crates the
+   * orders lie on, on the side away from the leader's post, its front on the
+   * door's line so you reach its lid from the doorway. What's inside comes out
+   * on the ground outside the door, on the crates' other side.
+   */
+  tent: { id: 'oakvale-leaders-tent', level: 2, x: -0.8, drop: { x: 1.9, z: 1.0 } },
 } as const;
 
 /** A board on a signpost: the name painted on it, the way it points (as a yaw: towards (sin a, cos a)) and its middle's height. */
@@ -502,6 +524,8 @@ export interface ForestLayout {
   camps: CampPlan[];
   /** What lies about to be picked up by hand: the leader's orders in their tent. */
   pickups: Pickup[];
+  /** The chests: on the watchtower's hilltop, in the leader's tent and the bandits' strongbox in the mine. */
+  chests: ChestPlan[];
   /** The places that sound where they are: the stream under the bridge, the dock, the windmill, the smithy, the inn's hearth, the lumber camp's fire and the mine's mouth. */
   sounds: PlaceSound[];
   /** The trees in the play area, for birds to call from. */
@@ -681,6 +705,12 @@ export function buildLayout(): ForestLayout {
     const [x, z] = localToWorld(mouth, lx, lz);
     colliders.addBox({ x, z, hw, hd, yaw: mouth.yaw });
   }
+  // The chests: the one on the watchtower's hilltop stands in your way (the tent's is in the tent,
+  // and the mine's strongbox is the mine's own prop).
+  const chests = placeChests(tower, structures.find((s) => s.kind === 'tent')!, mouth, heightAt);
+  const { w, d } = CONFIG.chests.looks.chest;
+  const onHill = chests.find((c) => c.id === CHESTS.watchtower.id)!;
+  colliders.addBox({ x: onHill.x, z: onHill.z, hw: w / 2, hd: d / 2, yaw: onHill.yaw });
   // Bridge railings, so the arch can't be walked off sideways.
   for (const side of [-1, 1]) {
     const [x, z] = localToWorld(bridge, side * (bridge.hw + 0.12), 0);
@@ -809,11 +839,25 @@ export function buildLayout(): ForestLayout {
     villagers,
     camps,
     pickups,
+    chests,
     sounds,
     trees,
     landmarks,
     heightAt,
   };
+}
+
+/** Oakvale's chests: on the watchtower's hilltop, in the leader's tent (CHESTS), and the bandits' strongbox in the mine's dig. */
+function placeChests(tower: Structure, tent: Structure, mouth: ReturnType<typeof mouthOf>, heightAt: (x: number, z: number) => number): ChestPlan[] {
+  /** A wooden chest out of doors at (x, z) facing `yaw`, with its contents coming out at `drop` in its frame. */
+  const chest = (c: { id: string; level: number; drop: { x: number; z: number } }, x: number, z: number, yaw: number): ChestPlan => {
+    const [dx, dz] = localToWorld({ x, z, yaw }, c.drop.x, c.drop.z);
+    return { id: c.id, level: c.level, look: 'chest', x, y: heightAt(x, z), z, yaw, interior: null, drop: { x: dx, y: heightAt(dx, dz), z: dz } };
+  };
+  const { watchtower: w, tent: t } = CHESTS;
+  const [hx, hz] = localToWorld(tower, w.r * Math.sin(w.a), w.r * Math.cos(w.a));
+  const [tx, tz] = localToWorld(tent, t.x, TENT.hd - 0.02 - CONFIG.chests.looks.chest.d / 2);
+  return [chest(w, hx, hz, facing(tower.x, tower.z, hx, hz)), { ...chest(t, tx, tz, tent.yaw), y: tent.y }, mineChest(mouth)];
 }
 
 /**

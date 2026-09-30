@@ -22,6 +22,9 @@ export type Profession = Gathering | Making;
 /** Every profession, gathering before making within each pair. */
 export const PROFESSIONS: readonly Profession[] = ['mining', 'smithing', 'herbalism', 'alchemy'];
 
+/** Each profession's name, as "+1 Alchemy" and the bag panel show it. */
+export const PROFESSION_NAMES: Readonly<Record<Profession, string>> = { mining: 'Mining', smithing: 'Smithing', herbalism: 'Herbalism', alchemy: 'Alchemy' };
+
 /** The steps of proficiency, in order, each capped until a trainer teaches the next. */
 export const GRADES = ['apprentice', 'journeyman', 'expert', 'artisan'] as const;
 
