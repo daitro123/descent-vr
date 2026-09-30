@@ -1,3 +1,4 @@
+import { CONFIG } from '../config';
 import type { ChunkData, ChunkKey, Detail } from './chunks';
 
 // Building a zone's chunks off the main thread. A zone's worker module runs
@@ -66,7 +67,8 @@ export class ChunkWorker {
       if ('error' in reply) this.fail(reply.error);
       else this.arrive(reply.data);
     };
-    port.onerror = (e) => this.fail(e.message);
+    // A module worker that fails to load says nothing but that it failed.
+    port.onerror = (e) => this.fail(e.message || 'the worker failed to load or threw');
   }
 
   /** A worker from `open`, or null where there's none to be had (the zone has none, or there are no workers here). */
@@ -95,6 +97,11 @@ export class ChunkWorker {
   has(key: ChunkKey, detail: Detail): boolean {
     for (const a of this.asked.values()) if (a.key === key && a.detail === detail) return true;
     return false;
+  }
+
+  /** Ask for `key` at `detail` if it isn't already asked for and there's room: CONFIG.streaming.inFlight at once. */
+  offer(key: ChunkKey, detail: Detail): void {
+    if (this.inFlight < CONFIG.streaming.inFlight && !this.has(key, detail)) this.request(key, detail);
   }
 
   request(key: ChunkKey, detail: Detail): void {

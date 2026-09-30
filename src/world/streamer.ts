@@ -22,7 +22,7 @@ interface Streamed {
   readonly worker: ChunkWorker | null;
 }
 
-/** A chunk's arrays waiting to be uploaded, by chunk and detail. */
+/** How the arrays back from a worker are filed: by chunk and detail. */
 const readyId = (key: ChunkKey, detail: Detail) => `${key} ${detail}`;
 
 /** A chunk built, and the zone it's in. */
@@ -110,7 +110,7 @@ export class Streamer {
             this.upload(data, zone);
           }
         } else if (worker && !worker.failed) {
-          if (worker.inFlight < CONFIG.streaming.inFlight && !worker.has(key, detail)) worker.request(key, detail);
+          worker.offer(key, detail);
         } else if (room > 0) {
           room--;
           this.upload(zone.source.build(key, detail), zone);

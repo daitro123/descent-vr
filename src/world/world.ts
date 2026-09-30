@@ -179,6 +179,7 @@ export class World implements Ground {
     scene.onBeforeRender = scene.onAfterRender = () => {};
     this.camera = null;
     this.scene = null;
+    this.compiler = null;
   }
 
   /** Stand someone at (x, z) whom nothing walks through, `r` metres round (a friendly character). */

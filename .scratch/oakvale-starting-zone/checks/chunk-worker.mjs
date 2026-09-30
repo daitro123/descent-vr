@@ -10,7 +10,8 @@
 //    main road north to south a metre an XR frame, then running it back
 //    south to north two metres a frame, looking the way you go. The chunks
 //    come from the worker; no frame uploads more than one chunk (counted at
-//    each render, and in bytes handed to WebGL); `renderer.info.programs`
+//    each render, and in bytes handed to WebGL, apart from the renders that
+//    upload a building's or the mine's meshes as you come near, ticket 34); `renderer.info.programs`
 //    is the same at the end as before the first step; and the streamer's own
 //    time on the main thread each frame.
 // 3. The same walk with no `Worker` in the page: the streamer builds on the
@@ -136,9 +137,11 @@ async function walkAndRun(init) {
     const apply = stager.apply.bind(stager);
     stager.apply = () => {
       const chunks = stager.queued.filter((q) => q.root.name.startsWith('chunk-')).length;
+      // Whatever else is staged with them: a building's or the mine's meshes as you come near.
+      const others = stager.queued.filter((q) => !q.root.name.startsWith('chunk-')).map((q) => q.root.name || q.root.type);
       const bytes = window.__bytes;
       apply();
-      window.__renders.push({ chunks, bytes });
+      window.__renders.push({ chunks, others, bytes });
     };
     const scene = d.world.root.parent;
     const after = scene.onAfterRender;
@@ -205,7 +208,9 @@ async function walkAndRun(init) {
           renders: renders.length,
           uploads: renders.reduce((n, r) => n + r.chunks, 0),
           most: Math.max(0, ...renders.map((r) => r.chunks)),
-          mostBytes: Math.max(0, ...renders.map((r) => r.bytes)),
+          // Of the renders that staged chunks alone; those that staged a place's meshes with them, apart.
+          mostBytes: Math.max(0, ...renders.filter((r) => !r.others.length).map((r) => r.bytes)),
+          places: renders.filter((r) => r.others.length).map((r) => `${r.others.join(' + ')} ${(r.bytes / 1024).toFixed(0)} KB`),
           ms: { most: Math.max(...ms), mean: ms.reduce((a, b) => a + b, 0) / ms.length },
           built,
           pending: d.world.chunksPending,
@@ -240,7 +245,7 @@ const report = (run, how) => {
     );
     check(
       leg.mostBytes <= run.biggest,
-      `${how}, ${leg.name}: no render hands WebGL more than one chunk's bytes (most ${kb(leg.mostBytes)}; Oakvale's biggest chunk is ${kb(run.biggest)})`,
+      `${how}, ${leg.name}: no render hands WebGL more than one chunk's bytes (most ${kb(leg.mostBytes)}; Oakvale's biggest chunk is ${kb(run.biggest)})${leg.places.length ? `, but for a place staged as you came near: ${leg.places.join(', ')}` : ''}`,
     );
     check(leg.programs === run.start.programs, `${how}, ${leg.name}: shader programs unchanged (${run.start.programs} before, ${leg.programs} after)`);
     console.log(`     the streamer's main-thread time a frame: ${leg.ms.mean.toFixed(2)} ms on average, ${leg.ms.most.toFixed(1)} ms at most`);
