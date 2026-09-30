@@ -15,6 +15,8 @@ export type Route =
   | { kind: 'arena'; firstWave: number; duel: boolean; showcase: boolean }
   /** `?belt=a|b|c`: PROTOTYPE, inventory ticket 04's belt, fighting duelists (`&calm`: only a drain on health). */
   | { kind: 'belt'; variant: BeltVariant; calm: boolean }
+  /** `?bag` or `?bag=a|b|c`: PROTOTYPE of the bag and the gear panel, starting on that way to move items. */
+  | { kind: 'bag'; variant: 'a' | 'b' | 'c' }
   /** Anything else: Oakvale, with the save. `?newgame` asks to start over. */
   | { kind: 'adventure'; newGame: boolean };
 
@@ -67,6 +69,10 @@ function chooseRoute(params: URLSearchParams): Route {
       duel: params.has('duel'),
       showcase: params.has('showcase'),
     };
+  }
+  if (params.has('bag')) {
+    const v = params.get('bag')?.toLowerCase();
+    return { kind: 'bag', variant: v === 'b' || v === 'c' ? v : 'a' };
   }
   return { kind: 'adventure', newGame: params.has('newgame') };
 }
