@@ -35,6 +35,8 @@ A written **spec for the inventory**, ready to hand off as build tickets: the ba
 
 <!-- one line per resolved ticket: [title](link): gist -->
 
+- [VR inventories in shipped games](issues/01-vr-inventories-in-shipped-games.md): shipped games use the same mix; zones are spheres placed from the headset with a speed gate, every slot glows and ticks, the grip is free to use, and the menu button isn't.
+
 ## Not yet specified
 
 - **Saving the inventory:** the record's version 2 (bag, gear, belt, coins, stash) and the migration from version 1's `sword`. It sharpens once [What an item is](issues/02-what-an-item-is.md), [The bag and the gear panel](issues/03-the-bag-and-the-gear-panel.md) and [Vendors and the stash](issues/06-vendors-and-the-stash.md) are settled.
