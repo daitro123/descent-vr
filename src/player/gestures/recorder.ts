@@ -8,6 +8,7 @@ import type { Point, Stroke } from './matcher';
 // - The grip goes down past `arm.down` and comes up below `arm.up` (hysteresis).
 // - A grip that goes down in a place taken by something else (the bag at a
 //   shoulder, a potion at a hip, the tool loop) never arms, until it's let go.
+//   The game can name the place too, where it finds the hand in one itself.
 // - Every frame of the stroke is tracked; a stroke held past `arm.maxDuration`
 //   (a grip held out of habit through a fight) is dropped, not read.
 // - While the class's own attack is in the hand (an arrow nocked, a bolt
@@ -33,6 +34,13 @@ export interface HandFrame {
   readonly tracked: boolean;
   /** The class's plain attack is in this hand (an arrow nocked, a bolt charging). */
   readonly busy: boolean;
+  /**
+   * The place the hand is in that belongs to something else, as the game
+   * finds it where that thing really hangs (the tool loop, from the belt's
+   * frame, which turns with you more lazily than your head): it counts as
+   * taken even where the body-frame places miss it.
+   */
+  readonly taken?: string | null;
   readonly dt: number;
 }
 
@@ -95,7 +103,7 @@ export class GestureRecorder {
       this.down = true;
       this.frame(f);
       const at = this.toBody(f.hand);
-      const place = takenPlace(at);
+      const place = f.taken ?? takenPlace(at);
       if (place) return { kind: 'taken', place };
       if (!f.tracked) return null;
       this.armed = true;
