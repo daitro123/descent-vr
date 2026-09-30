@@ -147,7 +147,7 @@ In Oakvale, the smith's and the innkeeper's **wares boards** unfold beside them 
 
   | Role | Coins | Junk | Gear |
   | --- | --- | --- | --- |
-  | Ordinary | 1 to 3 × level | 40% | 8% white, 3% green |
+  | Ordinary | 1 to 4 × level | 40% | 8% white, 3% green |
   | Leader, deep brute | 3 × that | 60% | always: 75% green, 25% blue |
   | Boss | 10 × that | none | a blue and a green |
   | Raised | nothing | nothing | nothing |
@@ -238,6 +238,7 @@ Calls made in this spec on Tom's behalf, beyond the map's tickets:
 - Armour cuts about 10% of damage taken with a full white set of your level and about 15% with greens.
 - The panel's quest and talent pages are tabs along its top.
 - A hand-in with a full bag waits on the board with its pick.
+- Coins are 1 to 4 × level (the role table's multipliers unchanged), tuned in [ticket 17](issues/17-oakvale-with-the-inventory-in-one-sitting.md) from 1 to 3, which paid the plain route about 275 coins on average, under the 300 to 400 this spec aims for.
 - An unknown item id in a save is dropped on load.
 - Save versions: each map's build bumps the record's version in turn, with its own migration.
 - Bigger bags wait for the zone that first offers one.

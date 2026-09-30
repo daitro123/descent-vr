@@ -67,6 +67,8 @@ Nothing: the destination is reached. The last patches of fog went into [the spec
 
 After 08, tickets 09 and 11 run side by side; after 09, tickets 10, 12 and 15 can run in parallel; each merges `main` before its PR.
 
+**Every build ticket is merged, and the map is done** (2026-09-30): 08 (#72), 09 (#76), 10 (#99), 11 (#82), 12 (#90), 13 (#87), 14 (#95), 15 (#86), 16 (#100) and 17 (#102). What's left is Tom's pass on the headset, gathered in [ticket 17's Answer](issues/17-oakvale-with-the-inventory-in-one-sitting.md).
+
 ## Out of scope
 
 - What each attribute does, the classes' weapons and how they handle: the Abilities map.
