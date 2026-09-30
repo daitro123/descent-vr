@@ -42,16 +42,35 @@ A written **spec for character development in combat**, ready to hand off as bui
 - [How the mage fights](issues/06-how-the-mage-fights.md): a bolt charged on each hand's trigger and cast by throwing it, the throw's speed making it small and fast or big and slow, three to a grunt; the focus in the off hand holds a ward on the grip that blocks like the shield for 10 mana a block; a 3.5 m blink replaces the dash; the plain bolt is free, mana pays for the ward and abilities. Prototype kept at `?arena&class=mage`. On Tom's behalf.
 - [Rage, focus and mana](issues/09-rage-focus-and-mana.md): every resource is a bar of 100 that plain attacks never spend; rage stays as built, focus starts full and refills 10 a second, mana grows 2 a point of Intellect over 10 and refills 2 a second in a fight and 30 out; costs don't grow with level; the belt's right orb shows the class's resource. On Tom's behalf.
 - [Using abilities by gesture](issues/07-using-abilities-by-gesture.md): hold the right grip, draw a shape in the air, let go; the same five shapes for every class (ring, Z, V, triangle, S), since flicks read a sword's thrusts and blocks as gestures; a grip at a shoulder, a hip or the tool loop never arms, nor one with an arrow nocked or a bolt charging; every ability ready with no loadout up to six gestures and one A/X button, a loadout of six by slot past that; a miss costs nothing. Prototype kept at `?arena&class=<class>&gestures`. On Tom's behalf.
+- [The warrior's abilities and talents](issues/11-the-warriors-abilities-and-talents.md): today's kit stays; Heroic Throw (6), Shield Wall (8) and Sweeping Strikes (10) as ring, Z and V; Arms (Mortal Strike at tier 3, Bladestorm at 5) and Protection (Shield Slam, Bulwark). On Tom's behalf.
+- [The ranger's abilities and talents](issues/12-the-rangers-abilities-and-talents.md): Power Shot on A/X mid-draw (2), Snare Trap (3), Volley (6), Scatter (8) and Hunter's Mark (10); Marksmanship (Trueshot, Rain of Arrows) and Survival (Explosive Trap, Camouflage). On Tom's behalf.
+- [The mage's abilities and talents](issues/13-the-mages-abilities-and-talents.md): Frost Nova on A/X (2), then Fireball (3), Frostbolt (6) and Chain Lightning (8) that change the next bolt, and Blizzard (10); Fire (Pyroblast, Meteor) and Frost (Ice Barrier, Frozen Orb). On Tom's behalf.
+- [Enemies against every class](issues/14-enemies-against-every-class.md): no new behaviours; range pulls and the leash work as today; new rooted, frozen and slowed states, halved on brutes, and the Warden ignores roots and freezes. On Tom's behalf.
+- [Oakvale and the arena for every class](issues/15-oakvale-and-the-arena-for-every-class.md): one chain for every class, rewards per class from Inventory; level 3 shows the first gesture's shape in the air; the mage's bolt gathers at the tip of its wand or staff; `?arena&class=` plays level 1 with every base ability. On Tom's behalf.
+- [Effects within the budget](issues/16-effects-within-the-budget.md): no new lights (one pooled light lent for 0.5 s), shared particles and instanced projectiles, at most three lasting effects, under 10 draw calls and 5,000 triangles in all. On Tom's behalf.
 
 ## Not yet specified
 
-- **Enemies against the new classes:** camps were tuned for a warrior in melee. A ranger shooting from range meets the 8 m notice radius and the 30 m leash, and a mage's crowd control meets "only two enemies mid-attack at once". What enemies need (ranged pressure on a kiter, leash rules for ranged pulls) waits on how the ranger and mage fight.
-- **Oakvale for every class:** the quest chain, the Warden and Hale's longsword were made for the warrior. Whether a ranger or mage can play levels 1 to 5 as they stand, and what the last quest pays a non-warrior, waits on the class kits and on Inventory.
 - **The talent page's look:** a page of Inventory's panel with free resets (see Talent tree rules); its layout waits on Tom's UI overhaul, so the spec carries only a plain first pass.
-- **The belt for three classes:** today's belt shows health, rage and the warrior's ability pips. Each class needs its resource and its abilities' cooldowns shown.
-- **The arena with classes:** whether `?arena` lets you pick a class and at what level.
-- **Spell effects and the budget:** how many lights, particles and draw calls the mage's and ranger's effects may cost, once their kits exist.
-- **Assembling the spec** from every decision, then build tickets with `/to-tickets`.
+- **Assembling the spec:** done. The spec is [spec.md](spec.md), written on 2026-09-30 by Claude on Tom's behalf from every decision above, then broken into build tickets (see Build tickets below).
+
+## Build tickets
+
+Written on 2026-09-30 from [spec.md](spec.md), **by Claude on Tom's behalf**, numbered on from the map's sixteen tickets in the same `issues/` folder. Each needs its own session. Each lists the tickets that genuinely block it; tickets with no open blockers can run side by side.
+
+1. [17: Classes, attributes and the level curve](issues/17-classes-attributes-and-the-level-curve.md): no blockers.
+2. [18: Characters: the roster and the page before VR](issues/18-characters-the-roster-and-the-page-before-vr.md): after 17.
+3. [19: Gestures and the warrior's new abilities](issues/19-gestures-and-the-warriors-new-abilities.md): after 17.
+4. [20: Rooted, frozen and slowed](issues/20-rooted-frozen-and-slowed.md): no blockers.
+5. [21: The ranger](issues/21-the-ranger.md): after 17 to 20.
+6. [22: The ranger's abilities at 6, 8 and 10](issues/22-the-rangers-abilities-at-6-8-and-10.md): after 21.
+7. [23: The mage](issues/23-the-mage.md): after 17 to 20.
+8. [24: The mage's abilities at 6, 8 and 10](issues/24-the-mages-abilities-at-6-8-and-10.md): after 23.
+9. [25: Talents and the warrior's trees](issues/25-talents-and-the-warriors-trees.md): after 18 and 19.
+10. [26: The ranger's and mage's trees](issues/26-the-rangers-and-mages-trees.md): after 22, 24 and 25.
+11. [27: Every class through Oakvale](issues/27-every-class-through-oakvale.md): after 26.
+
+`/to-tickets` would have asked Tom about the granularity and the edges; answered on his behalf: each class splits into its plain kit with its level-2 and level-3 abilities (so Oakvale is playable as that class) and its abilities at 6 to 10 (arena-only until the cap rises); the enemy states stand alone so both classes can build on them; talents come after the warrior's gestures so the page has slots to show.
 
 ## Out of scope
 
