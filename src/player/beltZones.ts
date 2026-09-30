@@ -26,6 +26,15 @@ export const HIPS: readonly BeltZone[] = [
   { name: 'rightHip', offset: { down, right: side, ahead } },
 ];
 
+/**
+ * The tool loop (the Professions build's): `behind` m behind the main hand's
+ * hip slot, the right hip's today, where the pick and the herb knife hang.
+ */
+export const TOOL_LOOP: BeltZone = {
+  name: 'toolLoop',
+  offset: { ...HIPS[1].offset, ahead: HIPS[1].offset.ahead - CONFIG.professions.toolLoop.behind },
+};
+
 const UP = new Vector3(0, 1, 0);
 const _fwd = new Vector3();
 const _right = new Vector3();

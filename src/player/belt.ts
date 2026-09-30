@@ -48,6 +48,8 @@ export interface BeltWorld {
   buzz(hand: Handedness, intensity: number, ms: number): void;
   /** What a drink did, at the mouth: shown (the heal among it) and saved. */
   apply(effects: readonly InventoryEffect[], at: Vector3): void;
+  /** Is `hand` holding something else (a tool from the loop)? Then it takes no flask. */
+  busy?(hand: Handedness): boolean;
 }
 
 /** A carried item over a hip slot, from the bag: the slot, and whether it may go there. */
@@ -286,13 +288,14 @@ export class Belt {
     grip.getWorldPosition(_p);
 
     // A tick as the hand arrives at a flask it could take.
-    const near = tracked && player.alive && h.slot < 0 ? this.frame.nearest(HIPS, _p, B.near, (i) => this.onShow(i) && !this.dimmed(i)) : -1;
+    const free = !world.busy?.(h.hand);
+    const near = tracked && free && player.alive && h.slot < 0 ? this.frame.nearest(HIPS, _p, B.near, (i) => this.onShow(i) && !this.dimmed(i)) : -1;
     if (near >= 0 && near !== h.near) world.buzz(h.hand, B.buzz.tick.intensity, B.buzz.tick.ms);
     h.near = near;
 
     if (!player.alive) return;
     if (h.slot >= 0 && !this.stack(h.slot)) this.release(h, 'now'); // gone from under it (moved off on the bag's panel)
-    if (h.slot < 0 && tracked && gripDown && h.weapon === 'held') {
+    if (h.slot < 0 && tracked && free && gripDown && h.weapon === 'held') {
       const at = this.frame.nearest(HIPS, _p, B.near, (i) => this.onShow(i));
       if (at >= 0) {
         if (this.dimmed(at)) this.refuse(h, at);
