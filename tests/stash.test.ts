@@ -35,7 +35,7 @@ const bag = (slot: number): Where => ({ in: 'bag', slot });
 const potions = (count: number): Stack => ({ id: 'minor-healing-potion', count });
 const refusals = (effects: InventoryEffect[]) => effects.flatMap((e) => (e.kind === 'refused' ? [e.reason] : []));
 const TUNIC: Stack = { id: 'worn-tunic', count: 1 };
-const CHARM: Stack = { id: 'bone-charm', count: 1 };
+const CHARM: Stack = { id: 'bone-charm-1', count: 1 };
 
 /** A warrior whose bag holds `stacks`, from its first slot. */
 function carrying(stacks: Stack[]): Inventory {

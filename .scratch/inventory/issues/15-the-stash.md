@@ -28,9 +28,9 @@ Built on 2026-09-30 by Claude **on Tom's behalf** (he asked for the build ticket
 
 **Checks**
 
-- `npm run typecheck`, `npm test` (786 passed, 11 of them new in `tests/stash.test.ts`) and `npm run build` pass.
+- `npm run typecheck`, `npm test` (909 passed after merging main, 11 of them new in `tests/stash.test.ts`) and `npm run build` pass.
 - `checks/stash.mjs`, all 24 passed: in the inn the chest is drawn; a fist on its lid opens the stash panel on the bag panel's left with the bag's 45 cm in front, a buzz, and the lid up; no new shader program compiles at the first open (24 before and after); the stash panel costs 3 draws an eye; the bone charm goes onto page 1 and shows its card over the stash panel; the Page 2 tab shows the second page and the potions go into stash slot 22; the caption says 2 of 32; the leader's orders can't be carried off the quest page and the inventory refuses them the stash; walking off shuts both panels and the lid; after a reload the stash is as left; the lid opens it again and the potions come back into the bag, which a second reload keeps.
-- `checks/bag-adventure.mjs`, `checks/bag.mjs` and `oakvale-starting-zone/checks/inn.mjs`: all passed.
+- `checks/bag-adventure.mjs`, `checks/bag.mjs` and `oakvale-starting-zone/checks/inn.mjs`: all passed. The inn check now counts the chest's two draws out of the room's, as it does the innkeeper's.
 
 **Calls made on Tom's behalf**
 

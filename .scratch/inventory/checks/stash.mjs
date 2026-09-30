@@ -276,7 +276,7 @@ await enter();
 await page.evaluate(() => {
   const { adventure, state } = window.__descent;
   const effects = state.inventory.take([
-    { id: 'bone-charm', count: 1 },
+    { id: 'bone-charm-1', count: 1 },
     { id: 'minor-healing-potion', count: 5 },
     { id: 'leaders-orders', count: 1 },
   ]);
@@ -339,10 +339,10 @@ await standAtChest();
 // 2. Into the stash, on both pages.
 {
   let s = await state();
-  const charm = s.slots.indexOf('bone-charm×1');
+  const charm = s.slots.indexOf('bone-charm-1×1');
   await carry(await bagSlot(charm), await stashSlot(0));
   s = await state();
-  check(s.slots[charm] === null && s.stash[0] === 'bone-charm×1', `the charm carried onto the stash's first page goes in (${s.last})`);
+  check(s.slots[charm] === null && s.stash[0] === 'bone-charm-1×1', `the charm carried onto the stash's first page goes in (${s.last})`);
   // Its card shows over the stash panel.
   const first = await stashSlot(0);
   await fistAt('right', await outFrom(first, 0.1, 'stash'));
@@ -404,7 +404,7 @@ await standAtChest();
   await page.evaluate(() => window.__descent.saved());
   await enter();
   let s = await state();
-  check(s.stash[0] === 'bone-charm×1' && s.stash[21] === 'minor-healing-potion×5', `after a reload the stash is as you left it (${s.stash.filter(Boolean).join(', ')})`);
+  check(s.stash[0] === 'bone-charm-1×1' && s.stash[21] === 'minor-healing-potion×5', `after a reload the stash is as you left it (${s.stash.filter(Boolean).join(', ')})`);
   await standAtChest();
   await touchLid();
   await handsDown();
@@ -419,7 +419,7 @@ await standAtChest();
   await page.evaluate(() => window.__descent.saved());
   await enter();
   s = await state();
-  check(s.stash[21] === null && s.slots.includes('minor-healing-potion×5') && s.stash[0] === 'bone-charm×1', `and a reload keeps that too (${s.slots.filter(Boolean).join(', ')})`);
+  check(s.stash[21] === null && s.slots.includes('minor-healing-potion×5') && s.stash[0] === 'bone-charm-1×1', `and a reload keeps that too (${s.slots.filter(Boolean).join(', ')})`);
 }
 
 check(errors.length === 0, `no page errors (${errors.join('; ')})`);
