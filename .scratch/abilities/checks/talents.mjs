@@ -394,7 +394,7 @@ await handsDown();
   check(drawn.id === 'triangle' && drawn.ability === 'shieldSlam' && drawn.use === 'cast', `a triangle casts Shield Slam (${JSON.stringify(drawn)})`);
   check(armed.rage > 78 && armed.rage <= 80 && armed.left > 2.5, `for 20 rage, arming the next bash for 3 s (rage ${armed.rage.toFixed(1)}, ${armed.left.toFixed(2)} s)`);
   // A shield bash: the left hand punched straight at the brute's chest, fast.
-  const bash = await page.evaluate(() => {
+  await page.evaluate(() => {
     const d = window.__descent;
     const e = d.camps.camps.find((c) => c.plan.interior === 'mine').members.find((m) => m.enemy.kind === 'brute').enemy;
     const { player, device } = d;
@@ -406,11 +406,9 @@ await handsDown();
     window.__bash = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => local(from.clone().addScaledVector(to, i * 0.08)).toArray());
     const p = window.__bash[0];
     device.controllers.left.position.set(p[0], p[1], p[2]);
-    return { slams: d.adventure.combat && 0 };
   });
-  void bash;
   await xrFrames(2);
-  const before = await page.evaluate(async () => (await import('/src/combat/combat.ts')).combatStats.shieldSlams);
+  const before = await page.evaluate(() => window.__descent.combatStats.shieldSlams);
   for (let i = 1; i < 8; i++) {
     await page.evaluate((i) => {
       const p = window.__bash[i];
@@ -419,10 +417,10 @@ await handsDown();
     await xrFrames(1);
     await step(1 / 72);
   }
-  const hit = await page.evaluate(async () => {
+  const hit = await page.evaluate(() => {
     const d = window.__descent;
     const e = d.camps.camps.find((c) => c.plan.interior === 'mine').members.find((m) => m.enemy.kind === 'brute').enemy;
-    return { slams: (await import('/src/combat/combat.ts')).combatStats.shieldSlams, state: e.state, exposed: e.exposed, left: d.player.abilities.left('shieldSlam') };
+    return { slams: d.combatStats.shieldSlams, state: e.state, exposed: e.exposed, left: d.player.abilities.left('shieldSlam') };
   });
   check(hit.slams === before + 1 && hit.state === 'stagger' && hit.exposed > 2.5 && hit.left === 0, `the next bash slams the brute: stunned and exposed, the charge spent (${JSON.stringify(hit)})`);
   await page.evaluate(() => {
