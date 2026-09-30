@@ -17,6 +17,7 @@ import type { Respawn, StartingZone, Zone } from './maps/types';
 import { Hale } from './people/hale';
 import { Villagers } from './people/villagers';
 import { Player } from './player/player';
+import { Anvil } from './professions/anvil/anvil';
 import { Run } from './player/run';
 import { SaveController } from './save/controller';
 import { type Interior, saveRecord } from './save/record';
@@ -48,6 +49,8 @@ const _turn = new Euler();
 type FloatStyle = Parameters<FloatingText['spawn']>[2];
 /** "+N XP" where an enemy fell. */
 const KILL_XP_FLOAT: FloatStyle = { color: '#ffd23a', scale: 0.24, life: CONFIG.levels.xpFloat.time, rise: 0.5 };
+/** "+1 Smithing" where the thing was made. */
+const PROFICIENCY_FLOAT: FloatStyle = { color: '#ffffff', ...CONFIG.professions.float };
 /** A hand-in's reward over Hale. */
 const HAND_IN_FLOAT: FloatStyle = { scale: 0.2, life: CONFIG.handIn.time, rise: 0.3 };
 
@@ -121,6 +124,8 @@ export class Adventure {
   readonly bag: Bag;
   /** What you've let go of off the bag's panel, lying on the ground. */
   readonly dropped: Dropped;
+  /** The smith's anvil: step up to it with Smithing learned, and make things with the hammer and tongs. Null in a zone without a smith. */
+  readonly anvil: Anvil | null;
   /** Each hand's controller, for the bag. */
   private readonly bagHands: Record<'left' | 'right', { -readonly [K in keyof BagHand]: BagHand[K] }>;
   /** Where the quest arrow's targets are: each quest's place, and Hale. */
@@ -278,6 +283,25 @@ export class Adventure {
     // The smith's hammer rings on the anvil with each blow of their work.
     this.ambience = new Ambience([zone, ...neighbours]);
     this.villagers.onStrike = () => this.ambience.strike('anvil');
+    // The smith's anvil, drawn with the outdoors.
+    const smith = zone.villagers.find((v) => v.id === 'smith');
+    this.anvil = smith
+      ? new Anvil(
+          scene,
+          this.world,
+          smith,
+          {
+            professions: this.state.professions,
+            inventory: this.state.inventory,
+            hands: (tools) => this.player.holdTools(tools),
+            buzz: (hand, intensity, ms) => this.player.input.pulse(hand, intensity, ms),
+            apply: (effects, at) => this.applyMade(effects, at),
+            smithAside: (to) => this.villagers.get('smith')?.stepAside(to),
+          },
+          { particles: this.particles, text: this.text },
+        )
+      : null;
+    if (this.anvil) this.world.stageWith(null, this.anvil.frame);
 
     // A new character at the zone's start, facing Hale; or where the save stood,
     // facing the same way, at full health and with no rage. A save made inside
@@ -307,6 +331,7 @@ export class Adventure {
     // With a door shut behind you, what stands outside isn't drawn either.
     const outdoors = this.world.outdoorsShown;
     this.pickups.root.visible = this.hale.root.visible = this.villagers.root.visible = outdoors;
+    if (this.anvil) this.anvil.frame.visible = outdoors;
     this.showCamps(outdoors);
     player.fighting = this.fighting;
     player.update(dt);
@@ -347,6 +372,7 @@ export class Adventure {
     }
     this.orbs.update(dt, player);
     this.talk(dt);
+    this.updateAnvil(dt);
     this.updateBag(dt);
     this.villagers.update(dt, you.head, this.state);
     this.pickUp();
@@ -506,6 +532,30 @@ export class Adventure {
     sfx.pickup();
   }
 
+  /** The anvil: your hands on it while you stand at it, and the work under way. */
+  private updateAnvil(dt: number): void {
+    const { anvil, player, you } = this;
+    if (!anvil) return;
+    const [left, right, tip] = this.touching();
+    player.camera.getWorldDirection(_gaze);
+    anvil.update({
+      dt,
+      head: you.head,
+      gaze: _gaze,
+      fighting: this.fighting,
+      alive: player.alive,
+      squeeze: player.input.hands.left.squeeze,
+      fists: [left?.at ?? null, right?.at ?? null],
+      tip: tip?.at ?? null,
+    });
+  }
+
+  /** What a make did (materials taken, the thing made, proficiency): saved and shown at `at`, and each thing made counts for your quests. */
+  private applyMade(effects: readonly Effect[], at: Vector3): void {
+    this.applyThings(effects, at);
+    for (const e of effects) if (e.kind === 'made') this.apply({ kind: 'made', recipe: e.recipe }, at);
+  }
+
   /** What an operation on your things did: saved, and shown at `at`. */
   private applyThings(effects: readonly Effect[], at: Vector3): void {
     this.saves.onEffects(effects);
@@ -596,6 +646,9 @@ export class Adventure {
           break;
         case 'coins':
           this.bag.changed();
+          break;
+        case 'proficiency':
+          this.floatOver(at, CONFIG.professions.float.height, `+${e.gained} ${e.profession[0].toUpperCase()}${e.profession.slice(1)}`, PROFICIENCY_FLOAT);
           break;
       }
     }
