@@ -49,6 +49,15 @@ export interface VillagerSpot extends Spot {
   readonly turn: number;
 }
 
+/**
+ * The stash's chest: where it stands (yaw as a model turns: 0 faces +Z, its
+ * front), the floor's height under it, and the building it's in.
+ */
+export interface StashSpot extends Spot {
+  readonly y: number;
+  readonly interior: InteriorId;
+}
+
 /** Where you wake after a death, and the building it's in, if any. */
 export interface Respawn extends Spot {
   readonly interior: InteriorId | null;
@@ -103,6 +112,32 @@ export interface Pickup extends Spot {
   readonly item: Item;
   /** The height of what it lies on. */
   readonly y: number;
+}
+
+/** How a chest looks: a wooden chest, or the bandits' iron-bound strongbox. Each look's size is in CONFIG.chests.looks. */
+export type ChestLook = 'chest' | 'strongbox';
+
+/**
+ * A chest standing in a zone, opened once per character by touching its lid
+ * (.scratch/inventory/spec.md, "Chests"). It holds coins and a piece of gear
+ * by its area's level, and what's inside comes out on the ground beside it.
+ */
+export interface ChestPlan {
+  /** Its id, as the save keeps it among the chests opened. */
+  readonly id: string;
+  /** Its area's level. */
+  readonly level: number;
+  readonly look: ChestLook;
+  /** The middle of its foot, on the floor it stands on. */
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  /** As a model turns about +Y: its front faces (sin yaw, cos yaw), so 0 faces +Z. */
+  readonly yaw: number;
+  /** The building or mine it's in, if any. */
+  readonly interior: InteriorId | null;
+  /** Where what's inside comes out: on the ground beside it, out of your feet's way as you stand to open it. */
+  readonly drop: { readonly x: number; readonly y: number; readonly z: number };
 }
 
 /**
@@ -163,6 +198,8 @@ export interface Zone extends MapBase {
   readonly villagers: readonly VillagerSpot[];
   /** What lies about to be picked up by hand, shown while the adventure state says it lies there. */
   readonly pickups: readonly Pickup[];
+  /** Its chests, each opened once per character. */
+  readonly chests: readonly ChestPlan[];
   /** The places that sound where they are. */
   readonly sounds: readonly PlaceSound[];
   /** Its trees, which its birds call from. */
@@ -179,6 +216,8 @@ export interface Zone extends MapBase {
 export interface StartingZone extends Zone {
   /** Where you wake after a death: the village's is by the inn's hearth, the mine's outside its mouth. */
   readonly respawns: { readonly village: Respawn; readonly mine: Respawn };
+  /** The stash's chest, by the inn's hearth: touch its lid for the stash. */
+  readonly stash: StashSpot;
   /** Where Marshal Hale, the quest giver, stands (yaw as a model turns: 0 faces +Z). */
   readonly hale: Spot;
   /** Where each quest sends you, for the quest arrow. */

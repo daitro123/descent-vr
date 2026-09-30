@@ -544,9 +544,9 @@ describe('the house by the well', () => {
     expect(Math.abs(plan.heightAt(foot.x, foot.z) - house.y)).toBeLessThan(0.02);
   });
 
-  it('keeps you in by its walls and out of its hearth, bed, chest, table and shelf, and lets you through the door', () => {
+  it('keeps you in by its walls and out of its hearth, bed, chest, table, shelf and alchemy bench, and lets you through the door', () => {
     const r = CONFIG.player.bodyRadius;
-    const { room, hearth, bed, chest, table, shelf, door } = HOUSE;
+    const { room, hearth, bed, chest, table, shelf, door, bench } = HOUSE;
     const pushed = (lx: number, lz: number) => world.resolve(at(lx, lz), r);
     expect(pushed(0, -room.hd + 0.1)).toBe(true); // the back wall, from inside
     expect(pushed(-room.hw + 0.1, 1.5)).toBe(true); // the left wall
@@ -556,6 +556,7 @@ describe('the house by the well', () => {
     expect(pushed(chest.x, chest.z)).toBe(true);
     expect(pushed(table.x, table.z)).toBe(true);
     expect(pushed(shelf.x, -room.hd + 0.3)).toBe(true);
+    expect(pushed(room.hw - bench.depth / 2, bench.z)).toBe(true);
     // The doorway is open, in and out; the middle of the floor is clear.
     for (const lz of [HOUSE.hd + 0.5, HOUSE.hd, HOUSE.hd - 0.3, room.hd - 0.5]) expect(pushed(door.x, lz)).toBe(false);
     expect(pushed(0.8, -0.5)).toBe(false);

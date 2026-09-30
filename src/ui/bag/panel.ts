@@ -1,27 +1,13 @@
-import {
-  BoxGeometry,
-  BufferAttribute,
-  BufferGeometry,
-  type Camera,
-  Color,
-  Group,
-  InstancedMesh,
-  Matrix4,
-  Mesh,
-  MeshBasicMaterial,
-  Quaternion,
-  type Scene,
-  Vector3,
-  type WebGLRenderer,
-} from 'three';
+import { BufferGeometry, type Camera, Color, Group, Mesh, type Scene, Vector3, type WebGLRenderer } from 'three';
 import { CONFIG } from '../../config';
 import type { Inventory, Stack, Where } from '../../inventory';
 import { itemOf, type ItemId } from '../../items';
 import { ModelBuilder } from '../../models/kit';
 import { sharedModelMaterial } from '../../models/materials';
 import { Card, FONT, roundRect } from '../card';
-import { type CardText, cardText } from './cardLines';
+import { cardText } from './cardLines';
 import {
+  type BagSpot,
   BOARD,
   CARD,
   COINS,
@@ -44,6 +30,7 @@ import {
   TABS,
 } from './layout';
 import { BLANK_CELL, EMPTY_CELL, type IconAtlas, lookOf, RARITY_COLOUR } from './looks';
+import { cardKey, paintCard, SlotMeshes } from './pieces';
 
 // The bag panel in the Adventure, promoted from the bag prototype's variant A
 // (ui/bag-prototype/panel.ts): it comes round when you reach for the bag.
@@ -82,27 +69,18 @@ const C = {
   refused: new Color(0xd03030),
 };
 
-/** A stack's count: two digits in the slot's lower right corner. */
-const DIGIT = { size: 0.018, x: SLOT / 2 - 0.02, y: -SLOT / 2 + 0.011, gap: 0.011 };
-
 const UP = new Vector3(0, 1, 0);
 const _fwd = new Vector3();
 const _to = new Vector3();
 const _local = new Vector3();
-const _m = new Matrix4();
-const _q = new Quaternion();
-const _s = new Vector3();
-const _p = new Vector3();
 const _c = new Color();
 
 export class BagPanel {
   readonly root = new Group();
   readonly card = new Card(CARD.w, CARD.h, { ppm: 1400 });
   private readonly board = new Card(BOARD.right - BOARD.left, BOARD.top - BOARD.bottom, { ppm: 1100 });
-  private readonly frames: InstancedMesh;
-  private readonly icons: Mesh<BufferGeometry, MeshBasicMaterial>;
-  private readonly uv: BufferAttribute;
-  private readonly figure: Mesh;
+  private readonly slots: SlotMeshes;
+  private readonly figure: Mesh<BufferGeometry>;
   private open = false;
   /** Something in your things changed since the slots were last filled. */
   private dirty = true;
@@ -119,41 +97,17 @@ export class BagPanel {
     this.board.mesh.position.set((BOARD.left + BOARD.right) / 2, (BOARD.top + BOARD.bottom) / 2, 0);
     this.root.add(this.board.mesh);
 
-    // Every slot's frame: one draw.
-    this.frames = new InstancedMesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial({ fog: false }), SPOTS.length);
-    SPOTS.forEach((spot, i) => {
-      const [x, y] = spotXY(spot);
-      this.frames.setMatrixAt(i, _m.compose(_p.set(x, y, FACE / 2), _q.identity(), _s.set(SLOT, SLOT, FACE)));
-      this.frames.setColorAt(i, C.empty);
-    });
-    this.frames.frustumCulled = false;
-    this.root.add(this.frames);
-
-    // Every slot's icon, and two digits for each of the page's slots, from one atlas: one draw.
-    const grid = SPOTS.filter((s) => s.in === 'grid');
-    const quads = SPOTS.length + grid.length * 2;
-    const pos = new Float32Array(quads * 4 * 3);
-    const index: number[] = [];
-    const quad = (q: number, x: number, y: number, half: number, z: number) => {
-      pos.set([x - half, y - half, z, x + half, y - half, z, x + half, y + half, z, x - half, y + half, z], q * 12);
-      index.push(q * 4, q * 4 + 1, q * 4 + 2, q * 4, q * 4 + 2, q * 4 + 3);
-    };
-    SPOTS.forEach((spot, i) => {
-      const [x, y] = spotXY(spot);
-      quad(i, x, y, SLOT * 0.4, FACE + 0.001);
-    });
-    grid.forEach((spot, k) => {
-      const [x, y] = spotXY(spot);
-      for (let d = 0; d < 2; d++) quad(SPOTS.length + k * 2 + d, x + DIGIT.x - (1 - d) * DIGIT.gap, y + DIGIT.y, DIGIT.size / 2, FACE + 0.002);
-    });
-    const geometry = new BufferGeometry();
-    geometry.setAttribute('position', new BufferAttribute(pos, 3));
-    this.uv = new BufferAttribute(new Float32Array(quads * 4 * 2), 2);
-    geometry.setAttribute('uv', this.uv);
-    geometry.setIndex(index);
-    this.icons = new Mesh(geometry, new MeshBasicMaterial({ map: atlas.texture, transparent: true, alphaTest: 0.05, fog: false }));
-    this.icons.frustumCulled = false;
-    this.root.add(this.icons);
+    // Every slot's frame in one draw, and its icon (and the page's slots' counts) from one atlas in another.
+    this.slots = new SlotMeshes(
+      SPOTS.map((spot) => {
+        const [x, y] = spotXY(spot);
+        return { x, y, counts: spot.in === 'grid' };
+      }),
+      SLOT,
+      atlas,
+    );
+    SPOTS.forEach((_, i) => this.slots.colour(i, C.empty));
+    this.root.add(this.slots.frames, this.slots.icons);
 
     this.figure = new Mesh(new BufferGeometry(), sharedModelMaterial());
     this.figure.position.set(FIGURE.x, FIGURE.bottom, FACE + 0.02);
@@ -233,6 +187,7 @@ export class BagPanel {
 
   /** The place in your things a slot of the panel is: the talent page's grid is none. */
   where(spot: Spot): Where | null {
+    if (spot.in === 'beside') return null;
     if (spot.in === 'gear') return { in: 'gear', slot: spot.slot };
     if (this.page === 'bag') return { in: 'bag', slot: spot.i };
     if (this.page === 'quest') return { in: 'quest', slot: spot.i };
@@ -254,7 +209,7 @@ export class BagPanel {
   }
 
   /** The slot `world` touches, if any. */
-  spotAt(world: Vector3, reach: Reach): Spot | null {
+  spotAt(world: Vector3, reach: Reach): BagSpot | null {
     return this.open ? spotAt(this.toLocal(world), reach, this.grid) : null;
   }
 
@@ -273,7 +228,7 @@ export class BagPanel {
    * slot when over the figure, or else the nearest slot within a few
    * centimetres, since a carried item is aimed by eye, not by the hand.
    */
-  targetAt(world: Vector3, id: ItemId, reach: Reach & { near: number }): Spot | null {
+  targetAt(world: Vector3, id: ItemId, reach: Reach & { near: number }): BagSpot | null {
     if (!this.open) return null;
     const l = this.toLocal(world);
     const spot = spotAt(l, reach, this.grid);
@@ -284,7 +239,7 @@ export class BagPanel {
   }
 
   /** The world point just off a slot's face. */
-  slotWorld(spot: Spot, out: Vector3, off = 0.02): Vector3 {
+  slotWorld(spot: BagSpot, out: Vector3, off = 0.02): Vector3 {
     const [x, y] = spotXY(spot);
     return this.root.localToWorld(out.set(x, y, FACE + off));
   }
@@ -313,10 +268,10 @@ export class BagPanel {
       else if (spot.in === 'gear' && spot.slot === compare) _c.copy(C.compare);
       else if (item) _c.set(RARITY_COLOUR[item.rarity]).multiplyScalar(0.8);
       else _c.copy(C.empty);
-      this.frames.setColorAt(i, _c);
+      this.slots.colour(i, _c);
     });
-    this.frames.instanceColor!.needsUpdate = true;
-    this.frames.count = this.grid ? SPOTS.length : SPOTS.length - CONFIG.bag.slots;
+    this.slots.coloured();
+    this.slots.shown = this.grid ? SPOTS.length : SPOTS.length - CONFIG.bag.slots;
     this.paintBoard(shows.tab);
     this.showCard(shows.card, shows.cardOver);
     void dt;
@@ -327,24 +282,14 @@ export class BagPanel {
     this.dirty = false;
     this.drawnLifted = lifted;
     this.drawnPage = this.page;
-    const uv = this.uv.array as Float32Array;
-    const set = (q: number, cell: number) => {
-      const [u0, v0, u1, v1] = this.atlas.uv(cell);
-      uv.set([u0, v0, u1, v0, u1, v1, u0, v1], q * 8);
-    };
-    let k = 0;
     SPOTS.forEach((spot, i) => {
       const stack = sameSpot(spot, lifted) ? null : this.stackAt(spot);
       const item = stack && itemOf(stack.id);
       const grid = spot.in === 'grid';
-      set(i, item ? this.atlas.cellOf(item) : grid ? (this.grid ? EMPTY_CELL : BLANK_CELL) : this.atlas.ghostOf(spot.slot));
-      if (!grid) return;
-      const count = stack && stack.count > 1 ? stack.count : 0;
-      const q = SPOTS.length + k++ * 2;
-      set(q, count >= 10 ? this.atlas.digit(Math.floor(count / 10) % 10) : BLANK_CELL);
-      set(q + 1, count ? this.atlas.digit(count % 10) : BLANK_CELL);
+      this.slots.icon(i, item ? this.atlas.cellOf(item) : grid ? (this.grid ? EMPTY_CELL : BLANK_CELL) : this.atlas.ghostOf(spot.slot));
+      this.slots.count(i, stack?.count ?? 0);
     });
-    this.uv.needsUpdate = true;
+    this.slots.painted();
     this.dress();
   }
 
@@ -435,67 +380,12 @@ export class BagPanel {
 
   /** The card: over the slot it's for, kept within the board. */
   private showCard(stack: Stack | null, over: Spot | null): void {
-    const text = stack && cardText(stack.id, stack.count, this.inventory.wearing, this.inventory.gear);
+    const { inventory } = this;
+    const text = stack && cardText(stack.id, stack.count, inventory.wearing, inventory.gear);
     this.card.mesh.visible = !!text;
     if (!text) return;
-    const x = over ? spotXY(over)[0] : 0;
+    const x = over && over.in !== 'beside' ? spotXY(over)[0] : 0;
     this.card.mesh.position.x = Math.max(BOARD.left + CARD.w / 2, Math.min(BOARD.right - CARD.w / 2, x));
-    const key = `${stack.id}|${stack.count}|${JSON.stringify(this.inventory.gear)}|${this.inventory.wearing.level}`;
-    this.card.paint(key, (c, w, h) => paintItemCard(c, w, h, text));
-  }
-}
-
-/** An item's card, as `cardText` says it: on the bag panel, and under each of a hand-in's picks on Hale's board. */
-export function paintItemCard(c: CanvasRenderingContext2D, w: number, h: number, text: CardText): void {
-  const colour = RARITY_COLOUR[text.rarity];
-  c.fillStyle = 'rgba(12, 10, 16, 0.94)';
-  roundRect(c, 0, 0, w, h, 18);
-  c.fill();
-  c.strokeStyle = colour;
-  c.lineWidth = 4;
-  roundRect(c, 3, 3, w - 6, h - 6, 16);
-  c.stroke();
-  c.textBaseline = 'top';
-  c.fillStyle = colour;
-  c.font = `bold 32px ${FONT}`;
-  c.fillText(text.count > 1 ? `${text.name} ×${text.count}` : text.name, 20, 14, w - 40);
-  c.font = `24px ${FONT}`;
-  let y = 54;
-  // What it is, and the class it's locked to (red if it isn't yours).
-  c.fillStyle = '#a89c80';
-  const kind = text.worn ? `${text.kind} · worn` : text.kind;
-  c.fillText(kind, 20, y);
-  if (text.lock) {
-    c.fillStyle = text.lock.yours ? '#a89c80' : '#ff5040';
-    c.textAlign = 'right';
-    c.fillText(text.lock.name, w - 20, y);
-    c.textAlign = 'left';
-  }
-  y += 30;
-  if (text.level) {
-    c.fillStyle = text.level.reached ? '#a89c80' : '#ff5040';
-    c.fillText(`Item level ${text.level.value}`, 20, y);
-    y += 32;
-  }
-  c.font = `26px ${FONT}`;
-  for (const s of text.stats) {
-    c.fillStyle = s.yours ? '#ece6d6' : '#6a6458';
-    c.fillText(`${s.name} ${s.value}`, 20, y);
-    if (s.diff) {
-      c.fillStyle = s.diff > 0 ? '#40e040' : '#ff5040';
-      c.fillText(`${s.diff > 0 ? '+' : '−'}${Math.abs(s.diff)}${s.name === 'Damage' ? '%' : ''}`, 270, y);
-    }
-    y += 30;
-  }
-  if (text.note) {
-    c.fillStyle = '#ece6d6';
-    c.fillText(text.note, 20, y, w - 40);
-  }
-  if (text.sells) {
-    c.fillStyle = '#a89c80';
-    c.font = `20px ${FONT}`;
-    c.textAlign = 'right';
-    c.fillText(`Sells for ${text.sells} ${text.sells === 1 ? 'coin' : 'coins'}`, w - 20, h - 32);
-    c.textAlign = 'left';
+    paintCard(this.card, text, cardKey(stack, inventory.gear, inventory.wearing.level));
   }
 }

@@ -7,7 +7,7 @@ import type { Handedness } from '../player/input';
 import type { CardText } from './bag/cardLines';
 import type { Reach } from './bag/layout';
 import { modelOf, RARITY_COLOUR } from './bag/looks';
-import { paintItemCard } from './bag/panel';
+import { paintCard } from './bag/pieces';
 import { Card, FONT, parchment, wrap } from './card';
 
 // Talking to Marshal Hale: the talk prototype's variant A (in history at merge
@@ -255,7 +255,7 @@ export class TalkBoard {
   private paintPick(p: PickSlot): void {
     const text = this.describe?.(p.id);
     p.card.mesh.visible = !!text;
-    if (text) p.card.paint(JSON.stringify(text), (c, w, h) => paintItemCard(c, w, h, text));
+    if (text) paintCard(p.card, text, JSON.stringify(text));
   }
 
   /**

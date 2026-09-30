@@ -6,7 +6,8 @@ import type { Family } from './models/characters';
 // What a kill drops, rolled from a seed, with no three.js in it: coins, maybe
 // junk of the enemy's family, and maybe a piece of gear for your class, all at
 // the enemy's level, by the role table in CONFIG.loot
-// (.scratch/inventory/issues/05-loot.md; spec, "The inventory state").
+// (.scratch/inventory/issues/05-loot.md; spec, "The inventory state"). A
+// chest's contents come from the same pool of gear (spec, "Chests").
 
 /** What fell with an enemy, for the loot it drops. */
 export interface Fallen {
@@ -97,3 +98,19 @@ export function rollLoot(fallen: Fallen, klass: ClassId, rand: () => number): Lo
   }
   return { coins, items };
 }
+
+/**
+ * What a chest at `level` holds for a character of `klass`, from `rand`:
+ * `CONFIG.loot.chest.coins` × its level in coins, and one piece of gear your
+ * class can use at its level (within the loot levels), green or, now and
+ * then, blue.
+ */
+export function rollChest(level: number, klass: ClassId, rand: () => number): Loot {
+  const { coins, gear } = CONFIG.loot.chest;
+  const rarity = rollRarity(gear, rand);
+  const id = rarity && gearFor(rarity, Math.min(Math.max(1, Math.round(level)), CONFIG.loot.levels), klass, rand);
+  return { coins: coins * level, items: id ? [id] : [] };
+}
+
+/** A chest's seed: the chest and the character opening it, so its roll is the same however often it's asked. */
+export const chestSeed = (chest: string, character: string): number => lootSeed('chest', chest, character);

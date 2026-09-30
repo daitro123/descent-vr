@@ -516,10 +516,10 @@ function buildRamp(at: (x: number, z: number) => ModelBuilder, floorAt: (x: numb
   second.forEach((z, i) => set(mid(legB.x0, legB.x1), z, 'x', i % 2 ? -0.05 : 0.04));
 }
 
-/** The dig: the silver vein glinting in its walls, and what the bandits dropped. */
+/** The dig: the silver vein glinting in its walls, and what the bandits dropped (bar their strongbox, a chest). */
 function buildDig(b: PartBuilders, glow: Glow): void {
   const dig = minePiece('dig');
-  const { strongbox, picks, cloak, lantern: fallen, vein } = MINE.dig;
+  const { picks, cloak, lantern: fallen, vein } = MINE.dig;
   const y = dig.floor;
   const m = b.model;
   // The vein: bright flecks of silver along the north and west walls, catching the light.
@@ -534,16 +534,7 @@ function buildDig(b: PartBuilders, glow: Glow): void {
     m.box(north ? len : 0.1, 0.05 + rand() * 0.05, north ? 0.1 : len, { color: 0x8a949e, glow: 0.08, jitter: 0.12, at: [x, h, z], rot: north ? [0, 0, rand() * 0.6 - 0.3] : [rand() * 0.6 - 0.3, 0, 0] });
     for (let k = 0; k < 3; k++) m.box(0.04, 0.04, 0.04, { color: 0xdce6f0, glow: 0.35, jitter: 0, at: [x + (north ? (rand() - 0.5) * len : 0.1), h + (rand() - 0.5) * 0.2, z + (north ? 0.1 : (rand() - 0.5) * len)] });
   }
-  // The strongbox of ore against the north wall, its lid thrown back.
-  const sx = (strongbox.x0 + strongbox.x1) / 2;
-  const sz = (strongbox.z0 + strongbox.z1) / 2;
-  const sw = strongbox.x1 - strongbox.x0;
-  const sd = strongbox.z1 - strongbox.z0;
-  m.box(sw, 0.5, sd, { color: PAL.woodDark, jitter: 0.1, at: [sx, y + 0.25, sz] })
-    .box(sw + 0.02, 0.05, sd + 0.02, { ...IRON, at: [sx, y + 0.12, sz] })
-    .box(sw + 0.02, 0.05, sd + 0.02, { ...IRON, at: [sx, y + 0.42, sz] })
-    .box(sw, 0.05, sd, { color: PAL.woodDark, jitter: 0.1, at: [sx, y + 0.55, strongbox.z0 + 0.05], rot: [-1.35, 0, 0] });
-  for (let i = 0; i < 6; i++) m.shape(new IcosahedronGeometry(0.12, 0), { at: [sx + (rand() - 0.5) * (sw - 0.3), y + 0.52, sz + (rand() - 0.5) * (sd - 0.25)], rot: [rand() * 3, rand() * 3, 0], color: i % 2 ? 0xb8c2cc : EARTH.rockDark, glow: i % 2 ? 0.2 : 0, jitter: 0.15 });
+  // Their strongbox by the north wall is Oakvale's chest now (world/chests.ts), opened by its lid.
   // Two picks dropped on the floor.
   for (const [x, z, yaw] of picks) {
     m.box(0.05, 0.05, 0.9, { color: PAL.wood, at: [x, y + 0.03, z], rot: [0, yaw, 0] });

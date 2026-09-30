@@ -82,6 +82,7 @@ export function buildForest(given?: ForestLayout): StartingZone {
     spawn: plan.spawn,
     camps: plan.camps,
     respawns: plan.respawns,
+    stash: plan.stash,
     interiors: plan.interiors.map((interior) => {
       const build = INTERIOR_MODELS[interior.id];
       if (!build) throw new Error(`No model for the ${interior.id}`);
@@ -92,6 +93,7 @@ export function buildForest(given?: ForestLayout): StartingZone {
     places: plan.places,
     villagers: plan.villagers,
     pickups: plan.pickups,
+    chests: plan.chests,
     sounds: plan.sounds,
     trees: new TreeCover(plan.trees),
     ambience: 'woods',

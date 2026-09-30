@@ -484,6 +484,19 @@ export const CONFIG = {
       take: 0.25, // m from a hand to take it back, the orb's pickup radius
       settle: 0.6, // s after it's let go before a hand can take it back
     },
+    // The stash panel (ui/bag/stashPanel.ts): opened with the bag's by touching the stash chest's lid,
+    // on the bag panel's left, turned in towards you. It closes with the bag's.
+    stashPanel: {
+      gap: 0.03, // m between its edge and the bag panel's
+      turn: 25, // ° turned in towards you
+    },
+    // The stash's chest by the inn's hearth (world/stashChest.ts).
+    stashChest: {
+      touch: 0.05, // m round its lid a fist or the weapon's tip counts as touching it
+      lid: 105, // ° its lid swings up while the stash is open…
+      swing: 0.35, // …over this many s
+      buzz: { intensity: 0.6, ms: 50 }, // the lid touched
+    },
   },
 
   // The belt at your hips (inventory.ts).
@@ -506,6 +519,9 @@ export const CONFIG = {
       warden: { coins: 10, junk: 0, gear: {}, every: ['blue', 'green'] },
       raised: { coins: 0, junk: 0, gear: {}, every: [] },
     } satisfies Record<Role, { coins: number; junk: number; gear: Partial<Record<Rarity, number>>; every: Rarity[] }>,
+    // What a chest holds (.scratch/inventory/issues/13-oakvales-chests.md): `coins` × its level,
+    // and one piece of gear of your class at its level, of a rarity by `gear`'s chances.
+    chest: { coins: 5, gear: { green: 0.8, blue: 0.2 } satisfies Partial<Record<Rarity, number>> },
     levels: 5, // loot's items come at item levels 1 to this; an enemy above it drops this level's
     lifetime: 300, // s a drop lies, through your death too
     most: 12, // drops lying at once: past this the oldest goes
@@ -517,6 +533,20 @@ export const CONFIG = {
     beam: { height: 2, radius: 0.025, opacity: 0.55 }, // green and blue items' unlit, additive beams
     full: { flash: 1.6, rate: 6, float: 1.2 }, // s a full bag flashes an item red, flashes per s, s "Bag full" floats
     buzz: { take: { intensity: 0.8, ms: 70 }, full: { intensity: 1, ms: 160 } }, // in the hand that touched it
+  },
+
+  // Chests in a zone (world/chests.ts; .scratch/inventory/issues/13-oakvales-chests.md): a
+  // touch of a shut chest's lid opens it for good, with a creak and a buzz in that hand, and
+  // what's inside comes out on the ground beside it as a kill's loot does (loot.chest).
+  chests: {
+    reach: 0.12, // m round its lid a fist or the sword's tip opens it from
+    open: { seconds: 0.6, angle: 1.35 }, // the lid swings back this far (rad), over this long
+    buzz: { intensity: 0.7, ms: 120 }, // in the hand that opened it
+    // Each look's size (m): width, depth, the body's height and the lid's thickness.
+    looks: {
+      chest: { w: 0.62, d: 0.42, h: 0.34, lid: 0.1 },
+      strongbox: { w: 1.0, d: 0.65, h: 0.5, lid: 0.06 },
+    },
   },
 
   // Professions (professions/professions.ts; .scratch/professions/spec.md): the
@@ -562,6 +592,46 @@ export const CONFIG = {
       whetstone: { price: 2, damage: 0.05, seconds: 10 * 60 }, // rubbed along a blade or arrowheads; never on the belt
       copperGauntlets: { level: 5, rarity: 'green' }, // as good as a green drop at level 5, each version with Stamina
     },
+    // One rule for hands at a station: step within `near` m of it, looking within `facing` rad of
+    // it and out of a fight, and both hands become the station's; past `far` m they're yours again.
+    station: { near: 1.3, far: 2, facing: Math.PI / 3 },
+    // The smith's anvil (professions/anvil/), promoted from ?proto=anvil variant A.
+    anvil: {
+      tapSpeed: 1.2, // m/s the hammer's face comes down under which a strike is only a tap…
+      greatSpeed: 2.2, // …and from which it's great, working a mark at once (a good one works it halfway)
+      minTravel: 0.08, // m the face must come down onto the work for a strike to count
+      rearm: 0.04, // m it must lift off again before the next strike
+      markReach: 0.04, // m from a mark a strike must land to work it
+      heatUp: 1.5, // s in the fire from cold to full heat…
+      coolDown: 14, // …and out of it from full heat to cold: over `workingHeat` for about 10 s
+      workingHeat: 0.3, // hot enough to work (0 cold to 1 fresh from the fire)
+      smelt: 3, // s two ore take in the crucible to become a bar
+      flight: 0.35, // s what's made takes to fly to your bag…
+      settle: { made: 0.5, smelted: 0.9 }, // …after resting this long in the tongs or on the anvil, or on the mould
+      retry: 1, // s between tries to bag a thing left waiting on the anvil with the bag full
+      tongs: { grab: 0.6, release: 0.35, reach: 0.15 }, // squeeze to close the tongs and to let go; m from a piece they take it
+    },
+  },
+
+  // The alchemy bench in the house by the well (professions/bench/), promoted
+  // from `?proto=brew` variant B: you drop the herbs, grind and stir; the bench
+  // tips the mortar and pours the pot. Its herbalist stands at its end.
+  alchemyBench: {
+    near: 1.3, // m from the bench's front (your head, over the floor), facing it and out of a fight: your hands go bare…
+    far: 2, // m: …until you step back past this, and your weapons come back
+    facing: 0.3, // how squarely you must face it to step up: the dot of your gaze with the way to it, over the floor
+    reach: 0.02, // m past a thing's own size a hand takes it from
+    back: 0.25, // s a thing you let go glides back to its place
+    drop: 0.1, // m from the mortar's mouth, over the floor, that a herb let go drops in
+    turns: { grind: 3, stir: 3 }, // full turns of the pestle, and of the spoon
+    pound: { fall: 0.6, share: 1 / 3 }, // m/s down onto the mortar's floor that counts as a pound, and the share of a turn it's worth
+    tip: 1.2, // s the bench takes to tip the mortar into the pot
+    pour: 2, // s it takes to pour the pot into the flask and cork it
+    stands: 3, // flask stands: brews wait corked on them until you take them or step away
+    herbs: 3, // of each herb laid out on the tray, as many as the bag holds
+    hip: { down: 0.7, aside: 0.2, within: 0.18 }, // a flask let go this near a hip (m below your head, m aside) goes on the belt there
+    buzz: { take: { intensity: 0.5, ms: 30 }, crunch: { intensity: 0.4, ms: 25 }, pound: { intensity: 0.8, ms: 40 }, stir: { intensity: 0.25, ms: 30 }, belt: { intensity: 0.6, ms: 50 }, nope: { intensity: 1, ms: 120 } },
+    herbalist: { reach: 1.2, tie: 2.4, hang: 1.4 }, // s: their work at the bench's end: reaching for a sprig, tying it into a bundle, holding it up to look
   },
 
   // Marshal Hale at the crossroads (people/hale.ts).
@@ -598,6 +668,7 @@ export const CONFIG = {
       face: 0.8, // s turning to the bellows after the last burst, and back
       pumps: 3, // pulls on the bellows' handle…
       pump: 1.2, // …each this long
+      aside: { speed: 0.9, back: 2 }, // m/s they step aside from the anvil while you work at it; s after you leave before they go back
     },
     // The innkeeper's loop: wiping the bar, polishing a tankard, setting it down and picking up another.
     innkeeper: { wipe: 5, polish: 5, setDown: 1.4, pickUp: 1.6, rubs: 1.6 }, // s each; rubs per s of the rag
