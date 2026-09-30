@@ -408,6 +408,16 @@ export abstract class Enemy {
     return false;
   }
 
+  /**
+   * Pushed along `push` (m/s) without a blow (Scatter's gust): it slides as a
+   * blow's push would slide it, heavy ones barely, and nothing else happens.
+   * One a blow can't land on stays put.
+   */
+  shove(push: Vector3): void {
+    if (!this.hittable) return;
+    this.knockback.addScaledVector(push, this.knockbackScale());
+  }
+
   /** How far pushes move it: heavy enemies barely budge. */
   protected knockbackScale(): number {
     return this.kind === 'brute' ? 0.35 : this.kind === 'warden' ? 0.15 : 1;

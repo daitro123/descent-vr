@@ -261,6 +261,28 @@ export const sfx = {
     noise(0.07, 0.6, 2200, at, 'bandpass', 0, 1.5);
     tone(320, 120, 0.15, 'square', 0.18, at);
   },
+  /** Volley is on your next arrow: a quick rattle of shafts and a rising whistle. */
+  volleyReady(at?: Vector3) {
+    for (let i = 0; i < 3; i++) noise(0.05, 0.18, 2600, at, 'bandpass', i * 0.04, 4);
+    tone(700, 1100, 0.22, 'triangle', 0.07, at, 0.06);
+  },
+  /** A Volley leaves the bow: five strings' worth of thrum, staggered by a hair. */
+  volley(at: Vector3) {
+    for (let i = 0; i < 5; i++) noise(0.09, 0.14, 1400 + i * 250, at, 'bandpass', i * 0.018, 3);
+    tone(520, 260, 0.2, 'triangle', 0.06, at);
+  },
+  /** Scatter: a gust from the hand, a rush of wind sweeping past. */
+  scatter(at?: Vector3) {
+    noise(0.45, 0.35, 900, at, 'bandpass', 0, 0.7);
+    noise(0.3, 0.18, 2400, at, 'highpass', 0.04);
+    tone(180, 90, 0.3, 'sine', 0.1, at);
+  },
+  /** Hunter's Mark: a bright, narrow ping as the mark takes, like a bead drawn on the quarry. */
+  huntersMark(at?: Vector3) {
+    tone(1600, 1600, 0.12, 'sine', 0.09, at);
+    tone(2400, 2400, 0.2, 'sine', 0.06, at, 0.08);
+    noise(0.05, 0.1, 5000, at, 'highpass');
+  },
   /** Frost Nova: a glassy crack, then a cold hiss spreading out. */
   frostNova() {
     tone(1800, 900, 0.25, 'triangle', 0.12);
