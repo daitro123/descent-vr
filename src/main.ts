@@ -75,6 +75,9 @@ async function start(): Promise<void> {
       return startArena(renderer, scene, camera, device, perf, r);
     case 'belt': // PROTOTYPE: inventory ticket 04
       return (await import('./player/beltPrototype')).startBelt(renderer, scene, camera, device, perf, r, (then) => onEnterVR(renderer, then));
+    case 'bag':
+      onEnterVR(renderer);
+      return (await import('./ui/bag-prototype')).startBagPrototype(renderer, scene, camera, device, perf, r.variant);
     case 'adventure':
       return startAdventure(renderer, scene, camera, device, perf, r);
   }
