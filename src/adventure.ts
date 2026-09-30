@@ -33,6 +33,7 @@ import { IconAtlas, lookOf } from './ui/bag/looks';
 import { type Probe, TalkBoard } from './ui/talkBoard';
 import { Drops, type Touch } from './world/drops';
 import { Orbs } from './world/orbs';
+import { Chests } from './world/chests';
 import { Pickups } from './world/pickups';
 import { BlobShadows } from './world/shadows';
 import { Dropped } from './world/dropped';
@@ -125,6 +126,8 @@ export class Adventure {
   private named = false;
   /** What lies about for a quest, to pick up by hand: the leader's orders. */
   readonly pickups: Pickups;
+  /** The zone's chests, shut until you touch a lid, and open for good after. */
+  readonly chests: Chests;
   /** The bag: reach over a shoulder for it, and move your things about on its panel. */
   readonly bag: Bag;
   /** What you've let go of off the bag's panel, lying on the ground. */
@@ -273,6 +276,11 @@ export class Adventure {
 
     this.pickups = new Pickups(zone.pickups);
     scene.add(this.pickups.root);
+    // The chests out of doors with the chunks round you; the mine's strongbox with the mine's meshes.
+    this.chests = new Chests(zone.chests, (id) => this.state.inventory.isOpened(id));
+    scene.add(this.chests.outdoors, this.chests.mine);
+    this.world.stageWith(null, this.chests.outdoors);
+    if (zone.mine) this.world.stageWith('mine', this.chests.mine);
 
     this.hale = new Hale(zone.hale, this.world, this.state.hale.marker, this.state.haleSwordAtHip);
     this.arrowSpots = { places: zone.places, givers: { hale: zone.hale } };
@@ -321,7 +329,7 @@ export class Adventure {
     this.world.update(dt, player.camera);
     // With a door shut behind you, what stands outside isn't drawn either.
     const outdoors = this.world.outdoorsShown;
-    this.pickups.root.visible = this.hale.root.visible = this.villagers.root.visible = outdoors;
+    this.pickups.root.visible = this.hale.root.visible = this.villagers.root.visible = this.chests.outdoors.visible = outdoors;
     this.showCamps(outdoors);
     player.fighting = this.fighting;
     player.update(dt);
@@ -366,6 +374,7 @@ export class Adventure {
     this.updateBag(dt);
     this.villagers.update(dt, you.head, this.state);
     this.pickUp();
+    this.openChests(dt);
     this.updateHandIn(dt);
     this.tracker.update(dt, player.camera, this.state.tracker, this.questArrow());
     // The zone you're in floats up as you load in.
@@ -420,6 +429,7 @@ export class Adventure {
    */
   private showCamps(outdoors: boolean): void {
     const mine = this.world.mine;
+    if (mine) showInMine(mine, this.chests.mine);
     for (const camp of this.camps.camps) {
       if (camp.plan.interior !== 'mine' || !mine) camp.root.visible = outdoors;
       else showInMine(mine, camp.root);
@@ -591,6 +601,21 @@ export class Adventure {
     this.player.input.pulse(taken.hand, intensity, ms);
     sfx.parchment(taken.at);
     this.apply({ kind: 'pickup', item: taken.item }, taken.at);
+  }
+
+  /**
+   * A fist or the sword's tip touches a shut chest's lid: it swings open for
+   * good with a creak and a buzz in that hand, and what's inside comes out on
+   * the ground beside it, to take as a kill's loot is taken.
+   */
+  private openChests(dt: number): void {
+    const lifted = this.chests.update(dt, this.touching(), (id) => this.state.inventory.isOpened(id));
+    if (!lifted) return;
+    const { chest, hand } = lifted;
+    const { intensity, ms } = CONFIG.chests.buzz;
+    this.player.input.pulse(hand, intensity, ms);
+    sfx.chest(_a.set(chest.x, chest.y + CONFIG.chests.looks[chest.look].h, chest.z));
+    this.apply({ kind: 'chest', chest: chest.id, level: chest.level }, _a.set(chest.drop.x, chest.drop.y, chest.drop.z));
   }
 
   /** Where each fist and the sword's tip are, while tracked and you're standing. */

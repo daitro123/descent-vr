@@ -2,7 +2,7 @@ import { CONFIG, type EnemyConfig } from './config';
 import { Inventory, type InventoryEffect, type InventorySave } from './inventory';
 import { type ProfessionEffect, Professions, type ProfessionsSave, type RecipeId, type SpotKind } from './professions/professions';
 import { type ClassId, itemOf, type Worn, WORN_NOTHING } from './items';
-import { type Loot, rollLoot, seeded } from './loot';
+import { chestSeed, type Loot, rollChest, rollLoot, seeded } from './loot';
 import type { CampId } from './maps/types';
 import type { Family } from './models/characters';
 import { BARKS, type Chain, CHAINS, type GiverId, type Item, type Objective, type Place, type Quest, type QuestId, type Sword, SWORDS, type VillagerId } from './quests';
@@ -76,6 +76,14 @@ export type AdventureEvent =
   | { readonly kind: 'handIn'; readonly giver?: GiverId }
   /** Something picked up by hand (the leader's orders). */
   | { readonly kind: 'pickup'; readonly item: Item }
+  /** A chest's lid touched: it opens for good, and what's inside comes out on the ground. */
+  | {
+      readonly kind: 'chest';
+      /** Its id in the zone's plan, as the save keeps it. */
+      readonly chest: string;
+      /** Its area's level: what it holds goes by it. */
+      readonly level: number;
+    }
   /** A spot of a kind gathered: the professions module's own effect, passed straight in. */
   | { readonly kind: 'gathered'; readonly spot: SpotKind }
   /** A recipe made (into the bag or left on the station): the professions module's own effect, passed straight in. */
@@ -90,7 +98,7 @@ export type Effect =
   | { readonly kind: 'quest'; readonly quest: QuestId; readonly stage: Stage }
   /** One of a quest's objectives counted one more: `count` of its need. */
   | { readonly kind: 'progress'; readonly quest: QuestId; readonly objective: number; readonly count: number }
-  /** A kill's drop, lying where it fell: a pouch of coins and each item beside it. Not saved until taken. */
+  /** A kill's or a chest's drop, lying on the ground: a pouch of coins and each item beside it. Not saved until taken. */
   | ({ readonly kind: 'loot' } & Loot)
   /** What happened to your things: a reward put straight into your hand, say. */
   | InventoryEffect
@@ -456,6 +464,8 @@ export class AdventureState {
       }
       case 'pickup':
         return this.count((o) => o.kind === 'pickup' && o.item === event.item);
+      case 'chest':
+        return this.openChest(event.chest, event.level);
       case 'gathered':
         return this.count((o) => o.kind === 'gather' && o.spot === event.spot);
       case 'made':
@@ -465,6 +475,18 @@ export class AdventureState {
       case 'handIn':
         return this.handIn(event.giver ?? 'hale');
     }
+  }
+
+  /**
+   * Open chest `id` at `level`, once per character: it's recorded open, and
+   * what it holds, rolled from the chest and the character, comes out as a
+   * drop. Every character is a warrior for now, so the class stands for the
+   * character in the seed until the roster brings each its own id.
+   */
+  private openChest(id: string, level: number): Effect[] {
+    if (this.inventory.isOpened(id)) return [];
+    const loot = rollChest(level, this.klass, seeded(chestSeed(id, this.klass)));
+    return [...this.inventory.openChest(id), { kind: 'loot', ...loot }];
   }
 
   /** The chain's quest `giver` has for you, if they have a chain. */
