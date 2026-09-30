@@ -1,5 +1,6 @@
 import type { Role, Stage } from './adventureState';
 import { CONFIG } from './config';
+import type { ItemId } from './items';
 import type { CampId } from './maps/types';
 
 // Marshal Hale's quest chain, as data: what each quest asks, what it pays, and
@@ -15,10 +16,10 @@ export type Place = 'farm' | 'lumberCamp' | 'mine';
 /** Something an objective asks you to pick up by hand. */
 export type Item = 'orders';
 
-/** Every sword: the one you start with, and Hale's old longsword. */
+/** Every sword's look: the one you start with, and Hale's old longsword. A warrior's weapon's model is one of them. */
 export const SWORDS = ['plain', 'hale'] as const;
 
-/** The sword in your hand. */
+/** A sword's look. */
 export type Sword = (typeof SWORDS)[number];
 
 /** One thing a quest asks before it can be handed in. */
@@ -35,8 +36,8 @@ export interface Quest {
   /** Where its objectives are, which the quest arrow points at while it's under way. */
   readonly place: Place;
   readonly xp: number;
-  /** A sword it pays besides the XP. */
-  readonly sword?: Sword;
+  /** An item it pays besides the XP, worn at once (items.ts). */
+  readonly reward?: ItemId;
   /** What Hale says while it's on offer, under way, and ready to hand in. */
   readonly says: { readonly offered: string; readonly active: string; readonly ready: string };
 }
@@ -81,7 +82,7 @@ export const CHAIN: readonly Quest[] = [
     objectives: [{ kind: 'kill', text: 'What woke the dead defeated', need: 1, role: 'warden' }],
     place: 'mine',
     xp: Q.below.xp,
-    sword: 'hale',
+    reward: 'hale-longsword',
     says: {
       offered:
         'Something stirs under that hill. The dead are walking in the old mine. Go down, find what woke them, and put it back to rest.',

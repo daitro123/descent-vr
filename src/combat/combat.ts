@@ -5,6 +5,7 @@ import type { FloatingText } from '../fx/floatingText';
 import type { Particles } from '../fx/particles';
 import { sfx } from '../fx/sfx';
 import type { Shockwaves } from '../fx/shockwave';
+import { armourCut } from '../items';
 import type { Player } from '../player/player';
 import { clamp01, closestPointOnSegment, closestSegmentSegment, segmentIntersectsBox, type SegmentHit } from './geometry';
 import { type Arrow, type ArrowContact, type ArrowResolver, Projectiles } from './projectiles';
@@ -411,7 +412,7 @@ export class Combat implements ArrowResolver {
         this.fx.text.spawn('dodge', res.point, { color: '#9a9a9a', scale: 0.14 });
         return 'dodged';
       }
-      this.hurtPlayer(attack.damage);
+      this.hurtPlayer(attack.damage, enemy);
       this.fx.particles.burst('sparks', res.point, 6, undefined, 0xff4020);
       return 'hit';
     }
@@ -455,7 +456,7 @@ export class Combat implements ArrowResolver {
         player.shield.numb = CONFIG.shield.numbTime;
         player.shield.flash(0xff6030);
       }
-      this.hurtPlayer(chip, false);
+      this.hurtPlayer(chip, enemy, false);
       return 'hit';
     }
     this.fx.text.spawn('block', at.clone().setY(at.y + 0.2), { color: '#c0c0c0', scale: 0.15 });
@@ -467,7 +468,7 @@ export class Combat implements ArrowResolver {
   }
 
   /** A slam lands (EnemyContext.slam): unblockable, so only distance (or a dash) saves you. */
-  slam(_enemy: Enemy, attack: AttackConfig, at: Vector3): void {
+  slam(enemy: Enemy, attack: AttackConfig, at: Vector3): void {
     const r = attack.radius ?? 1.5;
     this.fx.shockwaves.trigger(at, r, 0xff3a10, 0.45);
     this.fx.particles.burst('dust', at, 22, undefined, 0x5a5048);
@@ -488,7 +489,7 @@ export class Combat implements ArrowResolver {
       this.fx.text.spawn('dodge', _feet.clone().setY(_feet.y + 1.2), { color: '#9a9a9a', scale: 0.14 });
       return;
     }
-    this.hurtPlayer(attack.damage);
+    this.hurtPlayer(attack.damage, enemy);
   }
 
   /** An archer looses (EnemyContext.shoot): aimed at the chest where the player is now. */
@@ -499,9 +500,10 @@ export class Combat implements ArrowResolver {
     sfx.arrowLoose(from);
   }
 
-  private hurtPlayer(amount: number, flinch = true): void {
+  /** A blow from `from` lands on you: your armour cuts it by its share against the attacker's level. */
+  private hurtPlayer(amount: number, from: Enemy | null, flinch = true): void {
     combatStats.hurts++;
-    this.player.damage(amount);
+    this.player.damage(Math.round(amount * (1 - armourCut(this.player.stats.armour, from?.level ?? 1))));
     sfx.hurt();
     if (flinch) this.events.onPlayerHurt();
   }
@@ -570,7 +572,7 @@ export class Combat implements ArrowResolver {
     closestSegmentSegment(prev, pos, d.torsoTop, d.torsoBottom, _hit);
     if (headHit || _hit.distance <= d.torsoRadius + R) {
       if (player.invulnerable) return 'dodged';
-      this.hurtPlayer(arrow.damage);
+      this.hurtPlayer(arrow.damage, arrow.owner);
       sfx.arrowThunk();
       return 'hit';
     }
