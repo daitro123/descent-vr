@@ -128,6 +128,54 @@ _Avoid_: emitter, sound source, point sound
 How loud and how muffled each part of the ambience is right now, following the light's cues: behind a shut door the outdoors goes quiet and muffled and the room's fires come up, past the mine's bend the outdoors gives way to the mine's own air, at the crypt's breach the drone rises, and while anything fights you it all dips.
 _Avoid_: mixer, ducking, audio state
 
+**Item**:
+Anything that can sit in the bag: gear, a consumable, a material, a quest item or junk.
+_Avoid_: object, thing, loot (loot is items as they drop)
+
+**Item level**:
+The level an item belongs to: the level of the enemy that dropped it, or of the quest that paid it. It sets the item's numbers with its rarity, and you can't wear gear whose item level is above your own level.
+_Avoid_: tier, ilvl, gear score
+
+**Quest item**:
+An item a quest asks for, kept on the bag's own quest page, taking none of its slots, and gone when the quest is handed in. The leader's orders are one.
+_Avoid_: key item, quest object
+
+**Bag**:
+What you carry items in, on your back. You reach over your shoulder to pull it round and sort it. It starts with 16 slots.
+_Avoid_: backpack, pack, inventory (the inventory is the whole system: bag, gear, belt, coins and stash)
+
+**Gear**:
+The items you wear, one in each of seven slots: main hand, off hand, head, chest, hands, legs and feet. A weapon is gear locked to the class that fights with it; armour anyone can wear.
+_Avoid_: equipment, kit, outfit
+
+**Belt**:
+Two slots at your hips for what you use in the middle of a fight, taken by hand, like a potion you lift to your mouth.
+_Avoid_: quick slots, hotbar, holster (the health orbs and level you glance down at are the belt HUD, not the belt)
+
+**Loot**:
+Items and coins as they drop from enemies or lie in chests, before you take them. Loot glows in its rarity's colour, and a touch takes it.
+_Avoid_: drops, reward (a reward is what a hand-in pays)
+
+**Rarity**:
+How good an item is for its level, shown by the colour of its name and its glow: grey (junk), white, green or blue.
+_Avoid_: quality, tier, grade
+
+**Junk**:
+Grey items that are only worth selling.
+_Avoid_: trash, vendor trash
+
+**Coins**:
+The one currency. They take no slot in the bag.
+_Avoid_: gold, money, currency
+
+**Vendor**:
+A friendly character who buys and sells: in Oakvale, the smith (gear, and anything you bring) and the innkeeper (food and potions).
+_Avoid_: merchant, shopkeeper, trader
+
+**Stash**:
+The chest at the inn where you keep items you aren't carrying.
+_Avoid_: bank, storage, vault
+
 **Profession**:
 A trade a character learns from a trainer and practises by hand between fights: gathering (Mining, Herbalism) or making (Smithing, Alchemy). Every character can learn all of them.
 _Avoid_: skill (abilities are what you fight with), job, trade skill, craft (as a noun for the profession)
@@ -153,5 +201,5 @@ How practised a character is at one profession: a number that climbs by gatherin
 _Avoid_: skill, level, experience
 
 **Grade**:
-A step of proficiency, from Apprentice through Journeyman and Expert to Artisan, each capped until a trainer teaches the next. Each grade goes with a tier of materials; Oakvale's is Apprentice.
-_Avoid_: rank, tier (a tier is the materials that go with a grade), level
+A step of proficiency, from Apprentice through Journeyman and Expert to Artisan, each capped until a trainer teaches the next. Each grade goes with a zone's materials; Oakvale's is Apprentice.
+_Avoid_: rank, tier, level
