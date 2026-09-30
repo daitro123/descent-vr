@@ -305,7 +305,7 @@ await standBy(1.3);
   await step(0.1);
   const red = await page.evaluate(() => {
     const { bag } = window.__descent;
-    const frames = bag.panel.frames;
+    const frames = bag.panel.slots.frames;
     // The seven gear slots come first, then the page's sixteen.
     const i = 7 + 5;
     const C = frames.material.color.constructor;
