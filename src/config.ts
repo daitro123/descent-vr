@@ -260,6 +260,48 @@ export const CONFIG = {
     bashCooldown: 0.8,
   },
 
+  // The mage's plain kit (player/mage.ts, combat/bolts.ts; .scratch/abilities/spec.md, "The mage"),
+  // promoted from the mage prototype's kit A. A grunt has 45 health: a full bolt deals 20, so three
+  // kill one, two with a head shot; the sword deals 8 to 28 a swing, so the mage trades damage for range.
+  mage: {
+    bolt: {
+      minDamage: 7, // a bolt let go the moment it's conjured…
+      maxDamage: 20, // …and one held to full charge
+      chargeTime: 0.6, // s of holding the trigger to full charge
+      minHold: 0.12, // s: let go sooner and nothing is cast
+      life: 2.2, // s in flight
+      knockback: 1.6, // m/s shove along the bolt's travel
+      exposedMultiplier: 1.5, // as the sword's
+      assistRange: 18, // m: the aim assist looks this far
+      homingDegPerSec: 70, // how hard a bolt bends toward what the assist locked on
+    },
+    // Let go mid-throw: the hand's speed (in your own space, so walking adds nothing) shapes the bolt.
+    throw: {
+      minSpeed: 1.2, // m/s of the hand at release: slower is a fizzle, not a cast
+      fullSpeed: 4, // m/s: a throw this fast makes the tightest, fastest bolt
+      slow: { speed: 7, radius: 0.2 }, // a gentle toss: a big slow orb, easy to land
+      fast: { speed: 20, radius: 0.08 }, // a hard throw: a small quick bolt
+      assistDeg: 15, // thrown aim is rough: bend onto an enemy this far off
+    },
+    // The main hand's bolt gathers at the tip of the worn weapon, this far out of the fist (m), by its
+    // look; any other look is a wand's, and an empty main hand casts from the palm, as the focus hand does.
+    tip: { wand: 0.32, staff: 0.75 },
+    // The focus's ward on the off hand's grip is the shield to combat: each block costs this much mana
+    // (a parry is free), and it won't rise with less.
+    ward: { cost: 10 },
+    // B / Y: `distance` m in the stick's direction (back if it's neutral) every `cooldown` s, shown on the dash's bar.
+    // The way is tried every `step` m, and the blink stops short of a wall.
+    blink: { distance: 3.5, cooldown: 2.2, step: 0.25 },
+    haptics: {
+      charge: { intensity: 0.12, ms: 20 }, // a tick every 0.1 s while charging
+      full: { intensity: 0.5, ms: 40 }, // at full charge
+      cast: { intensity: 0.8, ms: 60 },
+      hit: { intensity: 0.5, ms: 40 },
+      fizzle: { intensity: 0.2, ms: 30 },
+      blink: { intensity: 0.6, ms: 60 },
+    },
+  },
+
   // Enemy guards: kinds with a `guard` raise their weapon when your blade comes
   // at them, on the side it comes from. A blade that meets the guard does no
   // damage; swing at the open side, feint, or shield-bash the guard away.
@@ -369,9 +411,9 @@ export const CONFIG = {
     mage: {
       resource: 'mana',
       abilities: {
-        // Every enemy within `radius` m is frozen for `freeze` s, or until a hit breaks it.
-        frostNova: { level: 2, use: 'button', cost: 30, cooldown: 20, radius: 3, freeze: 4 },
-        // The next bolt deals `multiplier` times and bursts for `burst` within `radius` m.
+        // Every enemy within `radius` m takes `damage` and is frozen for `freeze` s, or until a hit breaks it.
+        frostNova: { level: 2, use: 'button', cost: 30, cooldown: 20, radius: 3, freeze: 4, damage: 5 },
+        // The next bolt deals `multiplier` times and bursts for `burst` on every other enemy within `radius` m.
         fireball: { level: 3, use: 'ring', cost: 15, cooldown: 0, multiplier: 1.5, burst: 10, radius: 2 },
         // The next bolt slows the enemy it hits by `slow` for `time` s.
         frostbolt: { level: 6, use: 'z', cost: 15, cooldown: 0, slow: 0.4, time: 5 },

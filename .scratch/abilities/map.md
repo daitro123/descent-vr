@@ -64,7 +64,7 @@ Written on 2026-09-30 from [spec.md](spec.md), **by Claude on Tom's behalf**, nu
 4. [20: Rooted, frozen and slowed](issues/20-rooted-frozen-and-slowed.md): no blockers.
 5. [21: The ranger](issues/21-the-ranger.md): after 17 to 20.
 6. [22: The ranger's abilities at 6, 8 and 10](issues/22-the-rangers-abilities-at-6-8-and-10.md): after 21.
-7. [23: The mage](issues/23-the-mage.md): after 17 to 20.
+7. [23: The mage](issues/23-the-mage.md): after 17 to 20. Done.
 8. [24: The mage's abilities at 6, 8 and 10](issues/24-the-mages-abilities-at-6-8-and-10.md): after 23.
 9. [25: Talents and the warrior's trees](issues/25-talents-and-the-warriors-trees.md): after 18 and 19.
 10. [26: The ranger's and mage's trees](issues/26-the-rangers-and-mages-trees.md): after 22, 24 and 25.
