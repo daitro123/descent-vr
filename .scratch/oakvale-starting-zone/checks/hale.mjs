@@ -24,9 +24,11 @@
 //    0/3" at the top left of your view, flashing. It lags a quick head turn.
 // 4. At the farm, three kills count 1/3, 2/3, 3/3, then "Return to Marshal
 //    Hale" and a gold "?"; a fourth counts nothing.
-// 5. Back at Hale: "Hand in", pressed with the sword's tip. "+80 XP" floats
-//    over Hale, then "LEVEL 2"; you're level 2 at 120 XP; the board offers The
-//    Lumber Camp with a gold "!" over Hale, and the tracker is gone.
+// 5. Back at Hale: no "Hand in" button but the pick (inventory ticket 12),
+//    the Farmstead Gloves carried off the board into the bag on the sword's
+//    tip. "+80 XP" floats over Hale, then "LEVEL 2"; you're level 2 at 120
+//    XP; the board offers The Lumber Camp with a gold "!" over Hale, and the
+//    tracker is gone.
 // 6. Hale is solid: standing on their spot puts you beside them.
 //
 // Playwright is the global install; Chromium is the pre-installed one.
@@ -136,6 +138,7 @@ const talk = () =>
       boardOpen: board.isOpen,
       boardText: board.text.ctx.__texts ?? [],
       keys: board.keys.map((k) => k.face.ctx.__texts?.at(-1)),
+      picks: [...board.picks],
       tracker: tracker.mesh.visible ? tracker.card.ctx.__texts : null,
       level: state.level,
       xp: state.xp,
@@ -352,27 +355,50 @@ let acceptRig;
   check(t.xp === 40 && t.level === 1, `four kills pay 40 XP (${t.xp}, level ${t.level})`);
 }
 
-// 5. Hand in with the sword's tip.
+// 5. Hand in with the sword's tip: the gloves carried off the board into the bag.
 {
   await standBy(1.9);
   await step(0.5);
   let t = await talk();
-  check(t.boardOpen && t.boardText.slice(1).join(' ') === "The farm's quieter already. Well done." && t.keys.join() === 'Hand in', `the board says "${t.boardText.slice(1).join(' ')}" with "${t.keys.join()}"`);
-  const handIn = await keyAt('Hand in');
-  const before = await keyAt('Hand in', 0.2);
-  await tipTo(before.world);
+  check(
+    t.boardOpen && t.boardText.slice(1).join(' ').startsWith("The farm's quieter already. Well done.") && t.keys.length === 0 && t.picks.length === 2,
+    `the board says "${t.boardText.slice(1).join(' ')}" over the pick (${t.picks.join(', ')}), with no button`,
+  );
+  const pickAt = (out = 0.02) =>
+    page.evaluate((out) => {
+      const { board } = window.__descent.adventure;
+      board.root.updateMatrixWorld(true);
+      const w = board.pickSlots[0].frame.localToWorld(board.root.position.clone().set(0, 0, 0.01 + out));
+      return { x: w.x, y: w.y, z: w.z };
+    }, out);
+  await tipTo(await pickAt(0.2));
   t = await talk();
-  check(t.level === 1 && t.boardOpen, `the sword's tip in front of "Hand in" presses nothing`);
-  const buzzesBefore = t.buzzes.length;
-  await tipTo(handIn.world);
+  check(t.level === 1 && t.boardOpen, `the sword's tip in front of the gloves does nothing`);
+  await tipTo(await pickAt());
+  const buzzesBefore = (await talk()).buzzes.length;
+  await page.evaluate(() => window.__descent.device.controllers.right.updateButtonValue('squeeze', 1));
+  await xrFrames(2);
+  await step(1 / 72);
+  const held = await page.evaluate(() => ({ open: window.__descent.bag.isOpen, holding: window.__descent.bag.holding?.id }));
+  check(held.open && held.holding === 'farmstead-gloves-strength', `the grip lifts the gloves onto the tip, and the bag swings round`);
+  const slot = await page.evaluate(() => {
+    const { bag, camera } = window.__descent;
+    const p = bag.panel.slotWorld({ in: 'grid', i: 0 }, camera.position.clone(), 0.015);
+    return { x: p.x, y: p.y, z: p.z };
+  });
+  await tipTo(slot);
+  await page.evaluate(() => window.__descent.device.controllers.right.updateButtonValue('squeeze', 0));
+  await xrFrames(2);
+  await step(0.8); // the level floats up a moment after the XP
   t = await talk();
   const fist = await page.evaluate((w) => {
     const { player } = window.__descent;
     const g = player.input.hands.right.grip.getWorldPosition(player.rig.position.clone());
     return Math.hypot(g.x - w.x, g.y - w.y, g.z - w.z);
-  }, handIn.world);
-  check(t.level === 2 && t.xp === 120 && fist > 0.5, `the sword's tip hands it in, the fist ${fist.toFixed(2)} m away: level ${t.level} at ${t.xp} XP`);
+  }, slot);
+  check(t.level === 2 && t.xp === 120 && fist > 0.5, `the gloves let go over the bag's first slot hand it in, the fist ${fist.toFixed(2)} m away: level ${t.level} at ${t.xp} XP`);
   check(t.buzzes.length > buzzesBefore && t.buzzes.at(-1) === 'right', `and the right hand buzzes`);
+  await page.evaluate(() => window.__descent.bag.close('check'));
   const words = await floating();
   const over = (w) => Math.hypot(w.x - HALE.x, w.z - HALE.z) < 0.15 && w.y > HALE.y + HALE.headY + 0.2;
   const xp = words.find((w) => w.text === '+80 XP');

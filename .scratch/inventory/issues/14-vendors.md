@@ -29,7 +29,7 @@ Built on 2026-09-30 by Claude **on Tom's behalf** (he asked for the build ticket
 
 - `npm run typecheck`, `npm test` and `npm run build` pass. New tests are in `tests/vendors.test.ts` (the smith's stock, the innkeeper's, prices, what walking up unfolds, "Trade" beside the buttons) and `tests/inventory.test.ts` (the checks before you let go, selling what you wear). The existing vendor tests cover buying, selling, buyback, refusing too few coins, selling all junk and quest items being unsellable.
 - `checks/vendors.mjs`, all 21 passed. The smith's board unfolds with the bag panel 57 cm to its right, the board turned in (0.91 facing). It shows sixteen wares, all dimmed with their prices in red at 0 coins, for 3 draws an eye. The iron longsword's card says "Costs 12 coins" in red, and the grip on it refuses with a strong buzz. "Sell junk" sells three torn cloth and a bone charm for 10 coins, and the Sold row holds them, newest first. The tunic carried onto the board sells for 3 and comes back off the Sold row for 3. Walking off folds both. The innkeeper sells a potion for 8 and still has it. Leaving the zone empties the Sold row, and a reload keeps the coins and what was bought.
-- `checks/bag-adventure.mjs` and `checks/stash.mjs` still pass after the bag's changes.
+- `checks/vendors.mjs` also checks that at the anvil (Professions ticket 15), with its hammer and tongs in your hands, the smith's wares stay shut. `checks/bag-adventure.mjs`, `checks/stash.mjs`, `checks/hand-in-picks.mjs` and the Professions' `checks/anvil-adventure.mjs` still pass after the bag's changes and the merges.
 
 **Calls made on Tom's behalf**
 
@@ -42,13 +42,15 @@ Built on 2026-09-30 by Claude **on Tom's behalf** (he asked for the build ticket
 - **Where it sits:** the wares board is 60 cm from the vendor towards you, 55 cm to your right (as Hale's board) and 1.35 m up (`CONFIG.vendors.board`), a little higher than Hale's so that the Sold row clears the inn's bar. It's built on the stash's side panel, as the coordinator asked once ticket 15 landed: the bag panel opens pinned on its right, and the board hangs on the bag's left, turned in as the stash's does.
 - **"Sell junk" is painted on the board**, lit while pressed, rather than a separate 3D button like the talk board's. That keeps the board at three draws. It's pressed the same way: a fist or the tip arriving on it, 0.4 s after the board unfolds and 0.6 s after a press.
 - **Prices:** the elixir of the keen eye and the whetstone sell for 4 and 2 coins, as Professions' spec settled them, not the 3 each ticket 06 had. The rest are ticket 06's.
+- **At the anvil the wares stay shut.** The anvil stands in front of the smith, so walking up to it would otherwise unfold their wares. While it has your hands the wares close, and they stay shut until you've walked away and back.
+- **A ware carried is a third kind of origin beside the hand-in's shelf.** Ticket 12's `Shelf` (Hale's pick) is carried from outside the bag's panels, while the wares are a `BesidePanel` whose slots the bag already touches, lights and cards, so the wares keep their `Trade` and a carried ware's origin is `{ in: 'ware' }` in the bag's `From`, next to the shelf's.
 - The board shows what the bag's hands touch a frame later than the bag panel does, which can't be seen at 72 Hz.
 
 **For later tickets**
 
 - Another board beside the bag that buys or sells (a trainer's recipes, say) implements `BesidePanel` with a `Trade`, as `WaresBoard` does.
 - 16 (ranger and mage): once their white weapons and off hands are in `LOOT_GEAR`, the smith sells them at 1, 3 and 5 with no change here.
-- Professions 18 (trainers): the smith's quest chain goes into `CHAINS` and the talk-first rule starts working on its own. Add "Train" to `TalkButton`, `vendorTalk` and `Adventure.vendorPress`. A hand-in to the smith currently floats its level-up over Hale (`Adventure.show` with `handIn`), so point that at the giver.
+- Professions 18 (trainers): the smith's quest chain goes into `CHAINS` and the talk-first rule starts working on its own. Add "Train" to `TalkButton`, `vendorTalk` and `Adventure.vendorPress`. A hand-in to the smith currently floats its level-up over Hale (`Adventure.show` with `handIn`), so point that at the giver. `vendorTalk` passes a hand-in's pick through, but the Adventure's `Shelf` reads only Hale's board, so a pick at the smith needs the vendor's talk board as the shelf too.
 - 17 (one sitting): about 300 to 400 coins on the route buys a white chest piece (24 or 48 coins) and potions at 8.
 
 **On the headset:** walk up to the smith and to the innkeeper. Check that the board and the bag panel sit where you can reach both without stepping sideways, that the prices read, that carrying a ware into the bag and something of yours onto the board feels like sorting, and that "Sell junk" is easy to hit.

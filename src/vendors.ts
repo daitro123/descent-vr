@@ -75,7 +75,7 @@ export function opensWith(giver: GiverShows | null): 'talk' | 'wares' {
 /** A button on a vendor's talk board: the giver's, and "Trade". */
 export type VendorButton = Button | 'trade';
 
-/** A vendor's talk board: the giver's line, and their buttons with "Trade" beside them. */
-export function vendorTalk(giver: GiverShows): { readonly line: string; readonly buttons: readonly VendorButton[] } {
-  return { line: giver.line, buttons: [...giver.buttons, 'trade'] };
+/** A vendor's talk board: the giver's line and pick, and their buttons with "Trade" beside them. */
+export function vendorTalk(giver: GiverShows): { readonly line: string; readonly buttons: readonly VendorButton[]; readonly picks: readonly ItemId[] } {
+  return { line: giver.line, buttons: [...giver.buttons, 'trade'], picks: giver.picks };
 }

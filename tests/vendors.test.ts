@@ -43,7 +43,7 @@ describe("the innkeeper's", () => {
 });
 
 describe('walking up to a vendor', () => {
-  const shows = (marker: GiverShows['marker'], buttons: GiverShows['buttons']): GiverShows => ({ marker, line: 'Hello', buttons });
+  const shows = (marker: GiverShows['marker'], buttons: GiverShows['buttons']): GiverShows => ({ marker, line: 'Hello', buttons, picks: [] });
 
   it("unfolds the wares at once, unless they've a quest to offer or take back", () => {
     expect(opensWith(null)).toBe('wares');
