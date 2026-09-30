@@ -31,6 +31,7 @@ describe('reading the page from its URL', () => {
 
   it('carries a class prototype with the arena, at ?arena&class=', () => {
     expect(readPage('?arena&class=ranger').route).toMatchObject({ kind: 'arena', playerClass: 'ranger' });
+    expect(readPage('?arena&class=mage').route).toMatchObject({ kind: 'arena', playerClass: 'mage' });
     expect(readPage('?arena').route).not.toHaveProperty('playerClass', expect.anything());
   });
 
