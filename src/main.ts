@@ -71,6 +71,9 @@ async function start(): Promise<void> {
       return (await import('./maps/walk')).startWalk(renderer, scene, camera, r.map);
     case 'arena':
       return startArena(renderer, scene, camera, device, perf, r);
+    case 'bag':
+      onEnterVR(renderer);
+      return (await import('./ui/bag-prototype')).startBagPrototype(renderer, scene, camera, device, perf, r.variant);
     case 'adventure':
       return startAdventure(renderer, scene, camera, device, perf, r);
   }

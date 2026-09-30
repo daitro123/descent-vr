@@ -13,6 +13,8 @@ export type Route =
   | { kind: 'walk'; map: string }
   /** `?arena`: the wave game. `?duel`, `?wave=N` and `?showcase` alone open it too. */
   | { kind: 'arena'; firstWave: number; duel: boolean; showcase: boolean }
+  /** `?bag` or `?bag=a|b|c`: PROTOTYPE of the bag and the gear panel, starting on that way to move items. */
+  | { kind: 'bag'; variant: 'a' | 'b' | 'c' }
   /** Anything else: Oakvale, with the save. `?newgame` asks to start over. */
   | { kind: 'adventure'; newGame: boolean };
 
@@ -57,6 +59,10 @@ function chooseRoute(params: URLSearchParams): Route {
       duel: params.has('duel'),
       showcase: params.has('showcase'),
     };
+  }
+  if (params.has('bag')) {
+    const v = params.get('bag')?.toLowerCase();
+    return { kind: 'bag', variant: v === 'b' || v === 'c' ? v : 'a' };
   }
   return { kind: 'adventure', newGame: params.has('newgame') };
 }
