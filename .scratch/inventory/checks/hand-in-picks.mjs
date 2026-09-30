@@ -228,7 +228,7 @@ const seen = () =>
 await enter();
 
 // 1. Raiders in the Fields ready: the pick on Hale's board.
-await apply({ kind: 'accept' }, ...Array(3).fill({ kind: 'kill', camp: 'farm', level: 1, role: 'ordinary' }));
+await apply({ kind: 'accept' }, ...Array(3).fill({ kind: 'kill', camp: 'farm', level: 1, role: 'ordinary', family: 'bandit', seed: 1 }));
 await standBy(1.3);
 {
   const s = await seen();
@@ -281,7 +281,7 @@ await standBy(1.3);
   await apply({ kind: 'accept' });
   await page.evaluate(() => {
     const { adventure } = window.__descent;
-    for (let i = 0; i < 5; i++) adventure.apply({ kind: 'kill', camp: 'lumberCamp', level: 2, role: i === 4 ? 'leader' : 'ordinary' }, adventure.hale.position);
+    for (let i = 0; i < 5; i++) adventure.apply({ kind: 'kill', camp: 'lumberCamp', level: 2, role: i === 4 ? 'leader' : 'ordinary', family: 'bandit', seed: i }, adventure.hale.position);
   });
   let s = await seen();
   check(s.questPage.length === 0, `no orders on the quest page before they're touched`);
@@ -345,7 +345,7 @@ await standBy(1.3);
     const { adventure, state } = window.__descent;
     adventure.applyThings(state.inventory.move({ in: 'bag', slot: 6 }, { in: 'ground' }), adventure.player.rig.position);
   });
-  await apply({ kind: 'accept' }, { kind: 'kill', camp: null, level: 5, role: 'warden' });
+  await apply({ kind: 'accept' }, { kind: 'kill', camp: null, level: 5, role: 'warden', family: 'undead', seed: 1 });
   await walkOff();
   await standBy(1.3);
   let s = await seen();

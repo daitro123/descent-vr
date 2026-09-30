@@ -14,7 +14,7 @@ Read [the spec](../spec.md) and [Oakvale's items](07-oakvales-items.md).
 
 ## Answer
 
-Built on 2026-09-30 by Claude **on Tom's behalf** (he asked for the build tickets to run without his input, taking the recommended option at every fork). Quests from more than one giver (Professions ticket 12, PR #79) landed first, so this is built on its chains and `state.giver(...)`.
+Built on 2026-09-30 by Claude **on Tom's behalf** (he asked for the build tickets to run without his input, taking the recommended option at every fork). Quests from more than one giver (Professions ticket 12, PR #79), loot (PR #82) and classes (PR #81) landed first, so this is built on their chains, `state.giver(...)` and `state.class`.
 
 **What was built**
 
@@ -27,7 +27,7 @@ Built on 2026-09-30 by Claude **on Tom's behalf** (he asked for the build ticket
   - `pickRefusal(pick, to)` answers before the item is let go, so the slot can turn red or green.
   - The orders go on the quest page when touched, and `giveUp` removes them at the hand-in. A record saved with the orders taken but not on the page gains them on load.
   - `haleSwordAtHip` is true unless a quest was handed in with `hale-longsword` picked. `pickedAt(id)` reads what was picked.
-  - The constructor takes a class as its third argument (`new AdventureState(saved, chains, klass)`). Warrior is the default, and the Adventure still passes nothing.
+  - The picks follow `state.class`, the class PR #81 added (`new AdventureState(saved, chains, { class })`, a warrior by default).
 - **The save**: each handed-in quest keeps `picked`. It's an optional field, so the version stays 2 with no migration. A record whose What Lies Below was handed in without `picked` counts as having taken the longsword, since that's all the old hand-in paid.
 - **Hale's board** (`src/ui/talkBoard.ts`): at a hand-in, the buttons' row becomes the reward row. Each item stands in a frame of its rarity's colour, with its card underneath (the bag's card, comparing against what you wear). The board also says "Carry one into your bag." The card painter moved out of `BagPanel` as `paintItemCard`.
 - **Carrying a pick** (`src/ui/bag/bag.ts`): the bag takes an optional `Shelf`, meaning items offered beside it. A fist or the tip on a pick lights its frame, with the light buzz. The grip carries it, and if the bag is shut it swings round in front of you with the item already in hand. Let go over a bag slot to take it. Let go anywhere else and it goes back to the board. The Adventure's shelf is Hale's board, and taking a pick hands the quest in with the fanfare over Hale.
@@ -36,7 +36,7 @@ Built on 2026-09-30 by Claude **on Tom's behalf** (he asked for the build ticket
 
 - `npm run typecheck`, `npm test` and `npm run build` pass. The tests include 17 new ones in `tests/handInPicks.test.ts`: each hand-in's picks for each class, the class's main attribute on every armour pick, the orders on the page and gone at the hand-in, a full bag, a refused slot, and Hale's sword by class and by pick, with reloads and an old record. The quest chain, saving and givers tests were updated. The plain route still lands levels 2, 3, 4 and 5 where it did.
 - `checks/hand-in-picks.mjs`: all 31 passed. It hands in Raiders in the Fields by carrying the gloves off the board into bag slot 4, with the bag shut to start with. The Lumber Camp's pick is refused with a full bag (red slot, strong buzz) and taken once a slot is freed. What Lies Below's Warden's Mantle leaves Hale's sword at their hip. A reload keeps it all.
-- Updated for picks and passing: `oakvale-starting-zone/checks/hale.mjs` (the gloves carried on the sword's tip), `lumber-camp.mjs` and `warden.mjs`. `warden.mjs` also got a one-line fix for the tracker becoming a list in PR #79. `play-through.mjs` takes a pick at each hand-in.
+- Updated for picks and passing: `oakvale-starting-zone/checks/hale.mjs` (the gloves carried on the sword's tip), `lumber-camp.mjs` and `warden.mjs`. `warden.mjs` also got a one-line fix for the tracker becoming a list in PR #79. `play-through.mjs` takes a pick at each hand-in, and with main merged its whole Hale chain passes, from Raiders in the Fields to Hale's longsword in your hand at level 5.
 
 **Calls made on Tom's behalf**
 
@@ -50,7 +50,7 @@ Built on 2026-09-30 by Claude **on Tom's behalf** (he asked for the build ticket
 **For later tickets**
 
 - 14 and 15 (vendors and the stash): a wares board or the stash can be a `Shelf` for `Bag.update` (`itemAt`, `stackAt`, `check`, `take`, `show`). `paintItemCard` draws any card. `Inventory.receive(stack, to)` and `checkReceive` take something into a chosen bag slot. `purchase` now uses them.
-- The Abilities roster: pass the character's class as `AdventureState`'s third argument, and the board offers that class's picks.
+- The Abilities roster: pass the character's class in `AdventureState`'s options (`{ class }`), and the board offers that class's picks.
 - The trainers' quests (Professions 18): give a quest `picks` for a reward row, or none to keep the "Hand in" button.
 
 **On the headset** (plain URL, a new character):
