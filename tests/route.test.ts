@@ -21,6 +21,7 @@ describe('reading the page from its URL', () => {
   it('opens a professions prototype at ?proto=<name>', () => {
     expect(readPage('?proto=brew').route).toEqual({ kind: 'proto', name: 'brew' });
     expect(readPage('?proto=brew&emulate').route).toEqual({ kind: 'proto', name: 'brew' });
+    expect(readPage('?proto=anvil&v=B').route).toEqual({ kind: 'proto', name: 'anvil' });
   });
 
   it('opens the arena at ?arena, as the plain URL did before', () => {

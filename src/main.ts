@@ -282,6 +282,8 @@ async function startPrototype(renderer: WebGLRenderer, scene: Scene, camera: Per
   if (name === 'brew') return (await import('./professions/prototypes/brew')).startBrewPrototype(renderer, scene, camera, device);
   // ?proto=pick: PROTOTYPE of swinging the pick and cutting herbs (.scratch/professions/issues/05-…).
   if (name === 'pick') return (await import('./professions/prototypes/pick')).startPickPrototype(renderer, scene, camera, device);
+  // ?proto=anvil: PROTOTYPE of hammering at the anvil (.scratch/professions/issues/06-…).
+  if (name === 'anvil') return (await import('./professions/prototypes/anvil')).startAnvilPrototype(renderer, scene, camera, device);
   const intro = document.getElementById('intro');
   if (intro) intro.textContent = `No prototype called "${name}".`;
 }
