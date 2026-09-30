@@ -35,3 +35,5 @@ Settled on 2026-09-30 **by Claude on Tom's behalf**, taking the recommended opti
 - Five levels per zone: Oakvale set the pace at about a level per place, and five levels is roughly one zone's worth.
 - Abilities at 2, 3, 6, 8 and 10: Oakvale's unlocks stay put, and the gaps widen as talents take over the choices.
 - The cap waits for content: raising it with nothing to fight would only let XP pile up in Oakvale.
+
+**2026-09-30, building ticket 17:** the rule above makes 4,500 XP in all to level 10, not 5,500 (100 + 200 + … + 900); 19,000 to 20 is right. The game uses the rule.

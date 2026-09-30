@@ -391,7 +391,8 @@ const look = () =>
       marker: state.hale.marker,
       line: state.hale.line,
       board: adventure.board.isOpen,
-      tracker: state.tracker ? [state.tracker.title, ...state.tracker.lines] : null,
+      // The tracker lists every quest you're on; Hale's chain has one at a time, the last.
+      tracker: state.tracker.length ? [state.tracker.at(-1).title, ...state.tracker.at(-1).lines] : null,
       arrow: state.arrow?.target ?? null,
       beaten: state.wardenBeaten,
       atHip: adventure.hale.swordAtHip,
@@ -592,7 +593,7 @@ let s = await look();
   await page.evaluate(() => window.__descent.teleport(46, 30, -Math.PI / 2 - 0.3));
   await page.evaluate(() => window.__play.wait(0.5));
   await shot('02-the-farm');
-  const r = await fightUntil({ done: '() => window.__descent.state.tracker?.lines[0] === "Return to Marshal Hale"', pick: '(e) => true' });
+  const r = await fightUntil({ done: '() => window.__descent.state.tracker.at(-1)?.lines[0] === "Return to Marshal Hale"', pick: '(e) => true' });
   s = await look();
   const tally = await page.evaluate(() => ({ ...window.__play.tally }));
   check(r === 'done' && s.marker === 'ready' && s.arrow === 'hale', `the farm fought through the real combat: 3/3, "Return to Marshal Hale", a gold "?" (${r}; ${tally.landed} of ${tally.swings} swings landed; ${Math.round(s.hp)}/${s.maxHp} health)`);
@@ -628,7 +629,7 @@ let s = await look();
   await page.evaluate(() => window.__play.wait(0.3));
   await shot('03-the-lumber-camp');
   const toCamp = () => page.evaluate(() => window.__descent.teleport(-33, -44, Math.PI / 2));
-  let { r, deaths } = await battle({ done: '() => window.__descent.state.tracker?.lines[0].endsWith("2/5")' }, toCamp);
+  let { r, deaths } = await battle({ done: '() => window.__descent.state.tracker.at(-1)?.lines[0].endsWith("2/5")' }, toCamp);
   check(r === 'done', `two of the lumber camp down (${r}, ${deaths} deaths)`);
   // Walk off, let them go home, and keep what's done.
   await page.evaluate(() => window.__descent.teleport(-20, -10, 0));
@@ -644,7 +645,7 @@ let s = await look();
   check(s.hp === s.maxHp && s.rage === 0 && members.every((m) => m.alive && m.hp === m.maxHp), `at full health, no rage, and the camp full again (${members.filter((m) => m.alive).length}/5 up)`);
 
   await toCamp();
-  ({ r, deaths } = await battle({ done: '() => window.__descent.state.tracker?.lines[0].endsWith("5/5")' }, toCamp));
+  ({ r, deaths } = await battle({ done: '() => window.__descent.state.tracker.at(-1)?.lines[0].endsWith("5/5")' }, toCamp));
   s = await look();
   check(r === 'done' && s.tracker?.[1] === 'Bandits defeated at the lumber camp: 5/5', `the rest of the camp fought, the leader too: 5/5 (${r}, ${deaths} deaths, ${Math.round(s.hp)}/${s.maxHp} health)`);
   // Anyone still up (the patrol, come in to help) fought off too, then the orders from the tent.
