@@ -254,10 +254,15 @@ function install() {
    * while a blow comes (each block costs mana); the ranger's bow hand held
    * up, its grip squeezed while an arrow flies at you.
    */
+  let warded = false;
   const defend = () => {
     const threat = shieldUp();
-    if (klass === 'mage') squeeze('left', threat ? 1 : 0);
-    if (klass === 'ranger') squeeze('left', arrowComing() ? 1 : 0);
+    if (klass === 'warrior') return threat;
+    // The mage's ward against a blow, the ranger's against an arrow: the left grip squeezed.
+    const up = klass === 'mage' ? threat : arrowComing();
+    squeeze('left', up ? 1 : 0);
+    if (up && !warded) tally2.wardUps++;
+    warded = up;
     return threat;
   };
   /** Stand `seconds`, hands down (or the shield up), stopping if you fall. */
@@ -1667,7 +1672,8 @@ const junkValue = await page.evaluate(async () => {
     if (klass === 'ranger') {
       const { BOW_LOOKS } = await import('/src/player/bow.ts');
       const { bow } = adventure.combat.ranger;
-      return Object.entries(BOW_LOOKS).find(([, l]) => l === bow.look)?.[0] ?? null;
+      // By its colours, not identity: the page's import can be another copy of the module than the game's.
+      return Object.entries(BOW_LOOKS).find(([, l]) => l.scale === bow.look.scale && l.wood === bow.look.wood)?.[0] ?? null;
     }
     if (klass === 'mage') return adventure.mage.wandLook;
     return adventure.player.sword.sword;
