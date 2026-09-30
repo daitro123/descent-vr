@@ -873,15 +873,16 @@ export class Station {
       if (item?.kind !== 'flask' || !item.flask!.cork.visible) continue;
       const head = camera.getWorldPosition(_a);
       camera.getWorldDirection(_c);
-      const mouth = head.addScaledVector(_c, 0.06).setY(head.y - 0.09);
-      const near = item.obj.localToWorld(_b.copy(FLASK.mouth)).distanceTo(mouth) < 0.13;
+      // Inventory's mouth point (?belt): 13 cm below and 10 cm in front of the eyes.
+      const mouth = head.addScaledVector(_c.setY(0).normalize(), 0.1).setY(head.y - 0.13);
+      const near = item.obj.localToWorld(_b.copy(FLASK.mouth)).distanceTo(mouth) < 0.15;
       if (!near) {
         this.drinkT = 0;
         continue;
       }
       if (this.drinkT < 0) continue;
       this.drinkT += dt;
-      if (this.drinkT < 0.25) continue;
+      if (this.drinkT < 0.7) continue;
       this.drinkT = -1;
       if (this.cooldown > 0) {
         brewSfx.nope();
@@ -890,7 +891,7 @@ export class Station {
       }
       brewSfx.gulp();
       rig.input.pulse(side, 0.5, 300);
-      floats.banner(camera, '+35% health', '#6ef070', 0.12, -0.2, 2);
+      floats.banner(camera, 'Healed', '#6ef070', 0.12, -0.2, 2);
       this.cooldown = COOLDOWN;
       const wasTable = item.home.parent === this.root;
       this.held[side] = null;

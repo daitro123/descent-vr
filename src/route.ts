@@ -15,8 +15,14 @@ export type Route =
   | { kind: 'arena'; firstWave: number; duel: boolean; showcase: boolean }
   /** `?proto=<name>`: a throwaway professions prototype (src/professions/prototypes). */
   | { kind: 'proto'; name: string }
+  /** `?belt=a|b|c`: PROTOTYPE, inventory ticket 04's belt, fighting duelists (`&calm`: only a drain on health). */
+  | { kind: 'belt'; variant: BeltVariant; calm: boolean }
   /** Anything else: Oakvale, with the save. `?newgame` asks to start over. */
   | { kind: 'adventure'; newGame: boolean };
+
+/** PROTOTYPE: how the belt prototype takes a potion while both hands are full (see player/beltPrototype.ts). */
+export type BeltVariant = 'a' | 'b' | 'c';
+export const BELT_VARIANTS: readonly BeltVariant[] = ['a', 'b', 'c'];
 
 export interface Page {
   route: Route;
@@ -51,6 +57,10 @@ function chooseRoute(params: URLSearchParams): Route {
   if (params.has('fly')) return { kind: 'fly', map: params.get('fly') ?? '' };
   if (params.has('proto')) return { kind: 'proto', name: params.get('proto') ?? '' };
   if (params.has('map')) return { kind: 'walk', map: params.get('map') || 'forest' };
+  if (params.has('belt')) {
+    const v = params.get('belt') as BeltVariant;
+    return { kind: 'belt', variant: BELT_VARIANTS.includes(v) ? v : 'a', calm: params.has('calm') };
+  }
   if (ARENA_FLAGS.some((f) => params.has(f))) {
     const waves = CONFIG.waves.list.length;
     return {

@@ -1,6 +1,6 @@
 # Descent VR
 
-A single-player action RPG for VR that runs in the browser (Three.js + WebXR), growing into a WoW-style world of zones joined without loading screens. The plain URL is the **Adventure**: Oakvale, the starting zone, where Marshal Hale waits at the crossroads with a quest chain and you walk out with a sword and shield to take on the raiders camped at the farm (the lumber camp, the old mine and the rest are being built, see `.scratch/oakvale-starting-zone/`). The **arena** at `?arena` is the combat prototype that came first: one crypt hall, four enemy types including a boss, seven waves.
+A single-player action RPG for VR that runs in the browser (Three.js + WebXR), growing into a WoW-style world of zones joined without loading screens. The plain URL is the **Adventure**: Oakvale, the starting zone, where Marshal Hale waits at the crossroads with a chain of three quests that take a new character from level 1 to 5, and south over the pass lies Brackenmoor, a small second zone you walk into without a loading screen (see [Playing Oakvale](#playing-oakvale), and `.scratch/oakvale-starting-zone/` for the spec and its tickets). The **arena** at `?arena` is the combat prototype that came first: one crypt hall, four enemy types including a boss, seven waves.
 
 For why this stack, other options, and the pixel-art pipeline, see [docs/tech-research.md](docs/tech-research.md).
 
@@ -31,11 +31,12 @@ npm run dev          # http://localhost:5173
     - `?wave=N` starts the run at wave N (`?wave=7` goes straight to the boss).
     - `?duel` fights practice duelists one at a time: grunts that block about nine swings in ten. After each one falls, a banner shows how many of your hits it blocked.
     - `?showcase` pins the title-screen camera on the bestiary lineup, for reviewing models without a headset.
-  - `?perf` adds a readout of the frame rate, draw calls, triangles and shader programs, low on the left of your view, over Oakvale or the arena.
-  - `?emulate` forces the emulator even when a real headset is present. `?emulate&nodevui` runs it without the DevUI, so controller poses are driven only by code (for scripted tests). `window.__descent` is the debug handle; in Oakvale it has `camps`, `state` (your level and XP, and what Hale and the tracker show), `saved()` (resolves once no save write is in flight), `teleport(x, z, yaw)` and `step(seconds)`, which runs the game without waiting for frames.
-  - `?fly` opens the map viewer: fly freely through any map, with no enemies and no walls in the way. `?fly=crypt` opens one map. Walk mode drops you to eye height with the player's collision. R (desktop) or Y (headset) steps through the map's start, its landmarks and an overview from above. On the desktop, click to look around, WASD to move, Q/E for down and up, shift to go fast, M for the next map, G to walk, F for fog. In the headset, the left stick moves where you look, the right stick turns and rises, grip goes fast, A is the next map, B walks or flies, and X toggles fog. The readout floats over your left controller. On a phone or tablet, a stick (bottom left) moves, dragging anywhere else looks around, ▲ ▼ go up and down, and buttons under the readout switch map, walk, fog, fast and spot.
+  - `?perf` adds a readout of the frame rate, draw calls, triangles (both eyes), shader programs, the most bytes uploaded to the GPU in a frame and, in Oakvale, the chunks loaded at full detail and as far stand-ins, low on the left of your view, over Oakvale or the arena.
+  - `?emulate` forces the emulator even when a real headset is present, and `?noemulate` rules it out (the page's desktop camera, for screenshots). `?emulate&nodevui` runs it without the DevUI, so controller poses are driven only by code (for scripted tests). `window.__descent` is the debug handle; in Oakvale it has `adventure`, `world`, `player`, `camps`, `state` (your level and XP, and what Hale, the tracker and the quest arrow show), `device` (the emulator's), `saved()` (resolves once no save write is in flight), `paused` (stops VR frames stepping the game), `teleport(x, z, yaw)` and `step(seconds)`, which runs the game without waiting for frames. The scripted checks in `.scratch/oakvale-starting-zone/checks/` drive it, `play-through.mjs` from `?newgame` to Brackenmoor.
+  - `?fly` opens the map viewer: fly freely through any map (Oakvale, Brackenmoor and the crypt hall), with no enemies and no walls in the way. `?fly=crypt` opens one map (`?fly=forest` is Oakvale, `?fly=brackenmoor` the moor). Walk mode drops you to eye height with the player's collision. R (desktop) or Y (headset) steps through the map's start, its landmarks and an overview from above. On the desktop, click to look around, WASD to move, Q/E for down and up, shift to go fast, M for the next map, G to walk, F for fog. In the headset, the left stick moves where you look, the right stick turns and rises, grip goes fast, A is the next map, B walks or flies, and X toggles fog. The readout floats over your left controller. On a phone or tablet, a stick (bottom left) moves, dragging anywhere else looks around, ▲ ▼ go up and down, and buttons under the readout switch map, walk, fog, fast and spot.
+  - `?belt` is a PROTOTYPE of the belt (inventory ticket 04): two potion slots at your hips while practice duelists fight you and a light drain eats your health (`&calm` keeps only the drain). Squeeze the grip at a slot to take a flask and hold it at your mouth to drink. `?belt=a|b|c` picks how the weapon in that hand gets out of the way (a: it fades, b: it swings to the hip, c: it stays and you touch the slot then lift that hand to your mouth); a click of either stick cycles them in the headset.
   - `?proto=brew` is a throwaway prototype for the professions map's "Brewing at the alchemy table" ticket: three ways to brew a minor healing potion at a bench in the house by the well (`?proto=brew&variant=A`, `B` or `C` to start on one). In the headset, squeeze the grip to take things and click the left stick to switch; the page lists the desktop keys. It goes once a variant is rebuilt properly.
-  - `?map=forest` walks Oakvale from its start with no enemies (`?map=crypt` for the crypt hall). Headset: left stick moves, right stick turns. Desktop: WASD or the arrow keys walk (Shift to hurry), dragging looks around.
+  - `?map=forest` walks the world from Oakvale's start with no enemies and no save, over the pass into Brackenmoor too (`?map=brackenmoor` starts on the moor, `?map=crypt` walks the crypt hall). Headset: left stick moves, right stick turns. Desktop: WASD or the arrow keys walk (Shift to hurry), dragging looks around.
 
 Other commands: `npm test` runs the unit tests, `npm run typecheck`, `npm run build`.
 
@@ -55,13 +56,31 @@ Other commands: `npm test` runs the unit tests, `npm run typecheck`, `npm run bu
 
 The belt HUD (look down) shows health on the left orb and rage on the right orb, with pips for Earthshaker and War Cry beneath it. Between the orbs is the dash cooldown, and in the arena the wave and the enemies left. Rage builds from hits, blocks, parries and bashes.
 
-In Oakvale, you start facing Marshal Hale, with a gold "!" over their head. Walk up looking at them and a board unfolds beside them; press its buttons with either fist or your sword's tip. The quest you're on floats at the top left of your view with its counts, and a gold "?" over Hale says it's ready to hand in. Kills pay XP and hand-ins pay more, and each level adds health and damage (the War Cry comes at level 2, Earthshaker at 3).
+## Playing Oakvale
 
-Enemies wait in camps. Come within 8 m of one, or hurt it, and it fights, bringing whoever of its camp stands near it; lead it 30 m from where it waited and it walks home untouchable ("Evade") and heals. A cleared camp fills again three minutes later, once you're well away. Out of a fight for 5 s, your health comes back. If you die, the view fades to black and you wake in the village in front of the inn, with nothing lost.
+You start at the crossroads a few steps from **Marshal Hale**, the village's guard captain, facing them, with a gold "!" over their head and "Oakvale" floating up in front of you. Walk up looking at them and a parchment board unfolds on your right with what they say; press its buttons (**Accept**, **Not now**, **Hand in**, **Goodbye**) with either fist or your sword's tip, and that hand buzzes. Over Hale, a gold "!" means a quest to take, a grey "?" one under way and a gold "?" one ready to hand in. The quest you're on floats at the top left of your view with its counts, and a small gold arrow beside the line you're working on points the way (up is straight ahead). Signposts name the roads, and a painted map by the crossroads shows the whole zone.
+
+**The quest chain**, one quest at a time, each unlocked by handing in the one before:
+
+| Quest | What Hale asks | Pays |
+|---|---|---|
+| Raiders in the Fields | Defeat 3 of the red-masked bandits at the farm, east of the village | 80 XP (level 2) |
+| The Lumber Camp | Defeat the 5 bandits of the lumber camp across the bridge, their leader included, and take the leader's orders from the tent by touching them | 120 XP (level 3) |
+| What Lies Below | Go down the old mine at the end of the north road and defeat what woke the dead: the Bone Warden, who rises from its throne as you step into its hall | 300 XP and Hale's old longsword (level 5) |
+
+Only kills of the quest's own camp, made while it's active, count. Every kill pays 10 XP per enemy level (triple for the bandit leader, the mine's brutes and the Warden) and floats what it paid. Each level adds 20 health and 20% damage; the War Cry arrives at level 2 (with rage and its orb) and Earthshaker at 3, and level 5 is the cap. The longsword swaps into your hand at the last hand-in, a darker blade with a gilded guard that handles like yours and hits one level harder. Afterwards Hale points you south, to Brackenmoor.
+
+**Enemies** wait in camps at the farm, the lumber camp, on the lumber camp's road (a patrol) and at the watchtower, and the undead fill the mine. Come within 8 m of one, or hurt it, and it fights, bringing whoever of its camp stands near it; lead it 30 m from where it waited and it walks home untouchable ("Evade") and heals. A cleared camp fills again three minutes later, once you're well away. The village, the bridge, the pond, the standing stones and Brackenmoor are safe. Out of a fight for 5 s, your health comes back over about 10 s, and a click of the left stick runs while nothing fights you (the edges of your view darken a little).
+
+**Dying** costs only the walk back: the view fades to black and you wake by the inn's hearth, inside with the door shut, or on the rail bed outside the old mine if you fell inside it, at full health with nothing lost.
+
+**The village** is at work: the smith hammers at the anvil, the innkeeper polishes tankards behind the bar of the Golden Tankard and the farmer waits by the well, and each has a line for you as you pass that changes as the chain moves on. The inn and the house by the well open as you walk up to their doors, and you can walk in under the smithy's roof.
+
+**Brackenmoor**: the road climbs south out of Oakvale to the crest of a pass. Walk over it and the light, the haze and the wind blend into the moor's, "Brackenmoor" floats up and the game saves, all without a loading screen. Its road ends at a rockfall in the far hills, the way on to a later zone. Nothing lives there yet.
 
 ### Saving
 
-Oakvale saves itself in the browser's IndexedDB (one database, `descent-vr`, holding one record). It writes at once when you take a quest, a count goes up, a quest is ready or handed in, you level up or get a new sword (and, once Brackenmoor is joined on, when you cross into another zone). It also writes every 30 s of play, when the page is hidden, when VR ends and when the headset is put down. Loading puts you where you stood, facing the way you faced, with your level, XP, sword and quests, at full health, with no rage and every camp full. Health, rage, the camps and the talk board aren't saved.
+Oakvale saves itself in the browser's IndexedDB (one database, `descent-vr`, holding one record). It writes at once when you take a quest, a count goes up, a quest is ready or handed in, you level up or get a new sword, and when you cross into another zone. It also writes every 30 s of play, when the page is hidden, when VR ends and when the headset is put down. Loading puts you where you stood, facing the way you faced, with your level, XP, sword and quests, at full health, with no rage and every camp full. Health, rage, the camps and the talk board aren't saved.
 
 The record carries a version. A new build that changes its shape bumps the version and adds a migration (`src/save/record.ts`), so older saves upgrade and a deploy never wipes a character. A page from an older build (a stale cache) that finds a newer record leaves it alone and plays unsaved, and so does a page that can't make sense of the record; `?newgame` deletes it after asking. Where the browser won't store data (some private windows), the game plays anyway, keeping progress in memory, and the page says it won't be kept. `?newgame` starts over; the arena and `?map=` never read or write the save.
 
@@ -123,19 +142,22 @@ src/
     poses.ts         keyframe poses; the arc between wind-up and strike is the blow
     tokens.ts        attack tokens: who may swing, and spacing between swings
     camps.ts         Oakvale's camps: pulls, the leash, refilling, one token pool (unit tested)
-  people/hale.ts     Marshal Hale at the crossroads: turns to you, waves, the "!" or "?" over their head
-  world/             the World (one light rig, sky, fog and Ground for every zone), the arena's crypt hall
-                     (merged geometry, colliders), glow sprites, blob shadows, pixel textures, orbs
+    throne.ts        the Warden on its throne at the mine's foot: seated, fighting, resetting, beaten (unit tested)
+  people/            Marshal Hale (turns to you, waves, the "!" or "?"), the villagers at work and their barks
+  world/             the World: one light rig, sky and radial fog, the streamer and its chunk worker, Ground
+                     for every zone, the seam's crossing and blended air, interiors and the mine with their
+                     switch, the ambience's mix; also the arena's crypt hall, glows, blob shadows, orbs, smoke
   maps/
     types.ts         GameMap: what gameplay and the map viewer need from any map (scene, sky, ground height, collision)
     registry.ts      finds every map folder (src/maps/<id>/index.ts); add a map by adding a folder
     walk.ts          ?map=<id>: walk a map with the warrior's locomotion, no enemies
     crypt/           the crypt hall (world/arena.ts) as a map
-    forest/          Oakvale, the outdoor map: layout.ts is the plan (heights, roads, what stands where,
-                     colliders, unit tested); terrain, nature, buildings and sky turn it into chunked meshes
-  fx/                particles, sword trail, shockwaves, floating text, spatial synthesised SFX
-  ui/                belt HUD and vignette, enemy health bars, Hale's talk board, the quest tracker,
-                     debug text panel, ?perf readout, ?newgame's dialog
+    forest/          Oakvale, the starting zone: layout.ts is the plan (heights, roads, what stands where,
+                     camps, places, colliders, unit tested); chunks.ts builds a 40 m chunk of it (in a worker)
+    brackenmoor/     Brackenmoor, the moor over the southern pass: its plan and chunk builder
+  fx/                particles, sword trail, shockwaves, floating text, spatial synthesised SFX and ambience
+  ui/                belt HUD and vignettes, enemy health bars, Hale's talk board, the quest tracker and arrow,
+                     the zone's name, debug text panel, ?perf readout, ?newgame's dialog
 ```
 
 ## How the combat works
@@ -147,13 +169,15 @@ src/
 ## Status
 
 - **Not yet tested on a physical headset.** Everything below was verified in the IWER emulator and in unit tests.
-- A scripted emulator bot that reads telegraphs and blocks on the correct side cleared a full run twice in a row: all seven waves and the boss. A bot that doesn't block goes down within a couple of waves. Each ability was exercised in isolation: block, shield and sword parry, bash interrupt, dash, War Cry, Earthshaker, arrows stuck in the shield, and arrows reflected by the shield and by the sword.
-- Performance: 36 draw calls in the emulator's mono view with a full wave (five enemies, their health bars and the HUD), so about 72 per frame in stereo, well under the ~300 budget from the Quest 3 research. Characters are one draw call each, the room is four meshes, and all particles, arrows, glows and shadows are instanced.
-- Expect to tune after the first headset session: `CONFIG.sword.minHitSpeed`, both weapons' `pitchDeg`, the shield's size and offset, the parry speeds, and the enemy wind-up times.
+- **Oakvale, start to finish** (ticket 38): a scripted play-through in headless Chromium (`.scratch/oakvale-starting-zone/checks/play-through.mjs`) takes a new character from `?newgame` through all three quests, fought through the real combat with a sword and shield, to level 5 and Hale's longsword, then over the pass to Brackenmoor's rockfall. On the way it reloads mid-chain, dies outside the mine (waking by the inn's hearth) and inside it (waking outside its mouth), and reloads with the Warden beaten to find its throne empty. Every user story in the spec is mapped to what showed it, or to what waits on the headset, in `.scratch/oakvale-starting-zone/stories-seen.md`.
+- Oakvale's performance in the emulator, both eyes at 96° each, the worst heading: the village 122 draw calls and 255k triangles, the crest looking north 136 calls and 318k, inside the inn 22 calls and 11k, the Warden's hall 20 calls and 17k, never more than 4 point lights. Draw calls are well under the ~300 budget; the triangles in the open woods are still a little over the 250k to 300k rule of thumb after the spec's three cuts, and wait on the headset's frame time (ticket 39).
+- The arena (`?arena`): a scripted emulator bot that reads telegraphs and blocks on the correct side cleared a full run twice in a row: all seven waves and the boss. A bot that doesn't block goes down within a couple of waves. Each ability was exercised in isolation: block, shield and sword parry, bash interrupt, dash, War Cry, Earthshaker, arrows stuck in the shield, and arrows reflected by the shield and by the sword. 36 draw calls in the emulator's mono view with a full wave.
+- Expect to tune after the first headset session: `CONFIG.sword.minHitSpeed`, both weapons' `pitchDeg`, the shield's size and offset, the parry speeds, the enemy wind-up times, the run's vignette and the camps' levels.
 - Art is procedural: low-poly models built in code with pixel-grain textures. There are no imported assets.
 
 ## Next steps (suggested)
 
-1. Loot drops with rolled stats: the core Diablo loop.
-2. Hand-built floors, and a descent between them.
-3. Real models from Blockbench (glTF) once the look is settled. The rig and pose system can drive them.
+1. Play Oakvale on the Quest: the "For Tom, on the headset" list on ticket 38 says what to check.
+2. More of Brackenmoor past the rockfall, and the next zone after it.
+3. Loot drops with rolled stats.
+4. Real models (Blender or Blockbench, glTF) once the look is settled. The rig and pose system can drive them.
