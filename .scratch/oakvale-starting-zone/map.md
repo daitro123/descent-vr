@@ -73,6 +73,7 @@ Written on 2026-09-28 from [spec.md](spec.md) with `/to-tickets`, **by Claude on
 23. [36: The pass and Brackenmoor's land](issues/36-the-pass-and-brackenmoors-land.md)
 24. [37: Crossing the seam](issues/37-crossing-the-seam.md)
 25. [38: The whole zone in one sitting](issues/38-the-whole-zone-in-one-sitting.md)
+26. [39: The triangle budget in the woods](issues/39-the-triangle-budget-in-the-woods.md) (found by 38; waits on the headset)
 
 `/to-tickets` would have asked Tom whether the granularity, the blocking edges and the splits were right. These were answered **on Tom's behalf**, for him to revisit:
 
