@@ -868,6 +868,30 @@ export const CONFIG = {
       body: 0.85,
       flight: 0.35,
     },
+    // The herb knife (professions/gathering/knife.ts), promoted from ?proto=pick variant C: a blade
+    // from `bladeStart` to `bladeEnd` m out of the fist. A cut counts on a lighter gate than the pick's:
+    // `travel` m of hand travel one way at `handSpeed` m/s, with the tip over `minSpeed` m/s. Slower
+    // only brushes the leaves.
+    knife: { bladeStart: 0.1, bladeEnd: 0.3, travel: 0.1, handSpeed: 0.6, minSpeed: 1.4 },
+    // A clump of Hearthleaf or Duskcap (professions/gathering/clumps.ts) on its bank or stump `rise` m
+    // high, so nobody kneels. A cut through its stems, within `stemRadius` m of its middle and under
+    // `stemTop` m over its foot, takes it; one through its leaves (or caps), within `leafRadius` and up to
+    // `leafTop`, trims one and says "cut lower", down to `leavesLeft`. You bump into its rise as a circle
+    // of `body`. What it gives comes loose for `flight` s, then flies to the bag. Taken, its stems stand
+    // `stub` m high until it refills, growing back over `grow` s.
+    clump: {
+      rise: 0.45,
+      stemTop: 0.1,
+      stemRadius: 0.1,
+      leafTop: 0.34,
+      leafRadius: 0.17,
+      leavesLeft: 3,
+      body: 0.42,
+      flight: 0.25,
+      stub: 0.025,
+      grow: 0.6,
+      clear: { plant: 1.2, tree: 2.2 }, // nothing grows this near one (a tree this near)
+    },
     // One rule for hands at a station: step within `near` m of it, looking within `facing` rad of
     // it and out of a fight, and both hands become the station's; past `far` m they're yours again.
     station: { near: 1.3, far: 2, facing: Math.PI / 3 },

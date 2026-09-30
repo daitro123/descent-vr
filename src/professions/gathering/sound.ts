@@ -2,9 +2,10 @@ import type { Vector3 } from 'three';
 import { audio } from '../../fx/sfx';
 
 // Gathering's sounds, synthesised like fx/sfx.ts's, promoted from ?proto=pick
-// (prototypes/pick/sound.ts keeps its own copy): the pick's strikes, the vein
-// giving, the tool drawn from and hung on the loop. Placed ones sound where
-// they happen.
+// (prototypes/pick/sound.ts keeps its own copy of the pick's, and plays the
+// knife's from here): the pick's strikes, the vein giving, the knife through
+// leaves and stems, the tool drawn from and hung on the loop. Placed ones
+// sound where they happen.
 
 function out(at?: Vector3): AudioNode | null {
   const kit = audio();
@@ -93,6 +94,15 @@ export const gatherSfx = {
     noise(0.35, 0.7, 700, at);
     tone(90, 40, 0.4, 'sine', 0.4, at);
     for (let i = 0; i < 7; i++) noise(0.05, 0.3, 1200 + Math.random() * 1500, at, 'bandpass', 0.08 + Math.random() * 0.45, 4);
+  },
+  /** Leaves brushed by a slow knife or hand. */
+  rustle(at: Vector3) {
+    noise(0.18, 0.12, 3800, at, 'bandpass', 0, 0.8);
+  },
+  /** A knife through leaves or stems: a quick, bright snick, with a snap through the stems. */
+  slice(at: Vector3, stems: boolean) {
+    noise(0.07, 0.35, stems ? 4200 : 5600, at, 'highpass');
+    if (stems) tone(700, 300, 0.06, 'triangle', 0.08, at);
   },
   /** Into the bag. */
   bag() {
