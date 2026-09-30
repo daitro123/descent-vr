@@ -1,9 +1,10 @@
 // Every tunable in one place. White-boxing is mostly turning these knobs,
 // so keep gameplay numbers here rather than scattered through systems.
 
-import type { Ability, Role } from './adventureState';
+import type { Role } from './adventureState';
 import type { EnemyKind } from './models/characters';
 import type { GearSlot, Rarity } from './items';
+import type { Grade, RecipeRow, SpotKindRow } from './professions/professions';
 
 /** Which keyframe pair (enemies/poses.ts) an attack animates between. */
 export type AttackPoseName = 'chop' | 'slashR' | 'slashL' | 'slam' | 'draw' | 'summon';
@@ -72,6 +73,8 @@ export interface EnemyConfig {
   attacks: readonly AttackConfig[];
   /** Kinds without one never block. */
   guard?: GuardConfig;
+  /** How much of a root's or freeze's length (`hold`, 0: immune) and of a slow's strength (`slow`) it takes. All of both without one. */
+  takes?: { hold: number; slow: number };
 }
 
 export const CONFIG = {
@@ -162,7 +165,6 @@ export const CONFIG = {
   },
 
   player: {
-    maxHp: 100,
     bodyRadius: 0.3, // for wall/pillar push-out around the head's floor projection
     moveSpeed: 2.2, // m/s, left stick
     snapTurnDeg: 45,
@@ -314,18 +316,82 @@ export const CONFIG = {
   },
 
   // Levels (adventureState.ts): the Adventure's character climbs from 1 to the
-  // cap, and every level adds the same step to it and to an enemy of that
-  // level, so a fight against your own level plays like the arena at any level.
-  // The arena is level 1 with every ability.
+  // cap. Your health and damage come from your attributes (items.attribute),
+  // which rise the same at every level, and an enemy of each level takes the
+  // same step, so a fight against your own level plays like the arena at any
+  // level. The arena is level 1 with every base ability of its class.
   levels: {
-    xp: [100, 300, 600, 1000], // XP in all to reach levels 2, 3, 4 and 5, the cap; XP past it is dropped
-    health: 20, // your maximum health (player.maxHp at level 1) grows this much per level above 1
-    step: 0.2, // your damage, and an enemy's health and damage, times 1 + this per level above 1
+    xp: 100, // level L needs this × (L − 1) more XP than level L − 1: 100, 300, 600 and 1,000 in all to 2, 3, 4 and 5; 19,000 to 20
+    cap: 5, // the top level the content has quests and camps for; XP past it is dropped
+    grey: 5, // an enemy this many levels or more below you pays no XP
+    step: 0.2, // an enemy's health and damage, times 1 + this per level above 1 (your attributes make the same step)
     killXp: 10, // a kill pays this per enemy level…
     roles: { ordinary: 1, leader: 3, deepBrute: 3, warden: 3, raised: 0 } satisfies Record<Role, number>, // …times this, by what it was
-    unlocks: { warCry: 2, earthshaker: 3 } satisfies Record<Ability, number>, // the level each ability arrives at; rage comes with the War Cry
     xpFloat: { height: 1.9, time: 1.6 }, // "+N XP" floats this high over where an enemy fell, for this long (s)
     levelUp: { banner: 3.5, lines: 5 }, // s that "LEVEL N", and the lines on what it brought, stay in view
+  },
+
+  // Each class's resource and base abilities (classes.ts; .scratch/abilities/spec.md,
+  // "The adventure state learns classes", and the class tickets 11 to 13). An
+  // ability's `use` is how it's used: A / X, A / X while drawing, the
+  // Earthshaker rule, or the gesture shape it starts in. Costs never grow with
+  // level; damage is in level-1 terms and multiplies by your damage like every blow.
+  classes: {
+    warrior: {
+      resource: 'rage',
+      abilities: {
+        warCry: { level: 2, use: 'button' }, // its cost and numbers are warCry's, below
+        earthshaker: { level: 3, use: 'earthshaker' }, // its cost, cooldown and numbers are groundSlam's, below
+        // A spectral axe flies up to `range` m to the enemy you face.
+        heroicThrow: { level: 6, use: 'ring', cost: 15, cooldown: 6, damage: 20, range: 20, stagger: 1 },
+        // For `time` s a block takes no damage from any blow (the slam still can't be blocked) and doesn't numb the arm.
+        shieldWall: { level: 8, use: 'z', cost: 25, cooldown: 30, time: 6 },
+        // For `time` s every sword hit also strikes the nearest other enemy within `reach` m, for `share` of it.
+        sweepingStrikes: { level: 10, use: 'v', cost: 30, cooldown: 20, time: 8, reach: 1.5, share: 0.6 },
+      },
+    },
+    ranger: {
+      resource: 'focus',
+      abilities: {
+        // The nocked arrow deals `multiplier` times and passes through the first enemy to hit one behind.
+        powerShot: { level: 2, use: 'drawing', cost: 20, cooldown: 4, multiplier: 2, pierce: 1 },
+        // A trap at your feet roots the first enemy to step on it within `lasts` s, for `root` s.
+        snareTrap: { level: 3, use: 'ring', cost: 20, cooldown: 10, lasts: 30, root: 4 },
+        // The next arrow splits into `arrows` in a `fanDeg`° fan, each at `share`.
+        volley: { level: 6, use: 'z', cost: 35, cooldown: 12, arrows: 5, fanDeg: 20, share: 0.6 },
+        // A gust knocks back and staggers every enemy within `radius` m in the `arcDeg`° in front of you.
+        scatter: { level: 8, use: 'v', cost: 25, cooldown: 15, radius: 3, arcDeg: 90, knockback: 6, stagger: 1.2 },
+        // The enemy you face (within `aimDeg`°) is marked for `time` s: it takes `bonus` more from you and shows through walls.
+        huntersMark: { level: 10, use: 's', cost: 20, cooldown: 1, time: 20, bonus: 0.15, aimDeg: 15 },
+      },
+    },
+    mage: {
+      resource: 'mana',
+      abilities: {
+        // Every enemy within `radius` m is frozen for `freeze` s, or until a hit breaks it.
+        frostNova: { level: 2, use: 'button', cost: 30, cooldown: 20, radius: 3, freeze: 4 },
+        // The next bolt deals `multiplier` times and bursts for `burst` within `radius` m.
+        fireball: { level: 3, use: 'ring', cost: 15, cooldown: 0, multiplier: 1.5, burst: 10, radius: 2 },
+        // The next bolt slows the enemy it hits by `slow` for `time` s.
+        frostbolt: { level: 6, use: 'z', cost: 15, cooldown: 0, slow: 0.4, time: 5 },
+        // The next bolt arcs on to `jumps` more enemies within `reach` m, at `share` each.
+        chainLightning: { level: 8, use: 'v', cost: 30, cooldown: 8, jumps: 2, reach: 4, share: 0.7 },
+        // Ice falls for `time` s over a `radius` m circle where you point: `damage` every `every` s and a `slow` slow.
+        blizzard: { level: 10, use: 's', cost: 40, cooldown: 30, time: 5, radius: 4, damage: 6, every: 0.5, slow: 0.5, aimDeg: 15 },
+      },
+    },
+  },
+
+  // Each class's resource: a bar plain attacks never spend (classes.ts). None of it is saved:
+  // after death or loading you have no rage and full focus and mana.
+  resources: {
+    // Rage starts empty; its size and drain are player.maxRage and player.rageDecayPerSec, and what builds it is `rage`, below.
+    rage: { start: 0 },
+    // Focus starts full and refills this much a second, in a fight or out.
+    focus: { size: 100, start: 1, refill: 10 },
+    // Mana starts full; the pool is `size` plus `perIntellect` for every point of Intellect over `from`, and
+    // refills `fighting` a second while anything fights you and `calm` once nothing does.
+    mana: { size: 100, perIntellect: 2, from: 10, start: 1, refill: { fighting: 2, calm: 30 } },
   },
 
   // Marshal Hale's quest chain (quests.ts): what each quest asks and pays.
@@ -358,8 +424,9 @@ export const CONFIG = {
     attributes: 1 / 3,
     // Each armour slot's share of a set's armour and attributes. A weapon carries only its damage rating.
     share: { offHand: 0.15, head: 0.15, chest: 0.25, hands: 0.125, legs: 0.2, feet: 0.125 } satisfies Record<Exclude<GearSlot, 'mainHand'>, number>,
-    // The attributes the Abilities map sets: a level-1 character's own, what each level adds, and
-    // what a point is worth (these match levels.health and levels.step).
+    // The attributes the Abilities map sets: a level-1 character's own Stamina and main attribute, what
+    // each level adds to both, and what a point is worth: Stamina in health, the main attribute in damage
+    // (a share of level 1's). Levels and gear add up through this one rule.
     attribute: { atLevel1: 10, perLevel: 2, health: 10, damage: 0.1 },
     // Coins a vendor pays per item level, by rarity; consumables and materials have their own price.
     sell: { grey: 2, white: 3, green: 8, blue: 20 } satisfies Record<Rarity, number>,
@@ -443,6 +510,78 @@ export const CONFIG = {
     },
   },
 
+  // What a kill drops (loot.ts) and how it lies on the ground (world/drops.ts)
+  // (.scratch/inventory/issues/05-loot.md). Loot's item level is the enemy's.
+  loot: {
+    // By what the enemy was: coins are `coins` × level × the role's `coins` (a whole number, evenly),
+    // junk drops at `junk`, and one piece of gear at most, of a rarity by `gear`'s chances; a boss
+    // drops every rarity in `every` instead. What the Warden raises drops nothing.
+    coins: [1, 3],
+    roles: {
+      ordinary: { coins: 1, junk: 0.4, gear: { white: 0.08, green: 0.03 }, every: [] },
+      leader: { coins: 3, junk: 0.6, gear: { green: 0.75, blue: 0.25 }, every: [] },
+      deepBrute: { coins: 3, junk: 0.6, gear: { green: 0.75, blue: 0.25 }, every: [] },
+      warden: { coins: 10, junk: 0, gear: {}, every: ['blue', 'green'] },
+      raised: { coins: 0, junk: 0, gear: {}, every: [] },
+    } satisfies Record<Role, { coins: number; junk: number; gear: Partial<Record<Rarity, number>>; every: Rarity[] }>,
+    levels: 5, // loot's items come at item levels 1 to this; an enemy above it drops this level's
+    lifetime: 300, // s a drop lies, through your death too
+    most: 12, // drops lying at once: past this the oldest goes
+    ring: 0.4, // m from the pouch its items lie, round it
+    hover: 0.3, // m over the ground each item turns, slowly
+    spin: 0.8, // rad/s
+    size: 0.3, // m: an item's model, about this big
+    rim: 0.9, // how brightly a rarity's colour glows round each model's edge
+    beam: { height: 2, radius: 0.025, opacity: 0.55 }, // green and blue items' unlit, additive beams
+    full: { flash: 1.6, rate: 6, float: 1.2 }, // s a full bag flashes an item red, flashes per s, s "Bag full" floats
+    buzz: { take: { intensity: 0.8, ms: 70 }, full: { intensity: 1, ms: 160 } }, // in the hand that touched it
+  },
+
+  // Professions (professions/professions.ts; .scratch/professions/spec.md): the
+  // grades, the kinds of gathering spot, the Apprentice recipes and the numbers
+  // of what they make. Proficiency climbs by `gain` for each spot emptied and
+  // each thing made, up to its grade's cap. A later zone adds rows.
+  professions: {
+    // Each grade's proficiency cap, in order. Oakvale's trainers teach only Apprentice.
+    grades: { apprentice: 25, journeyman: 50, expert: 75, artisan: 100 } satisfies Record<Grade, number>,
+    // What emptying one spot of each kind puts in the bag. It refills `refill.after` s
+    // after it's taken, once you're `refill.away` m from it.
+    spots: {
+      copperVein: { profession: 'mining', grade: 'apprentice', needs: 0, gives: { 'copper-ore': 3, 'rough-stone': 1 }, gain: 1, refill: { after: 180, away: 30 } },
+      hearthleaf: { profession: 'herbalism', grade: 'apprentice', needs: 0, gives: { hearthleaf: 2 }, gain: 1, refill: { after: 180, away: 30 } },
+      duskcap: { profession: 'herbalism', grade: 'apprentice', needs: 0, gives: { duskcap: 2 }, gain: 1, refill: { after: 180, away: 30 } },
+    } satisfies Record<string, SpotKindRow>,
+    // What each recipe takes and makes, the proficiency it needs and pays, and the
+    // trainer's price in coins (null: taught with the profession). Recipes sharing a
+    // `lesson` are bought together, once: one price teaches every version of the gauntlets.
+    recipes: {
+      'copper-bar': { profession: 'smithing', station: 'anvil', grade: 'apprentice', takes: { 'copper-ore': 2 }, makes: 'copper-bar', needs: 0, gain: 1, price: null },
+      whetstone: { profession: 'smithing', station: 'anvil', grade: 'apprentice', takes: { 'rough-stone': 1 }, makes: 'whetstone', needs: 0, gain: 1, price: null },
+      'copper-gauntlets-of-strength': { profession: 'smithing', station: 'anvil', grade: 'apprentice', takes: { 'copper-bar': 4 }, makes: 'copper-gauntlets-of-strength', needs: 15, gain: 3, price: 25, lesson: 'copper-gauntlets' },
+      'copper-gauntlets-of-agility': { profession: 'smithing', station: 'anvil', grade: 'apprentice', takes: { 'copper-bar': 4 }, makes: 'copper-gauntlets-of-agility', needs: 15, gain: 3, price: 25, lesson: 'copper-gauntlets' },
+      'copper-gauntlets-of-intellect': { profession: 'smithing', station: 'anvil', grade: 'apprentice', takes: { 'copper-bar': 4 }, makes: 'copper-gauntlets-of-intellect', needs: 15, gain: 3, price: 25, lesson: 'copper-gauntlets' },
+      'minor-healing-potion': { profession: 'alchemy', station: 'bench', grade: 'apprentice', takes: { hearthleaf: 2 }, makes: 'minor-healing-potion', needs: 0, gain: 1, price: null },
+      'rage-draught': { profession: 'alchemy', station: 'bench', grade: 'apprentice', takes: { duskcap: 2 }, makes: 'rage-draught', needs: 5, gain: 1, price: 10 },
+      'minor-mana-potion': { profession: 'alchemy', station: 'bench', grade: 'apprentice', takes: { hearthleaf: 1, duskcap: 1 }, makes: 'minor-mana-potion', needs: 5, gain: 1, price: 10 },
+      'elixir-of-the-keen-eye': { profession: 'alchemy', station: 'bench', grade: 'apprentice', takes: { hearthleaf: 2, duskcap: 1 }, makes: 'elixir-of-the-keen-eye', needs: 10, gain: 1, price: 10 },
+    } satisfies Record<string, RecipeRow>,
+    // Oakvale's materials and what the recipes make (items.ts). Materials and
+    // consumables sell for a fixed price in coins; the gauntlets by the gear rule.
+    items: {
+      copperOre: { price: 1 },
+      roughStone: { price: 1 },
+      copperBar: { price: 3 },
+      hearthleaf: { price: 1 },
+      duskcap: { price: 1 },
+      rageDraught: { price: 3, rage: 30 }, // a potion, on the belt's shared cooldown
+      minorManaPotion: { price: 3, mana: 0.4 }, // the share of your maximum mana; does nothing until the mage has mana
+      // Buffs: not potions, so off the cooldown; one of each kind on you at a time, a new one replacing the old.
+      elixirOfTheKeenEye: { price: 4, damage: 0.1, seconds: 5 * 60 }, // added to your damage multiplier
+      whetstone: { price: 2, damage: 0.05, seconds: 10 * 60 }, // rubbed along a blade or arrowheads; never on the belt
+      copperGauntlets: { level: 5, rarity: 'green' }, // as good as a green drop at level 5, each version with Stamina
+    },
+  },
+
   // Marshal Hale at the crossroads (people/hale.ts).
   hale: {
     radius: 0.3, // m round them: they're solid, so you can't walk through them
@@ -507,7 +646,7 @@ export const CONFIG = {
     // The quest arrow at the left of the objective you're working on, pointing its way as the crow flies.
     arrow: {
       size: 0.022, // m across, on the tracker
-      nearHale: 10, // m: it hides this close to Hale, when it points at them (their gold "?" shows the way)
+      nearGiver: 10, // m: it hides this close to Hale (or any quest giver), when it points at them (their gold "?" shows the way)
     },
   },
 
@@ -671,6 +810,7 @@ export const CONFIG = {
       critMultiplier: 1.6,
       orbChance: 1,
       death: 'topple',
+      takes: { hold: 0.5, slow: 0.5 }, // shrugs off half
       attacks: [
         { pose: 'slashR', kind: 'melee', windup: 1.05, active: 0.3, recover: 0.9, damage: 22, blockable: true, guardBreak: true, aim: true, weight: 2 },
         { pose: 'slam', kind: 'slam', windup: 1.25, active: 0.25, recover: 1.6, damage: 30, blockable: false, radius: 1.5, exposeOnRecover: true, weight: 1 },
@@ -692,6 +832,7 @@ export const CONFIG = {
       critMultiplier: 2,
       orbChance: 0,
       death: 'shatter',
+      takes: { hold: 0, slow: 0.5 }, // no root or freeze holds it: it stays a boss fight
       attacks: [
         { pose: 'slashR', kind: 'melee', windup: 0.85, active: 0.28, recover: 0.3, damage: 18, blockable: true, aim: true, weight: 2, next: 1 },
         { pose: 'slashL', kind: 'melee', windup: 0.5, active: 0.28, recover: 0.3, damage: 18, blockable: true, aim: true, weight: 0, next: 2 },

@@ -1,5 +1,6 @@
 import { Group, type PerspectiveCamera, Vector3, type WebGLRenderer } from 'three';
-import { ABILITIES, type Ability, type Stats, statsAt } from '../adventureState';
+import { type Ability, type Stats, statsAt } from '../adventureState';
+import { abilitiesOf } from '../classes';
 import { CONFIG } from '../config';
 import { sfx } from '../fx/sfx';
 import type { Ground } from '../world/ground';
@@ -14,8 +15,8 @@ const _fwd = new Vector3();
 const _right = new Vector3();
 const _resolved = new Vector3();
 
-/** The arena's numbers: level 1, with every ability. */
-const ARENA: Stats = { ...statsAt(1), abilities: ABILITIES };
+/** The arena's numbers: a level-1 warrior, with every base ability of the class. */
+const ARENA: Stats = { ...statsAt(1), abilities: abilitiesOf('warrior') };
 
 /**
  * The warrior: XR rig (camera + controllers), locomotion, collision and the

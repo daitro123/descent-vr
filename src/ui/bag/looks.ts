@@ -57,6 +57,17 @@ const MODELS: Readonly<Record<string, ItemLook>> = {
   cloth: { look: 'cloth', tint: 0x8a6a5a },
   charm: { look: 'charm', tint: PAL.bone },
   dust: { look: 'dust', tint: 0x9a9488 },
+  // Professions' materials and what they make (the pouch stands in for ore, stone, bars and herbs).
+  'ore-copper': { look: 'pouch', tint: 0xb8733a },
+  'stone-rough': { look: 'pouch', tint: 0x8a8680 },
+  'bar-copper': { look: 'pouch', tint: 0xd08a4a },
+  'herb-hearthleaf': { look: 'pouch', tint: 0x7aa83a },
+  'herb-duskcap': { look: 'pouch', tint: 0x5a3a7a },
+  'flask-orange': { look: 'flask', tint: 0xd0701a },
+  'flask-blue': { look: 'flask', tint: 0x2a5ad0 },
+  'flask-green': { look: 'flask', tint: 0x3aa04a },
+  whetstone: { look: 'charm', tint: 0x7a7a80 },
+  'copper-gauntlets': { look: 'gloves', tint: 0xb8733a },
 };
 
 /** What each gear slot is drawn as, when its model isn't in the table: the main and off hand by class. */

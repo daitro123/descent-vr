@@ -1,5 +1,6 @@
 import { Euler, type Object3D, type PerspectiveCamera, Quaternion, type Scene, Vector3, type WebGLRenderer } from 'three';
 import { type Ability, type AdventureEvent, AdventureState, type Effect } from './adventureState';
+import { unlockLine } from './classes';
 import { Combat } from './combat/combat';
 import { CONFIG } from './config';
 import { type Camp, type CampHooks, Camps, type Member, type You } from './enemies/camps';
@@ -11,7 +12,9 @@ import { Particles } from './fx/particles';
 import { sfx, updateListener } from './fx/sfx';
 import { Shockwaves } from './fx/shockwave';
 import { SwordTrail } from './fx/trail';
+import { Vines } from './fx/vines';
 import { itemOf } from './items';
+import { lootSeed } from './loot';
 import { findMap } from './maps/registry';
 import type { Respawn, StartingZone, Zone } from './maps/types';
 import { Hale } from './people/hale';
@@ -31,6 +34,7 @@ import { RunVignette } from './ui/runVignette';
 import { Bag, type BagHand } from './ui/bag/bag';
 import { IconAtlas, lookOf } from './ui/bag/looks';
 import { type Probe, TalkBoard } from './ui/talkBoard';
+import { Drops, type Touch } from './world/drops';
 import { Orbs } from './world/orbs';
 import { Pickups } from './world/pickups';
 import { BlobShadows } from './world/shadows';
@@ -51,17 +55,15 @@ type FloatStyle = Parameters<FloatingText['spawn']>[2];
 const KILL_XP_FLOAT: FloatStyle = { color: '#ffd23a', scale: 0.24, life: CONFIG.levels.xpFloat.time, rise: 0.5 };
 /** A hand-in's reward over Hale. */
 const HAND_IN_FLOAT: FloatStyle = { scale: 0.2, life: CONFIG.handIn.time, rise: 0.3 };
+/** The coins a pouch held, over it as it's taken. */
+const COINS_FLOAT: FloatStyle = { color: '#ffd23a', scale: 0.1, life: 1, rise: 0.3 };
+/** "Bag full" over an item a full bag leaves on the ground. */
+const FULL_FLOAT: FloatStyle = { color: '#ff4a3a', scale: 0.12, life: CONFIG.loot.full.float, rise: 0.25 };
 
 /** Each body under `root` drawn only in a part of the mine that's drawn. */
 function showInMine(mine: Mine, root: Object3D): void {
   for (const body of root.children) body.visible = mine.drawn[mine.partAt(body.position.x, body.position.z)];
 }
-
-/** What a level-up says about each ability it brings. */
-const UNLOCKED: Record<Ability, string> = {
-  warCry: 'War Cry: press A or X',
-  earthshaker: "Earthshaker: drive your sword's tip into the ground",
-};
 
 /**
  * The game at the plain URL: Oakvale, loaded into the World, with the
@@ -77,7 +79,9 @@ const UNLOCKED: Record<Ability, string> = {
  * muffled behind a shut door, giving way to the mine's own air past its bend
  * and dipping while anything fights you. Kills and
  * the board's buttons go into the adventure state, whose levels set your
- * health, damage and abilities. What a quest has you find (the leader's
+ * health, damage and abilities. Each kill drops its loot where it fell (a
+ * pouch of coins and each item beside it), taken into your things with a
+ * touch, as an orb is. What a quest has you find (the leader's
  * orders) lies where it's found while the state says so, taken with a touch.
  * At the old mine's foot the Warden waits on its throne while you're on What
  * Lies Below, and Hale's old longsword comes into your hand when you hand it in.
@@ -134,7 +138,12 @@ export class Adventure {
   private readonly particles: Particles;
   private readonly shockwaves: Shockwaves;
   private readonly shadows = new BlobShadows();
+  private readonly vines = new Vines();
   private readonly orbs = new Orbs();
+  /** What kills drop, lying where they fell until touched. */
+  readonly drops = new Drops();
+  /** Seconds played since loading, for loot's seeds. */
+  private clock = 0;
   private readonly fade: Fade;
   /** The edges of your view darkening while you run. */
   private readonly runVignette: RunVignette;
@@ -182,7 +191,8 @@ export class Adventure {
     this.respawn = zone.respawns.village;
     this.player = new Player(camera, renderer, this.world);
     this.player.run = new Run();
-    scene.add(this.player.rig, this.orbs.root, this.shadows.mesh);
+    scene.add(this.player.rig, this.orbs.root, this.drops.root, this.shadows.mesh, this.vines.mesh);
+    this.drops.warm(renderer, camera, scene);
     this.trail = new SwordTrail(scene);
     this.text = new FloatingText(scene);
     this.particles = new Particles(scene);
@@ -255,7 +265,8 @@ export class Adventure {
         ? new Throne(zone.mine.throne, below, hooks, { melee: this.camps.meleeTokens, ranged: this.camps.rangedTokens }, {
             onRise: (w) => this.wardenRises(w),
             onSummon: (w, at) => this.wardenSummons(w, at),
-            onKill: (e, role) => this.apply({ kind: 'kill', camp: null, level: e.level, role }, e.position),
+            onKill: (e, role) =>
+              this.apply({ kind: 'kill', camp: null, level: e.level, role, family: e.family, seed: this.seed('hall', e.position.x, e.position.z) }, e.position),
             onCrumble: (e) => {
               this.particles.burst('bone', _a.copy(e.position).setY(e.position.y + 0.9), 14);
               sfx.death(_a, { big: false, bones: true });
@@ -271,7 +282,7 @@ export class Adventure {
     scene.add(this.pickups.root);
 
     this.hale = new Hale(zone.hale, this.world, this.state.hale.marker, this.state.haleSwordAtHip);
-    this.arrowSpots = { places: zone.places, hale: zone.hale };
+    this.arrowSpots = { places: zone.places, givers: { hale: zone.hale } };
     this.world.addBody(this.hale.body);
     scene.add(this.hale.root, this.board.root, this.tracker.mesh);
     // The innkeeper hangs from the inn's room, drawn while it is; the others are drawn with the outdoors.
@@ -312,6 +323,7 @@ export class Adventure {
   update(dt: number): void {
     // Clamp: a dropped frame (or tab switch) shouldn't teleport anything.
     dt = Math.min(dt, 1 / 30);
+    this.clock += dt;
     const { player, you } = this;
     this.world.update(dt, player.camera);
     // With a door shut behind you, what stands outside isn't drawn either.
@@ -354,11 +366,13 @@ export class Adventure {
     this.updateDeath(dt);
 
     this.shadows.cast(you.feet, this.gatherFoes());
+    this.vines.place(this.foes); // as just gathered
     if (sword.tip.valid) {
       sword.segment(rig, _a, _b);
       this.trail.update(dt, _a, _b, sword.hot, player.frenzy > 0);
     }
     this.orbs.update(dt, player);
+    this.loot(dt, outdoors);
     this.talk(dt);
     this.updateBag(dt);
     this.villagers.update(dt, you.head, this.state);
@@ -385,14 +399,15 @@ export class Adventure {
 
   /**
    * The quest arrow, if it shows: beside the line you're working on, turned
-   * towards its place (or Hale) from where you stand and look.
+   * towards its place (or its giver) from where you stand and look.
    */
   private questArrow(): ArrowShown | null {
     const arrow = this.state.arrow;
+    const to = arrow && arrowPoint(arrow.target, this.arrowSpots);
     const { head } = this.you;
-    if (!arrow || arrowHides(arrow.target, { x: head.x, z: head.z, interior: this.world.interior }, this.arrowSpots)) return null;
+    if (!arrow || !to || arrowHides(arrow.target, { x: head.x, z: head.z, interior: this.world.interior }, this.arrowSpots)) return null;
     const yaw = _turn.setFromQuaternion(this.player.camera.getWorldQuaternion(_look), 'YXZ').y;
-    return { line: arrow.line, turn: arrowTurn({ x: head.x, z: head.z, yaw }, arrowPoint(arrow.target, this.arrowSpots)) };
+    return { line: arrow.line, turn: arrowTurn({ x: head.x, z: head.z, yaw }, to) };
   }
 
   /** Is anything fighting you: a camp's (not walking home), or the Warden and what it raised? */
@@ -459,7 +474,43 @@ export class Adventure {
   /** A camp's member fell: it pays XP into the adventure state, and may count for your quest. */
   private onKill(camp: Camp, member: Member): void {
     const { enemy, plan } = member;
-    this.apply({ kind: 'kill', camp: camp.plan.id, level: enemy.level, role: plan.role ?? 'ordinary' }, enemy.position);
+    const seed = this.seed(camp.plan.id, camp.members.indexOf(member));
+    this.apply({ kind: 'kill', camp: camp.plan.id, level: enemy.level, role: plan.role ?? 'ordinary', family: enemy.family, seed }, enemy.position);
+  }
+
+  /** A kill's loot seed: from its camp, the enemy and the time. */
+  private seed(...enemy: readonly (string | number)[]): number {
+    return lootSeed(...enemy, Math.floor(this.clock * 1000));
+  }
+
+  /**
+   * A fist, the sword's tip or your feet touches loot lying shown: a pouch's
+   * coins are always taken, and an item goes into the bag with a buzz and the
+   * pickup sound, or, with the bag full, stays flashing red under "Bag full".
+   */
+  private loot(dt: number, outdoors: boolean): void {
+    const touching = { probes: this.touching(), feet: this.player.alive ? this.you.feet : null };
+    const shown = (interior: Interior | null) => (interior === null ? outdoors : this.world.interior === interior);
+    this.drops.update(dt, touching, shown, (touch) => this.take(touch));
+  }
+
+  /** Take what was touched into your things: false if it has to stay where it lies. */
+  private take(touch: Touch): boolean {
+    const effects = touch.item ? this.state.inventory.take([{ id: touch.item, count: 1 }]) : this.state.inventory.take([], touch.coins);
+    const { take, full } = CONFIG.loot.buzz;
+    const buzz = ({ intensity, ms }: { intensity: number; ms: number }) => {
+      for (const hand of touch.hand ? [touch.hand] : (['left', 'right'] as const)) this.player.input.pulse(hand, intensity, ms);
+    };
+    if (effects.some((e) => e.kind === 'left')) {
+      buzz(full);
+      this.floatOver(touch.at, 0.3, 'Bag full', FULL_FLOAT);
+      return false;
+    }
+    buzz(take);
+    sfx.pickup();
+    if (!touch.item) this.floatOver(touch.at, 0.2, `+${touch.coins} coins`, COINS_FLOAT);
+    this.applyThings(effects, touch.at);
+    return true;
   }
 
   /**
@@ -598,6 +649,10 @@ export class Adventure {
           if (e.stage === 'active' || e.stage === 'ready') this.tracker.flash();
           if (e.stage === 'handedIn') sfx.fanfare();
           break;
+        case 'loot':
+          // What a kill dropped, lying where it fell.
+          this.drops.drop(at, e, this.world.interior);
+          break;
         case 'slot':
           this.bag.changed();
           // Something worn or taken off (Hale's old longsword, straight into your hand, off their hip):
@@ -642,7 +697,7 @@ export class Adventure {
       sfx.levelUp();
       text.banner(player.camera, `LEVEL ${level}`, '#ffd23a', 0.34, 0.3, banner);
     }
-    unlocks.forEach((a, i) => text.banner(player.camera, UNLOCKED[a], '#f0e0b0', 0.09, 0.08 - i * 0.12, lines));
+    unlocks.forEach((a, i) => text.banner(player.camera, unlockLine(a), '#f0e0b0', 0.09, 0.08 - i * 0.12, lines));
   }
 
   /** Words floating up from `height` metres over `at`. */
