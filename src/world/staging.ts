@@ -10,7 +10,6 @@ import { type Light, type Material, type Mesh, MeshBasicMaterial, type Object3D 
 
 /** What a staged mesh was before it was staged. */
 interface Was {
-  readonly mesh: Mesh;
   readonly material: Material | Material[];
   readonly frustumCulled: boolean;
 }
@@ -20,8 +19,9 @@ export class Stager {
   private readonly hidden = new MeshBasicMaterial({ visible: false });
   /** What the next render stages, and whether every mesh under it is new (drawn nothing). */
   private readonly queued: { readonly root: Object3D; readonly all: boolean }[] = [];
-  private readonly meshes: Was[] = [];
-  private readonly shown: { readonly object: Object3D; readonly visible: boolean }[] = [];
+  /** Each mesh staged this render, as it was before (the first time: two roots may hold it). */
+  private readonly meshes = new Map<Mesh, Was>();
+  private readonly shown: Object3D[] = [];
 
   /** Is anything waiting for the next render? */
   get busy(): boolean {
@@ -47,12 +47,12 @@ export class Stager {
 
   /** Just after it: put everything back. */
   restore(): void {
-    for (const { mesh, material, frustumCulled } of this.meshes) {
+    for (const [mesh, { material, frustumCulled }] of this.meshes) {
       mesh.material = material;
       mesh.frustumCulled = frustumCulled;
     }
-    for (const { object, visible } of this.shown) object.visible = visible;
-    this.meshes.length = 0;
+    for (const object of this.shown) object.visible = false;
+    this.meshes.clear();
     this.shown.length = 0;
   }
 
@@ -61,13 +61,13 @@ export class Stager {
     if ((o as Light).isLight && !o.visible) return;
     if (!o.visible) {
       hidden = true;
-      this.shown.push({ object: o, visible: false });
+      this.shown.push(o);
       o.visible = true;
     }
     // Meshes, and sprites, points and lines too: whatever draws with a material.
     if ('material' in o) {
       const mesh = o as Mesh;
-      this.meshes.push({ mesh, material: mesh.material, frustumCulled: mesh.frustumCulled });
+      if (!this.meshes.has(mesh)) this.meshes.set(mesh, { material: mesh.material, frustumCulled: mesh.frustumCulled });
       if (all || hidden) mesh.material = this.hidden;
       mesh.frustumCulled = false;
     }

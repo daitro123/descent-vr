@@ -353,6 +353,14 @@ describe('staging', () => {
     expect(lamp.visible).toBe(false);
     stager.restore();
     expect([room.visible, inside.material, inside.frustumCulled, door.frustumCulled, stager.busy]).toEqual([false, lit, true, true, false]);
+    // Staged twice over in one render (the room with its building, and again on its own): put back as it was all the same.
+    stager.stage(root);
+    stager.stage(room, true);
+    stager.stage(door, true);
+    stager.apply();
+    expect([(door.material as MeshBasicMaterial).visible, lamp.visible]).toEqual([false, false]);
+    stager.restore();
+    expect([room.visible, inside.material, inside.frustumCulled, door.material, door.frustumCulled]).toEqual([false, lit, true, lit, true]);
   });
 });
 
