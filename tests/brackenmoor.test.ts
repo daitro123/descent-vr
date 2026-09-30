@@ -259,8 +259,9 @@ describe("Brackenmoor's land", () => {
     for (let z = 190; z <= 280; z += 10) for (const x of [-92, 92]) tops.push(moor.heightAt(x, z) - floor);
     for (let x = -80; x <= 80; x += 10) if (Math.abs(x - moor.road.line.at(-1)![0]) > 25) tops.push(moor.heightAt(x, 292) - floor);
     for (const h of tops) {
-      expect(h).toBeGreaterThan(MOOR.hills.low * 0.8);
-      expect(h).toBeLessThan(MOOR.hills.high * 1.35);
+      // The hill itself, give or take the floor's swell under it.
+      expect(h).toBeGreaterThan(MOOR.hills.low - MOOR.swell - 1);
+      expect(h).toBeLessThan(MOOR.hills.high + MOOR.swell + 1);
     }
   });
 

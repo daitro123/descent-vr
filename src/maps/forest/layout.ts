@@ -776,7 +776,7 @@ export function buildLayout(): ForestLayout {
     ...CREST,
     step: cell,
     heights: Array.from({ length: Math.round((CREST.maxX - CREST.minX) / cell) + 1 }, (_, k) => ground.at(CREST.minX + k * cell, CREST.z)),
-    roads: [{ x: rx, width: PATHS[0].width, dir: [(rx - nx) / len, (rz - nz) / len] }],
+    roads: [{ x: rx, width: main.width, dir: [(rx - nx) / len, (rz - nz) / len] }],
   };
 
   return {

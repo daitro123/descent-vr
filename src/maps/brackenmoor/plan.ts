@@ -2,6 +2,7 @@ import { CONFIG } from '../../config';
 import type { Tree } from '../../world/ambience';
 import type { Atmosphere } from '../../world/atmosphere';
 import { Colliders } from '../forest/colliders';
+import { PASS } from '../forest/layout';
 import { fbm, lerp, mulberry32, nearestOnPolyline, type P2, sampleCurve, smoothstep, valueNoise } from '../forest/noise';
 import { HeightGrid } from '../heightGrid';
 import type { Seam, Spot } from '../types';
@@ -37,7 +38,7 @@ export const MOOR = {
    * `side[0]` to their tops by `side[1]` east and west, and from z = `south[0]`
    * to `south[1]`. They part `gap.half` m either side of the road's end.
    */
-  hills: { low: 20, high: 35, side: [56, 96], south: [252, 296], gap: { half: 18, depth: 0.8 } },
+  hills: { low: 20, high: 35, lump: 0.15, side: [56, 96], south: [252, 296], gap: { half: 18, depth: 0.8 } },
   /** The road over the moor, the main road's width. */
   road: { width: 4 },
   /** The rockfall across the road where you can walk no farther: rocks this many m across. */
@@ -138,7 +139,7 @@ export function planBrackenmoor(crest: Seam): MoorPlan {
   const stone = { x: stoneAt[0], y: ground.at(...stoneAt), z: stoneAt[1], yaw: -Math.PI / 2, h: 2.9 };
   colliders.addCircle({ x: stone.x, z: stone.z, r: 0.55 });
 
-  const plants = placePlants(ground, roadDistance, walkable, stone, road);
+  const plants = placePlants(ground, walkable, stone, road);
   for (const p of plants) {
     const r = TRUNK[p.kind];
     if (r && walkable.distance(p.x, p.z) <= 2) colliders.addCircle({ x: p.x, z: p.z, r: r * p.scale });
@@ -184,9 +185,10 @@ function moorHeight(x: number, z: number, gapAt: P2): number {
   const side = smoothstep(hills.side[0], hills.side[1], Math.abs(x));
   const south = smoothstep(hills.south[0], hills.south[1], z);
   const ring = 1 - (1 - side) * (1 - south);
-  // Each hill its own height, `low` to `high`, and rounded: lumps along the ring.
-  const tall = hills.low + (hills.high - hills.low) * smoothstep(0.3, 0.7, fbm(x * 0.018 + 7, z * 0.018 - 3, 107));
-  const lump = 0.85 + 0.3 * valueNoise(x * 0.04, z * 0.04, 109);
+  // Each hill its own height, and rounded: lumps along the ring, `lump` either way, kept within `low` to `high`.
+  const lump = 1 + hills.lump * (2 * valueNoise(x * 0.04, z * 0.04, 109) - 1);
+  const [low, high] = [hills.low / (1 - hills.lump), hills.high / (1 + hills.lump)];
+  const tall = low + (high - low) * smoothstep(0.3, 0.7, fbm(x * 0.018 + 7, z * 0.018 - 3, 107));
   // The south hills part where the road runs out through them.
   const gap = smoothstep(hills.gap.half, hills.gap.half * 0.35, Math.abs(x - gapAt[0])) * south;
   h += ring * ring * (3 - 2 * ring) * tall * lump * (1 - hills.gap.depth * gap);
@@ -243,7 +245,7 @@ function meetCrest(ground: HeightGrid, crest: readonly number[]): void {
  */
 function walkableAreas(crossX: number, line: readonly P2[]): P2[][] {
   const { land, walk, opening } = MOOR;
-  const half = 10;
+  const { half } = PASS; // the pass's corridor runs on at Oakvale's width
   const top = land.minZ - CONFIG.world.ground.seam;
   const xAt = (z: number) => line.reduce((best, p) => (Math.abs(p[1] - z) < Math.abs(best[1] - z) ? p : best))[0];
   const mid = land.minZ + opening.corridor;
@@ -282,7 +284,6 @@ function walkableAreas(crossX: number, line: readonly P2[]): P2[][] {
  */
 function placePlants(
   ground: HeightGrid,
-  roadDistance: Float32Array,
   walkable: Walkable,
   stone: { x: number; z: number },
   road: { line: readonly P2[]; end: P2 },
@@ -290,7 +291,7 @@ function placePlants(
   const rand = mulberry32(4711);
   const { land, rockfall } = MOOR;
   const plants: MoorPlant[] = [];
-  const offRoad = (x: number, z: number, margin: number) => roadDistance[ground.row(z) * ground.cols + ground.col(x)] > margin;
+  const offRoad = (x: number, z: number, margin: number) => nearestOnPolyline(road.line, x, z).d - MOOR.road.width / 2 > margin;
   const onLand = (x: number, z: number) => x > land.minX + 1 && x < land.maxX - 1 && z > land.minZ + 0.5 && z < land.maxZ - 1;
   const clear = (x: number, z: number, margin: number) => onLand(x, z) && offRoad(x, z, margin) && Math.hypot(x - stone.x, z - stone.z) > 1.5 + margin;
   const grade = (x: number, z: number) => Math.hypot(ground.at(x + 1, z) - ground.at(x - 1, z), ground.at(x, z + 1) - ground.at(x, z - 1)) / 2;

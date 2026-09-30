@@ -5,8 +5,9 @@ import { type ChunkData, type ChunkKey, chunkBounds, chunkCoord, chunkKey, type 
 import { standingStone } from '../forest/buildings';
 import { planOakvale } from '../forest/layout';
 import { plantPrototypes, type Prototypes } from '../forest/nature';
+import { EARTH } from '../forest/palette';
 import { hash01, smoothstep, valueNoise } from '../forest/noise';
-import { addRoads, addSkirt, MeshBuffer, type Region } from '../forest/terrain';
+import { addRoads, addSkirt, faceUp, MeshBuffer, type Region } from '../forest/terrain';
 import { bracken, heather, MOOR, type MoorKind, type MoorPlan, planBrackenmoor } from './plan';
 import { MOOR_GROUND, MOOR_PLANTS } from './palette';
 
@@ -57,6 +58,7 @@ function plants(): { near: MoorPrototypes; far: MoorPrototypes } {
 function moorPrototypes(oak: Prototypes): MoorPrototypes {
   const each = (from: BufferGeometry[], palette: readonly number[]) => from.map((g, v) => recolour(g, palette[v % palette.length]));
   return {
+    // Each tuft shape twice, the second set's colours two on, so a shape isn't always the same colour.
     bracken: [...each(oak.grass, MOOR_PLANTS.bracken), ...each(oak.grass, MOOR_PLANTS.bracken.slice(2))],
     heather: oak.rock.map((g, v) => recolour(g, MOOR_PLANTS.heather[v % MOOR_PLANTS.heather.length], true)),
     bush: each(oak.bush, MOOR_PLANTS.bush),
@@ -157,7 +159,7 @@ function addMoorGround(raw: MeshBuffer, plan: MoorPlan, region: Region, coarse: 
   const rock = new Color(MOOR_GROUND.rock);
   const cliff = new Color(MOOR_GROUND.cliff);
   const top = new Color(MOOR_GROUND.hilltop);
-  const dirt = new Color(0x8a6a45);
+  const dirt = new Color(EARTH.dirt);
   const verge = new Color(dirt).lerp(grass, 0.5);
   const color = new Color();
   const tint = new Color();
@@ -196,15 +198,5 @@ function addMoorGround(raw: MeshBuffer, plan: MoorPlan, region: Region, coarse: 
     }
   }
   if (coarse) addSkirt(raw, ground, [i0, i1, j0, j1], step, (x, z, y) => colourAt(x, z, y, 1, Infinity, 0.5));
-}
-
-/** How upright a triangle's face is: 1 flat, 0 a wall. */
-function faceUp(a: readonly number[], b: readonly number[], c: readonly number[]): number {
-  const [ux, uy, uz] = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
-  const [vx, vy, vz] = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
-  const nx = uy * vz - uz * vy;
-  const ny = uz * vx - ux * vz;
-  const nz = ux * vy - uy * vx;
-  return Math.abs(ny) / (Math.hypot(nx, ny, nz) || 1);
 }
 

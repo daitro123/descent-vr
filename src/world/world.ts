@@ -396,7 +396,7 @@ export class World implements Ground {
 
   /**
    * The loaded zone underfoot at (x, z): the one whose land holds it (on a
-   * seam's line, where their heights agree, the first loaded), else the one
+   * seam's line, where their heights agree, the first added), else the one
    * whose walkable area is nearest.
    */
   zoneAt(x: number, z: number): Zone | undefined {

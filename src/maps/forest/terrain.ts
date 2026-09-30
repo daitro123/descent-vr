@@ -295,7 +295,8 @@ export function addSkirt(
   }
 }
 
-function faceUp(a: readonly number[], b: readonly number[], c: readonly number[]): number {
+/** How upright a triangle's face is: 1 flat, 0 a wall. */
+export function faceUp(a: readonly number[], b: readonly number[], c: readonly number[]): number {
   const ux = b[0] - a[0];
   const uy = b[1] - a[1];
   const uz = b[2] - a[2];
