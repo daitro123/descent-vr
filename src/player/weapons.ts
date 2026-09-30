@@ -1,4 +1,5 @@
 import { Color, Group, Mesh, Object3D, Quaternion, Vector3 } from 'three';
+import { ABILITY_COLOUR } from '../combat/abilities';
 import { CONFIG } from '../config';
 import { buildHeaterShield, buildLongsword } from '../models/gear';
 import { createModelMaterial } from '../models/materials';
@@ -215,6 +216,9 @@ export class Shield {
   private flashColor = new Color(1, 0.9, 0.5);
   /** Seconds the shield arm is numb after a guard break; it can't block meanwhile. */
   numb = 0;
+  /** Seconds of Shield Wall left: the board glows gold while it holds. */
+  walled = 0;
+  private time = 0;
 
   constructor() {
     const { width, height, depth, forwardOffset, pitchDeg } = CONFIG.shield;
@@ -247,7 +251,9 @@ export class Shield {
     this.centre.sample(_zero, this.board, rig, dt);
     this.flashTimer = Math.max(0, this.flashTimer - dt);
     this.numb = Math.max(0, this.numb - dt);
-    this.material.emissive.copy(this.flashColor).multiplyScalar(this.flashTimer * 3);
+    this.time += dt;
+    if (this.flashTimer > 0 || this.walled <= 0) this.material.emissive.copy(this.flashColor).multiplyScalar(this.flashTimer * 3);
+    else this.material.emissive.setHex(ABILITY_COLOUR.shieldWall!).multiplyScalar((0.3 + 0.12 * Math.sin(this.time * 6)) * Math.min(1, this.walled));
     // A numb shield sags visibly so the player knows it won't block.
     this.model.rotation.x = -0.6 * Math.min(1, this.numb * 3);
   }

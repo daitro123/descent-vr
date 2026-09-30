@@ -12,13 +12,29 @@ export type { ClassId, MainAttribute };
 /** Every class, in the order the page before VR lists their cards. */
 export const CLASSES = ['warrior', 'ranger', 'mage'] as const satisfies readonly ClassId[];
 
+/**
+ * The classes a new character can be: only those that are built. The ranger
+ * joins with abilities ticket 21 and the mage with 23.
+ */
+export const PLAYABLE: readonly ClassId[] = ['warrior'];
+
+/** A class as the page before VR shows it: its name, and a line on how it fights. */
+export const CLASS_CARD: Readonly<Record<ClassId, { readonly name: string; readonly line: string }>> = {
+  warrior: { name: 'Warrior', line: 'Sword and shield up close. Blows given and taken build rage for the War Cry and Earthshaker.' },
+  ranger: { name: 'Ranger', line: 'A bow drawn by hand. Arrows from range, traps and a mark, fed by focus.' },
+  mage: { name: 'Mage', line: 'Spells cast from the hands. Frost holds them, fire finishes them, all on mana.' },
+};
+
 type Table = typeof CONFIG.classes;
 
 /** A base ability of some class: what a level brings besides your plain kit. */
 export type Ability = { [C in ClassId]: keyof Table[C]['abilities'] }[ClassId];
 
-/** A shape drawn in the air with the right grip held: each gesture ability starts in one (ticket 19 reads them). */
+/** A shape drawn in the air with the right grip held: each gesture ability starts in one (player/gestures/). */
 export type Shape = 'ring' | 'z' | 'v' | 'triangle' | 's';
+
+/** Every shape, in the order the gesture slots are listed. */
+export const SHAPES: readonly Shape[] = ['ring', 'z', 'v', 'triangle', 's'];
 
 /**
  * How an ability is used: A / X, A / X while an arrow is drawn, the sword's
@@ -64,7 +80,7 @@ const NAMES: Readonly<Record<Ability, string>> = {
 };
 
 /** A shape as the level-up says it. */
-const SHAPES: Readonly<Record<Shape, string>> = { ring: 'a ring', z: 'a Z', v: 'a V', triangle: 'a triangle', s: 'an S' };
+const SHAPE_WORDS: Readonly<Record<Shape, string>> = { ring: 'a ring', z: 'a Z', v: 'a V', triangle: 'a triangle', s: 'an S' };
 
 /** How to use an ability, as the level-up says it. */
 function how(use: Use): string {
@@ -76,7 +92,7 @@ function how(use: Use): string {
     case 'earthshaker':
       return "drive your sword's tip into the ground";
     default:
-      return `hold the right grip, draw ${SHAPES[use]}, let go`;
+      return `hold the right grip, draw ${SHAPE_WORDS[use]}, let go`;
   }
 }
 
@@ -107,6 +123,27 @@ export const abilitiesOf = (klass: ClassId): readonly Ability[] =>
 
 /** A class's base abilities a character of `level` has. */
 export const abilitiesAt = (klass: ClassId, level: number): readonly Ability[] => abilitiesOf(klass).filter((a) => ABILITY[a].level <= level);
+
+/** Is an ability used by drawing a shape? */
+export const isShape = (use: Use): use is Shape => (SHAPES as readonly string[]).includes(use);
+
+/** Which ability each shape holds: none, until one of `abilities` is drawn in it. */
+export type Slots = Readonly<Record<Shape, Ability | null>>;
+
+/**
+ * The gesture slots of a character with `abilities`, filled by default: each
+ * base gesture ability in the shape it starts in (.scratch/abilities/spec.md,
+ * "The adventure state learns classes"). Each shape always casts what its slot
+ * holds, so the shapes you know never change meaning.
+ */
+export function slotsOf(abilities: readonly Ability[]): Slots {
+  const slots = Object.fromEntries(SHAPES.map((s) => [s, null])) as Record<Shape, Ability | null>;
+  for (const a of abilities) {
+    const { use } = ABILITY[a];
+    if (isShape(use) && slots[use] === null) slots[use] = a;
+  }
+  return slots;
+}
 
 /** What the level-up says about an ability it brings: its name, and how to use it. */
 export const unlockLine = (ability: Ability): string => `${ABILITY[ability].name}: ${how(ABILITY[ability].use)}`;

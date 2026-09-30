@@ -1,4 +1,4 @@
-import { type Ability, abilitiesAt, type ClassId, type MainAttribute, mainOf, type Resource, resourceOf } from './classes';
+import { type Ability, abilitiesAt, type ClassId, type MainAttribute, mainOf, type Resource, resourceOf, type Shape, SHAPES, type Slots, slotsOf } from './classes';
 import { CONFIG, type EnemyConfig } from './config';
 import { Inventory, type InventoryEffect, type InventorySave } from './inventory';
 import { type ProfessionEffect, Professions, type ProfessionsSave, type RecipeId, type SpotKind } from './professions/professions';
@@ -54,6 +54,8 @@ export interface Progress {
   readonly inventory: InventorySave;
   /** The professions learned, with their proficiency and grade, and the recipes known. */
   readonly professions: ProfessionsSave;
+  /** The shapes you've drawn an ability in at least once: none in an older record. */
+  readonly drawn?: readonly Shape[];
 }
 
 /** Something that happened in the world that progress may care about. */
@@ -87,7 +89,9 @@ export type AdventureEvent =
   /** A spot of a kind gathered: the professions module's own effect, passed straight in. */
   | { readonly kind: 'gathered'; readonly spot: SpotKind }
   /** A recipe made (into the bag or left on the station): the professions module's own effect, passed straight in. */
-  | { readonly kind: 'made'; readonly recipe: RecipeId };
+  | { readonly kind: 'made'; readonly recipe: RecipeId }
+  /** A shape drawn and read, whatever came of it (cast, or not enough rage). */
+  | { readonly kind: 'drawn'; readonly shape: Shape };
 
 /** What an event did, for the Adventure to show. */
 export type Effect =
@@ -103,7 +107,9 @@ export type Effect =
   /** What happened to your things: a reward put straight into your hand, say. */
   | InventoryEffect
   /** What happened to your professions: one learned, proficiency gained, a recipe known. */
-  | ProfessionEffect;
+  | ProfessionEffect
+  /** The first time a shape holding an ability was drawn: its shape stops hanging in the air. */
+  | { readonly kind: 'learned'; readonly shape: Shape };
 
 /** A button on a giver's board: Accept, Not now, Hand in, Goodbye. */
 export type Button = 'accept' | 'notNow' | 'handIn' | 'goodbye';
@@ -244,8 +250,12 @@ export class AdventureState {
   /** Every quest of every chain, in the chains' order: an open chain's first is on offer from the start. */
   private readonly held: Held[];
   private beaten = false;
-  /** Your class: every character is a warrior until the roster (abilities ticket 18) makes others. */
+  /** The shapes you've drawn an ability in at least once. */
+  private readonly drawn = new Set<Shape>();
+  /** Your class: a warrior unless the character's record says otherwise. */
   readonly class: ClassId;
+  /** Which character you are: their key in the save (the roster's), or your class where there's none (tests, a new state). */
+  readonly character: string;
   /** The top level: the content's (CONFIG.levels.cap), unless a test brings its own. */
   readonly cap: number;
   /** Your things, for your class. */
@@ -258,8 +268,9 @@ export class AdventureState {
    * `chains` (every one in the game, unless a test brings its own), of
    * `options.class` (a warrior unless it says).
    */
-  constructor(saved?: Progress, chains: readonly Chain[] = CHAINS, options: { readonly class?: ClassId; readonly cap?: number } = {}) {
+  constructor(saved?: Progress, chains: readonly Chain[] = CHAINS, options: { readonly class?: ClassId; readonly cap?: number; readonly character?: string } = {}) {
     this.class = options.class ?? 'warrior';
+    this.character = options.character ?? this.class;
     this.cap = options.cap ?? CONFIG.levels.cap;
     const you = this;
     const wearer = { class: this.class, get level() { return you.level; } };
@@ -285,6 +296,7 @@ export class AdventureState {
       wardenBeaten: this.beaten,
       inventory: this.inventory.snapshot(),
       professions: this.professions.snapshot(),
+      ...(this.drawn.size ? { drawn: SHAPES.filter((s) => this.drawn.has(s)) } : {}),
     };
   }
 
@@ -302,6 +314,7 @@ export class AdventureState {
     const levelNeeds = xpToReach(Math.max(1, Math.min(saved.level, this.cap)));
     this.total = Math.min(Math.max(saved.xp, levelNeeds, 0), xpToReach(this.cap));
     this.beaten = saved.wardenBeaten;
+    for (const shape of Array.isArray(saved.drawn) ? saved.drawn : []) if (SHAPES.includes(shape)) this.drawn.add(shape);
     for (const h of this.held) {
       const kept = saved.quests[h.quest.id] as QuestProgress | undefined;
       if (!kept) continue;
@@ -362,6 +375,20 @@ export class AdventureState {
 
   get stats(): Stats {
     return statsAt(this.level, this.inventory.numbers, this.class);
+  }
+
+  /** Which ability each shape holds: your class's base gesture abilities in their own shapes. */
+  get slots(): Slots {
+    return slotsOf(abilitiesAt(this.class, this.level));
+  }
+
+  /**
+   * The shapes holding an ability that you've never drawn, in the slots'
+   * order: the first hangs in the air in front of you until you draw it.
+   */
+  get unlearned(): readonly Shape[] {
+    const slots = this.slots;
+    return SHAPES.filter((s) => slots[s] !== null && !this.drawn.has(s));
   }
 
   /** The sword in your hand, as the main hand's item draws it: null for none. */
@@ -496,6 +523,10 @@ export class AdventureState {
         return this.count((o) => o.kind === 'gather' && o.spot === event.spot);
       case 'made':
         return this.count((o) => o.kind === 'make' && o.recipe === event.recipe);
+      case 'drawn':
+        if (this.slots[event.shape] === null || this.drawn.has(event.shape)) return [];
+        this.drawn.add(event.shape);
+        return [{ kind: 'learned', shape: event.shape }];
       case 'accept':
         return this.accept(event.giver ?? 'hale');
       case 'handIn':
@@ -506,12 +537,11 @@ export class AdventureState {
   /**
    * Open chest `id` at `level`, once per character: it's recorded open, and
    * what it holds, rolled from the chest and the character, comes out as a
-   * drop. Every character is a warrior for now, so the class stands for the
-   * character in the seed until the roster brings each its own id.
+   * drop, seeded by the chest and which character you are.
    */
   private openChest(id: string, level: number): Effect[] {
     if (this.inventory.isOpened(id)) return [];
-    const loot = rollChest(level, this.class, seeded(chestSeed(id, this.class)));
+    const loot = rollChest(level, this.class, seeded(chestSeed(id, this.character)));
     return [...this.inventory.openChest(id), { kind: 'loot', ...loot }];
   }
 

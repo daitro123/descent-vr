@@ -20,6 +20,8 @@ import type { Player } from '../player/player';
 
 const W = 64;
 const H = 24;
+/** Where the first ability's pip sits: five fit under the rage orb. */
+const PIPS = 44;
 const _head = new Vector3();
 const _fwd = new Vector3();
 
@@ -60,7 +62,8 @@ export interface HudStatus {
  * to read them. Follows head yaw only, so it does not swim when you look around.
  * Between the orbs: the dash cooldown, in the arena the wave and the enemies
  * left, and in the Adventure your level and a thin XP bar. The rage orb and
- * each ability's pip show once your level has brought them.
+ * each ability's pip show once your level has brought them; a pip is lit
+ * while its ability is off cooldown and you have the rage for it.
  *
  * Also owns the head-locked vignette: red when hurt (and pulsing at low HP),
  * dark during a dash to cut peripheral motion.
@@ -197,7 +200,8 @@ export class BeltHud {
     const s = this.status;
     const frenzyBlink = p.frenzy > 0 && (p.frenzy > 2 || Math.sin(this.time * 12) > 0);
     const canCry = p.can('warCry');
-    const canSlam = p.can('earthshaker');
+    // A pip per ability your level has brought, in the order they came: lit when it's ready and you can pay for it.
+    const pips = p.stats.abilities.map((a) => p.abilities.refuses(a, p.rage) === null);
     const key = [
       Math.round(hp * 18),
       Math.round(rage * 18),
@@ -209,7 +213,7 @@ export class BeltHud {
       s.level,
       Math.round(s.progress * 20),
       canCry,
-      canSlam,
+      pips.map(Number).join(''),
     ].join(':');
     if (key === this.lastKey) return;
     this.lastKey = key;
@@ -220,7 +224,6 @@ export class BeltHud {
     c.fillRect(20, 2, 24, 20);
     this.orb(10, hp, '#c81e1e', '#3a0c0c');
     const warCry = rage >= CONFIG.warCry.cost / CONFIG.player.maxRage;
-    const slam = rage >= CONFIG.groundSlam.cost / CONFIG.player.maxRage;
     if (canCry) this.orb(W - 11, rage, p.frenzy > 0 ? '#ff5a10' : warCry ? '#ffb020' : '#b86a10', '#2e1a06');
 
     if (this.waves) {
@@ -243,15 +246,11 @@ export class BeltHud {
     c.fillRect(22, 18, 20, 2);
     c.fillStyle = dash >= 1 ? '#9fd8ff' : '#4a6a80';
     c.fillRect(22, 18, Math.round(20 * Math.min(1, dash)), 2);
-    // Ability pips under the rage orb: slam (35) and War Cry (50).
-    if (canSlam) {
-      c.fillStyle = slam ? '#ffd060' : '#3a3228';
-      c.fillRect(W - 15, 21, 3, 2);
-    }
-    if (canCry) {
-      c.fillStyle = warCry ? '#ffd060' : '#3a3228';
-      c.fillRect(W - 10, 21, 3, 2);
-    }
+    // Ability pips under the rage orb, left to right in the order they came, each always in its own place.
+    pips.forEach((lit, i) => {
+      c.fillStyle = lit ? '#ffd060' : '#3a3228';
+      c.fillRect(PIPS + i * 4, 21, 3, 2);
+    });
     if (frenzyBlink) {
       c.fillStyle = '#ff7a20';
       c.fillRect(W - 12, 0, 2, 2);
