@@ -82,6 +82,7 @@ export function buildForest(given?: ForestLayout): StartingZone {
     spawn: plan.spawn,
     camps: plan.camps,
     respawns: plan.respawns,
+    stash: plan.stash,
     interiors: plan.interiors.map((interior) => {
       const build = INTERIOR_MODELS[interior.id];
       if (!build) throw new Error(`No model for the ${interior.id}`);

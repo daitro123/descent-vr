@@ -29,11 +29,13 @@ import { ZoneName } from './ui/zoneName';
 import { RunVignette } from './ui/runVignette';
 import { Bag, type BagHand } from './ui/bag/bag';
 import { IconAtlas, lookOf } from './ui/bag/looks';
+import { StashPanel } from './ui/bag/stashPanel';
 import { type Probe, TalkBoard } from './ui/talkBoard';
 import { Orbs } from './world/orbs';
 import { Pickups } from './world/pickups';
 import { BlobShadows } from './world/shadows';
 import { Dropped } from './world/dropped';
+import { StashChest } from './world/stashChest';
 import type { Mine } from './world/mine';
 import { World } from './world/world';
 
@@ -121,6 +123,9 @@ export class Adventure {
   readonly bag: Bag;
   /** What you've let go of off the bag's panel, lying on the ground. */
   readonly dropped: Dropped;
+  /** The stash's chest by the inn's hearth: touch its lid and the stash panel opens beside the bag's. */
+  readonly stashChest: StashChest;
+  readonly stash: StashPanel;
   /** Each hand's controller, for the bag. */
   private readonly bagHands: Record<'left' | 'right', { -readonly [K in keyof BagHand]: BagHand[K] }>;
   /** Where the quest arrow's targets are: each quest's place, and Hale. */
@@ -195,6 +200,7 @@ export class Adventure {
     // Your hands, closed on what they hold, and the bag over your shoulder.
     this.player.showFists();
     this.dropped = new Dropped(this.world);
+    const atlas = new IconAtlas();
     this.bag = new Bag(
       {
         inventory: this.state.inventory,
@@ -202,13 +208,21 @@ export class Adventure {
         apply: (effects, at) => this.applyThings(effects, at),
         drop: (stack, at, velocity) => this.dropped.drop(stack, at, velocity),
       },
-      new IconAtlas(),
+      atlas,
     );
     const { left, right } = this.player.input.hands;
     this.bagHands = { left: { grip: left.grip, tracked: false, squeeze: 0 }, right: { grip: right.grip, tracked: false, squeeze: 0 } };
     scene.add(this.bag.root, this.dropped.root);
     this.bag.warm(renderer, camera, scene);
     this.dropped.warm(renderer, camera, scene);
+    // The stash's chest stands in the inn's room, drawn while it is; its panel opens beside the bag's.
+    this.stash = new StashPanel(this.state.inventory, atlas);
+    this.stashChest = new StashChest(zone.stash);
+    const stashRoom = zone.interiors.find((i) => i.id === zone.stash.interior)?.room;
+    if (!stashRoom) throw new Error(`No room for the stash in the ${zone.stash.interior}`);
+    stashRoom.add(this.stashChest.root);
+    this.bag.panel.root.add(this.stash.root);
+    this.stash.warm(renderer, camera, scene);
 
     this.combat = new Combat(
       this.player,
@@ -490,6 +504,14 @@ export class Adventure {
       Object.assign(bagHands[side], { grip: hand.grip, tracked: hand.grip.visible, squeeze: hand.squeeze });
     }
     player.camera.getWorldDirection(_gaze);
+    // Touching the stash chest's lid opens the stash beside the bag.
+    const lid = this.stashChest.update(dt, this.stash.isOpen, this.touching());
+    if (lid) {
+      const { intensity, ms } = CONFIG.bag.stashChest.buzz;
+      player.input.pulse(lid.hand, intensity, ms);
+      sfx.creak(lid.at);
+      bag.openBeside(this.stash, you.head, _gaze, this.touching(), `the stash, ${lid.hand} hand on its lid`);
+    }
     bag.update({ dt, head: you.head, gaze: _gaze, rig: player.rig, hands: bagHands, probes: this.touching(), alive: player.alive });
     const [left, right] = this.touching();
     const taken = this.dropped.update(dt, [left?.at ?? null, right?.at ?? null], (stack) => {
