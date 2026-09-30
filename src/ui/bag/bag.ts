@@ -57,6 +57,8 @@ export interface BagWorld {
   apply(effects: readonly InventoryEffect[], at: Vector3): void;
   /** Let go of away from the panel: it lies on the ground, falling from `at`. */
   drop(stack: Stack, at: Vector3, velocity: Vector3): void;
+  /** The hip slot of the belt at `at`, if any: a potion let go there goes onto the belt. */
+  beltAt?(at: Vector3): number | null;
 }
 
 /** What the refusals say, in the log the checks read. */
@@ -97,6 +99,8 @@ export class Bag {
   readonly lines: string[] = [];
   private readonly track: Record<Handedness, HandTrack> = { left: newTrack(), right: newTrack() };
   private carry: { from: Where; page: Page; spot: Spot; stack: Stack; probe: number; hand: Handedness } | null = null;
+  /** The hip slot a carried item is over, off the panel, and whether it may go there: for the belt to light. */
+  beltTarget: { slot: number; fits: boolean } | null = null;
   private lastHover: Spot | null = null;
   /** The tab each probe rested on last frame: it must leave before it can press again. */
   private readonly onTab: (Page | null)[] = [];
@@ -151,6 +155,7 @@ export class Bag {
 
   private cancel(): void {
     this.carry = null;
+    this.beltTarget = null;
     this.held.visible = false;
   }
 
@@ -274,8 +279,11 @@ export class Bag {
     this.held.scale.setScalar(0.12);
     this.held.visible = true;
     const target = panel.targetAt(probe.at, carry.stack.id, CONFIG.bag.release);
-    const to = target && panel.where(target);
-    const lifted = carry.spot.in === 'gear' || carry.page === panel.page ? carry.spot : null;
+    // Off the panel, over a hip: onto the belt.
+    const hip = !target && !panel.over(probe.at, CONFIG.bag.release) ? (world.beltAt?.(probe.at) ?? null) : null;
+    const to: Where | null = target ? panel.where(target) : hip !== null ? { in: 'belt', slot: hip } : null;
+    this.beltTarget = hip !== null ? { slot: hip, fits: inventory.check(carry.from, to!) === null } : null;
+    const lifted = carry.spot.in !== 'grid' || carry.page === panel.page ? carry.spot : null;
     shows.lifted = lifted;
     shows.card = carry.stack;
     shows.cardOver = target ?? lifted;
@@ -347,5 +355,6 @@ const same = (a: Where, b: Where) => a.in === b.in && (a.in === 'ground' || (b.i
 function label(where: Where): string {
   if (where.in === 'ground') return 'the ground';
   if (where.in === 'gear') return where.slot;
+  if (where.in === 'belt') return where.slot === 0 ? 'the left hip' : 'the right hip';
   return `${where.in} ${where.slot + 1}`;
 }

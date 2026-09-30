@@ -16,6 +16,7 @@ import { findMap } from './maps/registry';
 import type { Respawn, StartingZone, Zone } from './maps/types';
 import { Hale } from './people/hale';
 import { Villagers } from './people/villagers';
+import { Belt } from './player/belt';
 import { Player } from './player/player';
 import { Run } from './player/run';
 import { SaveController } from './save/controller';
@@ -121,6 +122,8 @@ export class Adventure {
   readonly bag: Bag;
   /** What you've let go of off the bag's panel, lying on the ground. */
   readonly dropped: Dropped;
+  /** The potions at your hips: reach down for one and drink it at your mouth. */
+  readonly belt: Belt;
   /** Each hand's controller, for the bag. */
   private readonly bagHands: Record<'left' | 'right', { -readonly [K in keyof BagHand]: BagHand[K] }>;
   /** Where the quest arrow's targets are: each quest's place, and Hale. */
@@ -192,7 +195,7 @@ export class Adventure {
     this.runVignette.warm(renderer, camera, scene);
     scene.add(this.zoneName.mesh);
     this.zoneName.warm(renderer, camera, scene);
-    // Your hands, closed on what they hold, and the bag over your shoulder.
+    // Your hands, closed on what they hold, the bag over your shoulder and the potions at your hips.
     this.player.showFists();
     this.dropped = new Dropped(this.world);
     this.bag = new Bag(
@@ -201,13 +204,20 @@ export class Adventure {
         buzz: (hand, intensity, ms) => this.player.input.pulse(hand, intensity, ms),
         apply: (effects, at) => this.applyThings(effects, at),
         drop: (stack, at, velocity) => this.dropped.drop(stack, at, velocity),
+        beltAt: (at) => this.belt.slotNear(at),
       },
       new IconAtlas(),
     );
+    this.belt = new Belt(this.player, {
+      inventory: this.state.inventory,
+      buzz: (hand, intensity, ms) => this.player.input.pulse(hand, intensity, ms),
+      apply: (effects, at) => this.applyThings(effects, at),
+    });
     const { left, right } = this.player.input.hands;
     this.bagHands = { left: { grip: left.grip, tracked: false, squeeze: 0 }, right: { grip: right.grip, tracked: false, squeeze: 0 } };
-    scene.add(this.bag.root, this.dropped.root);
+    scene.add(this.bag.root, this.dropped.root, this.belt.root);
     this.bag.warm(renderer, camera, scene);
+    this.belt.warm(renderer, camera, scene);
     this.dropped.warm(renderer, camera, scene);
 
     this.combat = new Combat(
@@ -310,6 +320,9 @@ export class Adventure {
     this.showCamps(outdoors);
     player.fighting = this.fighting;
     player.update(dt);
+    // The belt's cooldown runs down, and a hand at a hip may take a flask (and its weapon fades).
+    this.state.inventory.tick(dt);
+    this.belt.update(dt, this.bag.beltTarget);
     this.runVignette.update(dt, player.running);
     updateListener(player.camera);
     const { hands } = player.input;
@@ -595,6 +608,9 @@ export class Adventure {
           break;
         case 'coins':
           this.bag.changed();
+          break;
+        case 'drank':
+          this.player.heal(this.player.maxHp * e.heal);
           break;
       }
     }

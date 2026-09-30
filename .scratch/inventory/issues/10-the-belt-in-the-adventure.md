@@ -4,7 +4,7 @@
 
 **Blocked by:** 09.
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 Read [the spec](../spec.md) ("The belt" under "The view in VR") and [The belt and drinking a potion](04-the-belt-and-drinking-a-potion.md).
 

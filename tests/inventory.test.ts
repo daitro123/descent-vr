@@ -204,6 +204,28 @@ describe('the belt', () => {
     expect(inv.at(bag(1))).toBeNull();
   });
 
+  it('stacks a potion carried onto a hip up to a stack, and says so before it is let go', () => {
+    const inv = carrying([potions(9), { id: 'worn-tunic', count: 1 }]);
+    expect(inv.check(bag(0), RIGHT_HIP)).toBeNull();
+    inv.move(bag(0), RIGHT_HIP);
+    expect(inv.at(RIGHT_HIP)).toEqual(potions(10));
+    expect(inv.at(bag(0))).toEqual(potions(2));
+    expect(inv.check(bag(0), RIGHT_HIP)).toBe('full');
+    expect(inv.check(bag(1), LEFT_HIP)).toBe('slot');
+    expect(inv.check(bag(0), LEFT_HIP)).toBeNull();
+  });
+
+  it('keeps the cooldown running through a drink from either hip, and refills from that potion only', () => {
+    const inv = carrying([{ id: 'torn-cloth', count: 1 }, potions(2)]);
+    inv.move(bag(1), LEFT_HIP, 1);
+    expect(inv.drink(0).map((e) => e.kind)).toEqual(['drank', 'slot', 'cooldown', 'slot', 'slot']);
+    expect(inv.at(LEFT_HIP)).toEqual(potions(1));
+    expect(inv.at(bag(0))).toEqual({ id: 'torn-cloth', count: 1 });
+    inv.tick(30);
+    expect(inv.cooldown).toBe(30);
+    expect(refusals(inv.drink(1))).toEqual(['cooldown']);
+  });
+
   it('refuses to drink from an empty slot, and stays empty with none left in the bag', () => {
     const inv = new Inventory(warrior());
     expect(refusals(inv.drink(0))).toEqual(['empty']);

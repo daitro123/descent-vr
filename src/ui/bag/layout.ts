@@ -5,11 +5,15 @@ import { GEAR_SLOTS, type GearSlot } from '../../items';
 // Where everything sits on the bag panel, in the panel's own space (metres,
 // +X to your right, +Y up, +Z out of its face towards you), and what a point
 // there touches: the sixteen slots of the page showing on the right, the
-// seven gear slots round the figure of you on the left, and the page tabs
-// along the top. From the bag prototype's panel (ui/bag-prototype/panel.ts).
+// seven gear slots round the figure of you on the left, the belt's two hip
+// slots under the figure, and the page tabs along the top. From the bag
+// prototype's panel (ui/bag-prototype/panel.ts).
 
-/** A slot on the panel: one of the page's sixteen (the bag's, or the quest page's), or a gear slot. */
-export type Spot = { readonly in: 'grid'; readonly i: number } | { readonly in: 'gear'; readonly slot: GearSlot };
+/** A slot on the panel: one of the page's sixteen (the bag's, or the quest page's), a gear slot, or one of the belt's. */
+export type Spot =
+  | { readonly in: 'grid'; readonly i: number }
+  | { readonly in: 'gear'; readonly slot: GearSlot }
+  | { readonly in: 'belt'; readonly slot: number };
 
 /** The pages the tabs switch between. The talent page is the Abilities map's to fill. */
 export const PAGES = ['bag', 'quest', 'talents'] as const;
@@ -39,6 +43,8 @@ const GEAR_AT: Readonly<Record<GearSlot, readonly [number, number]>> = {
   offHand: [-0.05, ROWS[2]],
 };
 export const FIGURE = { x: -0.16, bottom: -0.135, height: 0.27, halfWidth: 0.055 };
+/** The belt's two slots, under the figure: the left hip's on your left, the right's on your right. */
+const BELT_AT = [FIGURE.x - P / 2, FIGURE.x + P / 2].map((x) => [x, -0.178] as const);
 /** The tabs along the top, over the page they switch. */
 const GRID_MIDDLE = (GRID_X[0] + GRID_X[3]) / 2;
 export const TABS = { y: 0.188, w: 0.086, h: 0.036, x: [-1, 0, 1].map((k) => GRID_MIDDLE + k * 0.092) };
@@ -48,19 +54,22 @@ export const COINS = { x: GRID_MIDDLE, y: -0.19 };
 /** Where the card sits, over the panel. */
 export const CARD = { w: 0.28, h: 0.2, y: BOARD.top + 0.11 };
 
-/** Every slot, in the order the panel draws them: the gear slots, then the page's sixteen. */
+/** Every slot, in the order the panel draws them: the gear slots, the belt's, then the page's sixteen. */
 export const SPOTS: readonly Spot[] = [
   ...GEAR_SLOTS.map((slot) => ({ in: 'gear', slot }) as const),
+  ...Array.from({ length: CONFIG.belt.slots }, (_, slot) => ({ in: 'belt', slot }) as const),
   ...Array.from({ length: CONFIG.bag.slots }, (_, i) => ({ in: 'grid', i }) as const),
 ];
 
 export function spotXY(spot: Spot): readonly [number, number] {
-  return spot.in === 'grid' ? [GRID_X[spot.i % 4], ROWS[Math.floor(spot.i / 4)]] : GEAR_AT[spot.slot];
+  if (spot.in === 'grid') return [GRID_X[spot.i % 4], ROWS[Math.floor(spot.i / 4)]];
+  return spot.in === 'belt' ? BELT_AT[spot.slot] : GEAR_AT[spot.slot];
 }
 
 export function sameSpot(a: Spot | null, b: Spot | null): boolean {
   if (!a || !b) return a === b;
-  return a.in === 'grid' ? b.in === 'grid' && a.i === b.i : b.in === 'gear' && a.slot === b.slot;
+  if (a.in === 'grid') return b.in === 'grid' && a.i === b.i;
+  return a.in === b.in && a.slot === (b as typeof a).slot;
 }
 
 /** Is `l` near the face, within `reach`? */
