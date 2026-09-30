@@ -1,16 +1,20 @@
 import { type Progress, type QuestProgress, STAGES } from '../adventureState';
+import { CLASSES, type ClassId } from '../classes';
+import { CONFIG } from '../config';
 import { type InventorySave, type Stack, startingInventory } from '../inventory';
 import { GEAR_SLOTS } from '../items';
 import type { Spot } from '../maps/types';
 import { GRADES, NO_PROFESSIONS, type ProfessionsSave } from '../professions/professions';
 
-// The save record: what the browser keeps of one character between visits,
-// and how a record an older build wrote is brought up to date. A record is
-// read with no trust in it: whatever doesn't fit is unreadable, and a newer
-// build's record is left alone (.scratch/oakvale-starting-zone/spec.md, "Saving").
+// The save's records: what the browser keeps of each character between
+// visits, and of the roster that lists them, and how a record an older build
+// wrote is brought up to date. A record is read with no trust in it: whatever
+// doesn't fit is unreadable, and a newer build's record is left alone
+// (.scratch/oakvale-starting-zone/spec.md, "Saving"; .scratch/abilities/spec.md,
+// "Characters and the save").
 
-/** The record's version: bump it, and add a migration from the one before, whenever its shape changes. */
-export const SAVE_VERSION = 3;
+/** A character's record's version: bump it, and add a migration from the one before, whenever its shape changes. */
+export const SAVE_VERSION = 4;
 
 /** Every building and the mine you can be inside. */
 export const INTERIORS = ['inn', 'house', 'mine'] as const;
@@ -18,23 +22,40 @@ export const INTERIORS = ['inn', 'house', 'mine'] as const;
 /** A building or the mine you're inside. */
 export type Interior = (typeof INTERIORS)[number];
 
+/** Who a character is: their class, fixed once made, and the name the page shows. */
+export interface Who {
+  readonly class: ClassId;
+  readonly name: string;
+}
+
+/** Today's one character before the roster (version 3 and earlier): the first of the roster, until renamed. */
+export const FIRST_CHARACTER: Who = { class: 'warrior', name: 'Warrior' };
+
 /** One character, as saved. */
-export interface SaveRecord extends Progress {
+export interface SaveRecord extends Progress, Who {
   readonly version: typeof SAVE_VERSION;
   /** When it was written, in ms since 1970. */
   readonly savedAt: number;
-  /** Where you stood, in world metres on the ground plane. */
-  readonly position: { readonly x: number; readonly z: number };
+  /**
+   * Where you stood, in world metres on the ground plane; null for a character
+   * made on the page who hasn't played yet, who starts at the starting zone's
+   * start, facing Hale.
+   */
+  readonly position: { readonly x: number; readonly z: number } | null;
   /** Which way you faced, in radians about +Y (0 looks down −Z). */
   readonly facing: number;
   /** The building or mine you were in, or null outdoors. */
   readonly interior: Interior | null;
 }
 
-/** The record for a character with `progress`, standing at `at`, inside `at.interior` if it says so. */
-export function saveRecord(progress: Progress, at: Spot & { readonly interior?: Interior | null }, savedAt = Date.now()): SaveRecord {
-  return { version: SAVE_VERSION, savedAt, ...progress, position: { x: at.x, z: at.z }, facing: at.yaw, interior: at.interior ?? null };
+/** The record for the character `who` with `progress`, standing at `at`, inside `at.interior` if it says so. */
+export function saveRecord(progress: Progress, at: Spot & { readonly interior?: Interior | null }, savedAt = Date.now(), who: Who = FIRST_CHARACTER): SaveRecord {
+  return { version: SAVE_VERSION, savedAt, class: who.class, name: who.name, ...progress, position: { x: at.x, z: at.z }, facing: at.yaw, interior: at.interior ?? null };
 }
+
+/** Is `name` one a character can have: some letters, at most `CONFIG.save.name` of them, with nothing round them? */
+export const isName = (name: unknown): name is string =>
+  typeof name === 'string' && name.length > 0 && name.length <= CONFIG.save.name && name.trim() === name;
 
 /** A record as some version wrote it: nothing is known of it but its version. */
 export interface OlderRecord {
@@ -58,6 +79,10 @@ export interface Migration {
  *
  * 2 → 3, professions (.scratch/professions/spec.md, "Saving"): none learned,
  * and nothing paid for what came before.
+ *
+ * 3 → 4, the roster (.scratch/abilities/spec.md, "Characters and the save"):
+ * today's one character becomes the roster's first, a warrior named
+ * "Warrior". The roster itself is its own record (`readRoster`).
  */
 export const MIGRATIONS: readonly Migration[] = [
   {
@@ -68,6 +93,7 @@ export const MIGRATIONS: readonly Migration[] = [
     }),
   },
   { from: 2, up: (record) => ({ ...record, professions: NO_PROFESSIONS }) },
+  { from: 3, up: (record) => ({ ...record, ...FIRST_CHARACTER }) },
 ];
 
 /** What was found where the save is kept. */
@@ -93,6 +119,42 @@ export function readSave(stored: unknown, migrations: readonly Migration[] = MIG
   return isCurrent(record) ? { kind: 'saved', record } : { kind: 'unreadable' };
 }
 
+/** The roster record's version: bumped, with its own migrations, whenever its shape changes. */
+export const ROSTER_VERSION = 1;
+
+/** The roster: which characters there are, in the page's slot order, and the one played last. */
+export interface RosterRecord {
+  readonly version: typeof ROSTER_VERSION;
+  /** Each character's key in the store, in slot order: at most `CONFIG.save.characters`. */
+  readonly characters: readonly string[];
+  /** The key of the one played (or picked) last, or null for none. */
+  readonly last: string | null;
+}
+
+/** What was found where the roster is kept. */
+export type LoadedRoster =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'saved'; readonly roster: RosterRecord }
+  | { readonly kind: 'newer'; readonly version: number }
+  | { readonly kind: 'unreadable' };
+
+/** Read the roster as the store holds it. */
+export function readRoster(stored: unknown): LoadedRoster {
+  if (stored === undefined || stored === null) return { kind: 'none' };
+  if (!isObject(stored) || !Number.isInteger(stored.version)) return { kind: 'unreadable' };
+  const version = stored.version as number;
+  if (version > ROSTER_VERSION) return { kind: 'newer', version };
+  const { characters, last } = stored;
+  const ok =
+    version === ROSTER_VERSION &&
+    Array.isArray(characters) &&
+    characters.length <= CONFIG.save.characters &&
+    characters.every((k) => typeof k === 'string') &&
+    new Set(characters).size === characters.length &&
+    (last === null || typeof last === 'string');
+  return ok ? { kind: 'saved', roster: stored as unknown as RosterRecord } : { kind: 'unreadable' };
+}
+
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const isOneOf = <T>(list: readonly T[], v: unknown): v is T => list.includes(v as T);
@@ -102,6 +164,8 @@ function isCurrent(r: OlderRecord): r is OlderRecord & SaveRecord {
   return (
     r.version === SAVE_VERSION &&
     isNumber(r.savedAt) &&
+    isOneOf(CLASSES, r.class) &&
+    isName(r.name) &&
     Number.isInteger(r.level) &&
     isNumber(r.xp) &&
     isObject(r.quests) &&
@@ -109,9 +173,7 @@ function isCurrent(r: OlderRecord): r is OlderRecord & SaveRecord {
     typeof r.wardenBeaten === 'boolean' &&
     isInventory(r.inventory) &&
     isProfessions(r.professions) &&
-    isObject(r.position) &&
-    isNumber(r.position.x) &&
-    isNumber(r.position.z) &&
+    (r.position === null || (isObject(r.position) && isNumber(r.position.x) && isNumber(r.position.z))) &&
     isNumber(r.facing) &&
     (r.interior === null || isOneOf(INTERIORS, r.interior))
   );

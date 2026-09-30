@@ -731,6 +731,8 @@ export const CONFIG = {
   save: {
     every: 30, // s of play between writes when nothing else has written (where you stand is kept too)
     openTimeout: 5, // s to wait for the browser's storage to open before playing unsaved
+    characters: 3, // characters a player keeps (the page before VR's slots)
+    name: 16, // letters at most in a character's name
   },
 
   enemies: {

@@ -1,6 +1,7 @@
 import { Euler, type Object3D, type PerspectiveCamera, Quaternion, type Scene, Vector3, type WebGLRenderer } from 'three';
 import { type Ability, type AdventureEvent, AdventureState, type Effect } from './adventureState';
 import { unlockLine } from './classes';
+import { CHAINS } from './quests';
 import { Combat } from './combat/combat';
 import { CONFIG } from './config';
 import { type Camp, type CampHooks, Camps, type Member, type You } from './enemies/camps';
@@ -23,7 +24,7 @@ import { Player } from './player/player';
 import { Run } from './player/run';
 import { SaveController } from './save/controller';
 import { type Interior, saveRecord } from './save/record';
-import type { Save } from './save/store';
+import type { Played } from './save/store';
 import { BeltHud } from './ui/beltHud';
 import { Fade } from './ui/fade';
 import { arrowHides, arrowPoint, arrowTurn, type ArrowSpots } from './ui/questArrow';
@@ -173,14 +174,14 @@ export class Adventure {
     renderer: WebGLRenderer,
     /** Where a new character starts: Oakvale. */
     zone: StartingZone,
-    /** The character to load, if any, and where to keep it. */
-    save: Pick<Save, 'store' | 'record'>,
+    /** The character to play (their record, or none for a new one), who they are, and where their progress goes. */
+    played: Pick<Played, 'record' | 'who' | 'write'>,
     /** The zones over its seams (Brackenmoor), walked into with nothing in them. */
     neighbours: readonly Zone[] = [],
   ) {
-    const { record } = save;
-    this.state = new AdventureState(record ?? undefined);
-    this.saves = new SaveController(save.store, () => saveRecord(this.state.snapshot(), this.standing));
+    const { record, who } = played;
+    this.state = new AdventureState(record ?? undefined, CHAINS, { class: who.class });
+    this.saves = new SaveController(played, () => saveRecord(this.state.snapshot(), this.standing, Date.now(), who));
     this.world.attach(scene, camera, renderer);
     for (const n of neighbours) this.world.add(n);
     this.world.load(zone);
@@ -290,11 +291,11 @@ export class Adventure {
     this.ambience = new Ambience([zone, ...neighbours]);
     this.villagers.onStrike = () => this.ambience.strike('anvil');
 
-    // A new character at the zone's start, facing Hale; or where the save stood,
+    // A new character (or one made on the page who hasn't played) at the zone's start, facing Hale; or where the save stood,
     // facing the same way, at full health and with no rage. A save made inside
     // the inn loads inside it, with the door shut and the room lit; one made in
     // the mine loads in it, standing on its floor (so it settles first).
-    Object.assign(this.standing, record ? { ...record.position, yaw: record.facing, interior: record.interior } : { ...zone.spawn, interior: null });
+    Object.assign(this.standing, record?.position ? { ...record.position, yaw: record.facing, interior: record.interior } : { ...zone.spawn, interior: null });
     const { x, z, yaw, interior } = this.standing;
     this.dressHands();
     this.world.settle(interior);
