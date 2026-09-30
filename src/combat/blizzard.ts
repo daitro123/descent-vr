@@ -107,7 +107,8 @@ export class Blizzard {
   readonly shards: InstancedMesh;
   private readonly discMaterial: MeshBasicMaterial;
   private readonly falling: Shard[] = [];
-  private readonly radius: number;
+  /** m its circle reaches: its own, or further with Arctic Reach (set as it starts). */
+  radius: number;
   private elapsed = 0;
   private ticks = 0;
   private fade = 0;
@@ -144,9 +145,10 @@ export class Blizzard {
     return Math.round(B.time / B.every);
   }
 
-  /** Ice starts to fall over the circle at `at` (on the floor). One already falling ends. */
-  start(at: Vector3, particles: Particles | null = null): void {
+  /** Ice starts to fall over the circle at `at` (on the floor), `radius` m across. One already falling ends. */
+  start(at: Vector3, particles: Particles | null = null, radius: number = CONFIG.classes.mage.abilities.blizzard.radius): void {
     this.centre.copy(at);
+    this.radius = radius;
     this.elapsed = 0;
     this.ticks = 0;
     this.falling.length = 0;

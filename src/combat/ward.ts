@@ -21,6 +21,8 @@ export class Ward {
   age = 0;
   /** s before it can rise again. */
   cooldown = 0;
+  /** s more it holds, and sends arrows back for (Steady Ward): the kit sets it from your talents. */
+  longer = 0;
   /** The disc's centre and which way it faces, world, while it's up. */
   readonly centre = new Vector3();
   readonly normal = new Vector3(0, 0, -1);
@@ -40,7 +42,7 @@ export class Ward {
       return 'raised';
     }
     this.age += dt;
-    if (able && squeezing && this.age < W.hold) return null;
+    if (able && squeezing && this.age < W.hold + this.longer) return null;
     this.up = false;
     this.cooldown = W.cooldown;
     return 'dropped';
@@ -56,7 +58,7 @@ export class Ward {
 
   /** In its first moments it sends arrows back. */
   get fresh(): boolean {
-    return this.up && this.age <= CONFIG.ranger.ward.reflect;
+    return this.up && this.age <= CONFIG.ranger.ward.reflect + this.longer;
   }
 
   /** Does an arrow flying from `prev` to `pos` this frame cross the disc? What it does, or null. */

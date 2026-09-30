@@ -237,7 +237,8 @@ export class Player {
         this.dashVel.normalize().multiplyScalar(D.distance / D.time);
         this.dashTime = D.time;
         this.dodgeTime = D.invulnerable;
-        this.dashCooldown = D.cooldown;
+        // Fleet Foot brings it back sooner.
+        this.dashCooldown = D.cooldown - this.stats.talents.dashSooner;
         sfx.dash();
         this.onDash?.();
       }
