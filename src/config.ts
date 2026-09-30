@@ -465,9 +465,54 @@ export const CONFIG = {
           unbreakable: { tier: 3, max: 2, adds: { 'lasts:shieldWall': 2 } },
         },
       },
-      // The ranger's and the mage's trees come with abilities ticket 26.
-      ranger: {},
-      mage: {},
+      ranger: {
+        // Marksmanship: the bow, damage at range.
+        marksmanship: {
+          steadyAim: { tier: 1, max: 3, adds: { arrowDamage: 0.05 } }, // an arrow deals this much more
+          keenEye: { tier: 1, max: 2, adds: { headMultiplier: 0.2 } }, // added to a head hit's multiplier
+          efficiency: { tier: 2, max: 2, adds: { 'cost:powerShot': -5 } },
+          swiftArrows: { tier: 2, max: 3, adds: { arrowSpeed: 0.1 } }, // an arrow flies this much faster (so drops less)
+          // For `time` s every arrow you loose bends, at up to `bendDegPerSec`°/s, onto the enemy within `aimDeg`° of
+          // its flight (in sight, within `range` m), and passes a raised guard.
+          trueshot: { tier: 3, max: 1, use: 'triangle', cost: 30, cooldown: 20, time: 8, aimDeg: 8, bendDegPerSec: 60, range: 40 },
+          improvedVolley: { tier: 3, max: 2, adds: { volleyArrows: 1 } }, // more arrows in a Volley's fan
+        },
+        // Survival: traps, and staying alive up close.
+        survival: {
+          trapper: { tier: 1, max: 3, adds: { trapRoot: 1 } }, // s more Snare Trap roots for
+          fleetFoot: { tier: 1, max: 2, adds: { dashSooner: 0.3 } }, // s off the dash's cooldown
+          serratedTips: { tier: 2, max: 3, adds: { bleed: 2 }, time: 4 }, // an arrow hit bleeds the enemy for this over `time` s
+          steadyWard: { tier: 2, max: 2, adds: { wardLonger: 0.3 } }, // s more the ward holds, and sends arrows back for
+          // A trap at your feet, lying `lasts` s: the first enemy to step on it sets it off, and every enemy within
+          // `radius` m takes `damage` and is knocked back at `knockback` m/s (a grunt slides about an eighth of it in metres).
+          explosiveTrap: { tier: 3, max: 1, use: 'triangle', cost: 30, cooldown: 15, lasts: 30, damage: 25, radius: 2.5, knockback: 10 },
+          improvedScatter: { tier: 3, max: 2, adds: { scatterSlow: 0.3 }, time: 4 }, // Scatter also slows by this for `time` s
+        },
+      },
+      mage: {
+        // Fire: damage.
+        fire: {
+          ignite: { tier: 1, max: 3, adds: { ignite: 0.1 }, time: 4 }, // a fire hit burns for this share of it over `time` s
+          incineration: { tier: 1, max: 2, adds: { chargeFaster: 0.1 } }, // s off a bolt's charge time (mage.bolt.chargeTime)
+          improvedFireball: { tier: 2, max: 2, adds: { fireballRadius: 0.5 } }, // m more a Fireball's burst reaches
+          criticalMass: { tier: 2, max: 3, adds: { headMultiplier: 0.1 } }, // added to a head hit's multiplier
+          // The next bolt takes `charge` s to charge full, and leaves as a huge slow orb (`radius` m, `speed` m/s)
+          // whatever the throw: `damage` at full charge (a lesser charge less, as a bolt's), and the enemy it hits
+          // burns for `burn` over `burnTime` s.
+          pyroblast: { tier: 3, max: 1, use: 'triangle', cost: 35, cooldown: 12, charge: 1.2, radius: 0.3, speed: 6, damage: 60, burn: 15, burnTime: 4 },
+          masterOfElements: { tier: 3, max: 2, adds: { fireHeadMana: 5 } }, // mana back for a fire head hit
+        },
+        // Frost: control.
+        frost: {
+          frostbite: { tier: 1, max: 3, adds: { frostbite: 0.05 }, freeze: 2 }, // the chance a Frostbolt freezes a slowed enemy for `freeze` s
+          iceShards: { tier: 1, max: 2, adds: { frostDamage: 0.1 } }, // a Frostbolt deals this much more
+          permafrost: { tier: 2, max: 2, adds: { slowLonger: 1, slowStronger: 0.1 } }, // your slows last s longer and are this much stronger
+          arcticReach: { tier: 2, max: 3, adds: { frostReach: 0.3 } }, // m more Frost Nova and Blizzard reach
+          // A shell of ice takes the next `absorb` damage (times your level's step) within `time` s.
+          iceBarrier: { tier: 3, max: 1, use: 'triangle', cost: 30, cooldown: 25, absorb: 40, time: 10 },
+          frozenWard: { tier: 3, max: 2, adds: { wardSlow: 0.2 }, time: 3 }, // a blow the ward stops slows its attacker by this for `time` s
+        },
+      },
     },
   },
 
@@ -771,10 +816,14 @@ export const CONFIG = {
       rageDraught: { price: 3, rage: 30 }, // a potion, on the belt's shared cooldown
       minorManaPotion: { price: 3, mana: 0.4 }, // the share of your maximum mana; does nothing until the mage has mana
       // Buffs: not potions, so off the cooldown; one of each kind on you at a time, a new one replacing the old.
-      elixirOfTheKeenEye: { price: 4, damage: 0.1, seconds: 5 * 60 }, // added to your damage multiplier
-      whetstone: { price: 2, damage: 0.05, seconds: 10 * 60 }, // rubbed along a blade or arrowheads; never on the belt
+      elixirOfTheKeenEye: { price: 4, damage: 0.1, seconds: 5 * 60 }, // your damage 10% more while it lasts (buffs together add up: 15% with the whetstone)
+      whetstone: { price: 2, damage: 0.05, seconds: 10 * 60 }, // 5% more; rubbed along the blade or the bow (professions/sharpen.ts); never on the belt
       copperGauntlets: { level: 5, rarity: 'green' }, // as good as a green drop at level 5, each version with Stamina
     },
+    // Sharpening (professions/sharpen.ts): the whetstone carried from the bag, rubbed along the blade in the
+    // other hand (the ranger's bow, for the arrowheads). Within `reach` m of the edge it scrapes; `travel` m
+    // along the edge in all, back and forth, sharpens it, with a scrape's buzz every `stroke` m.
+    sharpen: { reach: 0.06, travel: 0.5, stroke: 0.12, buzz: { scrape: { intensity: 0.35, ms: 25 }, done: { intensity: 0.8, ms: 60 } } },
     // The tool loop behind the main-hand hip (professions/gathering/; spec, "Gathering spots and the
     // tool loop"): a sphere `radius` m round a point `behind` m behind the right hip's potion slot, hung
     // from the belt's frame. A grip in it, the hand under `maxSpeed` m/s, draws the tool for the nearest

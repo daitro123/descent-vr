@@ -346,6 +346,49 @@ export const sfx = {
   blizzardTick(at: Vector3) {
     for (let i = 0; i < 3; i++) noise(0.04, 0.15, 4500 + Math.random() * 1500, at, 'bandpass', Math.random() * 0.12, 5);
   },
+  /** Trueshot: the bow's string hums true, a long clear note settling. */
+  trueshot(at?: Vector3) {
+    tone(440, 440, 0.6, 'sine', 0.1, at);
+    tone(880, 660, 0.4, 'triangle', 0.05, at, 0.05);
+    noise(0.2, 0.08, 4000, at, 'bandpass', 0, 3);
+  },
+  /** An explosive trap goes off: a sharp crack and a deep thump. */
+  trapBurst(at: Vector3) {
+    noise(0.08, 0.6, 2400, at, 'bandpass', 0, 1.2);
+    tone(90, 35, 0.45, 'sine', 0.4, at);
+    noise(0.4, 0.45, 800, at, 'lowpass', 0.02);
+  },
+  /** Pyroblast is on your next bolt: a slow deep roar gathering. */
+  pyroblastReady() {
+    noise(0.7, 0.3, 400, undefined, 'bandpass', 0, 0.6);
+    tone(55, 110, 0.7, 'sawtooth', 0.1);
+  },
+  /** A Pyroblast leaves the hand: a heavy whoosh of flame. */
+  pyroblast(at: Vector3) {
+    noise(0.6, 0.4, 350, at, 'bandpass', 0, 0.6);
+    tone(70, 40, 0.5, 'sawtooth', 0.12, at);
+  },
+  /** A Pyroblast lands: a great burst, lower and longer than a Fireball's. */
+  pyroblastHit(at: Vector3) {
+    tone(55, 22, 0.8, 'sine', 0.5, at);
+    noise(0.7, 0.55, 700, at);
+    noise(0.4, 0.25, 2600, at, 'bandpass', 0.08, 2);
+  },
+  /** Ice Barrier: ice crackles shut round you. */
+  iceBarrier() {
+    for (let i = 0; i < 4; i++) noise(0.06, 0.2, 3500 + i * 600, undefined, 'bandpass', i * 0.05, 5);
+    tone(1200, 1800, 0.35, 'triangle', 0.06, undefined, 0.1);
+  },
+  /** The ice takes a blow for you: a glassy knock. */
+  barrierAbsorb() {
+    tone(1500, 1100, 0.14, 'triangle', 0.1);
+    noise(0.08, 0.15, 5000, undefined, 'highpass');
+  },
+  /** The ice gives way: a shatter. */
+  barrierBreak() {
+    for (let i = 0; i < 5; i++) noise(0.05, 0.22, 3000 + Math.random() * 3000, undefined, 'bandpass', i * 0.03, 4);
+    tone(2200, 700, 0.3, 'triangle', 0.07);
+  },
   /** The mage's blink: a soft rush in and a chime out. */
   blink() {
     noise(0.14, 0.2, 2200, undefined, 'bandpass', 0, 0.8);
@@ -375,6 +418,25 @@ export const sfx = {
   },
   pickup() {
     tone(500, 1000, 0.15, 'sine', 0.2);
+  },
+  /** The whetstone drawn along the edge: a short, gritty rasp. */
+  scrape(at?: Vector3) {
+    noise(0.12, 0.3, 3800 + Math.random() * 800, at, 'bandpass', 0, 3);
+    noise(0.08, 0.12, 6500, at, 'highpass', 0.03);
+  },
+  /** The edge sharpened: a clean ring off the steel. */
+  sharpened(at?: Vector3) {
+    tone(2640, 2600, 0.5, 'sine', 0.08, at);
+    tone(3960, 3900, 0.35, 'sine', 0.04, at, 0.02);
+  },
+  /** Two swallows, as a flask is drunk. */
+  gulp(at?: Vector3) {
+    tone(260, 110, 0.13, 'sine', 0.4, at);
+    tone(240, 100, 0.15, 'sine', 0.35, at, 0.17);
+  },
+  /** A buff taking hold: a low shimmer rising. */
+  buff() {
+    [330, 440, 660].forEach((f, i) => tone(f, f * 1.02, 0.4, 'triangle', 0.07, undefined, i * 0.07));
   },
   /** A quest item taken by hand: a crisp rustle of parchment and a soft chime. */
   parchment(at?: Vector3) {

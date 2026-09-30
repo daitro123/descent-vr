@@ -11,10 +11,10 @@ import type { Ground } from '../world/ground';
 
 /**
  * The abilities that change the mage's next bolt (Fireball, Frostbolt, Chain
- * Lightning). One waits at a time: drawing another while one waits spends
- * nothing and says which is waiting.
+ * Lightning, and the Fire tree's Pyroblast). One waits at a time: drawing
+ * another while one waits spends nothing and says which is waiting.
  */
-export const BOLT_CHARGES = ['fireball', 'frostbolt', 'chainLightning'] as const;
+export const BOLT_CHARGES = ['fireball', 'frostbolt', 'chainLightning', 'pyroblast'] as const;
 export type BoltCharge = (typeof BOLT_CHARGES)[number];
 
 /** A bolt's size and speed. */
@@ -38,8 +38,8 @@ export function boltShape(handSpeed: number): BoltShape | null {
   return { speed: T.slow.speed + (T.fast.speed - T.slow.speed) * t, radius: T.slow.radius + (T.fast.radius - T.slow.radius) * t };
 }
 
-/** How full a charge held `seconds` is: 0 to 1. */
-export const chargeOf = (seconds: number) => Math.min(1, Math.max(0, seconds / CONFIG.mage.bolt.chargeTime));
+/** How full a charge held `seconds` is, taking `full` s to fill (a bolt's own, unless talents or a Pyroblast change it): 0 to 1. */
+export const chargeOf = (seconds: number, full: number = CONFIG.mage.bolt.chargeTime) => Math.min(1, Math.max(0, seconds / full));
 
 /** Has a charge held `seconds` conjured anything? A tap sooner casts nothing. */
 export const conjured = (seconds: number) => seconds >= CONFIG.mage.bolt.minHold;

@@ -8,9 +8,10 @@ import { arrowGeometry, Bow } from '../player/bow';
 import type { Player } from '../player/player';
 import { ABILITY_COLOUR, type Target, throwTarget } from './abilities';
 import type { Aim, CombatFx, Use } from './combat';
+import { within } from './mage';
 import { Mark } from './mark';
 import type { Arrow, ArrowContact } from './projectiles';
-import { arrowDamage, fanOf, type Shot, Shots } from './shots';
+import { arrowDamage, bentOnto, fanOf, type Shot, Shots } from './shots';
 import { type Trap, Traps } from './traps';
 import { Ward } from './ward';
 
@@ -25,8 +26,11 @@ import { Ward } from './ward';
 // at your feet that roots the first enemy to step on it), Volley (the next
 // arrow splits into a fan of five), Scatter (a gust that knocks back and
 // staggers whoever is close in front of you) and Hunter's Mark (the enemy you
-// face takes more from you and shows through walls). Combat owns it and lands
-// its blows.
+// face takes more from you and shows through walls). Its talents' tier-3
+// abilities (ticket 26): Trueshot (for a while your arrows bend onto the enemy
+// you aim at and pass a raised guard) and Explosive Trap (a trap that bursts).
+// The talents' numbers are read from `player.stats.talents` as they're used.
+// Combat owns it and lands its blows.
 
 /**
  * The abilities that change the arrow on the string or the next one: Power
@@ -67,10 +71,16 @@ export function scatteredBy<T extends Target & { readonly evading?: boolean }>(
   return out.sort((a, b) => a.d - b.d).map((o) => o.e);
 }
 
+/** The Survival and Marksmanship talents' numbers. */
+const SURVIVAL = CONFIG.talents.trees.ranger.survival;
+const TRUESHOT = CONFIG.talents.trees.ranger.marksmanship.trueshot;
+
 /** What the kit needs of Combat. */
 export interface RangerHooks {
   /** An arrow's blow lands on `enemy` at `at`: `damage` as dealt, pushing it along `push`. True if it killed. */
   land(enemy: Enemy, damage: number, head: boolean, at: Vector3, push: Vector3): boolean;
+  /** `enemy` bleeds for `damage` more over `seconds` (Serrated Tips). */
+  bleed(enemy: Enemy, damage: number, seconds: number): void;
   /** A blow landed on an enemy walking home: it says so. */
   evade(at: Vector3): void;
   /** An enemy's arrow goes back at its archer (the warrior's reflect), labelled so. */
@@ -99,7 +109,30 @@ export class RangerKit {
   /** Something else has your hands (the bag open, the bench's work): no draw, no ward. */
   held: () => boolean = () => false;
   /** Counts, for the scripted checks and the console. */
-  readonly stats = { shots: 0, hits: 0, heads: 0, pierced: 0, wardStops: 0, wardReturns: 0, traps: 0, rooted: 0, volleys: 0, scattered: 0, marks: 0, markedHits: 0 };
+  readonly stats = {
+    shots: 0,
+    hits: 0,
+    heads: 0,
+    pierced: 0,
+    wardStops: 0,
+    wardReturns: 0,
+    traps: 0,
+    rooted: 0,
+    volleys: 0,
+    scattered: 0,
+    marks: 0,
+    markedHits: 0,
+    /** Arrows loosed under Trueshot, those it bent onto an enemy, and its hits that passed a raised guard. */
+    trueshots: 0,
+    bent: 0,
+    pastGuard: 0,
+    /** Explosive traps laid and burst, and whom their bursts caught. */
+    explosives: 0,
+    bursts: 0,
+    burst: 0,
+  };
+  /** The enemies as of the last frame: whom Trueshot can bend an arrow onto. */
+  private enemies: readonly Enemy[] = [];
   private readonly disc: Mesh<CircleGeometry, MeshBasicMaterial>;
   private tick = 0;
   private fullClick = false;
@@ -145,6 +178,11 @@ export class RangerKit {
     return this.player.abilities.primed('volley');
   }
 
+  /** Trueshot is on: every arrow loosed bends onto the enemy you aim at. */
+  get trueshooting(): boolean {
+    return this.player.abilities.left('trueshot') > 0;
+  }
+
   /** An arrow is on the string: the right hand is the bow's, so no gesture arms. */
   get drawing(): boolean {
     return this.bow.nocked;
@@ -153,6 +191,7 @@ export class RangerKit {
   update(dt: number, enemies: readonly Enemy[]): void {
     const { player } = this;
     const { left, right } = player.input.hands;
+    this.enemies = enemies;
     player.headPosition(_head);
     right.grip.getWorldPosition(_hand);
     const shown = this.worn && !player.holdingTools;
@@ -161,7 +200,9 @@ export class RangerKit {
     if (free) this.draw(dt);
     else this.bow.nocked = false;
     this.bow.update(left.grip, _head, _hand, shown); // the string follows this frame's nock
-    this.bow.glow(!this.bow.nocked ? null : this.powered ? ABILITY_COLOUR.powerShot! : this.volleyed ? ABILITY_COLOUR.volley! : null);
+    const glow = this.powered ? ABILITY_COLOUR.powerShot! : this.volleyed ? ABILITY_COLOUR.volley! : this.trueshooting ? ABILITY_COLOUR.trueshot! : null;
+    this.bow.glow(this.bow.nocked ? glow : null);
+    this.ward.longer = player.stats.talents.wardLonger;
     this.updateWard(dt, left.squeeze >= CONFIG.ranger.ward.squeeze, free && this.bow.tracked);
 
     this.shots.update(dt, enemies, player.ground, {
@@ -178,6 +219,8 @@ export class RangerKit {
       },
     });
     this.shots.render();
+    // Trueshot's arrows trail its colour, through the shared particles.
+    for (const shot of this.shots.flying) if (shot.trueshot && shot.stuck <= 0 && Math.random() < 0.6) this.fx.particles.burst('magic', shot.pos, 1, undefined, ABILITY_COLOUR.trueshot);
     this.traps.update(dt, enemies, (trap, enemy, held) => this.sprung(trap, enemy, held));
     this.traps.render();
     this.mark.update(dt);
@@ -221,19 +264,23 @@ export class RangerKit {
   private loose(draw: number): void {
     const { bow, player } = this;
     const P = CONFIG.classes.ranger.abilities.powerShot;
+    const talents = player.stats.talents;
     const dir = bow.aim(_dir);
     const from = _v.copy(bow.rest).addScaledVector(dir, 0.05);
     const powered = this.powered;
     this.powered = false;
     const volley = player.abilities.spend('volley');
+    // Steady Aim's more damage and Swift Arrows' more speed, on every arrow.
+    const damage = player.stats.damage * (1 + talents.arrowDamage);
+    const faster = talents.arrowSpeed;
     if (volley) {
-      // The arrow splits as it leaves the bow: a level fan, each at a share of the draw's blow.
+      // The arrow splits as it leaves the bow: a level fan, each at a share of the draw's blow (Improved Volley's more).
       const V = CONFIG.classes.ranger.abilities.volley;
-      for (const way of fanOf(dir, V.arrows, V.fanDeg)) this.shots.loose(from, way, draw, player.stats.damage * V.share, { volley: true });
+      for (const way of fanOf(dir, V.arrows + talents.volleyArrows, V.fanDeg)) this.shots.loose(from, way, draw, damage * V.share, { volley: true, faster, trueshot: this.bend(from, way) });
       this.stats.volleys++;
       sfx.volley(from);
       this.fx.particles.burst('magic', from, 18, dir, ABILITY_COLOUR.volley);
-    } else this.shots.loose(from, dir, draw, player.stats.damage * (powered ? P.multiplier : 1), { pierce: powered ? P.pierce : 0, powered });
+    } else this.shots.loose(from, dir, draw, damage * (powered ? P.multiplier : 1), { pierce: powered ? P.pierce : 0, powered, faster, trueshot: this.bend(from, dir) });
     this.stats.shots++;
     sfx.arrowLoose(from);
     if (powered) {
@@ -245,13 +292,33 @@ export class RangerKit {
     player.input.pulse('left', R.bow, 50);
   }
 
-  /** An arrow meets an enemy: the blow (more on a marked one), with the sword's feedback; a Power Shot's or Volley's colour bursts from it. */
+  /**
+   * Under Trueshot, an arrow loosed from `from` along `way` bends onto the
+   * enemy nearest its line within Trueshot's angle, if any: what rides on it.
+   * Null without Trueshot.
+   */
+  private bend(from: Vector3, way: Vector3): { target: Enemy | null } | null {
+    if (!this.trueshooting) return null;
+    const target = bentOnto(from, way, this.enemies, (a, b) => this.player.ground.lineOfSight(a, b), TRUESHOT);
+    this.stats.trueshots++;
+    if (target) this.stats.bent++;
+    return { target };
+  }
+
+  /**
+   * An arrow meets an enemy: the blow (more on a marked one, a head hit more
+   * with Keen Eye), with the sword's feedback; a Power Shot's or Volley's
+   * colour bursts from it. With Serrated Tips, the enemy bleeds.
+   */
   private hit(shot: Shot, enemy: Enemy, head: boolean, at: Vector3): void {
     const push = _v.copy(shot.vel).setY(0);
     if (push.lengthSq() > 1e-8) push.normalize().multiplyScalar(0.8);
     const through = shot.passed.length > 0;
     const marked = this.mark.of(enemy);
-    this.hooks.land(enemy, arrowDamage(shot.damage * marked, head, enemy), head, at, push);
+    const talents = this.player.stats.talents;
+    if (shot.trueshot && enemy.guarding) this.stats.pastGuard++;
+    const killed = this.hooks.land(enemy, arrowDamage(shot.damage * marked, head, enemy, talents.headMultiplier), head, at, push);
+    if (!killed && talents.bleed > 0) this.hooks.bleed(enemy, talents.bleed * this.player.stats.damage, SURVIVAL.serratedTips.time);
     this.stats.hits++;
     if (head) this.stats.heads++;
     if (through) this.stats.pierced++;
@@ -305,11 +372,11 @@ export class RangerKit {
     return 'cast';
   }
 
-  /** Snare Trap: a trap at your feet. */
+  /** Snare Trap: a trap at your feet, rooting longer with Trapper. */
   snareTrap(): Use {
     const S = CONFIG.classes.ranger.abilities.snareTrap;
     const feet = this.player.feetPosition(_v);
-    this.traps.lay(feet, S.root, S.lasts);
+    this.traps.lay(feet, S.root + this.player.stats.talents.trapRoot, S.lasts);
     this.stats.traps++;
     this.fx.particles.burst('dust', feet, 10);
     this.fx.particles.burst('magic', feet, 12, undefined, ABILITY_COLOUR.snareTrap);
@@ -354,6 +421,9 @@ export class RangerKit {
       _push.normalize().multiplyScalar(S.knockback);
       if (enemy.afflictedFor('rooted') <= 0) enemy.shove(_push);
       if (enemy.kind !== 'warden') enemy.stagger(S.stagger);
+      // Improved Scatter: the gust slows whom it reaches too.
+      const slow = player.stats.talents.scatterSlow;
+      if (slow > 0) enemy.afflict('slowed', SURVIVAL.improvedScatter.time, slow);
       fx.particles.burst('dust', _v.copy(enemy.position), 8, _push.normalize());
     }
     // The gust itself: a spray of wind and dust across the arc.
@@ -389,8 +459,68 @@ export class RangerKit {
     return 'cast';
   }
 
-  /** A trap snaps shut on `enemy`: rooted for what it `held` (0 for the Warden, which ignores it). */
+  /**
+   * Trueshot: for a while every arrow you loose bends onto the enemy you aim
+   * at and passes a raised guard. The bow glows its colour while it lasts.
+   */
+  trueshot(): Use {
+    const at = this.bow.rest;
+    this.fx.particles.burst('magic', at, 20, undefined, ABILITY_COLOUR.trueshot);
+    this.fx.text.spawn('TRUESHOT', at.clone().setY(at.y + 0.2), { color: '#fff0b0', scale: 0.12 });
+    sfx.trueshot(at);
+    this.player.input.pulse('left', 0.6, 80);
+    return 'cast';
+  }
+
+  /** Explosive Trap: a trap at your feet that bursts when stepped on. */
+  explosiveTrap(): Use {
+    const E = SURVIVAL.explosiveTrap;
+    const feet = this.player.feetPosition(_v);
+    this.traps.lay(feet, 0, E.lasts, 'explosive');
+    this.stats.explosives++;
+    this.fx.particles.burst('dust', feet, 10);
+    this.fx.particles.burst('embers', feet, 12, undefined, ABILITY_COLOUR.explosiveTrap);
+    sfx.snareTrap(feet);
+    return 'cast';
+  }
+
+  /**
+   * An explosive trap bursts at `at`: every enemy a blow can land on within
+   * its reach takes its damage (times yours) and is knocked straight away
+   * from it; one walking home is evaded.
+   */
+  private burst(at: Vector3): void {
+    const E = SURVIVAL.explosiveTrap;
+    const { fx } = this;
+    const colour = ABILITY_COLOUR.explosiveTrap!;
+    const damage = Math.round(E.damage * this.player.stats.damage);
+    this.stats.bursts++;
+    for (const enemy of this.enemies) {
+      if (!enemy.evading || Math.hypot(enemy.position.x - at.x, enemy.position.z - at.z) - enemy.def.radius > E.radius) continue;
+      this.hooks.evade(enemy.position.clone().setY(enemy.position.y + 1.5));
+    }
+    for (const enemy of within(at, E.radius, this.enemies)) {
+      _push.subVectors(enemy.position, at).setY(0);
+      if (_push.lengthSq() < 1e-8) _push.set(0, 0, 1);
+      _push.normalize().multiplyScalar(E.knockback);
+      enemy.capsule(_at, _v);
+      _at.lerp(_v, 0.5);
+      this.hooks.land(enemy, damage, false, _at, _push);
+      this.stats.burst++;
+      fx.particles.burst('embers', _at, 10, undefined, colour);
+    }
+    fx.shockwaves.trigger(at, E.radius, colour, 0.4);
+    fx.particles.burst('embers', _v.copy(at).setY(at.y + 0.2), 30, undefined, colour);
+    fx.particles.burst('dust', at, 16);
+    sfx.trapBurst(at);
+  }
+
+  /** A trap snaps shut on `enemy`: rooted for what it `held` (0 for the Warden, which ignores it); an explosive one bursts. */
   private sprung(trap: Trap, enemy: Enemy, held: number): void {
+    if (trap.kind === 'explosive') {
+      this.burst(trap.at);
+      return;
+    }
     if (held > 0) this.stats.rooted++;
     const at = trap.at.clone().setY(trap.at.y + 0.4);
     this.fx.particles.burst('sparks', at, 10);

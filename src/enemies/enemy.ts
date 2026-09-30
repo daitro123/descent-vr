@@ -409,6 +409,23 @@ export abstract class Enemy {
   }
 
   /**
+   * Hurt by what lingers (a bleed, a burn: combat/dots.ts), not by a blow:
+   * it loses `damage` of its health and flashes, and a camp notices, but it
+   * doesn't flinch, stagger or thaw out of a freeze. True if it died of it.
+   */
+  suffer(damage: number): boolean {
+    if (!this.hittable) return false;
+    this.hp -= damage;
+    this.flash = 0.08;
+    if (this.hp <= 0) {
+      this.die(_v.set(0, 0, 0));
+      return true;
+    }
+    this.onDamaged();
+    return false;
+  }
+
+  /**
    * Pushed along `push` (m/s) without a blow (Scatter's gust): it slides as a
    * blow's push would slide it, heavy ones barely, and nothing else happens.
    * One a blow can't land on stays put.

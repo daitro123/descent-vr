@@ -50,7 +50,6 @@ describe("the warrior's trees", () => {
       ['unbreakable', 3, 2],
     ]);
     expect([TALENT.mortalStrike.ability, TALENT.shieldSlam.ability]).toEqual(['mortalStrike', 'shieldSlam']);
-    expect(treesOf('ranger')).toEqual([]);
   });
 });
 
@@ -302,5 +301,123 @@ describe('the save', () => {
     const state = warrior(10, {}, { heroicThrow: 'z', shieldWall: 'ring', axeThrow: 'v', sweepingStrikes: 'star' } as unknown as Progress['placed']);
     expect(state.slots).toEqual({ ring: 'shieldWall', z: 'heroicThrow', v: 'sweepingStrikes', triangle: null, s: null });
     expect(state.snapshot().placed).toEqual({ heroicThrow: 'z', shieldWall: 'ring' });
+  });
+});
+
+// The ranger's and the mage's trees (abilities ticket 26), on the same machinery.
+
+/** A `klass` at `level` (the cap raised to 20), with `talents` spent. */
+function character(klass: 'ranger' | 'mage', level: number, talents: Progress['talents'] = {}): AdventureState {
+  const saved = { ...new AdventureState().snapshot(), level, xp: xpToReach(level), talents };
+  return new AdventureState(saved, CHAINS, { class: klass, cap: 20 });
+}
+
+const TO_TIER_3: Readonly<Record<'marksmanship' | 'survival' | 'fire' | 'frost', readonly Talent[]>> = {
+  marksmanship: ['steadyAim', 'steadyAim', 'steadyAim', 'efficiency', 'swiftArrows', 'swiftArrows'],
+  survival: ['trapper', 'trapper', 'fleetFoot', 'serratedTips', 'serratedTips', 'steadyWard'],
+  fire: ['ignite', 'ignite', 'incineration', 'improvedFireball', 'criticalMass', 'criticalMass'],
+  frost: ['frostbite', 'iceShards', 'iceShards', 'permafrost', 'arcticReach', 'arcticReach'],
+};
+
+describe("the ranger's and the mage's trees", () => {
+  it('are Marksmanship and Survival, Fire and Frost: three tiers of two talents each, the tier-3 abilities taking one point', () => {
+    const rows = (tree: Parameters<typeof talentsIn>[0]) => talentsIn(tree).map((t) => [t, TALENT[t].tier, TALENT[t].max]);
+    expect(treesOf('ranger')).toEqual(['marksmanship', 'survival']);
+    expect(treesOf('mage')).toEqual(['fire', 'frost']);
+    expect(rows('marksmanship')).toEqual([
+      ['steadyAim', 1, 3],
+      ['keenEye', 1, 2],
+      ['efficiency', 2, 2],
+      ['swiftArrows', 2, 3],
+      ['trueshot', 3, 1],
+      ['improvedVolley', 3, 2],
+    ]);
+    expect(rows('survival')).toEqual([
+      ['trapper', 1, 3],
+      ['fleetFoot', 1, 2],
+      ['serratedTips', 2, 3],
+      ['steadyWard', 2, 2],
+      ['explosiveTrap', 3, 1],
+      ['improvedScatter', 3, 2],
+    ]);
+    expect(rows('fire')).toEqual([
+      ['ignite', 1, 3],
+      ['incineration', 1, 2],
+      ['improvedFireball', 2, 2],
+      ['criticalMass', 2, 3],
+      ['pyroblast', 3, 1],
+      ['masterOfElements', 3, 2],
+    ]);
+    expect(rows('frost')).toEqual([
+      ['frostbite', 1, 3],
+      ['iceShards', 1, 2],
+      ['permafrost', 2, 2],
+      ['arcticReach', 2, 3],
+      ['iceBarrier', 3, 1],
+      ['frozenWard', 3, 2],
+    ]);
+    expect(['trueshot', 'explosiveTrap', 'pyroblast', 'iceBarrier'].map((t) => TALENT[t as Talent].ability)).toEqual(['trueshot', 'explosiveTrap', 'pyroblast', 'iceBarrier']);
+    // Every talent has a name and a line for the page.
+    for (const tree of [...treesOf('ranger'), ...treesOf('mage')]) for (const t of talentsIn(tree)) expect(TALENT[t].line.length, t).toBeGreaterThan(10);
+  });
+
+  it.each([
+    ['ranger', 'marksmanship', 'trueshot', ['powerShot', 'snareTrap', 'volley', 'scatter', 'trueshot']],
+    ['ranger', 'survival', 'explosiveTrap', ['powerShot', 'snareTrap', 'volley', 'scatter', 'explosiveTrap']],
+    ['mage', 'fire', 'pyroblast', ['frostNova', 'fireball', 'frostbolt', 'chainLightning', 'pyroblast']],
+    ['mage', 'frost', 'iceBarrier', ['frostNova', 'fireball', 'frostbolt', 'chainLightning', 'iceBarrier']],
+  ] as const)("the %s's %s: tier 3 at 6 points, and %s in the triangle at level 8", (klass, tree, ability, abilities) => {
+    const state = character(klass, 8);
+    expect(state.apply(spend(ability))).toEqual([{ kind: 'talentRefused', reason: 'tier' }]);
+    spendAll(state, TO_TIER_3[tree]);
+    expect(state.opens(tree, 3)).toBe(true);
+    expect(state.apply(spend(ability))).toEqual([{ kind: 'talent', talent: ability, points: 1 }]);
+    expect(state.pointsLeft).toBe(0);
+    expect(state.stats.abilities).toEqual(abilities);
+    expect(state.slots.triangle).toBe(ability);
+    expect(ABILITY[ability]).toMatchObject({ class: klass, level: 8, byTalent: true, use: 'triangle' });
+    // Reset takes it back.
+    state.apply(RESET);
+    expect(state.slots.triangle).toBeNull();
+  });
+
+  it("refuse another class's talents", () => {
+    expect(character('ranger', 10).apply(spend('ignite'))).toEqual([{ kind: 'talentRefused', reason: 'class' }]);
+    expect(character('mage', 10).apply(spend('steadyAim'))).toEqual([{ kind: 'talentRefused', reason: 'class' }]);
+    expect(warrior(10).apply(spend('trapper'))).toEqual([{ kind: 'talentRefused', reason: 'class' }]);
+    expect(character('mage', 10).apply(spend('deepCuts'))).toEqual([{ kind: 'talentRefused', reason: 'class' }]);
+  });
+
+  it("change the numbers Combat reads, point by point: the ranger's", () => {
+    const m = character('ranger', 20, { steadyAim: 3, keenEye: 2, efficiency: 2, swiftArrows: 3, improvedVolley: 2, trueshot: 1 }).stats.talents;
+    expect([m.arrowDamage, m.headMultiplier, m['cost:powerShot'], m.arrowSpeed, m.volleyArrows].map((n) => +n.toFixed(9))).toEqual([0.15, 0.4, -10, 0.3, 2]);
+    const s = character('ranger', 20, { trapper: 3, fleetFoot: 2, serratedTips: 3, steadyWard: 2, improvedScatter: 2 }).stats.talents;
+    expect([s.trapRoot, s.dashSooner, s.bleed, s.wardLonger, s.scatterSlow].map((n) => +n.toFixed(9))).toEqual([3, 0.6, 6, 0.6, 0.6]);
+    expect(costWith('powerShot', m)).toBe(10);
+  });
+
+  it("change the numbers Combat reads, point by point: the mage's", () => {
+    const f = character('mage', 20, { ignite: 3, incineration: 2, improvedFireball: 2, criticalMass: 3, masterOfElements: 2 }).stats.talents;
+    expect([f.ignite, f.chargeFaster, f.fireballRadius, f.headMultiplier, f.fireHeadMana].map((n) => +n.toFixed(9))).toEqual([0.3, 0.2, 1, 0.3, 10]);
+    const r = character('mage', 20, { frostbite: 3, iceShards: 2, permafrost: 2, arcticReach: 3, frozenWard: 2 }).stats.talents;
+    expect([r.frostbite, r.frostDamage, r.slowLonger, r.slowStronger, r.frostReach, r.wardSlow].map((n) => +n.toFixed(9))).toEqual([0.15, 0.2, 2, 0.2, 0.9, 0.4]);
+    // A talent of one class adds nothing to another's numbers.
+    expect(Object.values(character('mage', 20).stats.talents).every((v) => v === 0)).toBe(true);
+  });
+
+  it("round the save with the ranger's and the mage's characters", () => {
+    for (const [klass, tree, ability] of [
+      ['ranger', 'survival', 'explosiveTrap'],
+      ['mage', 'fire', 'pyroblast'],
+    ] as const) {
+      const state = character(klass, 9);
+      spendAll(state, [...TO_TIER_3[tree], ability, TO_TIER_3[tree][0]]);
+      const read = readSave(structuredClone(saveRecord(state.snapshot(), { x: 0, z: 0, yaw: 0 })));
+      if (read.kind !== 'saved') throw new Error(read.kind);
+      const back = new AdventureState(read.record, CHAINS, { class: klass, cap: 20 });
+      expect(back.talents).toEqual(state.talents);
+      expect(back.slots.triangle).toBe(ability);
+      expect(back.stats).toEqual(state.stats);
+    }
   });
 });

@@ -246,11 +246,17 @@ describe("each class's abilities", () => {
       ['volley', 'z', 35, 12],
       ['scatter', 'v', 25, 15],
       ['huntersMark', 's', 20, 1],
+      // The ranger's tier-3 talents' abilities (issues/12).
+      ['trueshot', 'triangle', 30, 20],
+      ['explosiveTrap', 'triangle', 30, 15],
       ['frostNova', 'button', 30, 20],
       ['fireball', 'ring', 15, 0],
       ['frostbolt', 'z', 15, 0],
       ['chainLightning', 'v', 30, 8],
       ['blizzard', 's', 40, 30],
+      // The mage's (issues/13).
+      ['pyroblast', 'triangle', 35, 12],
+      ['iceBarrier', 'triangle', 30, 25],
     ]);
     expect([CONFIG.warCry.cost, CONFIG.groundSlam.cost]).toEqual([50, 35]);
   });

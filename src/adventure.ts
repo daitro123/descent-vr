@@ -26,6 +26,7 @@ import { PROFESSION_NAMES, type ProfessionsEffects } from './professions/profess
 import { Gathering } from './professions/gathering/gathering';
 import { Belt } from './player/belt';
 import { Gestures } from './player/gestures/gestures';
+import type { Handedness } from './player/input';
 import { MageHands } from './player/mage';
 import { Player } from './player/player';
 import { Run } from './player/run';
@@ -205,6 +206,8 @@ export class Adventure {
   private readonly runVignette: RunVignette;
   private readonly you: You = { feet: new Vector3(), head: new Vector3(), sword: null, alive: true, interior: null };
   private readonly sword = { base: new Vector3(), tip: new Vector3(), speed: 0, swing: 0 };
+  /** The edge a whetstone is rubbed along this frame: the blade, or the ranger's bow. */
+  private readonly edge = { base: new Vector3(), tip: new Vector3() };
   /** Every enemy there is to fight this frame: the camps', the Warden and what it raised. */
   private readonly foes: Enemy[] = [];
   private hitStop = 0;
@@ -284,6 +287,8 @@ export class Adventure {
           swap: (a: Shape, b: Shape) => this.onTalents({ kind: 'swap', shapes: [a, b], fighting: this.fighting }),
         },
         beltAt: (at) => this.belt.slotNear(at),
+        mouth: (out) => this.belt.mouth(out),
+        edge: (hand) => this.edgeFor(hand),
       },
       atlas,
     );
@@ -453,6 +458,7 @@ export class Adventure {
           particles: this.particles,
           apply: (effects, at) => this.applyMade(effects, at),
           dress: () => this.dressHands(),
+          mouth: (out) => this.belt.mouth(out),
         },
         CONFIG.villagers.radius,
       );
@@ -501,8 +507,9 @@ export class Adventure {
     this.showCamps(outdoors);
     player.fighting = this.fighting;
     player.update(dt);
-    // The belt's cooldown runs down, and a hand at a hip may take a flask (and its weapon fades).
-    this.state.inventory.tick(dt);
+    // The belt's cooldown runs down, as do your buffs, and a hand at a hip may take a flask (and its weapon fades).
+    const ended = this.state.inventory.tick(dt);
+    if (ended.length) this.show(ended, you.head, false);
     this.belt.update(dt, this.bag.beltTarget);
     // The tool loop, and the pick at a vein: after the belt, so the sword's away before anything swings it.
     this.gathering.update({
@@ -576,6 +583,7 @@ export class Adventure {
     this.text.update(dt);
     this.particles.update(dt);
     this.shockwaves.update(dt);
+    this.hud.status.buffs = this.state.inventory.buffs;
     this.hud.status.level = this.state.level;
     this.hud.status.progress = this.state.progress;
     this.hud.update(dt);
@@ -968,6 +976,26 @@ export class Adventure {
     player.hp = Math.min(player.hp, player.maxHp);
   }
 
+  /**
+   * The edge a whetstone carried in `hand` is rubbed along: the sword's blade
+   * in your other hand, or the ranger's bow (for its arrowheads). None while
+   * that hand holds nothing that takes an edge.
+   */
+  private edgeFor(hand: Handedness): { readonly base: Vector3; readonly tip: Vector3 } | null {
+    const { player, edge } = this;
+    const bow = this.combat.ranger?.bow;
+    if (bow) {
+      if (hand === 'left' || !bow.tracked) return null;
+      edge.base.copy(bow.topTip);
+      edge.tip.copy(bow.bottomTip);
+      return edge;
+    }
+    const { sword } = player;
+    if (hand === 'right' || this.state.inventory.gear.mainHand === null || sword.away || !sword.tip.valid || !sword.model.visible) return null;
+    sword.segment(player.rig, edge.base, edge.tip);
+    return edge;
+  }
+
   /** A fist touches what lies there for your quest: it's yours, with a buzz in that hand. */
   private pickUp(): void {
     const [left, right] = this.touching();
@@ -1076,8 +1104,22 @@ export class Adventure {
           // Your talents' numbers and abilities: Toughness's health, a talent ability's pip and shape.
           this.dressHands();
           break;
-        case 'drank':
-          this.player.heal(this.player.maxHp * e.heal);
+        case 'drank': {
+          // Health, rage (the warrior's, once the War Cry has brought it) or a share of the mage's mana.
+          const { player } = this;
+          player.heal(player.maxHp * e.heal);
+          if (e.rage && player.bar.kind === 'rage') player.addRage(e.rage);
+          if (e.mana && player.bar.kind === 'mana') player.resource = Math.min(player.bar.size, player.resource + player.bar.size * e.mana);
+          break;
+        }
+        case 'buff':
+          // The whetstone's or the elixir's more damage, from now: its icon shows beside the belt HUD.
+          this.player.stats = this.state.stats;
+          sfx.buff();
+          this.floatOver(at, 0.1, `+${Math.round(e.damage * 100)}% damage`, { ...KILL_XP_FLOAT, color: '#9fe08a', scale: 0.08, rise: 0.25 });
+          break;
+        case 'buffEnded':
+          this.player.stats = this.state.stats;
           break;
         case 'proficiency':
           // "+1 Alchemy", small and white where it was made, in the XP float's style.

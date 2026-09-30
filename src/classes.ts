@@ -102,6 +102,10 @@ const NAMES: Readonly<Record<Ability, string>> = {
   blizzard: 'Blizzard',
   mortalStrike: 'Mortal Strike',
   shieldSlam: 'Shield Slam',
+  trueshot: 'Trueshot',
+  explosiveTrap: 'Explosive Trap',
+  pyroblast: 'Pyroblast',
+  iceBarrier: 'Ice Barrier',
 };
 
 /** A shape as the level-up says it. */

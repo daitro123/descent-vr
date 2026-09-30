@@ -5,6 +5,8 @@ import type { Inventory, InventoryEffect, Refusal, Stack, Where } from '../../in
 import { itemOf } from '../../items';
 import { sharedModelMaterial } from '../../models/materials';
 import type { Handedness } from '../../player/input';
+import { Sip } from '../../player/sip';
+import { Sharpen } from '../../professions/sharpen';
 import { type Page, type Reach, sameSpot, type Spot } from './layout';
 import { type IconAtlas, modelOf } from './looks';
 import { BagPanel, nothingShown, type PanelShows } from './panel';
@@ -34,6 +36,11 @@ import { TALENT, type TalentRefusal } from '../../talents';
 // Items offered beside it (a hand-in's pick on Hale's board) are carried the
 // same way, into a bag slot to take one: grip one with the bag shut and it
 // swings round with the item already in hand (12-quest-items-and-hand-in-picks.md).
+// What professions make is used from it: a potion or the elixir carried to
+// your mouth and held there is drunk, as a flask off the belt is; the
+// whetstone carried in one hand and rubbed along the blade in the other (the
+// ranger's bow, for the arrowheads) sharpens it
+// (.scratch/professions/issues/17-using-what-professions-make.md).
 // The Talents tab's page presses its buttons as the tabs are pressed: a
 // talent spends a point, Reset gives them all back, and two shapes one after
 // the other swap their slots (talentPage.ts;
@@ -99,6 +106,10 @@ export interface BagWorld {
   readonly talents?: TalentActs;
   /** The hip slot of the belt at `at`, if any: a potion let go there goes onto the belt. */
   beltAt?(at: Vector3): number | null;
+  /** Your mouth now, where a carried potion is drunk. */
+  mouth?(out: Vector3): Vector3;
+  /** The edge a whetstone carried in `hand` is rubbed along: the blade (or bow) in your other hand, if one's there. */
+  edge?(hand: Handedness): { readonly base: Vector3; readonly tip: Vector3 } | null;
 }
 
 /**
@@ -213,6 +224,7 @@ interface HandTrack {
 const newTrack = (): HandTrack => ({ held: false, gripDown: false, speed: 0, prev: new Vector3(), valid: false, at: new Vector3(), velocity: new Vector3() });
 
 const _v = new Vector3();
+const _mouth = new Vector3();
 
 export class Bag {
   /** The panel and the item you carry, both in world space. */
@@ -238,6 +250,9 @@ export class Bag {
   /** Placed where it was put (beside a vendor's wares) rather than in front of you: it stays there. */
   private pinned = false;
   private tabArming = 0;
+  /** A carried potion at your mouth, and a carried whetstone on an edge. */
+  private readonly sip = new Sip();
+  private readonly sharpen = new Sharpen();
 
   constructor(
     private readonly world: BagWorld,
@@ -326,6 +341,8 @@ export class Bag {
   }
 
   private cancel(): void {
+    this.sip.reset();
+    this.sharpen.reset();
     this.carry = null;
     this.beltTarget = null;
     this.held.visible = false;
@@ -576,6 +593,18 @@ export class Bag {
       this.cancel();
       return shows;
     }
+    // At your mouth, or on the edge in your other hand: drunk, or rubbed along it.
+    if (from.in !== 'shelf') {
+      const used = this.using(input, from, probe.at);
+      if (used === 'used') return nothingShown();
+      if (used === 'using') {
+        shows.cardOver = lifted;
+        if (hand.held) return shows;
+        this.cancel();
+        this.log(`back: ${itemOf(carry.stack.id)?.name} to ${label(from)}`);
+        return nothingShown();
+      }
+    }
     // Off the panels, over a hip: onto the belt (a pick on Hale's board goes only into the bag).
     const R = CONFIG.bag.release;
     const hip =
@@ -621,6 +650,67 @@ export class Bag {
       this.log(`back: ${name} to ${label(from)}`);
     } else this.dropOff(from, name, probe.at, carry.hand);
     return shows;
+  }
+
+  /**
+   * A consumable carried from `from`, held at `at`: at your mouth, a potion
+   * or the elixir is drunk once it's been there long enough; rubbed along the
+   * edge in your other hand, the whetstone sharpens it. 'using' while it's at
+   * the mouth or on the edge (let go there, it goes back), 'used' once it has
+   * been, and null otherwise.
+   */
+  private using(input: BagInput, from: Where, at: Vector3): 'using' | 'used' | null {
+    const carry = this.carry!;
+    const { world } = this;
+    const item = itemOf(carry.stack.id);
+    if (item?.kind !== 'consumable') return null;
+    const whetstone = item.buff?.kind === 'whetstone';
+    let done: boolean;
+    let where: Vector3 = at;
+    if (whetstone) {
+      const rubbed = this.sharpen.update(at, world.edge?.(carry.hand) ?? null);
+      if (rubbed === 'off') return null;
+      const S = CONFIG.professions.sharpen.buzz;
+      if (rubbed === 'stroke') {
+        world.buzz(carry.hand, S.scrape.intensity, S.scrape.ms);
+        world.buzz(other(carry.hand), S.scrape.intensity, S.scrape.ms);
+        sfx.scrape(at);
+      }
+      done = rubbed === 'done';
+    } else {
+      if (!world.mouth) return null;
+      where = world.mouth(_mouth);
+      const sipped = this.sip.update(input.dt, at.distanceTo(where), this.track[carry.hand].speed);
+      if (sipped === 'cancelled') this.log(`cancelled: ${item.name} pulled away`);
+      if (sipped === 'away' || sipped === 'cancelled') return null;
+      const D = CONFIG.belt.buzz.drink;
+      if (this.sip.buzz) world.buzz(carry.hand, D.intensity, D.ms);
+      done = sipped === 'drunk';
+    }
+    if (!done) return 'using';
+    const effects = world.inventory.use(from);
+    const refused = effects.find((e) => e.kind === 'refused');
+    this.cancel();
+    if (refused) {
+      const B = CONFIG.bag.buzz.refused;
+      world.buzz(carry.hand, B.intensity, B.ms);
+      this.log(`refused (${REFUSED[refused.reason]}): ${item.name}`);
+      return 'used';
+    }
+    if (whetstone) {
+      const S = CONFIG.professions.sharpen.buzz.done;
+      world.buzz(carry.hand, S.intensity, S.ms);
+      world.buzz(other(carry.hand), S.intensity, S.ms);
+      sfx.sharpened(at);
+      this.log(`sharpened: ${item.name} from ${label(from)}`);
+    } else {
+      const G = CONFIG.belt.buzz.gulp;
+      world.buzz(carry.hand, G.intensity, G.ms);
+      sfx.gulp(where);
+      this.log(`drank: ${item.name} from ${label(from)}`);
+    }
+    world.apply(effects, where);
+    return 'used';
   }
 
   /**
@@ -774,6 +864,8 @@ export class Bag {
     this.log(did);
   }
 }
+
+const other = (hand: Handedness): Handedness => (hand === 'left' ? 'right' : 'left');
 
 const same = (a: Where, b: Where) => a.in === b.in && (a.in === 'ground' || (b.in !== 'ground' && a.slot === b.slot));
 
