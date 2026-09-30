@@ -195,7 +195,7 @@ function startArena(
   camera: PerspectiveCamera,
   device: unknown,
   perf: PerfReadout | null,
-  { firstWave, duel, showcase: pinned, playerClass }: Extract<Route, { kind: 'arena' }>,
+  { firstWave, duel, showcase: pinned, playerClass, gestures }: Extract<Route, { kind: 'arena' }>,
 ): void {
   scene.background = new Color(0x0c0a0e);
   scene.fog = new Fog(0x0c0a0e, 6, CONFIG.arena.halfSize * 2.2);
@@ -216,7 +216,7 @@ function startArena(
   // `classKit`: a class prototype's (`&class=`), once it has loaded.
   const debug = { game, device, renderer, combatStats, CONFIG, showcase, paused: false, classKit: null as ClassPrototype | null };
   Object.assign(window, { __descent: debug });
-  if (playerClass) void loadClassPrototype(playerClass, game, scene).then((kit) => (debug.classKit = kit));
+  if (playerClass || gestures) void loadClassPrototype(playerClass, game, scene, gestures).then((kit) => (debug.classKit = kit));
 
   const timer = new Timer();
   renderer.setAnimationLoop((time) => {
