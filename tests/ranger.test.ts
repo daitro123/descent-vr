@@ -5,8 +5,9 @@ import { ABILITY, abilitiesAt, PLAYABLE, resourceOf } from '../src/classes';
 import { AbilityClock } from '../src/combat/abilities';
 import type { CombatFx } from '../src/combat/combat';
 import type { Arrow } from '../src/combat/projectiles';
-import { RangerKit } from '../src/combat/ranger';
-import { arrowDamage, shotOf } from '../src/combat/shots';
+import { Mark } from '../src/combat/mark';
+import { RangerKit, scatteredBy } from '../src/combat/ranger';
+import { arrowDamage, fanOf, shotOf } from '../src/combat/shots';
 import { Traps } from '../src/combat/traps';
 import { Ward } from '../src/combat/ward';
 import { CONFIG } from '../src/config';
@@ -19,11 +20,12 @@ import type { Player } from '../src/player/player';
 import { Arena } from '../src/world/arena';
 import type { Ground } from '../src/world/ground';
 
-// The ranger (abilities ticket 21) at the combat seam: a real RangerKit, its
+// The ranger (abilities tickets 21 and 22) at the combat seam: a real RangerKit, its
 // bow in a pair of hands posed by code, loosing at real enemies; the ward's
-// rule; Snare Trap's traps under real enemies' feet. The tests check what a
-// player would see: what an arrow deals, whom it hits, whether an enemy's
-// arrow comes back, whether a grunt stops.
+// rule; Snare Trap's traps under real enemies' feet; Volley's fan, Scatter's
+// gust and Hunter's Mark on real enemies. The tests check what a player would
+// see: what an arrow deals, whom it hits, whether an enemy's arrow comes back,
+// whether a grunt stops, how far a gust sends it, what a mark adds.
 
 const DT = 1 / 72;
 const A = CONFIG.ranger.arrow;
@@ -105,6 +107,13 @@ function frame(r: Ranger, enemies: Enemy[] = [], ctx?: EnemyContext): void {
   r.kit.update(DT, enemies);
   if (ctx) for (const e of enemies) e.update(DT, ctx);
 }
+
+/** The flat distance between two points. */
+const flat = (a: Vector3, b: Vector3) => Math.hypot(a.x - b.x, a.z - b.z);
+
+/** An aim from the eyes: the right hand facing `hand`, the eyes looking along `gaze`. */
+const aimAt = (hand: Vector3, gaze = hand) => ({ from: new Vector3(0, 1.4, 0), hand: hand.clone().normalize(), gaze: gaze.clone().normalize() });
+const sees = () => true;
 
 /** Put the draw hand on the string, hold the trigger, draw back `pull` m behind the arrow rest, and let go. */
 function shoot(r: Ranger, pull: number, enemies: Enemy[] = [], powerShot = false): void {
@@ -351,5 +360,253 @@ describe('the class', () => {
     expect(PLAYABLE).toContain('ranger');
     const focus = resourceOf('ranger', 10);
     expect(focus).toEqual({ kind: 'focus', size: 100, start: 100, refill: { fighting: 10, calm: 10 } });
+  });
+});
+
+describe('Volley', () => {
+  it('costs 35 focus on a 12 s cooldown, drawn as a Z from level 6', () => {
+    expect(ABILITY.volley).toMatchObject({ level: 6, use: 'z', cost: 35, cooldown: 12 });
+    expect(abilitiesAt('ranger', 5)).not.toContain('volley');
+    expect(abilitiesAt('ranger', 6)).toContain('volley');
+  });
+
+  it('fans five ways 20° across, level, the middle one along the aim', () => {
+    const dir = new Vector3(0, 0.2, -1).normalize();
+    const ways = fanOf(dir, 5, 20);
+    expect(ways).toHaveLength(5);
+    expect(ways[2].angleTo(dir)).toBeCloseTo(0);
+    const deg = (a: Vector3, b: Vector3) => (Math.atan2(a.x, -a.z) - Math.atan2(b.x, -b.z)) * (180 / Math.PI);
+    expect(Math.abs(deg(ways[0], ways[4]))).toBeCloseTo(20);
+    expect(Math.abs(deg(ways[0], ways[1]))).toBeCloseTo(5);
+    for (const w of ways) {
+      expect(w.y).toBeCloseTo(dir.y); // level: each rises as the aim does
+      expect(w.length()).toBeCloseTo(1);
+    }
+  });
+
+  it('splits the next arrow into five at 60% each, and the one after is a single arrow again', () => {
+    const r = ranger(6);
+    expect(r.kit.volley()).toBe('cast');
+    expect(r.kit.volleyed).toBe(true);
+    shoot(r, 0.8);
+    expect(r.kit.shots.flying).toHaveLength(5);
+    const full = 30 * r.player.stats.damage;
+    expect(r.kit.shots.flying.every((s) => s.volley && Math.abs(s.damage - full * R.volley.share) < 1e-9)).toBe(true);
+    expect(r.kit.stats).toMatchObject({ shots: 1, volleys: 1 });
+    expect(r.kit.volleyed).toBe(false);
+    shoot(r, 0.8);
+    expect(r.kit.shots.flying).toHaveLength(6);
+    expect(r.kit.shots.flying.at(-1)!.damage).toBeCloseTo(full);
+  });
+
+  it('lands an arrow on each of a camp of five standing in an arc 8 m off', () => {
+    const ctx = context(0);
+    const r = ranger(6);
+    const camp = [-10, -5, 0, 5, 10].map((deg) => {
+      const a = (deg * Math.PI) / 180;
+      return ready('grunt', Math.sin(a) * 8, -Math.cos(a) * 8, ctx);
+    });
+    r.kit.volley();
+    shoot(r, 0.8, camp);
+    fly(r, 0.5, camp);
+    expect(new Set(r.landed.map((l) => l.enemy))).toEqual(new Set(camp));
+    expect(r.landed.every((l) => l.damage === Math.round(30 * r.player.stats.damage * R.volley.share))).toBe(true);
+  });
+
+  it('waits one at a time with Power Shot: neither goes on an arrow the other is on', () => {
+    const r = ranger(6);
+    frame(r);
+    expect(r.kit.volley()).toBe('cast');
+    expect(r.kit.volley()).toBe('waiting');
+    r.hands.right.grip.position.copy(r.kit.bow.stringRest);
+    r.hands.right.trigger = 1;
+    frame(r);
+    expect(r.kit.powerShot()).toBe('waiting');
+    r.kit.clear();
+    expect(r.kit.volleyed).toBe(false);
+    frame(r);
+    r.hands.right.grip.position.copy(r.kit.bow.stringRest);
+    frame(r);
+    expect(r.kit.powerShot()).toBe('cast');
+    expect(r.kit.volley()).toBe('waiting');
+    expect(r.player.abilities.waitingOn()).toBe('powerShot');
+  });
+});
+
+describe('Scatter', () => {
+  const S = R.scatter;
+  const at = (x: number, z: number, radius = 0.33) => ({ position: new Vector3(x, 0, z), def: { radius }, hittable: true });
+
+  it('costs 25 focus on a 15 s cooldown, drawn as a V from level 8', () => {
+    expect(ABILITY.scatter).toMatchObject({ level: 8, use: 'v', cost: 25, cooldown: 15 });
+    expect(abilitiesAt('ranger', 7)).not.toContain('scatter');
+    expect(abilitiesAt('ranger', 8)).toContain('scatter');
+  });
+
+  it('reaches every body within 3 m in the 90° in front of you, and nothing behind, aside or further', () => {
+    const feet = new Vector3();
+    const facing = new Vector3(0, 0, -1);
+    const ahead = at(0, -2);
+    const edge = at(0, -3.2); // its body's edge 2.87 m off
+    const quarter = at(Math.sin(Math.PI / 4) * 2, -Math.cos(Math.PI / 4) * 2); // 45° off
+    const pressed = at(0.2, 0.1); // against you, behind or not
+    const behind = at(0, 2);
+    const aside = at(Math.sin(Math.PI / 3) * 2, -Math.cos(Math.PI / 3) * 2); // 60° off
+    const far = at(0, -3.5);
+    const down = { ...at(0, -1), hittable: false };
+    const got = scatteredBy(feet, facing, [far, behind, edge, aside, quarter, ahead, pressed, down], S);
+    expect(got[0]).toBe(pressed);
+    expect(new Set(got)).toEqual(new Set([pressed, ahead, quarter, edge]));
+    expect(got.at(-1)).toBe(edge);
+  });
+
+  it('knocks a grunt in front of you back about 1.5 m and staggers it, unhurt; one behind you is left alone', () => {
+    const ctx = context(0);
+    const r = ranger(8);
+    const grunt = ready('grunt', 0, -1.5, ctx);
+    const behind = ready('grunt', 0, 1.5, ctx);
+    const from = grunt.position.clone();
+    const back = behind.position.clone();
+    expect(r.kit.scatter([grunt, behind], new Vector3(0, 0, -1))).toBe('cast');
+    expect(grunt.state).toBe('stagger');
+    for (let t = 0; t < 0.8; t += DT) frame(r, [grunt, behind], ctx);
+    expect(flat(grunt.position, from)).toBeGreaterThan(1.3);
+    expect(flat(grunt.position, from)).toBeLessThan(1.7);
+    expect(grunt.position.z).toBeLessThan(from.z); // away from you
+    expect(grunt.hp).toBe(CONFIG.enemies.grunt.hp);
+    expect(behind.state).not.toBe('stagger');
+    expect(r.kit.stats.scattered).toBe(1);
+    // The one behind walked at you, it wasn't pushed away.
+    expect(behind.position.z).toBeLessThanOrEqual(back.z + 1e-6);
+  });
+
+  it('knocks every one in reach at once, each straight away from you', () => {
+    const ctx = context(0);
+    const r = ranger(8);
+    const left = ready('grunt', -1.2, -1.2, ctx);
+    const right = ready('grunt', 1.2, -1.2, ctx);
+    const was = [left.position.clone(), right.position.clone()];
+    r.kit.scatter([left, right], new Vector3(0, 0, -1));
+    for (let t = 0; t < 0.8; t += DT) frame(r, [left, right], ctx);
+    expect(left.position.x).toBeLessThan(was[0].x - 0.8);
+    expect(right.position.x).toBeGreaterThan(was[1].x + 0.8);
+    expect([left.state, right.state]).toEqual(['stagger', 'stagger']);
+  });
+
+  it('moves a brute a third as far, and only nudges the Warden, which it doesn’t stagger', () => {
+    const ctx = context(0);
+    const r = ranger(8);
+    const brute = ready('brute', -1.2, -1.5, ctx);
+    const warden = ready('warden', 1.8, -1.8, ctx);
+    const was = [brute.position.clone(), warden.position.clone()];
+    r.kit.scatter([brute, warden], new Vector3(0, 0, -1));
+    expect(brute.state).toBe('stagger');
+    expect(warden.state).not.toBe('stagger');
+    // Measured by the push alone: the enemies aren't stepped, so neither walks.
+    const kicked = [brute.knockback.length(), warden.knockback.length()];
+    expect(kicked[0]).toBeCloseTo(S.knockback * 0.35);
+    expect(kicked[1]).toBeCloseTo(S.knockback * 0.15);
+    expect(kicked[1] / 8).toBeLessThan(0.3); // under 30 cm of slide
+    expect(was[0].equals(brute.position)).toBe(true);
+  });
+
+  it('leaves a rooted grunt where the vines hold it, staggered', () => {
+    const ctx = context(0);
+    const r = ranger(8);
+    const grunt = ready('grunt', 0, -1.5, ctx);
+    grunt.afflict('rooted', 4);
+    const from = grunt.position.clone();
+    r.kit.scatter([grunt], new Vector3(0, 0, -1));
+    for (let t = 0; t < 0.8; t += DT) frame(r, [grunt], ctx);
+    expect(flat(grunt.position, from)).toBeLessThan(1e-6);
+    expect(grunt.state).toBe('stagger');
+  });
+});
+
+describe("Hunter's Mark", () => {
+  const H = R.huntersMark;
+
+  it('costs 20 focus on a 1 s cooldown, drawn as an S from level 10', () => {
+    expect(ABILITY.huntersMark).toMatchObject({ level: 10, use: 's', cost: 20, cooldown: 1 });
+    expect(abilitiesAt('ranger', 9)).not.toContain('huntersMark');
+    expect(abilitiesAt('ranger', 10)).toEqual(['powerShot', 'snareTrap', 'volley', 'scatter', 'huntersMark']);
+  });
+
+  it('marks the enemy the right hand faces, else the one you look at; none out of sight, out of reach or off to the side', () => {
+    const ctx = context(0);
+    const r = ranger(10);
+    const ahead = ready('grunt', 0, -10, ctx);
+    const off = ready('grunt', 10 * Math.sin(Math.PI / 6), -10 * Math.cos(Math.PI / 6), ctx); // 30° off
+    const foes = [ahead, off];
+    expect(r.kit.huntersMark(aimAt(new Vector3(0, 0, -1)), foes, sees)).toBe('cast');
+    expect(r.kit.mark.target).toBe(ahead);
+    // The hand pointing at the floor: where you look decides.
+    expect(r.kit.huntersMark(aimAt(new Vector3(0, -1, 0), off.position.clone().setY(1.4)), foes, sees)).toBe('cast');
+    expect(r.kit.mark.target).toBe(off);
+    // Behind a wall, beyond 30 m, or 30° off with nothing where you look: nothing to mark.
+    expect(r.kit.huntersMark(aimAt(new Vector3(0, 0, -1)), foes, () => false)).toBe('no target');
+    const far = ready('grunt', 0, -(H.range + 3), ctx);
+    expect(r.kit.huntersMark(aimAt(new Vector3(0, 0, -1)), [far, off], sees)).toBe('no target');
+    expect(r.kit.stats.marks).toBe(2);
+  });
+
+  it('makes your arrows deal 15% more to the marked enemy only', () => {
+    const ctx = context(0);
+    const r = ranger(10);
+    const marked = ready('brute', 0, -8, ctx);
+    r.kit.huntersMark(aimAt(new Vector3(0, 0, -1)), [marked], sees);
+    shoot(r, 0.8, [marked]);
+    fly(r, 0.5, [marked]);
+    const damage = 30 * r.player.stats.damage;
+    expect(r.landed).toHaveLength(1);
+    expect(r.landed[0].damage).toBe(arrowDamage(damage * (1 + H.bonus), false, marked));
+    expect(r.landed[0].damage).toBeGreaterThan(arrowDamage(damage, false, marked));
+    expect(r.kit.stats.markedHits).toBe(1);
+    expect(r.kit.mark.of(marked)).toBeCloseTo(1 + H.bonus);
+    expect(r.kit.mark.of(ready('grunt', 3, -8, ctx))).toBe(1);
+  });
+
+  it('lasts 20 s, one enemy at a time, and ends when it dies', () => {
+    const ctx = context(0);
+    const mark = new Mark(null);
+    const a = ready('grunt', 0, -5, ctx);
+    const b = ready('grunt', 2, -5, ctx);
+    mark.set(a, H.time);
+    mark.update(H.time - 0.1);
+    expect(mark.target).toBe(a);
+    expect(mark.outline.visible).toBe(true);
+    mark.update(0.2);
+    expect(mark.target).toBeNull();
+    expect(mark.of(a)).toBe(1);
+    expect(mark.outline.visible).toBe(false);
+    // Marking another lets the first go; marking it again starts its time over.
+    mark.set(a, H.time);
+    mark.set(b, H.time);
+    expect([mark.of(a), mark.of(b)]).toEqual([1, 1 + H.bonus]);
+    mark.update(15);
+    mark.set(b, H.time);
+    expect(mark.remaining).toBeCloseTo(H.time);
+    b.takeHit(999, new Vector3());
+    mark.update(DT);
+    expect(mark.target).toBeNull();
+  });
+
+  it('shows its outline over walls within the effects budget: 2 draw calls, under 500 triangles, no light', () => {
+    const ctx = context(0);
+    const parent = new Group();
+    const mark = new Mark(parent);
+    const warden = ready('warden', 0, -6, ctx);
+    mark.set(warden, H.time);
+    mark.update(0.5);
+    expect(parent.children).toEqual([mark.outline, mark.chevron]);
+    expect(mark.triangles).toBeLessThan(500);
+    expect(mark.outline.material.depthTest).toBe(false);
+    expect(mark.chevron.material.depthTest).toBe(false);
+    // Round its body, a little wider, and the chevron over its head.
+    expect(flat(mark.outline.position, warden.position)).toBeLessThan(0.3);
+    expect(mark.outline.scale.x).toBeGreaterThan(warden.def.radius);
+    const head = new Vector3();
+    warden.headSphere(head);
+    expect(mark.chevron.position.y).toBeGreaterThan(head.y);
   });
 });

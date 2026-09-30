@@ -218,7 +218,7 @@ export class Gestures {
         : use === 'cooling'
           ? `ready in ${Math.ceil(player.abilities.cooldown(ability))} s`
           : use === 'no target'
-            ? 'nothing to throw at'
+            ? (NOTHING[ability] ?? 'nothing to throw at')
             : use === 'waiting'
               ? waitingWords(ability, player.abilities.waitingOn())
               : 'not built yet';
@@ -342,6 +342,9 @@ function hintGeometry(shape: Shape): BufferGeometry {
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
 
 /** Why an ability that changes your next attack waits: it already does, or another does. */
+/** What an ability that needs something to act on says when there's nothing: Heroic Throw's words, unless its own. */
+const NOTHING: Partial<Record<Ability, string>> = { huntersMark: 'nothing to mark' };
+
 function waitingWords(ability: Ability, waiting: Ability | null): string {
   return !waiting || waiting === ability ? 'already waiting' : `${ABILITY[waiting].name} is waiting`;
 }
