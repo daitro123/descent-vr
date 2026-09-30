@@ -275,9 +275,12 @@ check(mode === 'record' && kept.n === 1 && kept.stored, `two clicks of the right
 await page.evaluate(() => localStorage.removeItem('descent-PROTOTYPE-gesture-recordings'));
 
 // 7. Without the flag.
-await enter('arena&class=ranger');
+await enter('arena&class=ranger-prototype');
 const ranger = await page.evaluate(() => ({ recorder: !!window.__descent.classKit?.recorder, bow: !!window.__descent.classKit?.bow }));
-check(ranger.bow && !ranger.recorder, `?arena&class=ranger alone is the ranger prototype, with no gestures (${JSON.stringify(ranger)})`);
+check(ranger.bow && !ranger.recorder, `?arena&class=ranger-prototype alone is the ranger prototype, with no gestures (${JSON.stringify(ranger)})`);
+await enter('arena&class=ranger');
+const built = await page.evaluate(() => ({ kit: window.__descent.classKit, bow: !!window.__descent.game.combat.ranger }));
+check(built.kit === null && built.bow, `?arena&class=ranger alone is the built ranger (${JSON.stringify(built)})`);
 await enter('arena');
 const warrior = await page.evaluate(() => ({ kit: window.__descent.classKit, sword: window.__descent.game.player.sword.model.parent !== null }));
 check(warrior.kit === null && warrior.sword, `?arena alone is the warrior's (${JSON.stringify(warrior)})`);

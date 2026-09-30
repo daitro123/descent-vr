@@ -1,6 +1,7 @@
 import { Color, Fog, PerspectiveCamera, Scene, Timer, WebGLRenderer } from 'three';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
 import { Adventure } from './adventure';
+import { PLAYABLE } from './classes';
 import { combatStats } from './combat/combat';
 import { CONFIG } from './config';
 import { enemiesDebug } from './enemies/debug';
@@ -194,14 +195,18 @@ async function startAdventure(
 /**
  * Your characters, from the save. At `?newgame`, the new-character form opens
  * first (with every slot taken, it says so), and the flag leaves the address,
- * so a reload carries on rather than asking again.
+ * so a reload carries on rather than asking again. A first visit (no
+ * characters, and a save that opened) opens the form too; turned away, it
+ * plays a new warrior with a suggested name, as a first visit did before the
+ * ranger. The scripted checks (`?emulate&nodevui`) skip it, as each opens a
+ * fresh browser to play that warrior.
  */
 async function openCharacter(newGame: boolean): Promise<Characters> {
   const characters = await openCharacters();
-  if (newGame) {
-    await askNewCharacter(characters);
-    history.replaceState(null, '', `${location.pathname}${forgetNewGame(location.search)}${location.hash}`);
-  }
+  const scripted = page.emulate === 'yes' && !page.devUI;
+  const first = characters.slots.length === 0 && characters.note === null && !scripted;
+  if (newGame || first) await askNewCharacter(characters);
+  if (newGame) history.replaceState(null, '', `${location.pathname}${forgetNewGame(location.search)}${location.hash}`);
   return characters;
 }
 
@@ -219,7 +224,10 @@ function startArena(
 
   // ?wave=N starts the run at wave N (7 is the Warden) for testing.
   // ?duel fights one practice duelist after another (CONFIG.duelist) instead.
-  const game = new Game(scene, camera, renderer, firstWave, duel);
+  // &class= a built class plays it; any other name is a class prototype's, over the warrior. `&gestures`
+  // runs the gesture prototype over the class prototypes it was built on, the ranger's too (until ticket 27).
+  const built = gestures ? undefined : PLAYABLE.find((c) => c === playerClass);
+  const game = new Game(scene, camera, renderer, firstWave, duel, built);
   const showcase = buildShowcase();
   scene.add(showcase.root);
   if (pinned) pinShowcaseCamera(camera);
@@ -240,7 +248,7 @@ function startArena(
   Object.assign(window, { __descent: debug });
   // The gesture prototype takes the right grip for its own modes: the game's gestures stand aside.
   if (gestures) game.gestures.enabled = false;
-  if (playerClass || gestures) void loadClassPrototype(playerClass, game, scene, gestures).then((kit) => (debug.classKit = kit));
+  if ((playerClass && !built) || gestures) void loadClassPrototype(playerClass, game, scene, gestures).then((kit) => (debug.classKit = kit));
 
   const timer = new Timer();
   renderer.setAnimationLoop((time) => {

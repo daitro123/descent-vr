@@ -11,6 +11,7 @@ import type { Player } from '../player/player';
 import { clamp01, closestPointOnSegment, closestSegmentSegment, segmentIntersectsBox, type SegmentHit } from './geometry';
 import { type Arrow, type ArrowContact, type ArrowResolver, Projectiles } from './projectiles';
 import { ABILITY_COLOUR, blocked, type Refusal, sweptTo, throwTarget } from './abilities';
+import { RangerKit } from './ranger';
 import { type BladeResult, bladeTarget, type Defender, sweepBlade, sweepStrike, type SweepResult } from './strike';
 import { ThrownAxes } from './thrownAxes';
 
@@ -22,8 +23,8 @@ export interface CombatEvents {
 
 /**
  * What came of using an ability: cast, or why not (still cooling down, not
- * enough rage, nobody in reach to throw at, or an ability not built yet), in
- * which case nothing was spent.
+ * enough of your class's bar, nobody in reach to throw at or nothing to use
+ * it on, or an ability not built yet), in which case nothing was spent.
  */
 export type Use = 'cast' | Refusal | 'no target' | 'unbuilt';
 
@@ -106,6 +107,8 @@ export class Combat implements ArrowResolver {
   readonly projectiles: Projectiles;
   /** Heroic Throw's axes in flight. */
   readonly axes: ThrownAxes;
+  /** The ranger's bow, arrows, ward and traps: a ranger's only. */
+  readonly ranger: RangerKit | null;
   private swinging = false;
   private slamCooldown = 0;
   private readonly defender: Defender;
@@ -121,6 +124,10 @@ export class Combat implements ArrowResolver {
   ) {
     this.projectiles = new Projectiles(parent, player.ground);
     this.axes = new ThrownAxes(parent);
+    this.ranger =
+      player.class === 'ranger'
+        ? new RangerKit(player, fx, { land: (e, d, head, at, push) => this.arrowLands(e, d, head, at, push), evade: (at) => this.evade(at), reflect: (a, label) => this.reflectArrow(a, label) }, parent)
+        : null;
     const B = CONFIG.player.body;
     const S = CONFIG.shield;
     this.defender = {
@@ -144,6 +151,7 @@ export class Combat implements ArrowResolver {
     this.updateSword(enemies);
     this.updateBash(enemies);
     this.updateGroundSlam(enemies);
+    this.ranger?.update(dt, enemies);
     this.projectiles.update(dt, this);
     this.axes.update(dt, (enemy, at, dir, from) => this.axeLands(enemy, at, dir, from));
   }
@@ -258,17 +266,41 @@ export class Combat implements ArrowResolver {
     if (killed) this.onKill(other);
   }
 
+  /** The class's own attack has the right hand (an arrow nocked): no gesture arms. */
+  get busy(): boolean {
+    return this.ranger?.drawing ?? false;
+  }
+
+  /** Nothing in flight or lying about, nothing on the string: after death, or a new run. */
+  clear(): void {
+    this.projectiles.clear();
+    this.axes.clear();
+    this.ranger?.clear();
+  }
+
   /**
-   * Use a gesture ability, aimed from the right hand: spend its cost and
-   * start its cooldown, or say why not and spend nothing.
+   * A / X: your class's button ability. The warrior's War Cry; the ranger's
+   * Power Shot while an arrow is drawn, which says over the bow what came of it.
    */
-  use(ability: Ability, aim: Aim): Use {
+  primary(enemies: Enemy[]): void {
+    const { player, ranger } = this;
+    if (player.class === 'warrior') this.warCry(enemies);
+    else if (ranger?.drawing && player.can('powerShot') && player.alive) ranger.say(this.use('powerShot'));
+  }
+
+  /**
+   * Use an ability by gesture (aimed from the right hand) or by its button:
+   * spend its cost from your class's bar and start its cooldown, or say why
+   * not and spend nothing.
+   */
+  use(ability: Ability, aim?: Aim): Use {
     const { player } = this;
-    const refused = player.abilities.refuses(ability, player.rage);
+    const refused = player.abilities.refuses(ability, player.resource);
     if (refused) return refused;
     const W = CONFIG.classes.warrior.abilities;
     switch (ability) {
       case 'heroicThrow': {
+        if (!aim) return 'no target';
         const target = throwTarget(aim.from, [aim.hand, aim.gaze], this.enemies, (a, b) => player.ground.lineOfSight(a, b), W.heroicThrow);
         if (!target) return 'no target';
         this.axes.throw(aim.from, target);
@@ -286,11 +318,36 @@ export class Combat implements ArrowResolver {
         player.abilities.used(ability, W.sweepingStrikes.time);
         sfx.sweepingStrikes();
         break;
+      case 'powerShot':
+      case 'snareTrap': {
+        if (!this.ranger) return 'unbuilt';
+        const used = ability === 'powerShot' ? this.ranger.powerShot() : this.ranger.snareTrap();
+        if (used !== 'cast') return used;
+        player.abilities.used(ability);
+        break;
+      }
       default:
         return 'unbuilt';
     }
-    player.rage -= ABILITY[ability].cost;
+    player.resource -= ABILITY[ability].cost;
     return 'cast';
+  }
+
+  /** One of the ranger's arrows lands on `enemy` (ranger.ts): the blow as dealt, with the sword's feedback. */
+  private arrowLands(enemy: Enemy, damage: number, head: boolean, at: Vector3, push: Vector3): boolean {
+    this.player.headPosition(_a);
+    const bright = head || enemy.exposed > 0;
+    const exposed = enemy.exposed > 0;
+    const killed = enemy.takeHit(damage, push, { from: _a });
+    combatStats.hits++;
+    if (head) combatStats.crits++;
+    this.impactFx(enemy, at, push, bright);
+    this.fx.text.spawn(head ? `${damage}!` : `${damage}`, at, { color: head ? '#ffd23a' : exposed ? '#9fd8ff' : '#ffffff', scale: head ? 0.3 : 0.22 });
+    sfx.hit(head, at);
+    if (head) this.events.hitStop(CONFIG.feel.hitStop * 1.2);
+    this.events.onEnemyHit(enemy, killed);
+    if (killed) this.onKill(enemy);
+    return killed;
   }
 
   /** Heroic Throw's axe reaches the enemy it was thrown at: a blow, and a stagger. */
@@ -623,6 +680,8 @@ export class Combat implements ArrowResolver {
     const d = this.defender;
     if (!player.alive) return null;
     const R = CONFIG.arrow.hitRadius;
+    const warded = this.ranger?.arrowContact(prev, pos, arrow);
+    if (warded) return warded;
 
     if (d.shieldInverse) {
       _a.copy(prev).applyMatrix4(d.shieldInverse);

@@ -15,13 +15,19 @@ import {
   Vector3,
   type WebGLRenderer,
 } from 'three';
+import type { ResourceKind } from '../classes';
 import { CONFIG } from '../config';
 import type { Player } from '../player/player';
 
 const W = 64;
 const H = 24;
-/** Where the first ability's pip sits: five fit under the rage orb. */
+/** Where the first ability's pip sits: five fit under the right orb. */
 const PIPS = 44;
+/** The right orb's colours, full and empty, for a bar other than rage (whose orb burns as the War Cry nears). */
+const BAR: Readonly<Record<Exclude<ResourceKind, 'rage'>, readonly [string, string]>> = {
+  focus: ['#f0c830', '#2e2608'], // gold
+  mana: ['#3a7aff', '#0a1430'], // blue
+};
 const _head = new Vector3();
 const _fwd = new Vector3();
 
@@ -61,9 +67,10 @@ export interface HudStatus {
  * Diablo's health and resource orbs, body-locked at belt height: glance down
  * to read them. Follows head yaw only, so it does not swim when you look around.
  * Between the orbs: the dash cooldown, in the arena the wave and the enemies
- * left, and in the Adventure your level and a thin XP bar. The rage orb and
- * each ability's pip show once your level has brought them; a pip is lit
- * while its ability is off cooldown and you have the rage for it.
+ * left, and in the Adventure your level and a thin XP bar. The right orb is
+ * your class's bar: rage (once the War Cry has come), focus in gold or mana
+ * in blue. Each ability's pip shows once your level has brought it, lit while
+ * it's off cooldown and you have the bar for it.
  *
  * Also owns the head-locked vignette: red when hurt (and pulsing at low HP),
  * dark during a dash to cut peripheral motion.
@@ -195,16 +202,19 @@ export class BeltHud {
   private redraw(): void {
     const p = this.player;
     const hp = p.hp / p.maxHp;
-    const rage = p.rage / CONFIG.player.maxRage;
+    const bar = p.stats.resource;
+    const fill = p.resource / bar.size;
     const dash = 1 - p.dashCooldown / CONFIG.dash.cooldown;
     const s = this.status;
     const frenzyBlink = p.frenzy > 0 && (p.frenzy > 2 || Math.sin(this.time * 12) > 0);
-    const canCry = p.can('warCry');
+    // Rage shows once the War Cry has come; focus and mana always.
+    const showBar = bar.kind !== 'rage' || p.can('warCry');
     // A pip per ability your level has brought, in the order they came: lit when it's ready and you can pay for it.
-    const pips = p.stats.abilities.map((a) => p.abilities.refuses(a, p.rage) === null);
+    const pips = p.stats.abilities.map((a) => p.abilities.refuses(a, p.resource) === null);
     const key = [
       Math.round(hp * 18),
-      Math.round(rage * 18),
+      Math.round(fill * 18),
+      bar.kind,
       Math.round(dash * 12),
       frenzyBlink,
       s.wave,
@@ -212,7 +222,7 @@ export class BeltHud {
       s.boss,
       s.level,
       Math.round(s.progress * 20),
-      canCry,
+      showBar,
       pips.map(Number).join(''),
     ].join(':');
     if (key === this.lastKey) return;
@@ -223,8 +233,12 @@ export class BeltHud {
     c.fillStyle = 'rgba(10,8,8,0.55)';
     c.fillRect(20, 2, 24, 20);
     this.orb(10, hp, '#c81e1e', '#3a0c0c');
-    const warCry = rage >= CONFIG.warCry.cost / CONFIG.player.maxRage;
-    if (canCry) this.orb(W - 11, rage, p.frenzy > 0 ? '#ff5a10' : warCry ? '#ffb020' : '#b86a10', '#2e1a06');
+    if (showBar) {
+      if (bar.kind === 'rage') {
+        const warCry = p.resource >= CONFIG.warCry.cost;
+        this.orb(W - 11, fill, p.frenzy > 0 ? '#ff5a10' : warCry ? '#ffb020' : '#b86a10', '#2e1a06');
+      } else this.orb(W - 11, fill, ...BAR[bar.kind]);
+    }
 
     if (this.waves) {
       // Wave (or BOSS), then a skull and the enemies left.
@@ -246,7 +260,7 @@ export class BeltHud {
     c.fillRect(22, 18, 20, 2);
     c.fillStyle = dash >= 1 ? '#9fd8ff' : '#4a6a80';
     c.fillRect(22, 18, Math.round(20 * Math.min(1, dash)), 2);
-    // Ability pips under the rage orb, left to right in the order they came, each always in its own place.
+    // Ability pips under the right orb, left to right in the order they came, each always in its own place.
     pips.forEach((lit, i) => {
       c.fillStyle = lit ? '#ffd060' : '#3a3228';
       c.fillRect(PIPS + i * 4, 21, 3, 2);

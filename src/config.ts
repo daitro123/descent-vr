@@ -395,6 +395,30 @@ export const CONFIG = {
     mana: { size: 100, perIntellect: 2, from: 10, start: 1, refill: { fighting: 2, calm: 30 } },
   },
 
+  // The ranger's plain kit (player/bow.ts, combat/ranger.ts; .scratch/abilities/spec.md, "The ranger"),
+  // promoted from the prototype's kept variant (issues/05): the bow in the left hand, drawn with the right.
+  ranger: {
+    // The bow, in metres: grip to each limb's tip, how far behind the grip the string sits at rest, the pull
+    // from the arrow rest to the nock at full draw, the rest over the fist, how near the string the draw hand
+    // nocks (its middle half), and the least draw that looses an arrow (less puts it away).
+    bow: { limb: 0.66, brace: 0.16, fullDraw: 0.62, rest: 0.05, nockReach: 0.13, minDraw: 0.15 },
+    // An arrow's damage (level-1 terms, times your damage) and speed rise in step with the draw, from the least
+    // to full; it falls under `gravity`, lives `life` s in flight and `stick` s stuck in a wall or the ground.
+    // A head hit takes the enemy's own multiplier, an exposed one the sword's; a raised guard stops it.
+    arrow: { minDamage: 6, maxDamage: 30, minSpeed: 14, maxSpeed: 42, gravity: 9.8, life: 3, stick: 4, radius: 0.03 },
+    // Squeeze the bow hand's grip: a disc `radius` m across, `reach` m past the bow hand, up while held for at most
+    // `hold` s, back `cooldown` s after it drops. It stops enemy arrows, and sends them back in its first
+    // `reflect` s (the warrior's reflect); `margin` m of slack round its rim. It doesn't stop blows.
+    ward: { radius: 0.3, reach: 0.16, hold: 1.2, cooldown: 2, reflect: 0.35, margin: 0.05, squeeze: 0.6 },
+    // Nock with the trigger past `nock`, loose under `loose`. Haptics: a tick every `tick` s through the draw,
+    // growing with the bend in both hands, a click at full draw and a sharp pulse on release.
+    trigger: { nock: 0.5, loose: 0.3 },
+    haptics: { tick: 0.05, nock: 0.5, full: 0.9, release: { draw: 1, bow: 0.6 } },
+    // Snare Trap's trap: `radius` m across on the ground, sprung by an enemy whose body reaches over it; at
+    // most `alive` lie about at once (another ends the oldest).
+    trap: { radius: 0.35, alive: 3 },
+  },
+
   // Abilities by gesture (player/gestures/; .scratch/abilities/spec.md, "Gestures"): hold the right
   // grip, draw a shape, let go. The stroke is read once, on release, against each shape's templates.
   gestures: {

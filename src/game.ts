@@ -1,5 +1,5 @@
 import { type PerspectiveCamera, type Scene, Vector3, type WebGLRenderer } from 'three';
-import { type Shape, SHAPES, slotsOf } from './classes';
+import { type ClassId, type Shape, SHAPES, slotsOf } from './classes';
 import { Combat, combatStats, resetCombatStats } from './combat/combat';
 import { CONFIG } from './config';
 import { type Enemy, type EnemyContext, keepApart, type PlayerSword } from './enemies/enemy';
@@ -81,10 +81,12 @@ export class Game {
     private readonly firstWave = 1,
     /** ?duel: endless duelists, one at a time, instead of the waves. */
     private readonly duel = false,
+    /** `&class=`: who fights, at level 1 with every base ability of the class. */
+    klass: ClassId = 'warrior',
   ) {
     this.wave = firstWave - 1;
     scene.add(this.arena.root, this.orbs.root, this.shadows.mesh, this.vines.mesh);
-    this.player = new Player(camera, renderer, this.arena);
+    this.player = new Player(camera, renderer, this.arena, klass);
     scene.add(this.player.rig);
     this.text = new FloatingText(scene);
     this.particles = new Particles(scene);
@@ -119,6 +121,7 @@ export class Game {
       },
       drawn: (shape) => this.learned.add(shape),
       use: (ability, aim) => this.combat.use(ability, aim),
+      busy: () => this.combat.busy,
     });
 
     this.ctx = {
@@ -148,7 +151,7 @@ export class Game {
     this.player.update(dt);
     updateListener(this.player.camera);
     const { hands } = this.player.input;
-    if (hands.left.primaryPressed || hands.right.primaryPressed) this.combat.warCry(this.enemies);
+    if (hands.left.primaryPressed || hands.right.primaryPressed) this.combat.primary(this.enemies);
 
     // Hit-stop freezes enemies (not the player) for a few frames on impact.
     const enemyDt = this.hitStop > 0 ? 0 : dt;
@@ -329,8 +332,7 @@ export class Game {
     this.orbs.clear();
     this.text.clear();
     this.particles.clear();
-    this.combat.projectiles.clear();
-    this.combat.axes.clear();
+    this.combat.clear();
     this.player.reset();
     this.wave = this.firstWave - 1;
     resetCombatStats();

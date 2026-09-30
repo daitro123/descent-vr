@@ -206,7 +206,7 @@ export class Adventure {
     this.world.load(zone);
     this.respawns = zone.respawns;
     this.respawn = zone.respawns.village;
-    this.player = new Player(camera, renderer, this.world);
+    this.player = new Player(camera, renderer, this.world, this.state.class);
     this.player.run = new Run();
     scene.add(this.player.rig, this.orbs.root, this.drops.root, this.shadows.mesh, this.vines.mesh);
     this.drops.warm(renderer, camera, scene);
@@ -271,8 +271,10 @@ export class Adventure {
       drawn: (shape) => this.apply({ kind: 'drawn', shape }, this.you.head),
       use: (ability, aim) => this.combat.use(ability, aim),
       // Your hands are the bag's while it's open, and the bench's while you work at it.
-      held: () => this.bag.isOpen || this.bench?.bare === true,
+      held: () => this.handsTaken,
+      busy: () => this.combat.busy,
     });
+    if (this.combat.ranger) this.combat.ranger.held = () => this.handsTaken;
     // The mine's undead stand on the mine's own ground, whether or not you've come in.
     const below = this.world.mineGround;
     const hooks: CampHooks = {
@@ -413,7 +415,7 @@ export class Adventure {
     updateListener(player.camera);
     const { hands } = player.input;
     const foes = this.gatherFoes();
-    if (hands.left.primaryPressed || hands.right.primaryPressed) this.combat.warCry(foes);
+    if (hands.left.primaryPressed || hands.right.primaryPressed) this.combat.primary(foes);
 
     // Hit-stop freezes enemies (not you) for a few frames on impact.
     const enemyDt = this.hitStop > 0 ? 0 : dt;
@@ -687,10 +689,16 @@ export class Adventure {
     for (const e of effects) if (e.kind === 'made') this.apply({ kind: 'made', recipe: e.recipe }, at);
   }
 
+  /** Your hands are the bag's while it's open, and the bench's while you work at it: no gesture, no draw. */
+  private get handsTaken(): boolean {
+    return this.bag.isOpen || this.bench?.bare === true;
+  }
+
   /**
    * Your hands show what you wear: the main hand's item is the sword you hold
-   * (none, with it empty), the off hand's the shield on your arm, and gloves
-   * tint your fists. Your numbers read what you wear.
+   * (none, with it empty), or the ranger's bow in the other hand; the off
+   * hand's the shield on your arm, and gloves tint your fists. Your numbers
+   * read what you wear.
    */
   private dressHands(): void {
     const { player, state } = this;
@@ -698,6 +706,7 @@ export class Adventure {
     player.sword.sword = state.sword ?? 'plain';
     player.sword.model.visible = gear.mainHand !== null;
     player.shield.model.visible = gear.offHand !== null;
+    if (this.combat.ranger) this.combat.ranger.worn = gear.mainHand !== null;
     const gloves = itemOf(gear.hands ?? '');
     const tint = gloves ? lookOf(gloves).tint : null;
     for (const fist of Object.values(player.fists ?? {})) fist.tint(tint);
@@ -880,8 +889,7 @@ export class Adventure {
     // Behind the fade, the chunks round where you wake, at once.
     this.world.fill(x, z);
     this.lastHp = this.player.hp;
-    this.combat.projectiles.clear();
-    this.combat.axes.clear();
+    this.combat.clear();
     this.deadFor = null;
     this.wakingFor = 0;
   }

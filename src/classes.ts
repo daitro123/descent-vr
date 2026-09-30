@@ -13,10 +13,10 @@ export type { ClassId, MainAttribute };
 export const CLASSES = ['warrior', 'ranger', 'mage'] as const satisfies readonly ClassId[];
 
 /**
- * The classes a new character can be: only those that are built. The ranger
- * joins with abilities ticket 21 and the mage with 23.
+ * The classes a new character can be, and the arena's `&class=` plays: only
+ * those that are built. The mage joins with abilities ticket 23.
  */
-export const PLAYABLE: readonly ClassId[] = ['warrior'];
+export const PLAYABLE: readonly ClassId[] = ['warrior', 'ranger'];
 
 /** A class as the page before VR shows it: its name, and a line on how it fights. */
 export const CLASS_CARD: Readonly<Record<ClassId, { readonly name: string; readonly line: string }>> = {
