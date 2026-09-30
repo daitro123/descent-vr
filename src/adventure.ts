@@ -278,7 +278,7 @@ export class Adventure {
     scene.add(this.pickups.root);
 
     this.hale = new Hale(zone.hale, this.world, this.state.hale.marker, this.state.haleSwordAtHip);
-    this.arrowSpots = { places: zone.places, hale: zone.hale };
+    this.arrowSpots = { places: zone.places, givers: { hale: zone.hale } };
     this.world.addBody(this.hale.body);
     scene.add(this.hale.root, this.board.root, this.tracker.mesh);
     // The innkeeper hangs from the inn's room, drawn while it is; the others are drawn with the outdoors.
@@ -389,14 +389,15 @@ export class Adventure {
 
   /**
    * The quest arrow, if it shows: beside the line you're working on, turned
-   * towards its place (or Hale) from where you stand and look.
+   * towards its place (or its giver) from where you stand and look.
    */
   private questArrow(): ArrowShown | null {
     const arrow = this.state.arrow;
+    const to = arrow && arrowPoint(arrow.target, this.arrowSpots);
     const { head } = this.you;
-    if (!arrow || arrowHides(arrow.target, { x: head.x, z: head.z, interior: this.world.interior }, this.arrowSpots)) return null;
+    if (!arrow || !to || arrowHides(arrow.target, { x: head.x, z: head.z, interior: this.world.interior }, this.arrowSpots)) return null;
     const yaw = _turn.setFromQuaternion(this.player.camera.getWorldQuaternion(_look), 'YXZ').y;
-    return { line: arrow.line, turn: arrowTurn({ x: head.x, z: head.z, yaw }, arrowPoint(arrow.target, this.arrowSpots)) };
+    return { line: arrow.line, turn: arrowTurn({ x: head.x, z: head.z, yaw }, to) };
   }
 
   /** Is anything fighting you: a camp's (not walking home), or the Warden and what it raised? */
@@ -533,7 +534,7 @@ export class Adventure {
     this.saves.onEffects(effects);
     this.show(effects, this.hale.head(_haleHead), true);
     const refused = effects.find((e) => e.kind === 'refused');
-    if (refused) return refused.reason;
+    if (refused) return refused.reason as Refusal;
     this.board.show(this.state.hale);
     return null;
   }

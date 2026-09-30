@@ -55,7 +55,7 @@ describe('a new character', () => {
   });
 
   it('has no quest to track', () => {
-    expect(new AdventureState().tracker).toBeNull();
+    expect(new AdventureState().tracker).toEqual([]);
   });
 });
 
@@ -69,7 +69,7 @@ describe('Raiders in the Fields', () => {
       buttons: ['goodbye'],
       picks: [],
     });
-    expect(state.tracker).toEqual({ title: 'Raiders in the Fields', lines: ['Bandits defeated at the farm: 0/3'] });
+    expect(state.tracker).toEqual([{ title: 'Raiders in the Fields', lines: ['Bandits defeated at the farm: 0/3'] }]);
   });
 
   it("counts the farm's bandits as they fall", () => {
@@ -80,7 +80,7 @@ describe('Raiders in the Fields', () => {
       { kind: 'progress', quest: 'raiders', objective: 0, count: 1 },
     ]);
     play(state, FARM);
-    expect(state.tracker?.lines).toEqual(['Bandits defeated at the farm: 2/3']);
+    expect(state.tracker[0]?.lines).toEqual(['Bandits defeated at the farm: 2/3']);
   });
 
   it('is ready with the third: a gold "?", Hand in, and "Return to Marshal Hale"', () => {
@@ -92,7 +92,7 @@ describe('Raiders in the Fields', () => {
     ]);
     // The pick lies on Hale's board: carrying one into the bag hands the quest in, so there's no button.
     expect(state.hale).toEqual({ marker: 'ready', line: "The farm's quieter already. Well done.", buttons: [], picks: PICKS.raiders });
-    expect(state.tracker).toEqual({ title: 'Raiders in the Fields', lines: ['Return to Marshal Hale'] });
+    expect(state.tracker).toEqual([{ title: 'Raiders in the Fields', lines: ['Return to Marshal Hale'] }]);
   });
 
   it('counts no more once ready: a fourth bandit pays its XP and nothing else', () => {
@@ -113,7 +113,7 @@ describe('Raiders in the Fields', () => {
     ]);
     expect(state.xp).toBe(110);
     expect(state.hale).toEqual({ marker: 'offered', line: OFFERED[1], buttons: ['accept', 'notNow'], picks: [] });
-    expect(state.tracker).toBeNull();
+    expect(state.tracker).toEqual([]);
   });
 });
 
@@ -121,38 +121,38 @@ describe('kill credit', () => {
   it("doesn't count the farm's bandits killed before the quest was taken", () => {
     const state = new AdventureState();
     play(state, FARM, FARM, FARM, ACCEPT);
-    expect(state.tracker?.lines).toEqual(['Bandits defeated at the farm: 0/3']);
+    expect(state.tracker[0]?.lines).toEqual(['Bandits defeated at the farm: 0/3']);
     expect(state.xp).toBe(30);
   });
 
   it("counts only the quest's own camp", () => {
     const state = new AdventureState();
     play(state, ACCEPT, THUG, PATROL, MINE, kill('watchtower', 2), WARDEN);
-    expect(state.tracker?.lines).toEqual(['Bandits defeated at the farm: 0/3']);
+    expect(state.tracker[0]?.lines).toEqual(['Bandits defeated at the farm: 0/3']);
   });
 
   it("doesn't count the lumber camp's bandits for The Lumber Camp before it's taken", () => {
     const state = new AdventureState();
     play(state, ...RAIDERS, THUG, THUG, THUG, ARCHER, LEADER, ACCEPT);
-    expect(state.tracker?.lines).toEqual(['Bandits defeated at the lumber camp: 0/5', "Leader's orders taken: 0/1"]);
+    expect(state.tracker[0]?.lines).toEqual(['Bandits defeated at the lumber camp: 0/5', "Leader's orders taken: 0/1"]);
   });
 
   it("doesn't count the lumber camp's patrol, which is its own camp", () => {
     const state = new AdventureState();
     play(state, ...RAIDERS, ACCEPT, PATROL, PATROL, THUG);
-    expect(state.tracker?.lines[0]).toBe('Bandits defeated at the lumber camp: 1/5');
+    expect(state.tracker[0]?.lines[0]).toBe('Bandits defeated at the lumber camp: 1/5');
   });
 
   it("doesn't count the Warden before What Lies Below is taken", () => {
     const state = new AdventureState();
     play(state, ...RAIDERS, ...LUMBER, WARDEN, ACCEPT);
-    expect(state.tracker?.lines).toEqual(['What woke the dead defeated: 0/1']);
+    expect(state.tracker[0]?.lines).toEqual(['What woke the dead defeated: 0/1']);
   });
 
   it("counts nothing for the skeletons the Warden raises", () => {
     const state = new AdventureState();
     play(state, ...RAIDERS, ...LUMBER, ACCEPT, kill(null, 5, 'raised'));
-    expect(state.tracker?.lines).toEqual(['What woke the dead defeated: 0/1']);
+    expect(state.tracker[0]?.lines).toEqual(['What woke the dead defeated: 0/1']);
   });
 });
 
@@ -167,10 +167,10 @@ describe('The Lumber Camp', () => {
       buttons: ['goodbye'],
       picks: [],
     });
-    expect(state.tracker).toEqual({
+    expect(state.tracker).toEqual([{
       title: 'The Lumber Camp',
       lines: ['Bandits defeated at the lumber camp: 0/5', "Leader's orders taken: 0/1"],
-    });
+    }]);
   });
 
   it('takes the orders only while it is under way', () => {
@@ -185,7 +185,7 @@ describe('The Lumber Camp', () => {
       { kind: 'progress', quest: 'lumber', objective: 1, count: 1 },
       { kind: 'slot', where: { in: 'quest', slot: 0 }, stack: { id: 'leaders-orders', count: 1 } },
     ]);
-    expect(state.tracker?.lines[1]).toBe("Leader's orders taken: 1/1");
+    expect(state.tracker[0]?.lines[1]).toBe("Leader's orders taken: 1/1");
   });
 
   it('takes the orders once: they are gone for good', () => {
@@ -239,13 +239,13 @@ describe('The Lumber Camp', () => {
     const state = new AdventureState();
     play(state, ...RAIDERS, ACCEPT, THUG, THUG, THUG, ARCHER, LEADER);
     expect(state.hale.marker).toBe('active');
-    expect(state.tracker?.lines).toEqual(['Bandits defeated at the lumber camp: 5/5', "Leader's orders taken: 0/1"]);
+    expect(state.tracker[0]?.lines).toEqual(['Bandits defeated at the lumber camp: 5/5', "Leader's orders taken: 0/1"]);
     expect(state.apply(ORDERS)).toEqual([
       { kind: 'progress', quest: 'lumber', objective: 1, count: 1 },
       { kind: 'quest', quest: 'lumber', stage: 'ready' },
       { kind: 'slot', where: { in: 'quest', slot: 0 }, stack: { id: 'leaders-orders', count: 1 } },
     ]);
-    expect(state.tracker?.lines).toEqual(['Return to Marshal Hale']);
+    expect(state.tracker[0]?.lines).toEqual(['Return to Marshal Hale']);
   });
 
   it('is ready with the orders first and the bandits last', () => {
@@ -289,7 +289,7 @@ describe('What Lies Below', () => {
       buttons: ['goodbye'],
       picks: [],
     });
-    expect(state.tracker).toEqual({ title: 'What Lies Below', lines: ['What woke the dead defeated: 0/1'] });
+    expect(state.tracker).toEqual([{ title: 'What Lies Below', lines: ['What woke the dead defeated: 0/1'] }]);
   });
 
   it('is ready once the Warden falls', () => {
@@ -305,7 +305,7 @@ describe('What Lies Below', () => {
       buttons: [],
       picks: PICKS.below,
     });
-    expect(state.tracker).toEqual({ title: 'What Lies Below', lines: ['Return to Marshal Hale'] });
+    expect(state.tracker).toEqual([{ title: 'What Lies Below', lines: ['Return to Marshal Hale'] }]);
   });
 
   it("hands in for 300 XP and Hale's old longsword, and ends the chain", () => {
@@ -442,7 +442,7 @@ describe('after the chain', () => {
 
   it('there is nothing to track, take or hand in: kills pay their XP and nothing more', () => {
     const state = done();
-    expect(state.tracker).toBeNull();
+    expect(state.tracker).toEqual([]);
     expect(play(state, ACCEPT, HAND_IN, ORDERS, WARDEN, FARM)).toEqual([
       { kind: 'xp', amount: 150 },
       { kind: 'xp', amount: 10 },
@@ -455,7 +455,7 @@ describe('the chain moves one way', () => {
     const state = new AdventureState();
     play(state, ACCEPT);
     expect(state.apply(ACCEPT)).toEqual([]);
-    expect(state.tracker?.title).toBe('Raiders in the Fields');
+    expect(state.tracker[0]?.title).toBe('Raiders in the Fields');
   });
 
   it("won't hand in a quest that isn't ready, or with nothing taken", () => {

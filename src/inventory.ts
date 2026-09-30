@@ -157,7 +157,7 @@ export class Inventory {
     const loose = (item: ItemDef) => item.kind !== 'quest';
     this.slots = {
       bag: slots(saved.bag, CONFIG.bag.slots, loose),
-      belt: slots(saved.belt, CONFIG.belt.slots, (item) => item.kind === 'consumable'),
+      belt: slots(saved.belt, CONFIG.belt.slots, onBelt),
       stash: slots(saved.stash, CONFIG.bag.stash, loose),
     };
     this.questPage = saved.quest.filter((id, i, all) => itemOf(id)?.kind === 'quest' && all.indexOf(id) === i);
@@ -358,6 +358,39 @@ export class Inventory {
     return [{ kind: 'slot', where: { in: 'quest', slot: i }, stack: null }];
   }
 
+  /** How many of `id` the bag holds. */
+  count(id: ItemId): number {
+    return this.slots.bag.reduce((n, s) => n + (s?.id === id ? s.count : 0), 0);
+  }
+
+  /**
+   * Take `stacks` out of the bag and `coins` from your purse, all or nothing:
+   * what a make at a station uses up, or a trainer's price. The last stacks in
+   * the bag go first, so the first stay whole.
+   */
+  spend(stacks: readonly Stack[], coins = 0): InventoryEffect[] {
+    if (coins > this.purse) return refuse('coins');
+    const need = new Map<ItemId, number>();
+    for (const s of stacks) need.set(s.id, (need.get(s.id) ?? 0) + s.count);
+    if ([...need].some(([id, n]) => this.count(id) < n)) return refuse('empty');
+    const effects: InventoryEffect[] = [];
+    for (const stack of stacks) {
+      let left = stack.count;
+      for (let slot = this.slots.bag.length - 1; slot >= 0 && left > 0; slot--) {
+        const s = this.slots.bag[slot];
+        if (s?.id !== stack.id) continue;
+        const n = Math.min(left, s.count);
+        left -= n;
+        effects.push(...this.remove({ in: 'bag', slot }, n));
+      }
+    }
+    if (coins > 0) {
+      this.purse -= coins;
+      effects.push({ kind: 'coins', coins: this.purse });
+    }
+    return effects;
+  }
+
   /** Buy `count` of `id` from a vendor, into bag slot `to` or wherever it fits. */
   buy(id: ItemId, count = 1, to?: Where): InventoryEffect[] {
     const item = itemOf(id);
@@ -448,7 +481,7 @@ export class Inventory {
         if (item.level > this.wearer.level) return 'level';
         return null;
       case 'belt':
-        return item.kind === 'consumable' ? null : 'slot';
+        return onBelt(item) ? null : 'slot';
       case 'quest':
         return item.kind === 'quest' ? null : 'slot';
       case 'ground':
@@ -527,5 +560,8 @@ export class Inventory {
     return effects;
   }
 }
+
+/** Can it go on the belt? Every consumable but one that says never (the whetstone). */
+const onBelt = (item: ItemDef) => item.kind === 'consumable' && item.belt !== false;
 
 const same = (a: Where, b: Where) => a.in === b.in && (a.in === 'ground' || (b.in !== 'ground' && a.slot === b.slot));

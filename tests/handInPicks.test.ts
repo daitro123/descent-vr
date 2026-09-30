@@ -26,7 +26,7 @@ function play(state: AdventureState, ...events: AdventureEvent[]): Effect[] {
 
 /** Ready to hand in Raiders in the Fields. */
 const raidersReady = (klass: ClassId = 'warrior') => {
-  const state = new AdventureState(undefined, klass);
+  const state = new AdventureState(undefined, undefined, klass);
   play(state, ACCEPT, FARM, FARM, FARM);
   return state;
 };
@@ -152,7 +152,7 @@ describe('a full bag', () => {
     expect(state.pickRefusal(gloves)).toBe('full');
     expect(state.apply(pick(gloves))).toEqual([{ kind: 'refused', reason: 'full' }]);
     expect(state.hale).toMatchObject({ marker: 'ready', picks: ['farmstead-gloves-strength', 'hedgerow-boots-strength'] });
-    expect(state.tracker?.lines).toEqual(['Return to Marshal Hale']);
+    expect(state.tracker.map((t) => t.lines)).toEqual([['Return to Marshal Hale']]);
     expect(state.xp).toBe(30);
   });
 
@@ -194,7 +194,7 @@ describe("the leader's orders", () => {
 });
 
 describe("Hale's sword at their hip", () => {
-  const at = (state: AdventureState) => [state.haleSwordAtHip, new AdventureState(state.snapshot(), state.klass).haleSwordAtHip];
+  const at = (state: AdventureState) => [state.haleSwordAtHip, new AdventureState(state.snapshot(), undefined, state.klass).haleSwordAtHip];
 
   it('leaves it only when a warrior takes it', () => {
     const warrior = belowReady('warrior');

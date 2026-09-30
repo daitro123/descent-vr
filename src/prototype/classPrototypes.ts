@@ -3,7 +3,8 @@ import type { Game } from '../game';
 
 // PROTOTYPE: `?arena&class=<name>` loads a class's throwaway kit over the
 // warrior's arena (abilities map, `.scratch/abilities/`). Each is loaded only
-// when asked for; an unknown class leaves the warrior as it is.
+// when asked for; an unknown class leaves the warrior as it is. `&gestures`
+// adds the gesture prototype over whichever class it is.
 
 export interface ClassPrototype {
   /** Once a frame, after the game's own update. */
@@ -15,7 +16,14 @@ const PROTOTYPES: Record<string, () => Promise<(game: Game, scene: Scene) => Cla
   mage: async () => (await import('./mage/mageKit.prototype')).startMagePrototype,
 };
 
-export async function loadClassPrototype(name: string, game: Game, scene: Scene): Promise<ClassPrototype | null> {
-  const load = PROTOTYPES[name];
-  return load ? (await load())(game, scene) : null;
+/**
+ * `&gestures` (abilities ticket 07) lays gesture abilities over the class's
+ * kit, or over the warrior's arena when the class has no prototype.
+ */
+export async function loadClassPrototype(name: string | undefined, game: Game, scene: Scene, gestures = false): Promise<ClassPrototype | null> {
+  const load = name ? PROTOTYPES[name] : undefined;
+  const kit = load ? (await load())(game, scene) : null;
+  if (!gestures) return kit;
+  const { startGesturePrototype } = await import('./gestures/gestureKit.prototype');
+  return startGesturePrototype(game, scene, name ?? 'warrior', kit);
 }
