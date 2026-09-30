@@ -36,17 +36,35 @@ A written **spec for professions**, ready to hand off as build tickets: **Mining
 - [Oakvale's first tier](issues/03-oakvales-first-tier.md): copper ore, rough stone and copper bars; Hearthleaf and Duskcap. Alchemy makes a healing potion for everyone, a rage draught, a mana potion and a ranger's elixir; Smithing makes whetstones and copper gauntlets at par in three versions. Potions share a 60 s cooldown.
 - [How a profession grows](issues/04-how-a-profession-grows.md): **proficiency** climbs by practice (1 per spot emptied or thing made) through **grades** (Apprentice to Artisan); Apprentice is Oakvale's, 0 to 25, and a trainer teaches each next grade. No character level needed.
 - [Swinging the pick and cutting herbs](issues/05-swinging-the-pick-and-cutting-herbs.md): strike a moving glint on the vein (2 glint strikes or 5 plain ones, on the sword's committed-swing gate), the ore flies to the bag, and the knife takes Hearthleaf with one slice low through the stems. Prototype at `?proto=pick`, variant C.
+- [Hammering at the anvil](issues/06-hammering-at-the-anvil.md): A, "Board and marks" (`?proto=anvil`): press a recipe on a board at the anvil like Hale's talk board and its materials come out of the bag; the tool loop there gives hammer and tongs; 3 (whetstone) or 5 (gauntlets) glowing marks, a great strike works a mark and a good one half; heat is a 10 s window; quench in a bucket by the anvil; what you make flies to the bag. Picked without the headset; Tom to try it.
 - [Brewing at the alchemy table](issues/07-brewing-at-the-alchemy-table.md): B, "Grind and stir" (`?proto=brew`): you drop 2 Hearthleaf in the mortar, grind them and stir the pot by hand; the mortar tips and the pot pours into the flask by themselves. The herbs you drop choose the recipe, nothing can fail, and the corked flask waits on its stand for the belt or a drink. Picked without the headset; Tom to try it.
 - [Trainers and first lessons](issues/09-trainers-and-first-lessons.md): the smith teaches Mining and Smithing; a new herbalist in the house by the well, with the alchemy table, teaches Herbalism and Alchemy. One intro quest per pair after Raiders in the Fields; up to three quests active at once; recipes bought from a "Train" button on the talk board.
 - [Gathering spots in Oakvale](issues/10-gathering-spots-in-oakvale.md): 22 spots (8 copper veins, 8 Hearthleaf, 6 Duskcap) through the village's edge, the mine's mouth and upper galleries, the fields, the pond, the woods and the standing stones, several among camps. A vein gives 3 ore and 1 rough stone, a clump 2 herbs. They refill 180 s after they're taken once you're 30 m off, are seen by their look alone, and cost 3 instanced draw calls.
+- [Does a better hand make a better thing](issues/08-does-a-better-hand-make-a-better-thing.md): no. A better hand buys speed only (fewer strikes, a quicker brew); yields and items never change, nothing fails and no material is wasted.
 
 ## Not yet specified
 
-- **Prices and coins:** what materials and crafted goods sell for, and what a trainer's recipes cost, once Inventory settles its coin economy and what the innkeeper's potions cost.
-- **Saving professions:** the save record adds, per character, each profession learned, its proficiency and its known recipes (settled in [How a profession grows](issues/04-how-a-profession-grows.md)). The record's version and migration wait on Inventory's version 2 and Abilities' characters, since all three change the same record.
-- **The later tiers' pattern:** grades and tiers now line up (Apprentice is Oakvale's). The spec sketches how a later zone adds its materials, recipes and trainer; the contents stay out of scope.
-- **The budget:** gathering spots scattered through Oakvale, a new station and a trainer cost triangles and draw calls in a zone already near its limit (see the Oakvale map's triangle budget).
-- **Assembling the spec** from every decision, then build tickets with `/to-tickets`.
+- **Assembling the spec:** done. The spec is [spec.md](spec.md), written on 2026-09-30 by Claude on Tom's behalf from every decision above. The calls it made beyond the tickets are listed in its Further Notes: prices, grade caps after Apprentice, and one rule for hands at a station. Prices, saving, the later grades' pattern and the budget, once fog here, are settled there or measured in the last build ticket.
+
+## Build tickets
+
+Written on 2026-09-30 from [spec.md](spec.md) with `/to-tickets`, **by Claude on Tom's behalf**, numbered on from the map's ten tickets in the same `issues/` folder. Each lists what genuinely blocks it, including the Inventory map's build tickets where the work sits on the bag or the belt. Each runs in its own session.
+
+1. [11: The professions state and its items](issues/11-the-professions-state-and-its-items.md)
+2. [12: Quests from more than one giver](issues/12-quests-from-more-than-one-giver.md)
+3. [13: The tool loop and Mining](issues/13-the-tool-loop-and-mining.md) (also waits on Inventory's 10)
+4. [14: Herbalism](issues/14-herbalism.md)
+5. [15: The smith's anvil](issues/15-the-smiths-anvil.md)
+6. [16: The herbalist and the alchemy bench](issues/16-the-herbalist-and-the-alchemy-bench.md)
+7. [17: Using what professions make](issues/17-using-what-professions-make.md) (also waits on Inventory's 10)
+8. [18: Trainers and intro quests](issues/18-trainers-and-intro-quests.md) (also waits on Inventory's 09)
+9. [19: Oakvale with professions, in one sitting](issues/19-oakvale-with-professions-in-one-sitting.md)
+
+`/to-tickets` would have asked Tom about granularity, edges and splits; answered **on his behalf**:
+
+- **Granularity:** nine tickets, each sized for one session to build, test and merge. The pure state and the quest system come first as prefactors, then one ticket per profession's place in the world, then using the products, then the trainers that tie it together, and a last play-through that tunes and measures.
+- **Edges:** 11 and 12 can start now and run side by side. 15 and 16 follow 11 and can run side by side. 13 and 17 also wait on the belt in the Adventure (Inventory's 10).
+- **Learning before trainers:** until 18, checks teach professions through the debug handle, so the world tickets don't wait on the quest work.
 
 ## Out of scope
 
