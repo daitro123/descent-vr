@@ -11,12 +11,20 @@ export type Route =
   | { kind: 'fly'; map: string }
   /** `?map=<id>`: walk a map with no enemies and no save. */
   | { kind: 'walk'; map: string }
-  /** `?proto=<name>`: a throwaway prototype in `src/professions/prototypes/<name>/`. */
-  | { kind: 'proto'; name: string }
   /** `?arena`: the wave game. `?duel`, `?wave=N` and `?showcase` alone open it too. */
   | { kind: 'arena'; firstWave: number; duel: boolean; showcase: boolean }
+  /** `?proto=<name>`: a throwaway professions prototype (src/professions/prototypes). */
+  | { kind: 'proto'; name: string }
+  /** `?belt=a|b|c`: PROTOTYPE, inventory ticket 04's belt, fighting duelists (`&calm`: only a drain on health). */
+  | { kind: 'belt'; variant: BeltVariant; calm: boolean }
+  /** `?bag` or `?bag=a|b|c`: PROTOTYPE of the bag and the gear panel, starting on that way to move items. */
+  | { kind: 'bag'; variant: 'a' | 'b' | 'c' }
   /** Anything else: Oakvale, with the save. `?newgame` asks to start over. */
   | { kind: 'adventure'; newGame: boolean };
+
+/** PROTOTYPE: how the belt prototype takes a potion while both hands are full (see player/beltPrototype.ts). */
+export type BeltVariant = 'a' | 'b' | 'c';
+export const BELT_VARIANTS: readonly BeltVariant[] = ['a', 'b', 'c'];
 
 export interface Page {
   route: Route;
@@ -49,8 +57,12 @@ export function readPage(search: string): Page {
 function chooseRoute(params: URLSearchParams): Route {
   if (params.has('inspect')) return { kind: 'inspect' };
   if (params.has('fly')) return { kind: 'fly', map: params.get('fly') ?? '' };
+  if (params.has('proto')) return { kind: 'proto', name: params.get('proto') ?? '' };
   if (params.has('map')) return { kind: 'walk', map: params.get('map') || 'forest' };
-  if (params.get('proto')) return { kind: 'proto', name: params.get('proto')! };
+  if (params.has('belt')) {
+    const v = params.get('belt') as BeltVariant;
+    return { kind: 'belt', variant: BELT_VARIANTS.includes(v) ? v : 'a', calm: params.has('calm') };
+  }
   if (ARENA_FLAGS.some((f) => params.has(f))) {
     const waves = CONFIG.waves.list.length;
     return {
@@ -60,6 +72,10 @@ function chooseRoute(params: URLSearchParams): Route {
       duel: params.has('duel'),
       showcase: params.has('showcase'),
     };
+  }
+  if (params.has('bag')) {
+    const v = params.get('bag')?.toLowerCase();
+    return { kind: 'bag', variant: v === 'b' || v === 'c' ? v : 'a' };
   }
   return { kind: 'adventure', newGame: params.has('newgame') };
 }

@@ -73,6 +73,11 @@ async function start(): Promise<void> {
       return startPrototype(renderer, scene, camera, device, r.name);
     case 'arena':
       return startArena(renderer, scene, camera, device, perf, r);
+    case 'belt': // PROTOTYPE: inventory ticket 04
+      return (await import('./player/beltPrototype')).startBelt(renderer, scene, camera, device, perf, r, (then) => onEnterVR(renderer, then));
+    case 'bag':
+      onEnterVR(renderer);
+      return (await import('./ui/bag-prototype')).startBagPrototype(renderer, scene, camera, device, perf, r.variant);
     case 'adventure':
       return startAdventure(renderer, scene, camera, device, perf, r);
   }
@@ -223,27 +228,6 @@ function startArena(
   });
 }
 
-/** Each prototype's folder, loaded only when its `?proto=<name>` is asked for. */
-type Prototype = { start(renderer: WebGLRenderer, scene: Scene, camera: PerspectiveCamera, device: unknown): Promise<void> };
-const PROTOTYPES = import.meta.glob<Prototype>('./professions/prototypes/*/index.ts');
-
-/** `?proto=<name>`: a throwaway prototype, or the list of them if there's no such one. */
-async function startPrototype(
-  renderer: WebGLRenderer,
-  scene: Scene,
-  camera: PerspectiveCamera,
-  device: unknown,
-  name: string,
-): Promise<void> {
-  const load = PROTOTYPES[`./professions/prototypes/${name}/index.ts`];
-  if (load) return (await load()).start(renderer, scene, camera, device);
-  const names = Object.keys(PROTOTYPES).map((k) => k.split('/')[3]);
-  const intro = document.getElementById('intro');
-  if (!intro) return;
-  intro.replaceChildren(Object.assign(document.createElement('h1'), { textContent: `No prototype "${name}"` }), 'Try:');
-  for (const n of names) intro.append(' ', Object.assign(document.createElement('a'), { href: `?proto=${n}`, textContent: n }));
-}
-
 async function startInspector(renderer: WebGLRenderer, scene: Scene, camera: PerspectiveCamera): Promise<void> {
   const { Inspector } = await import('./inspector/inspector');
   const inspector = new Inspector(renderer);
@@ -284,6 +268,16 @@ async function startMapViewer(
     viewer.update(timer.getDelta());
     renderer.render(scene, camera);
   });
+}
+
+/** `?proto=<name>`: a throwaway professions prototype, or the Adventure's page for a name it doesn't know. */
+async function startPrototype(renderer: WebGLRenderer, scene: Scene, camera: PerspectiveCamera, device: unknown, name: string): Promise<void> {
+  // ?proto=brew: PROTOTYPE of brewing at the alchemy table (.scratch/professions/issues/07-…).
+  if (name === 'brew') return (await import('./professions/prototypes/brew')).startBrewPrototype(renderer, scene, camera, device);
+  // ?proto=pick: PROTOTYPE of swinging the pick and cutting herbs (.scratch/professions/issues/05-…).
+  if (name === 'pick') return (await import('./professions/prototypes/pick')).startPickPrototype(renderer, scene, camera, device);
+  const intro = document.getElementById('intro');
+  if (intro) intro.textContent = `No prototype called "${name}".`;
 }
 
 void start();

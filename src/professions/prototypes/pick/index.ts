@@ -42,7 +42,7 @@ interface HandTrack {
   squeeze: number;
 }
 
-export async function start(renderer: WebGLRenderer, scene: Scene, camera: PerspectiveCamera, device: unknown): Promise<void> {
+export async function startPickPrototype(renderer: WebGLRenderer, scene: Scene, camera: PerspectiveCamera, device: unknown): Promise<void> {
   const intro = document.getElementById('intro');
   if (intro) intro.innerHTML = '<h1>Pick and herbs</h1>Loading Oakvale…';
   await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));

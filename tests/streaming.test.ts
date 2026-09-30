@@ -128,8 +128,18 @@ describe("Oakvale's chunk builder", () => {
     let triangles = 0;
     for (const key of keys()) triangles += buildOakvaleChunk(plan, key, 'full').position.length / 9;
     // Before streaming, the forest's 49 chunk meshes held 264,304 triangles between them;
-    // the pass's rocks and pines, opened to the crest (ticket 36), add 2,238.
-    expect(triangles).toBe(266542);
+    // the pass's rocks and pines, opened to the crest (ticket 36), added 2,238. The triangle
+    // budget's cuts (ticket 38: the far trees deep in the woods, the edge's mountains thinned)
+    // take that 266,542 down to 214,824.
+    expect(triangles).toBe(214824);
+  }, 20000);
+
+  it("cuts the budget's triangles in the woods and on the edge's mountains, and leaves the village as it was", () => {
+    const triangles = (key: ChunkKey) => buildOakvaleChunk(plan, key, 'full').position.length / 9;
+    // Before the cuts: the village's chunk 12,035, the woods north-west of it 8,493, the western mountains 2,062.
+    expect(triangles('0,0')).toBe(12035);
+    expect(triangles('-1,-1')).toBeLessThan(8493 * 0.97);
+    expect(triangles('-3,0')).toBeLessThan(2062 * 0.75);
   }, 20000);
 
   it('makes stand-ins cheaper than full detail everywhere, and about half in the woods and the village', () => {
@@ -175,13 +185,13 @@ describe("Oakvale's chunk builder", () => {
 });
 
 describe("the streamer's decisions", () => {
-  it('keeps chunks at full detail within 120 m, stand-ins out past the fog, and nothing beyond, a chunk of hysteresis on each', () => {
-    expect([full, hysteresis, reach.far]).toEqual([120, 40, 200]);
-    expect(detailFor(120, null, reach)).toBe('full');
-    expect(detailFor(121, null, reach)).toBe('standIn');
+  it('keeps chunks at full detail within 100 m, stand-ins out past the fog, and nothing beyond, a chunk of hysteresis on each', () => {
+    expect([full, hysteresis, reach.far]).toEqual([100, 40, 200]);
+    expect(detailFor(100, null, reach)).toBe('full');
+    expect(detailFor(101, null, reach)).toBe('standIn');
     // Kept full a chunk late…
-    expect(detailFor(160, 'full', reach)).toBe('full');
-    expect(detailFor(161, 'full', reach)).toBe('standIn');
+    expect(detailFor(140, 'full', reach)).toBe('full');
+    expect(detailFor(141, 'full', reach)).toBe('standIn');
     // …fetched a chunk early, before the fog's far edge reaches it, and dropped a chunk late.
     expect(detailFor(240, null, reach)).toBe('standIn');
     expect(detailFor(241, null, reach)).toBe(null);
@@ -190,11 +200,13 @@ describe("the streamer's decisions", () => {
     expect(detailFor(281, 'standIn', reach)).toBe(null);
   });
 
-  it('at the crossroads has all Oakvale in but its far corners at full detail', () => {
+  it('at the crossroads has all Oakvale in, the ring round its edge as stand-ins but for the middle of each side', () => {
     const at = decide(0, 0, keys(), new Map(), reach);
     expect(at.size).toBe(49);
     const standIns = [...at].filter(([, d]) => d === 'standIn').map(([k]) => k);
-    expect(standIns.sort()).toEqual(['-3,-3', '-3,3', '3,-3', '3,3']);
+    expect(standIns).toHaveLength(20);
+    for (const key of ['0,-3', '0,3', '-3,0', '3,0'] as const) expect(at.get(key)).toBe('full');
+    for (const key of standIns) expect(chunkDistance(key, 0, 0)).toBeGreaterThan(full);
   });
 
   it('in front of the old mine has the south of Oakvale as stand-ins', () => {
