@@ -11,8 +11,11 @@ export type Route =
   | { kind: 'fly'; map: string }
   /** `?map=<id>`: walk a map with no enemies and no save. */
   | { kind: 'walk'; map: string }
-  /** `?arena`: the wave game. `?duel`, `?wave=N` and `?showcase` alone open it too. */
-  | { kind: 'arena'; firstWave: number; duel: boolean; showcase: boolean }
+  /**
+   * `?arena`: the wave game. `?duel`, `?wave=N` and `?showcase` alone open it too.
+   * `&class=<name>` swaps the warrior for a class prototype (`src/prototype/`), when one exists.
+   */
+  | { kind: 'arena'; firstWave: number; duel: boolean; showcase: boolean; playerClass?: string }
   /** Anything else: Oakvale, with the save. `?newgame` asks to start over. */
   | { kind: 'adventure'; newGame: boolean };
 
@@ -56,6 +59,7 @@ function chooseRoute(params: URLSearchParams): Route {
       firstWave: Math.max(1, Math.min(waves, Math.floor(Number(params.get('wave'))) || 1)),
       duel: params.has('duel'),
       showcase: params.has('showcase'),
+      playerClass: params.get('class') || undefined,
     };
   }
   return { kind: 'adventure', newGame: params.has('newgame') };

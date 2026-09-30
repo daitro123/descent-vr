@@ -7,6 +7,7 @@ import { startAmbience, unlockAudio } from './fx/sfx';
 import { Game } from './game';
 import { findMap, loadNeighbours } from './maps/registry';
 import { isStartingZone } from './maps/types';
+import { type ClassPrototype, loadClassPrototype } from './prototype/classPrototypes';
 import { forgetNewGame, readPage, type Route } from './route';
 import { openSave, type Save } from './save/store';
 import { buildShowcase, pinShowcaseCamera } from './showcase';
@@ -183,7 +184,7 @@ function startArena(
   camera: PerspectiveCamera,
   device: unknown,
   perf: PerfReadout | null,
-  { firstWave, duel, showcase: pinned }: Extract<Route, { kind: 'arena' }>,
+  { firstWave, duel, showcase: pinned, playerClass }: Extract<Route, { kind: 'arena' }>,
 ): void {
   scene.background = new Color(0x0c0a0e);
   scene.fog = new Fog(0x0c0a0e, 6, CONFIG.arena.halfSize * 2.2);
@@ -201,8 +202,10 @@ function startArena(
 
   // Handle for poking at the game from the console / automated smoke tests.
   // `paused` freezes gameplay (rendering continues) to inspect a moment.
-  const debug = { game, device, renderer, combatStats, CONFIG, showcase, paused: false };
+  // `classKit`: a class prototype's (`&class=`), once it has loaded.
+  const debug = { game, device, renderer, combatStats, CONFIG, showcase, paused: false, classKit: null as ClassPrototype | null };
   Object.assign(window, { __descent: debug });
+  if (playerClass) void loadClassPrototype(playerClass, game, scene).then((kit) => (debug.classKit = kit));
 
   const timer = new Timer();
   renderer.setAnimationLoop((time) => {
@@ -211,7 +214,10 @@ function startArena(
     if (renderer.xr.isPresenting) {
       // Pull this frame's head pose in before gameplay reads it.
       renderer.xr.updateCamera(camera);
-      if (!debug.paused) game.update(dt);
+      if (!debug.paused) {
+        game.update(dt);
+        debug.classKit?.update(dt);
+      }
     } else if (!pinned) {
       camera.rotation.y += dt * 0.1; // idle orbit on the title screen
     }
