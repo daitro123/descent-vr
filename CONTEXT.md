@@ -127,3 +127,23 @@ _Avoid_: emitter, sound source, point sound
 **Mix**:
 How loud and how muffled each part of the ambience is right now, following the light's cues: behind a shut door the outdoors goes quiet and muffled and the room's fires come up, past the mine's bend the outdoors gives way to the mine's own air, at the crypt's breach the drone rises, and while anything fights you it all dips.
 _Avoid_: mixer, ducking, audio state
+
+**Profession**:
+A trade a character learns from a trainer and practises by hand between fights: gathering (Mining, Herbalism) or making (Smithing, Alchemy). Every character can learn all of them.
+_Avoid_: skill (abilities are what you fight with), job, trade skill, craft (as a noun for the profession)
+
+**Material**:
+Something gathered or made to be used up in making something else: ore, an herb, a bar.
+_Avoid_: resource (a class's rage, focus or mana), reagent, component, mat
+
+**Gathering spot**:
+A fixed place in a zone where a material can be taken by hand, such as a vein of ore or a clump of herbs. It refills some time after it's taken.
+_Avoid_: node, resource node, spawn
+
+**Station**:
+The place in the world where a making profession is done: the smithy's forge and anvil, the alchemy table.
+_Avoid_: crafting bench, workbench
+
+**Trainer**:
+The friendly character who teaches a profession and sells its recipes.
+_Avoid_: teacher, master, NPC
