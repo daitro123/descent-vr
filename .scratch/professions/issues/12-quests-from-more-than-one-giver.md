@@ -10,8 +10,8 @@
 
 Read [the spec](../spec.md) ("Trainers and quests") and [Trainers and first lessons](09-trainers-and-first-lessons.md) for why.
 
-- [ ] The adventure state's and quest chain's tests: Hale's chain unchanged; a second giver's quest offered, taken and handed in alongside Hale's; three active at once; gather and make objectives counting from events; markers per giver.
-- [ ] The save round-trips a second giver's quests, keyed by quest id as today; an older record loads with them locked.
-- [ ] The quest arrow's tests cover the most-recent rule.
-- [ ] `.scratch/oakvale-starting-zone/checks/hale.mjs` still passes.
-- [ ] `npm run typecheck`, `npm test` and `npm run build` pass.
+- [x] The adventure state's and quest chain's tests: Hale's chain unchanged; a second giver's quest offered, taken and handed in alongside Hale's; three active at once; gather and make objectives counting from events; markers per giver.
+- [x] The save round-trips a second giver's quests, keyed by quest id as today; an older record loads with them locked.
+- [x] The quest arrow's tests cover the most-recent rule.
+- [x] `.scratch/oakvale-starting-zone/checks/hale.mjs` still passes.
+- [x] `npm run typecheck`, `npm test` and `npm run build` pass.
