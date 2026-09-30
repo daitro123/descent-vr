@@ -132,6 +132,14 @@ _Avoid_: mixer, ducking, audio state
 Anything that can sit in the bag: gear, a consumable, a material, a quest item or junk.
 _Avoid_: object, thing, loot (loot is items as they drop)
 
+**Item level**:
+The level an item belongs to: the level of the enemy that dropped it, or of the quest that paid it. It sets the item's numbers with its rarity, and you can't wear gear whose item level is above your own level.
+_Avoid_: tier, ilvl, gear score
+
+**Quest item**:
+An item a quest asks for, kept on the bag's own quest page, taking none of its slots, and gone when the quest is handed in. The leader's orders are one.
+_Avoid_: key item, quest object
+
 **Bag**:
 What you carry items in, on your back. You reach over your shoulder to pull it round and sort it. It starts with 16 slots.
 _Avoid_: backpack, pack, inventory (the inventory is the whole system: bag, gear, belt, coins and stash)

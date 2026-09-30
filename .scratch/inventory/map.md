@@ -36,6 +36,8 @@ A written **spec for the inventory**, ready to hand off as build tickets: the ba
 <!-- one line per resolved ticket: [title](link): gist -->
 
 - [VR inventories in shipped games](issues/01-vr-inventories-in-shipped-games.md): shipped games use the same mix; zones are spheres placed from the headset with a speed gate, every slot glows and ticks, the grip is free to use, and the menu button isn't.
+- [What an item is](issues/02-what-an-item-is.md): five kinds; quest items on their own page; hand-made items whose numbers come from item level and rarity by one rule; white plain, green adds attributes, blue 30% more; no wearing gear above your level; weapons and off hands class-locked; a full green set is about a third of your attributes. On Tom's behalf.
+- [Loot](issues/05-loot.md): drops at the enemy's level and only for your class; coins always, junk and gear by role (a leader or deep brute always drops green or blue, the Warden a blue and a green); chests open once per character; a glowing pouch with unlit beams for green and blue, lying 5 minutes; a full bag leaves the item on the ground; healing orbs stay. On Tom's behalf.
 
 ## Not yet specified
 
