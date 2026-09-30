@@ -465,9 +465,54 @@ export const CONFIG = {
           unbreakable: { tier: 3, max: 2, adds: { 'lasts:shieldWall': 2 } },
         },
       },
-      // The ranger's and the mage's trees come with abilities ticket 26.
-      ranger: {},
-      mage: {},
+      ranger: {
+        // Marksmanship: the bow, damage at range.
+        marksmanship: {
+          steadyAim: { tier: 1, max: 3, adds: { arrowDamage: 0.05 } }, // an arrow deals this much more
+          keenEye: { tier: 1, max: 2, adds: { headMultiplier: 0.2 } }, // added to a head hit's multiplier
+          efficiency: { tier: 2, max: 2, adds: { 'cost:powerShot': -5 } },
+          swiftArrows: { tier: 2, max: 3, adds: { arrowSpeed: 0.1 } }, // an arrow flies this much faster (so drops less)
+          // For `time` s every arrow you loose bends, at up to `bendDegPerSec`°/s, onto the enemy within `aimDeg`° of
+          // its flight (in sight, within `range` m), and passes a raised guard.
+          trueshot: { tier: 3, max: 1, use: 'triangle', cost: 30, cooldown: 20, time: 8, aimDeg: 8, bendDegPerSec: 60, range: 40 },
+          improvedVolley: { tier: 3, max: 2, adds: { volleyArrows: 1 } }, // more arrows in a Volley's fan
+        },
+        // Survival: traps, and staying alive up close.
+        survival: {
+          trapper: { tier: 1, max: 3, adds: { trapRoot: 1 } }, // s more Snare Trap roots for
+          fleetFoot: { tier: 1, max: 2, adds: { dashSooner: 0.3 } }, // s off the dash's cooldown
+          serratedTips: { tier: 2, max: 3, adds: { bleed: 2 }, time: 4 }, // an arrow hit bleeds the enemy for this over `time` s
+          steadyWard: { tier: 2, max: 2, adds: { wardLonger: 0.3 } }, // s more the ward holds, and sends arrows back for
+          // A trap at your feet, lying `lasts` s: the first enemy to step on it sets it off, and every enemy within
+          // `radius` m takes `damage` and is knocked back at `knockback` m/s (a grunt slides about an eighth of it in metres).
+          explosiveTrap: { tier: 3, max: 1, use: 'triangle', cost: 30, cooldown: 15, lasts: 30, damage: 25, radius: 2.5, knockback: 10 },
+          improvedScatter: { tier: 3, max: 2, adds: { scatterSlow: 0.3 }, time: 4 }, // Scatter also slows by this for `time` s
+        },
+      },
+      mage: {
+        // Fire: damage.
+        fire: {
+          ignite: { tier: 1, max: 3, adds: { ignite: 0.1 }, time: 4 }, // a fire hit burns for this share of it over `time` s
+          incineration: { tier: 1, max: 2, adds: { chargeFaster: 0.1 } }, // s off a bolt's charge time (mage.bolt.chargeTime)
+          improvedFireball: { tier: 2, max: 2, adds: { fireballRadius: 0.5 } }, // m more a Fireball's burst reaches
+          criticalMass: { tier: 2, max: 3, adds: { headMultiplier: 0.1 } }, // added to a head hit's multiplier
+          // The next bolt takes `charge` s to charge full, and leaves as a huge slow orb (`radius` m, `speed` m/s)
+          // whatever the throw: `damage` at full charge (a lesser charge less, as a bolt's), and the enemy it hits
+          // burns for `burn` over `burnTime` s.
+          pyroblast: { tier: 3, max: 1, use: 'triangle', cost: 35, cooldown: 12, charge: 1.2, radius: 0.3, speed: 6, damage: 60, burn: 15, burnTime: 4 },
+          masterOfElements: { tier: 3, max: 2, adds: { fireHeadMana: 5 } }, // mana back for a fire head hit
+        },
+        // Frost: control.
+        frost: {
+          frostbite: { tier: 1, max: 3, adds: { frostbite: 0.05 }, freeze: 2 }, // the chance a Frostbolt freezes a slowed enemy for `freeze` s
+          iceShards: { tier: 1, max: 2, adds: { frostDamage: 0.1 } }, // a Frostbolt deals this much more
+          permafrost: { tier: 2, max: 2, adds: { slowLonger: 1, slowStronger: 0.1 } }, // your slows last s longer and are this much stronger
+          arcticReach: { tier: 2, max: 3, adds: { frostReach: 0.3 } }, // m more Frost Nova and Blizzard reach
+          // A shell of ice takes the next `absorb` damage (times your level's step) within `time` s.
+          iceBarrier: { tier: 3, max: 1, use: 'triangle', cost: 30, cooldown: 25, absorb: 40, time: 10 },
+          frozenWard: { tier: 3, max: 2, adds: { wardSlow: 0.2 }, time: 3 }, // a blow the ward stops slows its attacker by this for `time` s
+        },
+      },
     },
   },
 
@@ -522,7 +567,7 @@ export const CONFIG = {
       { name: 'the bag', at: [-0.2, -0.14, -0.12], radius: 0.18 },
       { name: 'a potion', at: [0.19, -0.7, 0.04], radius: 0.12 },
       { name: 'a potion', at: [-0.19, -0.7, 0.04], radius: 0.12 },
-      { name: 'the tool loop', at: [0.19, -0.66, -0.16], radius: 0.12 },
+      { name: 'the tool loop', at: [0.19, -0.7, -0.16], radius: 0.12 }, // as the belt's frame hangs it (professions.toolLoop)
     ],
     // In the right hand: a tick as the grip arms, a strong buzz on a read, two ticks `gap` ms apart on a miss,
     // and a dull buzz when it can't be paid for or isn't ready.
@@ -771,9 +816,81 @@ export const CONFIG = {
       rageDraught: { price: 3, rage: 30 }, // a potion, on the belt's shared cooldown
       minorManaPotion: { price: 3, mana: 0.4 }, // the share of your maximum mana; does nothing until the mage has mana
       // Buffs: not potions, so off the cooldown; one of each kind on you at a time, a new one replacing the old.
-      elixirOfTheKeenEye: { price: 4, damage: 0.1, seconds: 5 * 60 }, // added to your damage multiplier
-      whetstone: { price: 2, damage: 0.05, seconds: 10 * 60 }, // rubbed along a blade or arrowheads; never on the belt
+      elixirOfTheKeenEye: { price: 4, damage: 0.1, seconds: 5 * 60 }, // your damage 10% more while it lasts (buffs together add up: 15% with the whetstone)
+      whetstone: { price: 2, damage: 0.05, seconds: 10 * 60 }, // 5% more; rubbed along the blade or the bow (professions/sharpen.ts); never on the belt
       copperGauntlets: { level: 5, rarity: 'green' }, // as good as a green drop at level 5, each version with Stamina
+    },
+    // Sharpening (professions/sharpen.ts): the whetstone carried from the bag, rubbed along the blade in the
+    // other hand (the ranger's bow, for the arrowheads). Within `reach` m of the edge it scrapes; `travel` m
+    // along the edge in all, back and forth, sharpens it, with a scrape's buzz every `stroke` m.
+    sharpen: { reach: 0.06, travel: 0.5, stroke: 0.12, buzz: { scrape: { intensity: 0.35, ms: 25 }, done: { intensity: 0.8, ms: 60 } } },
+    // The tool loop behind the main-hand hip (professions/gathering/; spec, "Gathering spots and the
+    // tool loop"): a sphere `radius` m round a point `behind` m behind the right hip's potion slot, hung
+    // from the belt's frame. A grip in it, the hand under `maxSpeed` m/s, draws the tool for the nearest
+    // spot within `draw` m, or puts the tool back; walking `putAway` m from every spot puts it back too.
+    // It does nothing while anything fights you, and a pull puts the tool away at once with `pulled`.
+    toolLoop: {
+      behind: 0.2,
+      radius: 0.12,
+      maxSpeed: 1.5,
+      draw: 3,
+      putAway: 5,
+      buzz: {
+        tick: { intensity: 0.25, ms: 15 }, // the hand arrives where the loop would give or take
+        draw: { intensity: 0.5, ms: 30 },
+        putAway: { intensity: 0.3, ms: 30 },
+        nothing: { intensity: 0.15, ms: 20 }, // a grip there with nothing near to gather
+        pulled: { intensity: 1, ms: 120 }, // a pull put the tool away
+      },
+    },
+    // The pick (professions/gathering/pick.ts), promoted from ?proto=pick variant C. The head's two
+    // points are `reach` m down the handle and `spike` m either side of it. A strike counts on the
+    // sword's committed swing: `travel` m of hand travel one way at `handSpeed` m/s, with the head's
+    // point over `minSpeed` m/s (the sword's tip wants 2.8 a metre out; the pick's head is half as far),
+    // and full power at `fullSpeed`. Slower is a tap.
+    pick: { reach: 0.5, spike: 0.17, travel: 0.2, handSpeed: 1, minSpeed: 2.5, fullSpeed: 4.5 },
+    // A copper vein (professions/gathering/veins.ts): a strike in the glint is worth `glint`, one
+    // elsewhere on the ore `plain`, and it breaks at `need` (2 glints or 5 plain), cracking at a third
+    // and two thirds. The rock is struck as a sphere of `rockRadius` round a centre `centreHeight` over
+    // its foot (a little inside the drawn `drawnRadius`, so the head seems to bite); the ore faces its
+    // yaw, `oreLift` up, and reaches `oreRadius` from its middle, the glint `glintRadius`. You bump into
+    // it as a circle of `body`. What it gives comes loose for `flight` s, then flies to the bag.
+    vein: {
+      need: 4.5,
+      glint: 2.25,
+      plain: 1,
+      glintRadius: 0.1,
+      oreRadius: 0.28,
+      rockRadius: 0.74,
+      drawnRadius: 0.8,
+      centreHeight: 0.62,
+      oreLift: 0.55,
+      body: 0.85,
+      flight: 0.35,
+    },
+    // The herb knife (professions/gathering/knife.ts), promoted from ?proto=pick variant C: a blade
+    // from `bladeStart` to `bladeEnd` m out of the fist. A cut counts on a lighter gate than the pick's:
+    // `travel` m of hand travel one way at `handSpeed` m/s, with the tip over `minSpeed` m/s. Slower
+    // only brushes the leaves.
+    knife: { bladeStart: 0.1, bladeEnd: 0.3, travel: 0.1, handSpeed: 0.6, minSpeed: 1.4 },
+    // A clump of Hearthleaf or Duskcap (professions/gathering/clumps.ts) on its bank or stump `rise` m
+    // high, so nobody kneels. A cut through its stems, within `stemRadius` m of its middle and under
+    // `stemTop` m over its foot, takes it; one through its leaves (or caps), within `leafRadius` and up to
+    // `leafTop`, trims one and says "cut lower", down to `leavesLeft`. You bump into its rise as a circle
+    // of `body`. What it gives comes loose for `flight` s, then flies to the bag. Taken, its stems stand
+    // `stub` m high until it refills, growing back over `grow` s.
+    clump: {
+      rise: 0.45,
+      stemTop: 0.1,
+      stemRadius: 0.1,
+      leafTop: 0.34,
+      leafRadius: 0.17,
+      leavesLeft: 3,
+      body: 0.42,
+      flight: 0.25,
+      stub: 0.025,
+      grow: 0.6,
+      clear: { plant: 1.2, tree: 2.2 }, // nothing grows this near one (a tree this near)
     },
     // One rule for hands at a station: step within `near` m of it, looking within `facing` rad of
     // it and out of a fight, and both hands become the station's; past `far` m they're yours again.

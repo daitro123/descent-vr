@@ -37,6 +37,7 @@ export function buildBrackenmoor(given?: MoorPlan): Zone {
     villagers: [],
     pickups: [],
     chests: [],
+    spots: [],
     sounds: [],
     trees: new TreeCover(plan.trees),
     ambience: 'moor',

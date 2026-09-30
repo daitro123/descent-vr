@@ -22,9 +22,11 @@ import type { Respawn, StartingZone, Zone } from './maps/types';
 import { Hale } from './people/hale';
 import { Villagers } from './people/villagers';
 import { type AlchemyBench, type Herbalist, standInHouse } from './professions/bench';
-import { PROFESSION_NAMES } from './professions/professions';
+import { PROFESSION_NAMES, type ProfessionsEffects } from './professions/professions';
+import { Gathering } from './professions/gathering/gathering';
 import { Belt } from './player/belt';
 import { Gestures } from './player/gestures/gestures';
+import type { Handedness } from './player/input';
 import { MageHands } from './player/mage';
 import { Player } from './player/player';
 import { Run } from './player/run';
@@ -77,6 +79,8 @@ const KILL_XP_FLOAT: FloatStyle = { color: '#ffd23a', scale: 0.24, life: CONFIG.
 const HAND_IN_FLOAT: FloatStyle = { scale: 0.2, life: CONFIG.handIn.time, rise: 0.3 };
 /** The coins a pouch held, over it as it's taken. */
 const COINS_FLOAT: FloatStyle = { color: '#ffd23a', scale: 0.1, life: 1, rise: 0.3 };
+/** A short word from what you're doing: "Cut lower" over a clump whose leaves you trimmed. */
+const HINT_FLOAT: FloatStyle = { color: '#ffffff', scale: 0.09, life: 1.2, rise: 0.2 };
 /** "Bag full" over an item a full bag leaves on the ground. */
 const FULL_FLOAT: FloatStyle = { color: '#ff4a3a', scale: 0.12, life: CONFIG.loot.full.float, rise: 0.25 };
 
@@ -176,6 +180,8 @@ export class Adventure {
   };
   /** The smith's anvil: step up to it with Smithing learned, and make things with the hammer and tongs. Null in a zone without a smith. */
   readonly anvil: Anvil | null;
+  /** The tool loop behind your sword hip, the pick it gives near a copper vein, and the zone's veins. */
+  readonly gathering: Gathering;
   /** The stash's chest by the inn's hearth: touch its lid and the stash panel opens beside the bag's. */
   readonly stashChest: StashChest;
   readonly stash: StashPanel;
@@ -200,6 +206,8 @@ export class Adventure {
   private readonly runVignette: RunVignette;
   private readonly you: You = { feet: new Vector3(), head: new Vector3(), sword: null, alive: true, interior: null };
   private readonly sword = { base: new Vector3(), tip: new Vector3(), speed: 0, swing: 0 };
+  /** The edge a whetstone is rubbed along this frame: the blade, or the ranger's bow. */
+  private readonly edge = { base: new Vector3(), tip: new Vector3() };
   /** Every enemy there is to fight this frame: the camps', the Warden and what it raised. */
   private readonly foes: Enemy[] = [];
   private hitStop = 0;
@@ -279,6 +287,8 @@ export class Adventure {
           swap: (a: Shape, b: Shape) => this.onTalents({ kind: 'swap', shapes: [a, b], fighting: this.fighting }),
         },
         beltAt: (at) => this.belt.slotNear(at),
+        mouth: (out) => this.belt.mouth(out),
+        edge: (hand) => this.edgeFor(hand),
       },
       atlas,
     );
@@ -286,7 +296,26 @@ export class Adventure {
       inventory: this.state.inventory,
       buzz: (hand, intensity, ms) => this.player.input.pulse(hand, intensity, ms),
       apply: (effects, at) => this.applyThings(effects, at),
+      // A hand holding a tool from the loop takes no flask.
+      busy: (hand) => hand === 'right' && this.gathering.drawn !== null,
     });
+    // The tool loop hangs from the belt's frame; the veins out of doors load with the chunks round you, the mine's with the mine.
+    this.gathering = new Gathering(zone.spots, {
+      player: this.player,
+      professions: this.state.professions,
+      frame: this.belt.frame,
+      particles: this.particles,
+      buzz: (hand, intensity, ms) => this.player.input.pulse(hand, intensity, ms),
+      apply: (effects, at) => this.applyGathered(effects, at),
+      say: (words, at) => this.floatOver(at, 0.12, words, HINT_FLOAT),
+      handBusy: () => this.belt.holding('right') >= 0,
+    });
+    this.gathering.addTo(scene);
+    for (const { mesh, interior } of this.gathering.meshes) {
+      scene.add(mesh);
+      this.world.stageWith(interior, mesh);
+    }
+    this.gathering.warm(renderer, camera, scene);
     // The wares open beside the bag's panel, hung from it as the stash's is.
     this.wares = new WaresBoard(this.state.inventory, atlas);
     this.bag.panel.root.add(this.wares.root);
@@ -329,8 +358,10 @@ export class Adventure {
       unlearned: () => this.state.unlearned,
       drawn: (shape) => this.apply({ kind: 'drawn', shape }, this.you.head),
       use: (ability, aim) => this.combat.use(ability, aim),
-      // Your hands are the bag's while it's open, the bench's while you work at it, and a flask's while you hold one.
+      // Your hands are the bag's while it's open, the bench's while you work at it, and a flask's or the pick's while you hold one.
       held: () => this.handsHeld,
+      // A grip in the tool loop is the loop's, wherever the belt's frame has it hanging.
+      taken: () => (this.gathering.inLoop ? 'the tool loop' : null),
       busy: () => this.combat.busy || (this.mage?.charging('right') ?? false),
     });
     if (this.combat.ranger) this.combat.ranger.held = () => this.handsHeld;
@@ -427,6 +458,7 @@ export class Adventure {
           particles: this.particles,
           apply: (effects, at) => this.applyMade(effects, at),
           dress: () => this.dressHands(),
+          mouth: (out) => this.belt.mouth(out),
         },
         CONFIG.villagers.radius,
       );
@@ -470,13 +502,27 @@ export class Adventure {
     // With a door shut behind you, what stands outside isn't drawn either.
     const outdoors = this.world.outdoorsShown;
     this.pickups.root.visible = this.hale.root.visible = this.villagers.root.visible = this.chests.outdoors.visible = outdoors;
+    for (const { mesh, interior } of this.gathering.meshes) if (interior === null) mesh.visible = outdoors;
     if (this.anvil) this.anvil.frame.visible = outdoors;
     this.showCamps(outdoors);
     player.fighting = this.fighting;
     player.update(dt);
-    // The belt's cooldown runs down, and a hand at a hip may take a flask (and its weapon fades).
-    this.state.inventory.tick(dt);
+    // The belt's cooldown runs down, as do your buffs, and a hand at a hip may take a flask (and its weapon fades).
+    const ended = this.state.inventory.tick(dt);
+    if (ended.length) this.show(ended, you.head, false);
     this.belt.update(dt, this.bag.beltTarget);
+    // The tool loop, and the pick at a vein: after the belt, so the sword's away before anything swings it.
+    this.gathering.update({
+      dt,
+      fighting: this.fighting,
+      station: player.holdingTools || this.bench?.bare === true,
+      interior: this.world.interior,
+      outdoors,
+      mineDrawn: (x, z) => {
+        const mine = this.world.mine;
+        return !!mine && mine.drawn[mine.partAt(x, z)];
+      },
+    });
     this.mage?.update(dt, this.handsHeld);
     this.runVignette.update(dt, player.running);
     updateListener(player.camera);
@@ -537,6 +583,7 @@ export class Adventure {
     this.text.update(dt);
     this.particles.update(dt);
     this.shockwaves.update(dt);
+    this.hud.status.buffs = this.state.inventory.buffs;
     this.hud.status.level = this.state.level;
     this.hud.status.progress = this.state.progress;
     this.hud.update(dt);
@@ -559,9 +606,15 @@ export class Adventure {
     return { line: arrow.line, turn: arrowTurn({ x: head.x, z: head.z, yaw }, to) };
   }
 
-  /** Are your hands the bag's (it's open), the bench's (you work at it) or a flask's (off the belt) now, not your weapons'? */
+  /** Are your hands the bag's (it's open), the bench's (you work at it), a flask's (off the belt) or the pick's now, not your weapons'? */
   private get handsHeld(): boolean {
-    return this.bag.isOpen || this.bench?.bare === true || this.belt.holding('left') >= 0 || this.belt.holding('right') >= 0;
+    return (
+      this.bag.isOpen ||
+      this.bench?.bare === true ||
+      this.belt.holding('left') >= 0 ||
+      this.belt.holding('right') >= 0 ||
+      this.gathering.drawn !== null
+    );
   }
 
   /** Is anything fighting you: a camp's (not walking home), or the Warden and what it raised? */
@@ -586,6 +639,9 @@ export class Adventure {
   private showCamps(outdoors: boolean): void {
     const mine = this.world.mine;
     if (mine) showInMine(mine, this.chests.mine);
+    for (const { mesh, interior, spots } of this.gathering.meshes) {
+      if (interior === 'mine') mesh.visible = !!mine && spots.some((s) => mine.drawn[mine.partAt(s.x, s.z)]);
+    }
     for (const camp of this.camps.camps) {
       if (camp.plan.interior !== 'mine' || !mine) camp.root.visible = outdoors;
       else showInMine(mine, camp.root);
@@ -882,6 +938,17 @@ export class Adventure {
     this.show(effects, at, false);
   }
 
+  /**
+   * What emptying a gathering spot did: saved and shown at `at` ("+1 Mining"),
+   * and the spot counted for your quests. What a full bag can't take lies on
+   * the ground there, to take back as anything dropped is.
+   */
+  private applyGathered(effects: ProfessionsEffects, at: Vector3): void {
+    for (const e of effects) if (e.kind === 'left') this.dropped.drop(e.stack, _a.copy(at).setY(at.y + 0.1));
+    this.applyThings(effects, at);
+    for (const e of effects) if (e.kind === 'gathered') this.apply({ kind: 'gathered', spot: e.spot }, at);
+  }
+
   /** What a make at a station did: saved and shown at `at`, and what it made counted for your quests. */
   private applyMade(effects: readonly Effect[], at: Vector3): void {
     this.applyThings(effects, at);
@@ -907,6 +974,26 @@ export class Adventure {
     for (const fist of Object.values(player.fists ?? {})) fist.tint(tint);
     player.stats = state.stats;
     player.hp = Math.min(player.hp, player.maxHp);
+  }
+
+  /**
+   * The edge a whetstone carried in `hand` is rubbed along: the sword's blade
+   * in your other hand, or the ranger's bow (for its arrowheads). None while
+   * that hand holds nothing that takes an edge.
+   */
+  private edgeFor(hand: Handedness): { readonly base: Vector3; readonly tip: Vector3 } | null {
+    const { player, edge } = this;
+    const bow = this.combat.ranger?.bow;
+    if (bow) {
+      if (hand === 'left' || !bow.tracked) return null;
+      edge.base.copy(bow.topTip);
+      edge.tip.copy(bow.bottomTip);
+      return edge;
+    }
+    const { sword } = player;
+    if (hand === 'right' || this.state.inventory.gear.mainHand === null || sword.away || !sword.tip.valid || !sword.model.visible) return null;
+    sword.segment(player.rig, edge.base, edge.tip);
+    return edge;
   }
 
   /** A fist touches what lies there for your quest: it's yours, with a buzz in that hand. */
@@ -1017,8 +1104,22 @@ export class Adventure {
           // Your talents' numbers and abilities: Toughness's health, a talent ability's pip and shape.
           this.dressHands();
           break;
-        case 'drank':
-          this.player.heal(this.player.maxHp * e.heal);
+        case 'drank': {
+          // Health, rage (the warrior's, once the War Cry has brought it) or a share of the mage's mana.
+          const { player } = this;
+          player.heal(player.maxHp * e.heal);
+          if (e.rage && player.bar.kind === 'rage') player.addRage(e.rage);
+          if (e.mana && player.bar.kind === 'mana') player.resource = Math.min(player.bar.size, player.resource + player.bar.size * e.mana);
+          break;
+        }
+        case 'buff':
+          // The whetstone's or the elixir's more damage, from now: its icon shows beside the belt HUD.
+          this.player.stats = this.state.stats;
+          sfx.buff();
+          this.floatOver(at, 0.1, `+${Math.round(e.damage * 100)}% damage`, { ...KILL_XP_FLOAT, color: '#9fe08a', scale: 0.08, rise: 0.25 });
+          break;
+        case 'buffEnded':
+          this.player.stats = this.state.stats;
           break;
         case 'proficiency':
           // "+1 Alchemy", small and white where it was made, in the XP float's style.

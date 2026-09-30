@@ -27,21 +27,31 @@ export interface Shot {
   readonly powered: boolean;
   /** One of a Volley's arrows. */
   readonly volley: boolean;
+  /** Loosed under Trueshot: it bends onto `target` in flight and passes a raised guard. */
+  readonly trueshot: boolean;
+  /** Whom it bends onto (Trueshot), or null. */
+  readonly target: Enemy | null;
   /** s left stuck in a wall or the ground; 0 while it flies. */
   stuck: number;
 }
 
-/** What a loosed arrow carries, by how far the string was drawn (0 to 1): damage in level-1 terms, and speed in m/s. */
-export function shotOf(draw: number): { damage: number; speed: number } {
+/**
+ * What a loosed arrow carries, by how far the string was drawn (0 to 1):
+ * damage in level-1 terms, and speed in m/s, `faster` more (Swift Arrows).
+ */
+export function shotOf(draw: number, faster = 0): { damage: number; speed: number } {
   const A = CONFIG.ranger.arrow;
   const d = Math.max(0, Math.min(1, draw));
-  return { damage: A.minDamage + (A.maxDamage - A.minDamage) * d, speed: A.minSpeed + (A.maxSpeed - A.minSpeed) * d };
+  return { damage: A.minDamage + (A.maxDamage - A.minDamage) * d, speed: (A.minSpeed + (A.maxSpeed - A.minSpeed) * d) * (1 + faster) };
 }
 
-/** What an arrow deals an enemy: a head hit at its own crit multiplier, an exposed enemy at the sword's. */
-export function arrowDamage(damage: number, head: boolean, enemy: Pick<Enemy, 'exposed' | 'def'>): number {
+/**
+ * What an arrow deals an enemy: a head hit at its own crit multiplier (and
+ * `headBonus` more: Keen Eye), an exposed enemy at the sword's.
+ */
+export function arrowDamage(damage: number, head: boolean, enemy: Pick<Enemy, 'exposed' | 'def'>, headBonus = 0): number {
   let d = damage;
-  if (head) d *= enemy.def.critMultiplier;
+  if (head) d *= enemy.def.critMultiplier + headBonus;
   if (enemy.exposed > 0) d *= CONFIG.sword.exposedMultiplier;
   return Math.round(d);
 }
@@ -58,11 +68,52 @@ export interface ShotHooks {
   stuck(at: Vector3): void;
 }
 
-/** What rides on a loosed arrow besides the draw: enemies it passes through, and which ability it is. */
+/** What rides on a loosed arrow besides the draw: enemies it passes through, which ability it is, and how much faster it flies. */
 export interface Loosed {
   readonly pierce?: number;
   readonly powered?: boolean;
   readonly volley?: boolean;
+  /** Trueshot's: whom it bends onto (or null), passing a raised guard. */
+  readonly trueshot?: { readonly target: Enemy | null } | null;
+  /** This much faster than the draw's speed (Swift Arrows). */
+  readonly faster?: number;
+}
+
+/** What Trueshot bends an arrow onto: where on an enemy, its chest. */
+const CHEST = 0.6;
+
+/**
+ * Whom Trueshot bends an arrow loosed from `from` along `dir` onto: of the
+ * enemies a blow can land on within `range` m whose chest is within `aimDeg`°
+ * of `dir` and in sight, the one nearest the arrow's line. Null for none.
+ */
+export function bentOnto<T extends Pick<Enemy, 'hittable' | 'capsule'>>(
+  from: Vector3,
+  dir: Vector3,
+  enemies: readonly T[],
+  sees: (from: Vector3, to: Vector3) => boolean,
+  { aimDeg, range }: { readonly aimDeg: number; readonly range: number } = CONFIG.talents.trees.ranger.marksmanship.trueshot,
+): T | null {
+  let best: T | null = null;
+  let least = (aimDeg * Math.PI) / 180;
+  for (const e of enemies) {
+    if (!e.hittable) continue;
+    chestOf(e, _chest);
+    _to.subVectors(_chest, from);
+    const d = _to.length();
+    if (d > range || d < 0.3) continue;
+    const off = _to.angleTo(dir);
+    if (off > least || !sees(from, _chest)) continue;
+    least = off;
+    best = e;
+  }
+  return best;
+}
+
+/** Where Trueshot's arrows make for on an enemy: up its body, at the chest. */
+function chestOf(e: Pick<Enemy, 'capsule'>, out: Vector3): Vector3 {
+  e.capsule(_a, _b);
+  return out.lerpVectors(_a, _b, CHEST);
 }
 
 /**
@@ -91,6 +142,11 @@ const _v = new Vector3();
 const _one = new Vector3(1, 1, 1);
 const _fwd = new Vector3(0, 0, 1);
 const _up = new Vector3(0, 1, 0);
+const _a = new Vector3();
+const _b = new Vector3();
+const _to = new Vector3();
+const _chest = new Vector3();
+const _want = new Vector3();
 const _blade: BladeResult = { zone: 'body', point: new Vector3() };
 const _best: BladeResult = { zone: 'body', point: new Vector3() };
 const _target = bladeTarget();
@@ -112,8 +168,8 @@ export class Shots {
    * its damage times `multiplier` (your damage, and Power Shot's or Volley's),
    * passing through `pierce` enemies. The oldest arrow goes if there are too many.
    */
-  loose(from: Vector3, dir: Vector3, draw: number, multiplier: number, { pierce = 0, powered = false, volley = false }: Loosed = {}): Shot {
-    const { damage, speed } = shotOf(draw);
+  loose(from: Vector3, dir: Vector3, draw: number, multiplier: number, { pierce = 0, powered = false, volley = false, trueshot = null, faster = 0 }: Loosed = {}): Shot {
+    const { damage, speed } = shotOf(draw, faster);
     if (this.flying.length >= MAX) {
       const i = this.flying.findIndex((s) => s.stuck > 0);
       this.flying.splice(i >= 0 ? i : 0, 1);
@@ -128,6 +184,8 @@ export class Shots {
       passed: [],
       powered,
       volley,
+      trueshot: trueshot !== null,
+      target: trueshot?.target ?? null,
       stuck: 0,
     };
     this.flying.push(shot);
@@ -145,6 +203,7 @@ export class Shots {
       }
       s.life -= dt;
       s.prev.copy(s.pos);
+      if (s.target?.hittable) this.bend(s, dt);
       s.vel.y -= A.gravity * dt;
       s.pos.addScaledVector(s.vel, dt);
       if (this.strike(s, enemies, hooks)) {
@@ -160,10 +219,20 @@ export class Shots {
     }
   }
 
+  /** Trueshot: turn the arrow towards its target's chest, at most so far a second, its speed kept. */
+  private bend(s: Shot, dt: number): void {
+    const T = CONFIG.talents.trees.ranger.marksmanship.trueshot;
+    const speed = s.vel.length();
+    _want.subVectors(chestOf(s.target!, _chest), s.pos).normalize().multiplyScalar(speed);
+    const off = s.vel.angleTo(_want);
+    if (off < 1e-6) return;
+    s.vel.lerp(_want, Math.min(1, ((T.bendDegPerSec * Math.PI) / 180) * dt / off)).setLength(speed);
+  }
+
   /**
    * The enemies this frame's flight meets, nearest first: each hit lands, and
    * the arrow stops at the first unless it still pierces. A raised guard
-   * stops it. True once it has stopped.
+   * stops it, unless Trueshot loosed it. True once it has stopped.
    */
   private strike(s: Shot, enemies: readonly Enemy[], hooks: ShotHooks): boolean {
     for (;;) {
@@ -171,7 +240,9 @@ export class Shots {
       let near = Infinity;
       for (const enemy of enemies) {
         if ((!enemy.hittable && !enemy.evading) || s.passed.includes(enemy)) continue;
-        const res = sweepBlade(s.prev, s.pos, s.prev, s.pos, CONFIG.ranger.arrow.radius, 1, enemy.bladeTarget(_target), _blade);
+        const target = enemy.bladeTarget(_target);
+        if (s.trueshot) target.guarding = false;
+        const res = sweepBlade(s.prev, s.pos, s.prev, s.pos, CONFIG.ranger.arrow.radius, 1, target, _blade);
         if (!res) continue;
         const d = res.point.distanceToSquared(s.prev);
         if (d >= near) continue;
@@ -186,7 +257,7 @@ export class Shots {
         hooks.evaded(hit, at);
         return true;
       }
-      if (_best.zone === 'guard' || hit.guardCovers(at, s.vel)) {
+      if (!s.trueshot && (_best.zone === 'guard' || hit.guardCovers(at, s.vel))) {
         hooks.guarded(s, hit, at);
         return true;
       }
