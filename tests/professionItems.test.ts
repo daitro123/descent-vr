@@ -62,6 +62,103 @@ describe('the consumables', () => {
   });
 });
 
+describe('using what professions make', () => {
+  const bag = (slot: number) => ({ in: 'bag', slot }) as const;
+  const belt = (slot: number) => ({ in: 'belt', slot }) as const;
+  const refusals = (effects: ReturnType<Inventory['use']>) => effects.flatMap((e) => (e.kind === 'refused' ? [e.reason] : []));
+  /** A `klass` of level 1 carrying `ids`, one of each, from the bag's first slot. */
+  const carrying = (ids: string[], klass: 'warrior' | 'ranger' | 'mage' = 'warrior') => {
+    const inv = new Inventory({ class: klass, level: 1 });
+    inv.take(ids.map((id) => ({ id, count: 1 })));
+    return inv;
+  };
+
+  it('drinks the rage draught for 30 rage and the mana potion for 40% of mana', () => {
+    const inv = carrying(['rage-draught', 'minor-mana-potion']);
+    expect(inv.use(bag(0))).toContainEqual({ kind: 'drank', id: 'rage-draught', heal: 0, rage: 30 });
+    inv.tick(60);
+    expect(inv.use(bag(1))).toContainEqual({ kind: 'drank', id: 'minor-mana-potion', heal: 0, mana: 0.4 });
+    expect(inv.bag.slice(0, 2)).toEqual([null, null]);
+  });
+
+  it('shares the 60 s cooldown between the rage draught, the mana potion and the healing potion', () => {
+    const inv = carrying(['rage-draught', 'minor-mana-potion']);
+    inv.move(bag(0), belt(0));
+    // The healing potions on the right hip, the rage draught on the left, the mana potion in the bag.
+    expect(inv.drink(0)).toContainEqual({ kind: 'cooldown', seconds: 60 });
+    expect(refusals(inv.drink(1))).toEqual(['cooldown']);
+    expect(refusals(inv.use(bag(1)))).toEqual(['cooldown']);
+    inv.tick(60);
+    expect(refusals(inv.drink(1))).toEqual([]);
+    expect(refusals(inv.use(bag(1)))).toEqual(['cooldown']);
+  });
+
+  it('puts on the elixir and the whetstone off the cooldown, each reporting its buff', () => {
+    const inv = carrying(['elixir-of-the-keen-eye', 'whetstone']);
+    inv.drink(1);
+    expect(inv.use(bag(0))).toEqual([
+      { kind: 'buff', id: 'elixir-of-the-keen-eye', buff: 'elixir', damage: 0.1, seconds: 300 },
+      { kind: 'slot', where: bag(0), stack: null },
+    ]);
+    expect(inv.use(bag(1))).toContainEqual({ kind: 'buff', id: 'whetstone', buff: 'whetstone', damage: 0.05, seconds: 600 });
+    expect(inv.cooldown).toBe(60);
+    expect(inv.buffs.map((b) => [b.kind, b.left])).toEqual([
+      ['elixir', 300],
+      ['whetstone', 600],
+    ]);
+    expect(inv.boost).toBeCloseTo(0.15, 9);
+  });
+
+  it('replaces a buff with a second of its kind, for its whole time again', () => {
+    const inv = new Inventory({ class: 'ranger', level: 1 });
+    inv.take([{ id: 'whetstone', count: 2 }]);
+    inv.use(bag(0));
+    inv.tick(400);
+    expect(inv.buffs).toEqual([{ kind: 'whetstone', id: 'whetstone', damage: 0.05, left: 200 }]);
+    inv.use(bag(0));
+    expect(inv.buffs).toEqual([{ kind: 'whetstone', id: 'whetstone', damage: 0.05, left: 600 }]);
+    expect(inv.boost).toBe(0.05);
+  });
+
+  it('runs a buff out, reporting it as it ends', () => {
+    const inv = carrying(['elixir-of-the-keen-eye']);
+    inv.use(bag(0));
+    expect(inv.tick(299)).toEqual([]);
+    expect(inv.tick(1)).toEqual([{ kind: 'buffEnded', buff: 'elixir' }]);
+    expect(inv.buffs).toEqual([]);
+    expect(inv.boost).toBe(0);
+  });
+
+  it('drinks the elixir from the belt without dimming it', () => {
+    const inv = carrying(['elixir-of-the-keen-eye']);
+    inv.move(bag(0), belt(0));
+    inv.drink(1);
+    expect(refusals(inv.drink(0))).toEqual([]);
+    expect(inv.buffs.map((b) => b.kind)).toEqual(['elixir']);
+    expect(inv.cooldown).toBe(60);
+  });
+
+  it("refuses the whetstone to the mage, who has no blade, and keeps it", () => {
+    const inv = carrying(['whetstone'], 'mage');
+    expect(refusals(inv.use(bag(0)))).toEqual(['class']);
+    expect(inv.bag[0]).toEqual({ id: 'whetstone', count: 1 });
+    expect(inv.buffs).toEqual([]);
+  });
+
+  it('uses only a consumable, from the bag or the belt', () => {
+    const inv = carrying(['copper-ore']);
+    expect(refusals(inv.use(bag(0)))).toEqual(['empty']);
+    expect(refusals(inv.use(bag(5)))).toEqual(['empty']);
+    expect(refusals(inv.use({ in: 'stash', slot: 0 }))).toEqual(['slot']);
+  });
+
+  it('keeps no buff in the save', () => {
+    const inv = carrying(['whetstone']);
+    inv.use(bag(0));
+    expect(new Inventory({ class: 'warrior', level: 1 }, inv.snapshot()).buffs).toEqual([]);
+  });
+});
+
 describe('the copper gauntlets', () => {
   /** A green pair of gloves of item level 5, as a drop would be. */
   const drop = (main: GearItem['main']): GearItem => ({ id: 'drop', name: 'Drop', kind: 'gear', slot: 'hands', level: 5, rarity: 'green', model: 'test', main });

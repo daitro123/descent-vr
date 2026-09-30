@@ -231,6 +231,30 @@ describe("Hale's old longsword", () => {
   });
 });
 
+describe('buffs on your damage', () => {
+  it('make your damage 5% more with a whetstone, 15% with the elixir too, and back as they run out', () => {
+    const state = new AdventureState(undefined, undefined, { class: 'ranger' });
+    const plain = state.stats.damage;
+    state.inventory.take([
+      { id: 'whetstone', count: 1 },
+      { id: 'elixir-of-the-keen-eye', count: 1 },
+    ]);
+    state.inventory.use({ in: 'bag', slot: 0 });
+    expect(state.stats.damage / plain).toBeCloseTo(1.05, 9);
+    state.inventory.use({ in: 'bag', slot: 1 });
+    expect(state.stats.damage / plain).toBeCloseTo(1.15, 9);
+    state.inventory.tick(300);
+    expect(state.stats.damage / plain).toBeCloseTo(1.05, 9);
+    state.inventory.tick(300);
+    expect(state.stats.damage).toBe(plain);
+  });
+
+  it('scale everything that makes your damage, gear and level alike', () => {
+    expect(statsAt(5, HALE, 'warrior', 0.05).damage).toBeCloseTo(statsAt(5, HALE).damage * 1.05, 9);
+    expect(statsAt(5, HALE, 'warrior', 0.05).maxHp).toBe(statsAt(5, HALE).maxHp);
+  });
+});
+
 describe("an enemy's numbers", () => {
   const { grunt, archer, brute, warden } = CONFIG.enemies;
   const blows = (def: { attacks: readonly { damage: number }[] }) => def.attacks.map((a) => a.damage);

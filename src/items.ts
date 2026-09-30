@@ -70,11 +70,14 @@ export interface ConsumableItem extends Common {
   readonly belt?: false;
 }
 
+/** The kinds of buff: one of each is on you at a time. */
+export type BuffKind = 'whetstone' | 'elixir';
+
 /** A timed buff a consumable puts on you. */
 export interface Buff {
   /** One of each kind at a time. */
-  readonly kind: 'whetstone' | 'elixir';
-  /** Added to your damage multiplier while it lasts. */
+  readonly kind: BuffKind;
+  /** Your damage is this much more while it lasts (0.05 for 5% more); buffs on you together add up. */
   readonly damage: number;
   readonly seconds: number;
   /** The classes it's for; anyone's if missing. */

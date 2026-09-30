@@ -194,9 +194,10 @@ const stepAt = (level: number) => 1 + CONFIG.levels.step * (level - 1);
  * class's main attribute is a tenth of level 1's damage, so a character
  * without gear has 100 health and deals ×1 at level 1, 180 and ×1.8 at 5.
  * Your weapon's damage rating adds to your damage (Hale's old longsword adds
- * one level's step), and gear's armour cuts what you take.
+ * one level's step), and gear's armour cuts what you take. Buffs on you
+ * (`boost`: 0.05 for a whetstone) make all of that damage so much more.
  */
-export function statsAt(level: number, worn: Worn = WORN_NOTHING, klass: ClassId = 'warrior'): Stats {
+export function statsAt(level: number, worn: Worn = WORN_NOTHING, klass: ClassId = 'warrior', boost = 0): Stats {
   const A = CONFIG.items.attribute;
   const stamina = attributesAt(level) + worn.stamina;
   const main = attributesAt(level) + worn.main;
@@ -205,7 +206,7 @@ export function statsAt(level: number, worn: Worn = WORN_NOTHING, klass: ClassId
     attribute: mainOf(klass),
     main,
     maxHp: A.health * stamina,
-    damage: A.damage * main + worn.damage,
+    damage: (A.damage * main + worn.damage) * (1 + boost),
     armour: worn.armour,
     resource: resourceOf(klass, main),
     abilities: abilitiesAt(klass, level),
@@ -405,7 +406,7 @@ export class AdventureState {
   }
 
   get stats(): Stats {
-    return statsAt(this.level, this.inventory.numbers, this.class);
+    return statsAt(this.level, this.inventory.numbers, this.class, this.inventory.boost);
   }
 
   /** Which ability each shape holds: your class's base gesture abilities in their own shapes. */

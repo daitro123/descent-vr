@@ -730,10 +730,14 @@ export const CONFIG = {
       rageDraught: { price: 3, rage: 30 }, // a potion, on the belt's shared cooldown
       minorManaPotion: { price: 3, mana: 0.4 }, // the share of your maximum mana; does nothing until the mage has mana
       // Buffs: not potions, so off the cooldown; one of each kind on you at a time, a new one replacing the old.
-      elixirOfTheKeenEye: { price: 4, damage: 0.1, seconds: 5 * 60 }, // added to your damage multiplier
-      whetstone: { price: 2, damage: 0.05, seconds: 10 * 60 }, // rubbed along a blade or arrowheads; never on the belt
+      elixirOfTheKeenEye: { price: 4, damage: 0.1, seconds: 5 * 60 }, // your damage 10% more while it lasts (buffs together add up: 15% with the whetstone)
+      whetstone: { price: 2, damage: 0.05, seconds: 10 * 60 }, // 5% more; rubbed along the blade or the bow (professions/sharpen.ts); never on the belt
       copperGauntlets: { level: 5, rarity: 'green' }, // as good as a green drop at level 5, each version with Stamina
     },
+    // Sharpening (professions/sharpen.ts): the whetstone carried from the bag, rubbed along the blade in the
+    // other hand (the ranger's bow, for the arrowheads). Within `reach` m of the edge it scrapes; `travel` m
+    // along the edge in all, back and forth, sharpens it, with a scrape's buzz every `stroke` m.
+    sharpen: { reach: 0.06, travel: 0.5, stroke: 0.12, buzz: { scrape: { intensity: 0.35, ms: 25 }, done: { intensity: 0.8, ms: 60 } } },
     // One rule for hands at a station: step within `near` m of it, looking within `facing` rad of
     // it and out of a fight, and both hands become the station's; past `far` m they're yours again.
     station: { near: 1.3, far: 2, facing: Math.PI / 3 },

@@ -16,10 +16,15 @@ import {
   type WebGLRenderer,
 } from 'three';
 import { CONFIG } from '../config';
+import type { BuffKind } from '../items';
 import type { Player } from '../player/player';
 
 const W = 64;
 const H = 24;
+/** The buffs' strip beside it, at the same pixel size: a row of icon and minutes for each. */
+const BW = 16;
+/** Metres a pixel of the HUD's canvas is across. */
+const PX = 0.42 / W;
 /** Where the first ability's pip sits: five fit under the right orb. */
 const PIPS = 44;
 const _head = new Vector3();
@@ -55,7 +60,17 @@ export interface HudStatus {
   level: number;
   /** …and how far through it you are, 0 to 1. */
   progress: number;
+  /** The buffs on you and their seconds left, in the order they were put on. */
+  buffs: readonly { readonly kind: BuffKind; readonly left: number }[];
 }
+
+/** Each buff's icon, 5 × 7 pixels: its colour by letter, from the top row down. */
+const BUFF_ICONS: Readonly<Record<BuffKind, { rows: readonly string[]; colours: Readonly<Record<string, string>> }>> = {
+  // A grey whetstone lying across, a glint on its top edge.
+  whetstone: { rows: ['....w', '...ws', '..wss', '.wssd', 'wssd.', 'ssd..', 'sd...'], colours: { w: '#e8e8e0', s: '#9a9a90', d: '#5a5a54' } },
+  // A green flask, corked.
+  elixir: { rows: ['.ccc.', '..g..', '..g..', '.ggg.', 'ggGgg', 'ggggg', '.ggg.'], colours: { c: '#a07040', g: '#4fb04a', G: '#c8f0b8' } },
+};
 
 /**
  * Diablo's health and resource orbs, body-locked at belt height: glance down
@@ -78,11 +93,17 @@ export class BeltHud {
   private readonly vignette: ShaderMaterial;
   private readonly vignetteMesh: Mesh;
   private lastKey = '';
+  private readonly buffCanvas = document.createElement('canvas');
+  private readonly buffCtx: CanvasRenderingContext2D;
+  private readonly buffTexture: CanvasTexture;
+  /** The buffs' strip, beside the resource orb: shown while one is on you. */
+  readonly buffPanel: Mesh<PlaneGeometry, MeshBasicMaterial>;
+  private lastBuffs = '';
   private hurtTimer = 0;
   private dashTimer = 0;
   private time = 0;
   private yaw = 0;
-  readonly status: HudStatus = { wave: 0, enemiesLeft: 0, boss: false, level: 1, progress: 0 };
+  readonly status: HudStatus = { wave: 0, enemiesLeft: 0, boss: false, level: 1, progress: 0, buffs: [] };
   private readonly waves: boolean;
 
   constructor(
@@ -106,6 +127,20 @@ export class BeltHud {
     );
     panel.rotation.x = -0.9; // tilt up toward the eyes
     this.root.add(panel);
+
+    this.buffCanvas.width = BW;
+    this.buffCanvas.height = H;
+    this.buffCtx = this.buffCanvas.getContext('2d')!;
+    this.buffTexture = new CanvasTexture(this.buffCanvas);
+    this.buffTexture.magFilter = this.buffTexture.minFilter = NearestFilter;
+    this.buffTexture.generateMipmaps = false;
+    this.buffTexture.colorSpace = SRGBColorSpace;
+    this.buffPanel = new Mesh(new PlaneGeometry(BW * PX, H * PX), new MeshBasicMaterial({ map: this.buffTexture, transparent: true }));
+    this.buffPanel.name = 'buffs';
+    this.buffPanel.position.x = (W + BW) * PX * 0.5 + 0.008;
+    this.buffPanel.rotation.x = -0.9;
+    this.buffPanel.visible = false;
+    this.root.add(this.buffPanel);
 
     this.vignette = new ShaderMaterial({
       uniforms: { uColor: { value: new Color() }, uStrength: { value: 0 }, uInner: { value: 0.3 } },
@@ -173,6 +208,34 @@ export class BeltHud {
 
     this.updateVignette(dt);
     this.redraw();
+    this.redrawBuffs();
+  }
+
+  /** A row for each buff on you: its icon, and its minutes left (the last one shows 1 until it runs out). */
+  private redrawBuffs(): void {
+    const { buffs } = this.status;
+    const key = buffs.map((b) => `${b.kind}${Math.ceil(b.left / 60)}`).join(':');
+    if (key === this.lastBuffs) return;
+    this.lastBuffs = key;
+    this.buffPanel.visible = buffs.length > 0;
+    const c = this.buffCtx;
+    c.clearRect(0, 0, BW, H);
+    buffs.slice(0, 2).forEach((b, row) => {
+      const y = 1 + row * 11;
+      c.fillStyle = 'rgba(10,8,8,0.55)';
+      c.fillRect(0, y, BW, 10);
+      const icon = BUFF_ICONS[b.kind];
+      icon.rows.forEach((line, j) =>
+        [...line].forEach((ch, i) => {
+          if (ch === '.') return;
+          c.fillStyle = icon.colours[ch];
+          c.fillRect(1 + i, y + 1 + j, 1, 1);
+        }),
+      );
+      const minutes = String(Math.min(99, Math.ceil(b.left / 60)));
+      this.text(minutes, 7, y + 3, '#e8dcc0', c);
+    });
+    this.buffTexture.needsUpdate = true;
   }
 
   private updateVignette(dt: number): void {
@@ -269,8 +332,7 @@ export class BeltHud {
     return [...str].reduce((w, ch) => w + (GLYPHS[ch] ?? '000').length / 5 + 1, 0);
   }
 
-  private text(str: string, x: number, y: number, color: string): void {
-    const c = this.ctx;
+  private text(str: string, x: number, y: number, color: string, c = this.ctx): void {
     c.fillStyle = color;
     for (const ch of str) {
       const g = GLYPHS[ch] ?? '000000000000000';

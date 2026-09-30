@@ -7,6 +7,7 @@ import { type ItemId, itemOf } from '../../items';
 import { SKIN } from '../../player/fists';
 import type { Handedness } from '../../player/input';
 import type { Player } from '../../player/player';
+import { Sip } from '../../player/sip';
 import { lookOf } from '../../ui/bag/looks';
 import { type Professions, type ProfessionsEffects, RECIPES, type RecipeId } from '../professions';
 import { HERBS, MORTAR_HOLDS, recipeFor, Turns } from './brew';
@@ -36,6 +37,7 @@ import {
   trayPlace,
   trivet,
 } from './props';
+import { sfx } from '../../fx/sfx';
 import { brewSfx } from './sound';
 
 // The alchemy bench in the house by the well, promoted from `?proto=brew`
@@ -48,7 +50,8 @@ import { brewSfx } from './sound';
 // tips the mortar into the pot, stir (3 turns) while the brew changes colour,
 // and the bench pours it into the next empty flask and corks it: the make is
 // finished, into the bag. The flask waits on its stand: let it go at a hip to
-// put it on the belt, or step away and it flies to the bag. Whatever you let go
+// put it on the belt, hold it at your mouth to drink it (it's the bag's), or
+// step away and it flies to the bag. Whatever you let go
 // of glides back to its place. A brew you walk away from waits where it stands.
 
 type Kind = 'herb' | 'pestle' | 'spoon' | 'flask';
@@ -115,6 +118,8 @@ export interface BenchContext {
   apply(effects: ProfessionsEffects | readonly Effect[], at: Vector3): void;
   /** Your hands dressed as your gear says again: the sword and shield back as you step away. */
   dress(): void;
+  /** Your mouth now, where a corked flask held off its stand is drunk. */
+  mouth?(out: Vector3): Vector3;
 }
 
 const B = CONFIG.alchemyBench;
@@ -169,6 +174,11 @@ export class AlchemyBench {
   private readonly hands: Record<Handedness, ReturnType<typeof openHand>> = { left: openHand(), right: openHand() };
   private readonly held: Record<Handedness, Item | null> = { left: null, right: null };
   private readonly squeezing: Record<Handedness, boolean> = { left: false, right: false };
+  /** A corked flask held at your mouth, in each hand, and where each hand was last frame (in the rig) for its speed. */
+  private readonly sips: Record<Handedness, Sip> = { left: new Sip(), right: new Sip() };
+  private readonly handWas: Record<Handedness, Vector3 | null> = { left: null, right: null };
+  /** A drink refused in that hand: it isn't tried again until the flask leaves your mouth. */
+  private readonly spurned: Record<Handedness, boolean> = { left: false, right: false };
   private readonly turns = new Turns();
   private readonly spoonInPot: Place;
   private readonly spoonOnBench: Place;
@@ -374,6 +384,7 @@ export class AlchemyBench {
       else if (released && this.held[side]) this.release(side);
       this.hands[side].root.visible = this.bare && !this.held[side]?.hidesHand;
     }
+    for (const side of ['left', 'right'] as const) this.sipping(side, dt);
     for (const item of this.items) this.glide(item, dt);
     this.fly(dt);
     this.trayShows();
@@ -867,6 +878,49 @@ export class AlchemyBench {
   /** The first stand whose flask is empty, or null. */
   private freeFlask(): Flask | null {
     return this.flasks.find((f) => f?.potion === null) ?? null;
+  }
+
+  /**
+   * A corked flask held at your mouth for as long as a belt flask takes is
+   * drunk, as one off the belt: its potion is the bag's, so the bag's is the
+   * one drunk, on the shared cooldown. Refused (cooling down), it stays in
+   * the hand with the strong buzz, and waits to be taken from your mouth and
+   * brought back before it's tried again.
+   */
+  private sipping(side: Handedness, dt: number): void {
+    const grip = this.ctx.player.input.hands[side].grip;
+    const was = this.handWas[side];
+    const speed = was && dt > 0 ? grip.position.distanceTo(was) / dt : 0;
+    this.handWas[side] = grip.visible ? (was ?? new Vector3()).copy(grip.position) : null;
+    const f = this.held[side];
+    const sip = this.sips[side];
+    if (!this.ctx.mouth || f?.kind !== 'flask' || !(f as Flask).potion) return sip.reset();
+    const flask = f as Flask;
+    const mouth = this.ctx.mouth(_c);
+    const distance = this.mouthOf(flask, _a).distanceTo(mouth);
+    if (this.spurned[side]) {
+      if (distance < CONFIG.belt.mouthRadius) return;
+      this.spurned[side] = false;
+    }
+    const sipped = sip.update(dt, distance, speed);
+    const D = CONFIG.belt.buzz;
+    if (sip.buzz) this.buzz(side, D.drink);
+    if (sipped !== 'drunk') return;
+    const { inventory } = this.ctx;
+    let from = -1;
+    inventory.bag.forEach((s, i) => s?.id === flask.potion && (from = i));
+    const effects = !flask.left && from >= 0 ? inventory.use({ in: 'bag', slot: from }) : null;
+    if (!effects || effects.some((e) => e.kind === 'refused')) {
+      brewSfx.nope();
+      this.buzz(side, B.buzz.nope);
+      this.spurned[side] = true;
+      return;
+    }
+    this.buzz(side, D.gulp);
+    sfx.gulp(mouth);
+    this.held[side] = null;
+    this.replaceFlask(flask);
+    this.ctx.apply(effects, mouth.clone());
   }
 
   /** Where the `slot`th hip's belt slot is (0 the left, 1 the right): under your head, aside by the way you face. */
