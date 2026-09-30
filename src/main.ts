@@ -131,6 +131,7 @@ async function startAdventure(
   const debug = {
     adventure,
     state: adventure.state,
+    bag: adventure.bag,
     world: adventure.world,
     player: adventure.player,
     camps: adventure.camps,

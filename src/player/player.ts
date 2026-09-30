@@ -3,7 +3,8 @@ import { ABILITIES, type Ability, type Stats, statsAt } from '../adventureState'
 import { CONFIG } from '../config';
 import { sfx } from '../fx/sfx';
 import type { Ground } from '../world/ground';
-import { XRInput } from './input';
+import { Fist } from './fists';
+import { type Handedness, XRInput } from './input';
 import type { Run } from './run';
 import { Shield, Sword } from './weapons';
 
@@ -25,6 +26,8 @@ export class Player {
   readonly input: XRInput;
   readonly sword = new Sword();
   readonly shield = new Shield();
+  /** Your hands, closed on what they hold: the Adventure's (see `showFists`); the arena shows only the weapons. */
+  fists: Readonly<Record<Handedness, Fist>> | null = null;
   /** Your level's health, damage and abilities: the arena's, unless the Adventure sets them from your level. */
   stats: Stats = ARENA;
   hp: number = this.maxHp;
@@ -63,6 +66,17 @@ export class Player {
   private attachWeapons(): void {
     this.input.hands.right.grip.add(this.sword.model);
     this.input.hands.left.grip.add(this.shield.model);
+    if (this.fists) {
+      this.input.hands.right.grip.add(this.fists.right.mesh);
+      this.input.hands.left.grip.add(this.fists.left.mesh);
+    }
+  }
+
+  /** Show your hands, closed on what they hold. */
+  showFists(): Readonly<Record<Handedness, Fist>> {
+    this.fists ??= { left: new Fist(), right: new Fist() };
+    this.attachWeapons();
+    return this.fists;
   }
 
   get alive(): boolean {
