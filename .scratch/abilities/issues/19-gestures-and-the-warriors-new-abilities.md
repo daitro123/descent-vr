@@ -33,7 +33,7 @@ Built on 2026-09-30 **by Claude on Tom's behalf**, taking the recommended option
 - **Sweeping Strikes** takes 60% of the blow as dealt (a crit, the frenzy and an exposed enemy included), measures 1.5 m between the two bodies, and doesn't chain.
 - **A shape read while its ability is cooling down** says when it's ready and spends nothing, like "not enough rage".
 - **The shape in the air:** one at a time, in the slots' order; drawing it counts once it's read, paid for or not. The arena keeps no save, so its shapes hang again each visit.
-- **When gestures don't arm:** with no gesture ability (so Oakvale, capped at 5, is exactly as before), while the bag is open, and while you're down. A stroke is read only against the shapes that hold something.
+- **When gestures don't arm:** with no gesture ability (so Oakvale, capped at 5, is exactly as before), while the bag is open or your hands are bare at the alchemy bench, and while you're down. A stroke is read only against the shapes that hold something.
 - **Belt pips** are fixed per ability rather than centred, so a pip never moves as a level adds one.
 
 **For the ranger and the mage (21, 23, 24):**

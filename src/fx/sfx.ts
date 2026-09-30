@@ -255,6 +255,14 @@ export const sfx = {
     noise(0.12, 0.25, 2400, at, 'bandpass', 0.07, 1.5);
     tone(880, 880, 0.35, 'sine', 0.08, undefined, 0.05);
   },
+  /** A chest's lid lifted: its hinges creak as it swings back, and it thuds against its stop. */
+  chest(at?: Vector3) {
+    const f = 170 + Math.random() * 40;
+    for (let i = 0; i < 7; i++) tone(f * (1 + i * 0.04), f * (1 + i * 0.04) * 0.97, 0.07, 'sawtooth', 0.05, at, i * 0.055);
+    noise(0.4, 0.1, 800, at, 'bandpass', 0, 4);
+    noise(0.14, 0.45, 280, at, 'lowpass', 0.45);
+    tone(120, 60, 0.18, 'sine', 0.22, at, 0.45);
+  },
   wave() {
     tone(110, 110, 0.8, 'triangle', 0.2);
     tone(165, 165, 0.8, 'triangle', 0.1, undefined, 0.15);
