@@ -4,6 +4,7 @@
 import type { Ability, Role } from './adventureState';
 import type { EnemyKind } from './models/characters';
 import type { GearSlot, Rarity } from './items';
+import type { Grade, RecipeRow, SpotKindRow } from './professions/professions';
 
 /** Which keyframe pair (enemies/poses.ts) an attack animates between. */
 export type AttackPoseName = 'chop' | 'slashR' | 'slashL' | 'slam' | 'draw' | 'summon';
@@ -372,12 +373,102 @@ export const CONFIG = {
     slots: 16,
     stash: 32, // slots, in two pages of 16, the same from every inn
     buyback: 6, // the last things sold, bought back at the price you got until you leave the zone
+    // Reaching over a shoulder for the bag (ui/bag/reach.ts): a sphere over each shoulder, placed from
+    // the headset's position and facing (not its tilt). The grip must go down with the hand already
+    // inside it, moving slower than the gate, so an overhead swing never opens it.
+    reach: {
+      side: 0.2, // m out to the side of the eyes…
+      down: 0.14, // …below them…
+      back: 0.12, // …and behind them, the sphere's centre
+      radius: 0.18, // m
+      speedGate: 1.5, // m/s the hand must be under as the grip goes down
+      speedLag: 0.03, // s the measured hand speed takes to follow the hand
+      zoneBuzz: { intensity: 0.15, ms: 25, every: 0.2 }, // while a slow hand is in the zone
+      openPulse: { intensity: 0.9, ms: 90 },
+      closePulse: { intensity: 0.5, ms: 60 },
+    },
+    grip: { on: 0.6, off: 0.4 }, // the grip counts as squeezed past `on`, and let go under `off`
+    // The panel (ui/bag/panel.ts): placed once in front of you, turned to face you.
+    panel: {
+      out: 0.45, // m in front of the eyes…
+      down: 0.28, // …and below them
+      turn: 60, // ° turned away from it before it comes round in front again
+      walkAway: 1.5, // m walked from it (on the floor) and it closes
+      slot: 0.06, // m square
+      pitch: 0.072, // m between slots' centres
+    },
+    // Touching a slot with a fist or the weapon's tip: round its face, in front of it and behind it (m).
+    touch: { margin: 0.006, front: 0.035, back: 0.07 },
+    // Letting a carried item go: anywhere near the panel's face, and within `near` of a slot's centre counts (m).
+    release: { margin: 0.006, front: 0.12, back: 0.1, near: 0.05 },
+    // The tabs along the panel's top, pressed like the talk board's buttons (s before a press counts).
+    tabs: { arming: 0.4, rearm: 0.3 },
+    buzz: {
+      touch: { intensity: 0.25, ms: 20 }, // a fist or the tip arriving on an item
+      pick: { intensity: 0.6, ms: 40 }, // the grip taking it
+      place: { intensity: 0.8, ms: 50 }, // let go where it went
+      refused: { intensity: 1, ms: 120 }, // let go where it can't go
+      tab: { intensity: 0.5, ms: 40 },
+      takeBack: { intensity: 0.8, ms: 70 }, // a dropped item taken back off the ground
+    },
+    // What you drop off the panel lies on the ground (world/dropped.ts), as loot does: not saved.
+    dropped: {
+      most: 12, // lying at once: past that the oldest goes
+      lasts: 300, // s
+      take: 0.25, // m from a hand to take it back, the orb's pickup radius
+      settle: 0.6, // s after it's let go before a hand can take it back
+    },
   },
 
   // The belt at your hips (inventory.ts).
   belt: {
     slots: 2, // the left hip's, then the right's
     cooldown: 60, // s every potion on the belt dims for after you drink any of them
+  },
+
+  // Professions (professions/professions.ts; .scratch/professions/spec.md): the
+  // grades, the kinds of gathering spot, the Apprentice recipes and the numbers
+  // of what they make. Proficiency climbs by `gain` for each spot emptied and
+  // each thing made, up to its grade's cap. A later zone adds rows.
+  professions: {
+    // Each grade's proficiency cap, in order. Oakvale's trainers teach only Apprentice.
+    grades: { apprentice: 25, journeyman: 50, expert: 75, artisan: 100 } satisfies Record<Grade, number>,
+    // What emptying one spot of each kind puts in the bag. It refills `refill.after` s
+    // after it's taken, once you're `refill.away` m from it.
+    spots: {
+      copperVein: { profession: 'mining', grade: 'apprentice', needs: 0, gives: { 'copper-ore': 3, 'rough-stone': 1 }, gain: 1, refill: { after: 180, away: 30 } },
+      hearthleaf: { profession: 'herbalism', grade: 'apprentice', needs: 0, gives: { hearthleaf: 2 }, gain: 1, refill: { after: 180, away: 30 } },
+      duskcap: { profession: 'herbalism', grade: 'apprentice', needs: 0, gives: { duskcap: 2 }, gain: 1, refill: { after: 180, away: 30 } },
+    } satisfies Record<string, SpotKindRow>,
+    // What each recipe takes and makes, the proficiency it needs and pays, and the
+    // trainer's price in coins (null: taught with the profession). Recipes sharing a
+    // `lesson` are bought together, once: one price teaches every version of the gauntlets.
+    recipes: {
+      'copper-bar': { profession: 'smithing', station: 'anvil', grade: 'apprentice', takes: { 'copper-ore': 2 }, makes: 'copper-bar', needs: 0, gain: 1, price: null },
+      whetstone: { profession: 'smithing', station: 'anvil', grade: 'apprentice', takes: { 'rough-stone': 1 }, makes: 'whetstone', needs: 0, gain: 1, price: null },
+      'copper-gauntlets-of-strength': { profession: 'smithing', station: 'anvil', grade: 'apprentice', takes: { 'copper-bar': 4 }, makes: 'copper-gauntlets-of-strength', needs: 15, gain: 3, price: 25, lesson: 'copper-gauntlets' },
+      'copper-gauntlets-of-agility': { profession: 'smithing', station: 'anvil', grade: 'apprentice', takes: { 'copper-bar': 4 }, makes: 'copper-gauntlets-of-agility', needs: 15, gain: 3, price: 25, lesson: 'copper-gauntlets' },
+      'copper-gauntlets-of-intellect': { profession: 'smithing', station: 'anvil', grade: 'apprentice', takes: { 'copper-bar': 4 }, makes: 'copper-gauntlets-of-intellect', needs: 15, gain: 3, price: 25, lesson: 'copper-gauntlets' },
+      'minor-healing-potion': { profession: 'alchemy', station: 'bench', grade: 'apprentice', takes: { hearthleaf: 2 }, makes: 'minor-healing-potion', needs: 0, gain: 1, price: null },
+      'rage-draught': { profession: 'alchemy', station: 'bench', grade: 'apprentice', takes: { duskcap: 2 }, makes: 'rage-draught', needs: 5, gain: 1, price: 10 },
+      'minor-mana-potion': { profession: 'alchemy', station: 'bench', grade: 'apprentice', takes: { hearthleaf: 1, duskcap: 1 }, makes: 'minor-mana-potion', needs: 5, gain: 1, price: 10 },
+      'elixir-of-the-keen-eye': { profession: 'alchemy', station: 'bench', grade: 'apprentice', takes: { hearthleaf: 2, duskcap: 1 }, makes: 'elixir-of-the-keen-eye', needs: 10, gain: 1, price: 10 },
+    } satisfies Record<string, RecipeRow>,
+    // Oakvale's materials and what the recipes make (items.ts). Materials and
+    // consumables sell for a fixed price in coins; the gauntlets by the gear rule.
+    items: {
+      copperOre: { price: 1 },
+      roughStone: { price: 1 },
+      copperBar: { price: 3 },
+      hearthleaf: { price: 1 },
+      duskcap: { price: 1 },
+      rageDraught: { price: 3, rage: 30 }, // a potion, on the belt's shared cooldown
+      minorManaPotion: { price: 3, mana: 0.4 }, // the share of your maximum mana; does nothing until the mage has mana
+      // Buffs: not potions, so off the cooldown; one of each kind on you at a time, a new one replacing the old.
+      elixirOfTheKeenEye: { price: 4, damage: 0.1, seconds: 5 * 60 }, // added to your damage multiplier
+      whetstone: { price: 2, damage: 0.05, seconds: 10 * 60 }, // rubbed along a blade or arrowheads; never on the belt
+      copperGauntlets: { level: 5, rarity: 'green' }, // as good as a green drop at level 5, each version with Stamina
+    },
   },
 
   // Marshal Hale at the crossroads (people/hale.ts).

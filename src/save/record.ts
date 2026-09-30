@@ -2,6 +2,7 @@ import { type Progress, type QuestProgress, STAGES } from '../adventureState';
 import { type InventorySave, type Stack, startingInventory } from '../inventory';
 import { GEAR_SLOTS } from '../items';
 import type { Spot } from '../maps/types';
+import { GRADES, NO_PROFESSIONS, type ProfessionsSave } from '../professions/professions';
 
 // The save record: what the browser keeps of one character between visits,
 // and how a record an older build wrote is brought up to date. A record is
@@ -9,7 +10,7 @@ import type { Spot } from '../maps/types';
 // build's record is left alone (.scratch/oakvale-starting-zone/spec.md, "Saving").
 
 /** The record's version: bump it, and add a migration from the one before, whenever its shape changes. */
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 /** Every building and the mine you can be inside. */
 export const INTERIORS = ['inn', 'house', 'mine'] as const;
@@ -54,6 +55,9 @@ export interface Migration {
  * your hand becomes the warrior's starting kit, wearing that sword (the plain
  * one, or Hale's old longsword), with three minor healing potions on the belt
  * and no coins. Nothing earned before is paid again.
+ *
+ * 2 → 3, professions (.scratch/professions/spec.md, "Saving"): none learned,
+ * and nothing paid for what came before.
  */
 export const MIGRATIONS: readonly Migration[] = [
   {
@@ -63,6 +67,7 @@ export const MIGRATIONS: readonly Migration[] = [
       inventory: startingInventory('warrior', sword === 'hale' ? { mainHand: 'hale-longsword' } : {}),
     }),
   },
+  { from: 2, up: (record) => ({ ...record, professions: NO_PROFESSIONS }) },
 ];
 
 /** What was found where the save is kept. */
@@ -103,6 +108,7 @@ function isCurrent(r: OlderRecord): r is OlderRecord & SaveRecord {
     Object.values(r.quests).every(isQuest) &&
     typeof r.wardenBeaten === 'boolean' &&
     isInventory(r.inventory) &&
+    isProfessions(r.professions) &&
     isObject(r.position) &&
     isNumber(r.position.x) &&
     isNumber(r.position.z) &&
@@ -129,6 +135,21 @@ function isInventory(v: unknown): v is InventorySave {
     Array.isArray(v.chests) &&
     v.chests.every((id) => typeof id === 'string') &&
     isNumber(v.cooldown)
+  );
+}
+
+/**
+ * Is it the professions' shape? What it holds is checked on load
+ * (professions/professions.ts): a recipe the game no longer knows is dropped
+ * there, and proficiency kept within its grade.
+ */
+function isProfessions(v: unknown): v is ProfessionsSave {
+  return (
+    isObject(v) &&
+    isObject(v.learned) &&
+    Object.values(v.learned).every((l) => isObject(l) && isNumber(l.proficiency) && isOneOf(GRADES, l.grade)) &&
+    Array.isArray(v.recipes) &&
+    v.recipes.every((id) => typeof id === 'string')
   );
 }
 
