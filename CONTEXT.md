@@ -37,7 +37,7 @@ A friendly character who hands out quests and takes them back when they're done.
 _Avoid_: NPC (too broad: every friendly character is an NPC), questgiver
 
 **Villager**:
-A friendly character who lives in a zone and gives no quests. Oakvale has three: the innkeeper, the smith and the farmer.
+A friendly character who lives in a zone and gives no quests. Oakvale has two: the innkeeper and the farmer (the smith is a trainer).
 _Avoid_: NPC (too broad), townsfolk, civilian
 
 **Bark**:
@@ -145,5 +145,13 @@ The place in the world where a making profession is done: the smithy's forge and
 _Avoid_: crafting bench, workbench
 
 **Trainer**:
-The friendly character who teaches a profession and sells its recipes.
+A friendly character who teaches a profession, gives its intro quest and sells its recipes. Oakvale has two: the smith (Mining and Smithing) and the herbalist (Herbalism and Alchemy).
 _Avoid_: teacher, master, NPC
+
+**Proficiency**:
+How practised a character is at one profession: a number that climbs by gathering and making.
+_Avoid_: skill, level, experience
+
+**Grade**:
+A step of proficiency, from Apprentice through Journeyman and Expert to Artisan, each capped until a trainer teaches the next. Each grade goes with a tier of materials; Oakvale's is Apprentice.
+_Avoid_: rank, tier (a tier is the materials that go with a grade), level
