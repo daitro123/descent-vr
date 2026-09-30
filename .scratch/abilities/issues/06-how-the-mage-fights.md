@@ -9,7 +9,7 @@ Blocked by: 01
 How does the mage fight before any ability: the plain attack every mage has, what each hand holds, and how the mage survives a blow?
 
 - The plain attack: a bolt thrown from the hand, a staff or wand pointed and triggered, or something drawn.
-- What the off hand does: a ward that blocks like a shield, a second casting hand, a focus (the focus touches Inventory).
+- What the off hand does. Inventory makes the mage's off-hand slot a focus: does it ward like a shield, cast, or boost the other hand?
 - Defence: a ward, a blink in place of the dash, keeping distance.
 - How mana (see the resource decision in charting) limits the plain attack, if at all.
 

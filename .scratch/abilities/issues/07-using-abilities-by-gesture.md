@@ -10,6 +10,7 @@ How does each class use its abilities in a fight: which gestures, which buttons,
 
 - Charting decided gestures for most abilities and at most one button ability per hand. With the ranger's and mage's hands settled, which buttons and grips are free for each class?
 - A gesture vocabulary that works for all three classes: what makes a gesture distinct from a sword swing or a bow draw, and how it's armed (a grip held, a pose, a place near the body).
+- Inventory has taken two motions: lifting a belt potion to your mouth, and reaching over your shoulder and squeezing the grip to open the bag. Gestures must stay clear of both.
 - How many abilities one class can have in use at once, and whether you choose which (a loadout) or have them all.
 - What a missed or false gesture costs, and how the game shows a gesture was read.
 
