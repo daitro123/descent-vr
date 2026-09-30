@@ -42,7 +42,7 @@ Built on 2026-09-30 by Claude **on Tom's behalf**: he asked for the build ticket
 
 **Checks**
 
-- `npm run typecheck`, `npm test` (1298 passed) and `npm run build` pass. `tests/trainers.test.ts` (18 tests) covers:
+- `npm run typecheck`, `npm test` (1299 passed, after merging main) and `npm run build` pass. `tests/trainers.test.ts` (18 tests) covers:
   - both quests closed until Raiders in the Fields is handed in, then offered with gold markers;
   - accepting teaching each pair (and nothing more if it's already learned);
   - the objectives counting through the professions module's own effects, and nothing before the quest is taken;
@@ -52,7 +52,7 @@ Built on 2026-09-30 by Claude **on Tom's behalf**: he asked for the build ticket
   - the Train list's rows and their grey rule, matched against `buy`;
   - the talk boards' buttons, and the bag panel's lines.
 - `questChain`, `questGivers`, `saving` and `questArrow` tests were updated for the new chains and places. The stand-in chains in `questGivers` now sit beside Hale's alone.
-- `.scratch/professions/checks/trainers.mjs` passes, all 52 of its checks:
+- `.scratch/professions/checks/trainers.mjs` passes, all 53 of its checks:
   - After Raiders in the Fields there's a gold "!" over the smith.
   - Their talk board offers Ore and Fire with Accept, Not now and Trade. Accept, pressed with the right fist, teaches Mining and Smithing and hangs the pick.
   - With Hale's The Lumber Camp taken, the herbalist's board in the house offers Leaves for the Pot. Accept teaches Herbalism and Alchemy and hangs the knife.
@@ -65,6 +65,7 @@ Built on 2026-09-30 by Claude **on Tom's behalf**: he asked for the build ticket
   - A reload keeps it all.
   - `?proto=pick`, `anvil` and `brew` still run.
 - After the change, the earlier emulator checks still pass: `bench.mjs`, `anvil-adventure.mjs`, `herbalism.mjs` and `consumables.mjs` (professions), `vendors.mjs`, `hand-in-picks.mjs` and `bag-adventure.mjs` (inventory), and `hale.mjs`, `villagers.mjs` and `finding-the-way.mjs` (Oakvale).
+- After merging main (Inventory 17), `.scratch/inventory/checks/whole-zone.mjs` passes too. By the time it reaches the smith they have Ore and Fire to offer, so their talk board comes first; the check now presses "Trade" on it (`__play.press` takes a board). The smith's budget reads 120 draw calls with the wares and the bag open, up from 118: the smith's quest marker.
 
 **Calls made on Tom's behalf**
 
