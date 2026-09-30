@@ -177,20 +177,22 @@ async function openCharacter(newGame: boolean): Promise<Save> {
 }
 
 /** `?arena`: the wave game in the crypt hall, as the plain URL played before Oakvale. */
-function startArena(
+async function startArena(
   renderer: WebGLRenderer,
   scene: Scene,
   camera: PerspectiveCamera,
   device: unknown,
   perf: PerfReadout | null,
-  { firstWave, duel, showcase: pinned }: Extract<Route, { kind: 'arena' }>,
-): void {
+  { firstWave, duel, showcase: pinned, cls }: Extract<Route, { kind: 'arena' }>,
+): Promise<void> {
   scene.background = new Color(0x0c0a0e);
   scene.fog = new Fog(0x0c0a0e, 6, CONFIG.arena.halfSize * 2.2);
 
   // ?wave=N starts the run at wave N (7 is the Warden) for testing.
   // ?duel fights one practice duelist after another (CONFIG.duelist) instead.
-  const game = new Game(scene, camera, renderer, firstWave, duel);
+  // ?class=mage: the mage prototype's kit in place of the sword and shield.
+  const kit = cls === 'mage' ? (await import('./prototype/mage/mageKit.prototype')).mageKit(location.search) : undefined;
+  const game = new Game(scene, camera, renderer, firstWave, duel, kit);
   const showcase = buildShowcase();
   scene.add(showcase.root);
   if (pinned) pinShowcaseCamera(camera);

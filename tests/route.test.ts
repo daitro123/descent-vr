@@ -24,6 +24,11 @@ describe('reading the page from its URL', () => {
     expect(readPage('?arena&wave=3&showcase').route).toEqual({ kind: 'arena', firstWave: 3, duel: false, showcase: true });
   });
 
+  it('carries ?class= into the arena for the class prototypes', () => {
+    expect(readPage('?arena&class=mage').route).toMatchObject({ kind: 'arena', cls: 'mage' });
+    expect(readPage('?arena').route).not.toHaveProperty('cls', expect.anything());
+  });
+
   it("opens the arena for its own flags alone, so old links keep working", () => {
     expect(readPage('?duel').route).toMatchObject({ kind: 'arena', duel: true });
     expect(readPage('?wave=7').route).toMatchObject({ kind: 'arena', firstWave: 7 });

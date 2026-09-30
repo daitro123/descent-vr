@@ -12,7 +12,7 @@ export type Route =
   /** `?map=<id>`: walk a map with no enemies and no save. */
   | { kind: 'walk'; map: string }
   /** `?arena`: the wave game. `?duel`, `?wave=N` and `?showcase` alone open it too. */
-  | { kind: 'arena'; firstWave: number; duel: boolean; showcase: boolean }
+  | { kind: 'arena'; firstWave: number; duel: boolean; showcase: boolean; cls?: string }
   /** Anything else: Oakvale, with the save. `?newgame` asks to start over. */
   | { kind: 'adventure'; newGame: boolean };
 
@@ -56,6 +56,8 @@ function chooseRoute(params: URLSearchParams): Route {
       firstWave: Math.max(1, Math.min(waves, Math.floor(Number(params.get('wave'))) || 1)),
       duel: params.has('duel'),
       showcase: params.has('showcase'),
+      // ?class=mage: a class prototype's kit in place of the warrior's (src/prototype/).
+      cls: params.get('class') || undefined,
     };
   }
   return { kind: 'adventure', newGame: params.has('newgame') };

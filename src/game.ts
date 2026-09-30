@@ -18,6 +18,11 @@ import { BlobShadows } from './world/shadows';
 
 type Phase = 'intermission' | 'fighting' | 'dead' | 'victory';
 
+/** A class prototype's kit (`?arena&class=…`, src/prototype/): steps each frame after the player, before combat. */
+export interface ArenaKit {
+  update(dt: number): void;
+}
+
 const _fwd = new Vector3();
 const _a = new Vector3();
 const _b = new Vector3();
@@ -47,8 +52,8 @@ export class Game {
   readonly player: Player;
   readonly enemies: Enemy[] = [];
   readonly combat: Combat;
-  private readonly text: FloatingText;
-  private readonly particles: Particles;
+  readonly text: FloatingText;
+  readonly particles: Particles;
   private readonly shockwaves: Shockwaves;
   private readonly trail: SwordTrail;
   private readonly shadows = new BlobShadows();
@@ -65,6 +70,7 @@ export class Game {
   private spawnIndex = 0;
   private readonly ctx: EnemyContext;
   private readonly sword: PlayerSword = { base: new Vector3(), tip: new Vector3(), speed: 0, swing: 0 };
+  readonly kit: ArenaKit | null;
 
   constructor(
     private readonly scene: Scene,
@@ -73,6 +79,7 @@ export class Game {
     private readonly firstWave = 1,
     /** ?duel: endless duelists, one at a time, instead of the waves. */
     private readonly duel = false,
+    kit?: (game: Game) => ArenaKit,
   ) {
     this.wave = firstWave - 1;
     scene.add(this.arena.root, this.orbs.root, this.shadows.mesh);
@@ -116,6 +123,7 @@ export class Game {
         sfx.windup(_b, a.blockable);
       },
     };
+    this.kit = kit?.(this) ?? null;
   }
 
   update(dt: number): void {
@@ -124,6 +132,7 @@ export class Game {
     this.phaseTime += dt;
 
     this.player.update(dt);
+    this.kit?.update(dt);
     updateListener(this.player.camera);
     const { hands } = this.player.input;
     if (hands.left.primaryPressed || hands.right.primaryPressed) this.combat.warCry(this.enemies);
