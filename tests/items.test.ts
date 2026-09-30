@@ -120,7 +120,7 @@ describe('prices', () => {
     expect(sellPrice(piece('chest', 3, 'white'))).toBe(9);
     expect(sellPrice(piece('chest', 3, 'green'))).toBe(24);
     expect(sellPrice(CATALOGUE['hale-longsword'])).toBe(100);
-    expect(sellPrice(CATALOGUE['torn-cloth'])).toBe(2);
+    expect(sellPrice(CATALOGUE['torn-cloth-1'])).toBe(2);
     expect(buyPrice(piece('chest', 3, 'white'))).toBe(36);
   });
 
@@ -133,7 +133,7 @@ describe('prices', () => {
 describe('the catalogue', () => {
   it('stacks potions and junk to 10 and gear and quest items not at all', () => {
     expect(stackOf(CATALOGUE['minor-healing-potion'])).toBe(10);
-    expect(stackOf(CATALOGUE['grave-dust'])).toBe(10);
+    expect(stackOf(CATALOGUE['grave-dust-1'])).toBe(10);
     expect(stackOf(CATALOGUE['worn-tunic'])).toBe(1);
     expect(stackOf(CATALOGUE['leaders-orders'])).toBe(1);
   });

@@ -56,7 +56,7 @@ describe('what the panel shows before you let go', () => {
 
   it('refuses a quest item leaving its page, and a full stack', () => {
     const inv = new Inventory(warrior());
-    inv.take([{ id: 'leaders-orders', count: 1 }, { id: 'torn-cloth', count: 10 }, { id: 'torn-cloth', count: 3 }]);
+    inv.take([{ id: 'leaders-orders', count: 1 }, { id: 'torn-cloth-1', count: 10 }, { id: 'torn-cloth-1', count: 3 }]);
     expect(inv.check({ in: 'quest', slot: 0 }, bag(5))).toBe('quest');
     expect(inv.check(bag(1), bag(0))).toBe('full');
     expect(inv.check(bag(0), { in: 'quest', slot: 0 })).toBe('slot');
@@ -89,7 +89,7 @@ describe("an item's card", () => {
     expect(potions.kind).toBe('Potion');
     expect(potions.note).toBe('Heals 40% of your health');
     expect(potions.sells).toBe(6);
-    expect(cardText('bone-charm', 1, warrior(), worn)!.kind).toBe('Junk: only to sell');
+    expect(cardText('bone-charm-1', 1, warrior(), worn)!.kind).toBe('Junk: only to sell');
     expect(cardText('leaders-orders', 1, warrior(), worn)!.sells).toBe(0);
     expect(cardText('no-such-thing', 1, warrior(), worn)).toBeNull();
   });
