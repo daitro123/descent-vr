@@ -32,7 +32,7 @@
 //    Touching them with the left fist takes them: the left hand buzzes, they're
 //    gone, the tracker says "Return to Marshal Hale" and Hale's "?" turns
 //    gold. Touching the spot again takes nothing.
-// 7. "Hand in" at Hale with the right fist: "+120 XP" then "LEVEL 3" over
+// 7. A pick from Hale's board carried into the bag hands it in: "+120 XP" then "LEVEL 3" over
 //    Hale, level 3 at 370 XP, Earthshaker's line, and Hale offers What Lies
 //    Below.
 //
@@ -152,6 +152,8 @@ const look = () =>
       boardOpen: board.isOpen,
       boardText: board.text.ctx.__texts ?? [],
       keys: board.keys.map((k) => k.face.ctx.__texts?.at(-1)),
+      picks: [...board.picks],
+      questPage: [...window.__descent.state.inventory.quest],
       tracker: tracker.mesh.visible ? tracker.card.ctx.__texts : null,
       orders: pickups.root.children[0].visible,
       lies: state.lies('orders'),
@@ -459,10 +461,16 @@ const ROAD = { x: -29.5, z: -44.6 };
   await standByHale(1.9);
   await step(0.8);
   let t = await look();
-  check(t.boardOpen && t.keys.join() === 'Hand in' && t.boardText.slice(1).join(' ').startsWith('Orders...'), `Hale reads the orders: "${t.boardText.slice(1).join(' ')}"`);
-  await press('right', 'Hand in');
+  check(t.boardOpen && t.picks.length === 2 && t.boardText.slice(1).join(' ').startsWith('Orders...'), `Hale reads the orders: "${t.boardText.slice(1).join(' ')}"`);
+  check(t.questPage.join() === 'leaders-orders', `the orders are on the bag's quest page`);
+  // A pick carried into the bag's first empty slot, as a carry lets it go there (the fist's carry is
+  // .scratch/inventory/checks/hand-in-picks.mjs's).
+  await page.evaluate(() => {
+    const { adventure, state } = window.__descent;
+    adventure.picks.take(0, { in: 'bag', slot: state.inventory.bag.findIndex((b) => !b) });
+  });
   t = await look();
-  check(t.level === 3 && t.xp === 370, `"Hand in" with the right fist: level ${t.level} at ${t.xp} XP`);
+  check(t.level === 3 && t.xp === 370 && t.questPage.length === 0, `a pick carried into the bag hands it in: level ${t.level} at ${t.xp} XP, the orders gone`);
   await step(0.8);
   const words = await floating();
   const over = (w) => Math.hypot(w.x - HALE.x, w.z - HALE.z) < 0.15 && w.y > HALE.y + HALE.headY + 0.2;
