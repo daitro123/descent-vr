@@ -2,6 +2,7 @@ import type { Role, Stage } from './adventureState';
 import { CONFIG } from './config';
 import type { ItemId } from './items';
 import type { CampId } from './maps/types';
+import type { RecipeId, SpotKind } from './professions/professions';
 
 // The quest givers' chains, as data: what each quest asks, what it pays, and
 // what its giver says about it. The adventure state holds the rules that move
@@ -44,10 +45,10 @@ export type Objective =
   | (Asks & { readonly kind: 'kill'; readonly camp?: CampId; readonly role?: Role })
   /** Something picked up by hand. */
   | (Asks & { readonly kind: 'pickup'; readonly item: Item })
-  /** Gathering from a kind of spot (its id in the professions' table), once a spot. */
-  | (Asks & { readonly kind: 'gather'; readonly spot: string })
-  /** Making a recipe (its id in the professions' table), once a finished make. */
-  | (Asks & { readonly kind: 'make'; readonly recipe: string });
+  /** Gathering from a kind of spot, once a spot. */
+  | (Asks & { readonly kind: 'gather'; readonly spot: SpotKind })
+  /** Making a recipe, once a finished make. */
+  | (Asks & { readonly kind: 'make'; readonly recipe: RecipeId });
 
 export interface Quest {
   readonly id: QuestId;

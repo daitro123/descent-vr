@@ -1,5 +1,6 @@
 import { CONFIG, type EnemyConfig } from './config';
 import { Inventory, type InventoryEffect, type InventorySave } from './inventory';
+import { type ProfessionEffect, Professions, type ProfessionsSave, type RecipeId, type SpotKind } from './professions/professions';
 import { type ClassId, itemOf, type Worn, WORN_NOTHING } from './items';
 import type { CampId } from './maps/types';
 import { BARKS, type Chain, CHAINS, type GiverId, type Item, type Objective, type Place, type Quest, type QuestId, type Sword, SWORDS, type VillagerId } from './quests';
@@ -49,6 +50,8 @@ export interface Progress {
   readonly wardenBeaten: boolean;
   /** The bag, gear, belt, coins, stash and chests opened. */
   readonly inventory: InventorySave;
+  /** The professions learned, with their proficiency and grade, and the recipes known. */
+  readonly professions: ProfessionsSave;
 }
 
 /** Something that happened in the world that progress may care about. */
@@ -67,10 +70,10 @@ export type AdventureEvent =
   | { readonly kind: 'handIn'; readonly giver?: GiverId }
   /** Something picked up by hand (the leader's orders). */
   | { readonly kind: 'pickup'; readonly item: Item }
-  /** A gathering spot of a kind (its id in the professions' table) taken. */
-  | { readonly kind: 'gather'; readonly spot: string }
-  /** A recipe (its id in the professions' table) made. */
-  | { readonly kind: 'make'; readonly recipe: string };
+  /** A spot of a kind gathered: the professions module's own effect, passed straight in. */
+  | { readonly kind: 'gathered'; readonly spot: SpotKind }
+  /** A recipe made (into the bag or left on the station): the professions module's own effect, passed straight in. */
+  | { readonly kind: 'made'; readonly recipe: RecipeId };
 
 /** What an event did, for the Adventure to show. */
 export type Effect =
@@ -82,7 +85,9 @@ export type Effect =
   /** One of a quest's objectives counted one more: `count` of its need. */
   | { readonly kind: 'progress'; readonly quest: QuestId; readonly objective: number; readonly count: number }
   /** What happened to your things: a reward put straight into your hand, say. */
-  | InventoryEffect;
+  | InventoryEffect
+  /** What happened to your professions: one learned, proficiency gained, a recipe known. */
+  | ProfessionEffect;
 
 /** A button on a giver's board: Accept, Not now, Hand in, Goodbye. */
 export type Button = 'accept' | 'notNow' | 'handIn' | 'goodbye';
@@ -202,12 +207,15 @@ export class AdventureState {
   private beaten = false;
   /** Your things. Every character is a warrior until the Abilities map's roster brings classes. */
   readonly inventory: Inventory;
+  /** Your professions, working on your things. */
+  readonly professions: Professions;
 
   /** A new character, or one restored from a snapshot, with the givers' `chains` (every one in the game, unless a test brings its own). */
   constructor(saved?: Progress, chains: readonly Chain[] = CHAINS) {
     const you = this;
     const wearer = { class: 'warrior' as ClassId, get level() { return you.level; } };
     this.inventory = new Inventory(wearer, saved?.inventory);
+    this.professions = new Professions(this.inventory, saved?.professions);
     this.chains = chains;
     this.held = chains.flatMap((chain) => chain.quests.map((quest) => ({ quest, chain, stage: 'locked' as Stage, counts: quest.objectives.map(() => 0), taken: 0 })));
     for (const chain of chains) {
@@ -221,7 +229,14 @@ export class AdventureState {
   snapshot(): Progress {
     const quests: Record<QuestId, QuestProgress> = {};
     for (const h of this.held) quests[h.quest.id] = { stage: h.stage, counts: [...h.counts], ...(h.taken ? { taken: h.taken } : {}) };
-    return { level: this.level, xp: this.total, quests, wardenBeaten: this.beaten, inventory: this.inventory.snapshot() };
+    return {
+      level: this.level,
+      xp: this.total,
+      quests,
+      wardenBeaten: this.beaten,
+      inventory: this.inventory.snapshot(),
+      professions: this.professions.snapshot(),
+    };
   }
 
   /**
@@ -429,9 +444,9 @@ export class AdventureState {
       }
       case 'pickup':
         return this.count((o) => o.kind === 'pickup' && o.item === event.item);
-      case 'gather':
+      case 'gathered':
         return this.count((o) => o.kind === 'gather' && o.spot === event.spot);
-      case 'make':
+      case 'made':
         return this.count((o) => o.kind === 'make' && o.recipe === event.recipe);
       case 'accept':
         return this.accept(event.giver ?? 'hale');

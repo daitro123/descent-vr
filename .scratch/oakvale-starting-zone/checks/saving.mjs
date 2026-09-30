@@ -31,7 +31,11 @@
 //    are left alone, and the page says so; `?newgame` asks, then deletes it.
 // 9. A record from before the inventory (version 1) loads as a warrior in the
 //    starting kit wearing the sword it had: Hale's old longsword in your hand,
-//    2.0 damage, Hale without it; the next write is version 2.
+//    2.0 damage, Hale without it; the next write is the current version
+//    (3), with no professions learned.
+// 10. The debug handle's professions helpers (professions ticket 11): teaching
+//    Mining, setting Smithing's proficiency and filling the bag each write,
+//    and the record holds them.
 //
 // Playwright is the global install; Chromium is the pre-installed one.
 
@@ -177,7 +181,7 @@ await enterVR();
 {
   await board('accept');
   let r = await saved();
-  check(r?.version === 2 && r.quests.raiders.stage === 'active', `taking Raiders in the Fields writes it (${r?.quests.raiders.stage})`);
+  check(r?.version === 3 && r.quests.raiders.stage === 'active', `taking Raiders in the Fields writes it (${r?.quests.raiders.stage})`);
   await step(4); // the camps finish rising out of the ground
   await standAt(54.5, 26, Math.atan2(-(60 - 54.5), -(33 - 26)));
   const counts = [];
@@ -392,7 +396,22 @@ await open('?emulate&nodevui');
   await enterVR();
   await hidePage();
   const r = await saved();
-  check(r?.version === 2 && r.inventory.gear.mainHand === 'hale-longsword' && !('sword' in r), `the next write is version ${r?.version}, wearing ${r?.inventory.gear.mainHand}`);
+  check(r?.version === 3 && r.inventory.gear.mainHand === 'hale-longsword' && !('sword' in r), `the next write is version ${r?.version}, wearing ${r?.inventory.gear.mainHand}`);
+  check(
+    r && Object.keys(r.professions.learned).length === 0 && r.professions.recipes.length === 0,
+    `with no professions learned (${JSON.stringify(r?.professions)})`,
+  );
+
+  // 10. The debug handle's professions helpers, each written as play would.
+  await page.evaluate(() => window.__descent.professions.learn('mining'));
+  let p = (await saved())?.professions;
+  check(p?.learned.mining?.grade === 'apprentice' && p.recipes.join() === 'copper-bar,whetstone', `teaching Mining writes it, with its recipes (${p?.recipes})`);
+  await page.evaluate(() => window.__descent.professions.proficiency('smithing', 15));
+  p = (await saved())?.professions;
+  check(p?.learned.smithing?.proficiency === 15, `setting Smithing to 15 writes it (${p?.learned.smithing?.proficiency})`);
+  await page.evaluate(() => window.__descent.professions.fill());
+  const bag = (await saved())?.inventory.bag.filter(Boolean).map((s) => `${s.id}×${s.count}`);
+  check(bag?.includes('copper-ore×20') && bag.includes('duskcap×20'), `filling the bag writes a stack of each material (${bag})`);
 }
 
 const pageErrors = errors.filter((e) => !/WebGL|GPU stall/.test(e));

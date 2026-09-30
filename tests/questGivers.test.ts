@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { type AdventureEvent, AdventureState, type Effect, type Role } from '../src/adventureState';
 import type { CampId } from '../src/maps/types';
+import type { ProfessionsEffects, RecipeId, SpotKind } from '../src/professions/professions';
 import { type Chain, CHAINS, type GiverId } from '../src/quests';
 import { readSave, saveRecord } from '../src/save/record';
 
@@ -15,8 +16,8 @@ import { readSave, saveRecord } from '../src/save/record';
 const kill = (camp: CampId | null, level: number, role: Role = 'ordinary'): AdventureEvent => ({ kind: 'kill', camp, level, role });
 const accept = (giver?: GiverId): AdventureEvent => ({ kind: 'accept', giver });
 const handIn = (giver?: GiverId): AdventureEvent => ({ kind: 'handIn', giver });
-const gather = (spot: string): AdventureEvent => ({ kind: 'gather', spot });
-const make = (recipe: string): AdventureEvent => ({ kind: 'make', recipe });
+const gather = (spot: SpotKind): AdventureEvent => ({ kind: 'gathered', spot });
+const make = (recipe: RecipeId): AdventureEvent => ({ kind: 'made', recipe });
 
 const FARM = kill('farm', 1);
 const THUG = kill('lumberCamp', 2);
@@ -62,7 +63,7 @@ const HERBALIST: Chain = {
       title: 'Test Leaves',
       objectives: [
         { kind: 'gather', text: 'Hearthleaf gathered', need: 4, spot: 'hearthleaf' },
-        { kind: 'make', text: 'Minor healing potion brewed', need: 1, recipe: 'minorHealingPotion' },
+        { kind: 'make', text: 'Minor healing potion brewed', need: 1, recipe: 'minor-healing-potion' },
       ],
       place: 'farm',
       xp: 20,
@@ -148,7 +149,7 @@ describe("another giver's quest", () => {
     const state = withGivers(...RAIDERS, accept('smith'));
     expect(state.apply(VEIN)).toEqual([{ kind: 'progress', quest: 'test-ore', objective: 0, count: 1 }]);
     expect(state.apply(LEAF)).toEqual([]);
-    expect(state.apply(make('copperBar'))).toEqual([]);
+    expect(state.apply(make('copper-bar'))).toEqual([]);
     play(state, VEIN);
     expect(state.apply(VEIN)).toEqual([]);
     expect(state.tracker[0].lines).toEqual(['Copper veins broken: 2/2', 'Whetstone made: 0/1']);
@@ -178,6 +179,24 @@ describe("another giver's quest", () => {
   });
 });
 
+describe("the professions module's effects", () => {
+  it('count the gather and make objectives when passed straight in, as the Adventure does', () => {
+    const state = withGivers(...RAIDERS, accept('smith'));
+    /** Pass on what the professions module says was gathered or made; the rest is for the view. */
+    const told = (effects: ProfessionsEffects) => effects.flatMap((e) => (e.kind === 'gathered' || e.kind === 'made' ? state.apply(e) : []));
+    state.professions.learn('mining');
+    expect(told(state.professions.gather('copperVein'))).toEqual([{ kind: 'progress', quest: 'test-ore', objective: 0, count: 1 }]);
+    told(state.professions.gather('copperVein'));
+    expect(told(state.professions.start('whetstone'))).toEqual([]);
+    expect(told(state.professions.finish('anvil'))).toEqual([
+      { kind: 'progress', quest: 'test-ore', objective: 1, count: 1 },
+      { kind: 'quest', quest: 'test-ore', stage: 'ready' },
+    ]);
+    // The whetstone made for it stays yours.
+    expect(state.inventory.count('whetstone')).toBe(1);
+  });
+});
+
 describe('three quests at once', () => {
   it('are under way together, one per giver, listed in the order taken with the newest last', () => {
     const state = withGivers(...RAIDERS, accept('herbalist'), accept(), accept('smith'));
@@ -194,7 +213,7 @@ describe('three quests at once', () => {
       { kind: 'progress', quest: 'test-leaves', objective: 0, count: 1 },
       { kind: 'progress', quest: 'test-ore', objective: 1, count: 1 },
     ]);
-    play(state, VEIN, ...times(3, LEAF), make('minorHealingPotion'));
+    play(state, VEIN, ...times(3, LEAF), make('minor-healing-potion'));
     expect(state.tracker).toEqual([
       { title: 'The Lumber Camp', lines: ['Bandits defeated at the lumber camp: 1/5', "Leader's orders taken: 0/1"] },
       { title: 'Test Ore', lines: ['Return to the smith'] },
@@ -248,7 +267,7 @@ describe('the quest arrow', () => {
     at('whetstone made', make('whetstone'));
     at('herbalist taken last', accept('herbalist'));
     at('smith handed in', handIn('smith'));
-    at('herbalist handed in', ...times(4, LEAF), make('minorHealingPotion'), handIn('herbalist'));
+    at('herbalist handed in', ...times(4, LEAF), make('minor-healing-potion'), handIn('herbalist'));
     expect(seen).toEqual({
       'lumber taken': { target: 'lumberCamp', line: 0 },
       // The newest is the smith's, at the bottom: its veins, at the quest's place.
@@ -289,7 +308,7 @@ describe('saving the givers’ quests', () => {
   });
 
   it('restores a character who carries on exactly as the original would, at every step', () => {
-    const route = [...RAIDERS, accept('smith'), VEIN, accept('herbalist'), VEIN, accept(), ...times(4, LEAF), make('whetstone'), handIn('smith'), make('minorHealingPotion'), handIn('herbalist'), ...times(4, THUG), LEADER, ORDERS, handIn()];
+    const route = [...RAIDERS, accept('smith'), VEIN, accept('herbalist'), VEIN, accept(), ...times(4, LEAF), make('whetstone'), handIn('smith'), make('minor-healing-potion'), handIn('herbalist'), ...times(4, THUG), LEADER, ORDERS, handIn()];
     for (let at = 0; at <= route.length; at++) {
       const original = withGivers(...route.slice(0, at));
       const restored = reload(original);

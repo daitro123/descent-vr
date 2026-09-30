@@ -3,6 +3,7 @@ import { type AdventureEvent, AdventureState, type Effect, type Progress } from 
 import { CONFIG } from '../src/config';
 import { SaveController } from '../src/save/controller';
 import { startingInventory } from '../src/inventory';
+import { NO_PROFESSIONS } from '../src/professions/professions';
 import { type Migration, MIGRATIONS, readSave, SAVE_VERSION, type SaveRecord, saveRecord } from '../src/save/record';
 import { MemoryStore, openSave, type SaveStore } from '../src/save/store';
 
@@ -37,6 +38,7 @@ const answers = (s: AdventureState) => ({
   stats: s.stats,
   sword: s.sword,
   inventory: s.inventory.snapshot(),
+  professions: s.professions.snapshot(),
   hale: s.hale,
   tracker: s.tracker,
   wardenBeaten: s.wardenBeaten,
@@ -82,6 +84,7 @@ describe("the adventure state's snapshot", () => {
         below: { stage: 'locked', counts: [0] },
       },
       wardenBeaten: false,
+      professions: NO_PROFESSIONS,
     });
   });
 
@@ -163,6 +166,10 @@ describe('the save record', () => {
     expect(readSave({ ...current, inventory: { ...current.inventory, bag: 'full' } })).toEqual({ kind: 'unreadable' });
     expect(readSave({ ...current, inventory: { ...current.inventory, gear: { ...current.inventory.gear, head: 7 } } })).toEqual({ kind: 'unreadable' });
     expect(readSave({ ...current, quests: { raiders: { stage: 'maybe', counts: [0] } } })).toEqual({ kind: 'unreadable' });
+    const { professions: __, ...noProfessions } = current;
+    expect(readSave(noProfessions)).toEqual({ kind: 'unreadable' });
+    expect(readSave({ ...current, professions: { learned: { mining: { proficiency: 3, grade: 'grandmaster' } }, recipes: [] } })).toEqual({ kind: 'unreadable' });
+    expect(readSave({ ...current, professions: { learned: {}, recipes: [7] } })).toEqual({ kind: 'unreadable' });
     expect(readSave({ ...current, position: { x: Number.NaN, z: 0 } })).toEqual({ kind: 'unreadable' });
   });
 
@@ -187,6 +194,19 @@ describe('the save record', () => {
       position: { x: 1, z: 2 },
       facing: 0.5,
       interior: 'inn',
+    },
+    // Before professions: the inventory, but nothing learned.
+    2: {
+      version: 2,
+      savedAt: 9,
+      level: 3,
+      xp: 400,
+      quests: { raiders: { stage: 'handedIn', counts: [3] }, lumber: { stage: 'active', counts: [2, 0] }, below: { stage: 'locked', counts: [0] } },
+      wardenBeaten: false,
+      inventory: { ...startingInventory('warrior'), coins: 17, bag: [{ id: 'torn-cloth', count: 2 }, ...startingInventory('warrior').bag.slice(1)] },
+      position: { x: -4, z: 8 },
+      facing: 1.5,
+      interior: null,
     },
   };
 
@@ -233,6 +253,26 @@ describe('the save record', () => {
     const state = new AdventureState(read.record);
     expect(state.inventory.bag.slice(0, 2)).toEqual([null, { id: 'torn-cloth', count: 2 }]);
     expect(state.inventory.gear.head).toBeNull();
+  });
+
+  it('loads a version-2 character with no professions learned, and everything else as it was', () => {
+    const read = readSave(stored(OLDER[2]));
+    if (read.kind !== 'saved') throw new Error(read.kind);
+    expect(read.record.professions).toEqual(NO_PROFESSIONS);
+    const { version: _, professions: __, ...kept } = read.record;
+    const { version: ___, ...before } = OLDER[2] as SaveRecord;
+    expect(kept).toEqual(before);
+    const state = new AdventureState(read.record);
+    expect(state.professions.learned).toEqual([]);
+    expect(state.professions.recipes).toEqual([]);
+    expect(state.inventory.coins).toBe(17);
+    expect(state.level).toBe(3);
+  });
+
+  it('gives a version-1 character no professions either', () => {
+    const read = readSave(stored(OLDER[1]));
+    if (read.kind !== 'saved') throw new Error(read.kind);
+    expect(read.record.professions).toEqual(NO_PROFESSIONS);
   });
 
   // A made-up version 0, written before there were quest stages, to prove the chain.
@@ -310,6 +350,34 @@ describe('the in-memory store', () => {
       gear: { mainHand: 'hale-longsword' },
     });
     expect(restored.inventory.stash[20]).toEqual({ id: 'minor-healing-potion', count: 2 });
+  });
+
+  it('round-trips your professions: each learned with its proficiency and grade, and the recipes known', async () => {
+    const state = new AdventureState();
+    state.inventory.take([], 20);
+    state.professions.learn('mining');
+    state.professions.learn('herbalism');
+    state.professions.setProficiency('alchemy', 5);
+    state.professions.buy('rage-draught');
+    for (let i = 0; i < 3; i++) state.professions.gather('copperVein');
+    state.professions.train('herbalism', 'journeyman');
+    const record = recordOf(state.snapshot(), 77);
+    const store = new MemoryStore();
+    await store.write(record);
+    const read = readSave(await store.read());
+    expect(read).toEqual({ kind: 'saved', record });
+    if (read.kind !== 'saved') return;
+    const restored = new AdventureState(read.record);
+    expect(answers(restored)).toEqual(answers(state));
+    expect(restored.professions.snapshot()).toEqual({
+      learned: {
+        mining: { proficiency: 3, grade: 'apprentice' },
+        smithing: { proficiency: 0, grade: 'apprentice' },
+        herbalism: { proficiency: 0, grade: 'journeyman' },
+        alchemy: { proficiency: 5, grade: 'apprentice' },
+      },
+      recipes: ['copper-bar', 'whetstone', 'minor-healing-potion', 'rage-draught'],
+    });
   });
 
   it('round-trips a save made inside the inn, with the inn as its interior', async () => {
@@ -470,6 +538,10 @@ describe('the save controller', () => {
     'loot taken': [{ kind: 'coins', coins: 5 }, { kind: 'slot', where: { in: 'bag', slot: 0 }, stack: { id: 'torn-cloth', count: 1 } }],
     'a potion drunk': [{ kind: 'drank', id: 'minor-healing-potion', heal: 0.4 }],
     'a chest opened': [{ kind: 'chest', chest: 'watchtower' }],
+    'a profession learned': [{ kind: 'learned', profession: 'mining' }, { kind: 'recipe', recipe: 'copper-bar' }],
+    'a recipe bought': [{ kind: 'coins', coins: 5 }, { kind: 'recipe', recipe: 'rage-draught' }],
+    'proficiency gained': [{ kind: 'proficiency', profession: 'mining', proficiency: 4, gained: 1 }],
+    'a grade reached': [{ kind: 'grade', profession: 'mining', grade: 'journeyman' }],
   };
 
   for (const [what, list] of Object.entries(effects)) {
@@ -484,6 +556,7 @@ describe('the save controller', () => {
     const { store, controller } = saving();
     controller.onEffects([{ kind: 'xp', amount: 10 }]);
     controller.onEffects([{ kind: 'refused', reason: 'level' }]);
+    controller.onEffects([{ kind: 'refused', reason: 'proficiency' }]);
     controller.onEffects([]);
     expect(store.writes).toHaveLength(0);
   });
