@@ -1,5 +1,5 @@
 import { type PerspectiveCamera, type Scene, Vector3, type WebGLRenderer } from 'three';
-import { type Shape, SHAPES, slotsOf } from './classes';
+import { type ClassId, type Shape, SHAPES, slotsOf } from './classes';
 import { Combat, combatStats, resetCombatStats } from './combat/combat';
 import { CONFIG } from './config';
 import { type Enemy, type EnemyContext, keepApart, type PlayerSword } from './enemies/enemy';
@@ -13,6 +13,7 @@ import { SwordTrail } from './fx/trail';
 import { Vines } from './fx/vines';
 import type { EnemyKind } from './models/characters';
 import { Gestures } from './player/gestures/gestures';
+import { MageHands } from './player/mage';
 import { Player } from './player/player';
 import { BeltHud } from './ui/beltHud';
 import { Arena } from './world/arena';
@@ -54,6 +55,8 @@ export class Game {
   readonly particles: Particles;
   /** Abilities by gesture: every base ability's shape, from the start. */
   readonly gestures: Gestures;
+  /** The mage's hands (bolts, the ward and the blink), when you play the mage. */
+  readonly mage: MageHands | null;
   /** The shapes drawn since the page loaded: the arena keeps no save, so each hangs in the air once a visit. */
   private readonly learned = new Set<Shape>();
   private readonly shockwaves: Shockwaves;
@@ -81,10 +84,12 @@ export class Game {
     private readonly firstWave = 1,
     /** ?duel: endless duelists, one at a time, instead of the waves. */
     private readonly duel = false,
+    /** `&class=`: the class you fight as, at level 1 with every base ability. */
+    klass: ClassId = 'warrior',
   ) {
     this.wave = firstWave - 1;
     scene.add(this.arena.root, this.orbs.root, this.shadows.mesh, this.vines.mesh);
-    this.player = new Player(camera, renderer, this.arena);
+    this.player = new Player(camera, renderer, this.arena, klass);
     scene.add(this.player.rig);
     this.text = new FloatingText(scene);
     this.particles = new Particles(scene);
@@ -106,6 +111,7 @@ export class Game {
       },
       scene,
     );
+    this.mage = klass === 'mage' ? new MageHands(this.player, this.combat, this.particles) : null;
 
     const slots = () => slotsOf(this.player.stats.abilities);
     this.gestures = new Gestures({
@@ -119,6 +125,7 @@ export class Game {
       },
       drawn: (shape) => this.learned.add(shape),
       use: (ability, aim) => this.combat.use(ability, aim),
+      busy: () => this.mage?.charging('right') ?? false,
     });
 
     this.ctx = {
@@ -145,10 +152,13 @@ export class Game {
     dt = Math.min(dt, 1 / 30);
     this.phaseTime += dt;
 
+    // The arena is a fight while anything of the wave stands: mana refills slowly till it's down.
+    this.player.fighting = this.enemies.some((e) => e.alive);
     this.player.update(dt);
+    this.mage?.update(dt);
     updateListener(this.player.camera);
     const { hands } = this.player.input;
-    if (hands.left.primaryPressed || hands.right.primaryPressed) this.combat.warCry(this.enemies);
+    if (hands.left.primaryPressed || hands.right.primaryPressed) this.combat.press(this.enemies);
 
     // Hit-stop freezes enemies (not the player) for a few frames on impact.
     const enemyDt = this.hitStop > 0 ? 0 : dt;
@@ -331,6 +341,8 @@ export class Game {
     this.particles.clear();
     this.combat.projectiles.clear();
     this.combat.axes.clear();
+    this.combat.bolts.clear();
+    this.mage?.clear();
     this.player.reset();
     this.wave = this.firstWave - 1;
     resetCombatStats();
