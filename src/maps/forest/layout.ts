@@ -1,3 +1,4 @@
+import { CONFIG } from '../../config';
 import { PatrolWalk } from '../../enemies/patrol';
 import type { PlaceSound, Tree } from '../../world/ambience';
 import type { Atmosphere } from '../../world/atmosphere';
@@ -5,6 +6,7 @@ import type { InteriorPlan } from '../../world/interiors';
 import type { MinePlan } from '../../world/mine';
 import type { Place } from '../../quests';
 import type { CampId, CampPlan, Pickup, PostPlan, QuestPlace, Respawn, Seam, Spot, VillagerSpot } from '../types';
+import { HeightGrid } from '../heightGrid';
 import { Walkable } from '../walkable';
 import { Colliders } from './colliders';
 import { HOUSE, planHouse } from './house';
@@ -50,8 +52,16 @@ export const OAKVALE_ATMOSPHERE: Atmosphere = {
   flames: [],
 };
 
-/** The southern pass's crest, where Brackenmoor will take over: the terrain's south edge, across the pass's valley. */
-const CREST = { z: 140, minX: -100, maxX: 100 } as const;
+/** The southern pass's crest, where Brackenmoor takes over: the terrain's south edge, across the pass's valley. */
+export const CREST = { z: 140, minX: -100, maxX: 100 } as const;
+
+/**
+ * The southern pass, walkable from the play square's edge up to the crest: a
+ * corridor `half` m either side of the main road, bounded where its walls
+ * turn steep, with rocks and pines along its edges about every `every` m,
+ * `out` m on past them. The road's steepest stretch is eased to `grade`.
+ */
+export const PASS = { half: 10, grade: 0.2, every: 3.5, out: [1, 2.5] } as const;
 
 // ------------------------------------------------------------------ plan
 
@@ -394,47 +404,18 @@ export interface Deck {
 
 // ------------------------------------------------------------------ height field
 
-/** Heights on a square grid, read back exactly as the terrain mesh draws them. */
-export class HeightField {
+/** Oakvale's heights: a square grid round the origin, out to ±`half`. */
+export class HeightField extends HeightGrid {
+  /** Vertices along each side. */
   readonly n: number;
-  readonly data: Float32Array;
 
   constructor(
     readonly half: number,
-    readonly cell: number,
+    cell: number,
   ) {
-    this.n = Math.round((2 * half) / cell) + 1;
-    this.data = new Float32Array(this.n * this.n);
-  }
-
-  get(i: number, j: number): number {
-    return this.data[j * this.n + i];
-  }
-
-  /**
-   * Height on the terrain's triangles. Each cell splits along the diagonal
-   * from (i+1, j) to (i, j+1), the same as the mesh.
-   */
-  at(x: number, z: number): number {
-    const gx = Math.min(this.n - 1.0001, Math.max(0, (x + this.half) / this.cell));
-    const gz = Math.min(this.n - 1.0001, Math.max(0, (z + this.half) / this.cell));
-    const i = Math.floor(gx);
-    const j = Math.floor(gz);
-    const fx = gx - i;
-    const fz = gz - j;
-    const a = this.get(i, j);
-    const b = this.get(i + 1, j);
-    const c = this.get(i, j + 1);
-    const d = this.get(i + 1, j + 1);
-    if (fx + fz <= 1) return a + (b - a) * fx + (c - a) * fz;
-    return d + (c - d) * (1 - fx) + (b - d) * (1 - fz);
-  }
-
-  /** Visit every vertex with its world position. */
-  each(fn: (x: number, z: number, k: number) => void): void {
-    for (let j = 0; j < this.n; j++) {
-      for (let i = 0; i < this.n; i++) fn(-this.half + i * this.cell, -this.half + j * this.cell, j * this.n + i);
-    }
+    const n = Math.round((2 * half) / cell) + 1;
+    super(-half, -half, n, n, cell);
+    this.n = n;
   }
 }
 
@@ -481,7 +462,7 @@ export class DistanceField {
 // ------------------------------------------------------------------ the layout
 
 export interface ForestLayout {
-  /** Where you can walk: the play square. */
+  /** Where you can walk: the play square and the southern pass up to its crest. */
   walkable: Walkable;
   /** Its fog, sky colours and light, which the World applies. */
   atmosphere: Atmosphere;
@@ -528,6 +509,13 @@ export interface ForestLayout {
   heightAt(x: number, z: number): number;
 }
 
+let planned: ForestLayout | null = null;
+
+/** Oakvale's plan, made once: the zone, its neighbour Brackenmoor (for the crest) and its worker share it. */
+export function planOakvale(): ForestLayout {
+  return (planned ??= buildLayout());
+}
+
 export function buildLayout(): ForestLayout {
   const { half, cell, play, water } = FOREST;
   const ground = new HeightField(half, cell);
@@ -572,10 +560,13 @@ export function buildLayout(): ForestLayout {
   // 3. Paths, in order, each following a smoothed version of the ground so
   // later ones meet earlier ones at the same height.
   const paths: Path[] = PATHS.map((spec) => {
-    const line = sampleCurve(spec.pts, 1);
+    // The main road ends at the crest, where Brackenmoor's road carries on.
+    const line = spec.id === 'main' ? upTo(sampleCurve(spec.pts, 1), CREST.z) : sampleCurve(spec.pts, 1);
     let heights = line.map(([x, z]) => ground.at(x, z));
     for (let pass = 0; pass < 4; pass++) heights = smooth(heights, 5);
     heights = heights.map((h) => Math.max(h, water + 0.5));
+    // Up the pass, no steeper than PASS.grade.
+    if (spec.id === 'main') heights = easeGrade(line, heights, line.findIndex(([, z]) => z <= play), PASS.grade);
     const path = { id: spec.id, width: spec.width, line, heights };
     flattenAlong(ground, path);
     return path;
@@ -664,7 +655,7 @@ export function buildLayout(): ForestLayout {
   };
 
   const fences = buildFences(structures);
-  const walkable = Walkable.rect(-play, play, -play, play);
+  const walkable = new Walkable([Walkable.rect(-play, play, -play, play).areas[0], ...passCorridor(main.line)]);
   const colliders = new Colliders(walkable);
   for (const s of structures) {
     if (!s.solid) continue;
@@ -704,8 +695,9 @@ export function buildLayout(): ForestLayout {
   const roadDistance = new DistanceField(half);
   for (const p of paths) roadDistance.stamp(p.line, p.width / 2 + 6, p.width / 2);
   const plants = placePlants(ground, roadDistance, streamField, structures, colliders);
+  plants.push(...passEdges(ground, main.line));
   for (const p of plants) {
-    if (Math.abs(p.x) > play + 2 || Math.abs(p.z) > play + 2) continue;
+    if (walkable.distance(p.x, p.z) > 2) continue;
     const r = TRUNK_RADIUS[p.kind];
     if (r) colliders.addCircle({ x: p.x, z: p.z, r: r * p.scale });
   }
@@ -777,10 +769,14 @@ export function buildLayout(): ForestLayout {
     { label: 'Old mine', x: -14, z: -74 },
   ];
 
+  // The main road runs on over the crest: where it crosses, and which way.
+  const [[rx, rz], [nx, nz]] = main.line;
+  const len = Math.hypot(rx - nx, rz - nz);
   const crest: Seam = {
     ...CREST,
     step: cell,
     heights: Array.from({ length: Math.round((CREST.maxX - CREST.minX) / cell) + 1 }, (_, k) => ground.at(CREST.minX + k * cell, CREST.z)),
+    roads: [{ x: rx, width: PATHS[0].width, dir: [(rx - nx) / len, (rz - nz) / len] }],
   };
 
   return {
@@ -887,6 +883,104 @@ function placeVillagers(inn: Structure, smithy: Structure): VillagerSpot[] {
     { id: 'smith', x: sx, z: sz, yaw: smithy.yaw, interior: null, turn: handle + 0.35 },
     { id: 'farmer', x: fx, z: fz, yaw: facing(fx, fz, FARM[0], FARM[1]), interior: null, turn: 0 },
   ];
+}
+
+/**
+ * The pass's corridor, as areas of the walkable shape: `PASS.half` m either
+ * side of the main road (`line`, from the crest north) from inside the play
+ * square to the crest, and on over it by CONFIG.world.ground.seam, where
+ * Brackenmoor's own walkable area overlaps it. Overlapping quads, since the
+ * road bends; the last runs straight at the crest's width, as Brackenmoor's
+ * first does.
+ */
+function passCorridor(line: readonly P2[]): P2[][] {
+  const { half } = PASS;
+  const over = CREST.z + CONFIG.world.ground.seam;
+  const xAt = (z: number) => {
+    for (let i = 0; i < line.length - 1; i++) {
+      const [x0, z0] = line[i];
+      const [x1, z1] = line[i + 1];
+      if (z <= z0 && z >= z1) return x0 + ((x1 - x0) * (z0 - z)) / (z0 - z1 || 1);
+    }
+    return line[0][0];
+  };
+  const quad = (za: number, zb: number, xa = xAt(za), xb = xAt(zb)): P2[] => [
+    [xa - half, za],
+    [xa + half, za],
+    [xb + half, zb],
+    [xb - half, zb],
+  ];
+  const stations = [FOREST.play - 6, 100, 116, 130, CREST.z - 4];
+  const areas = stations.slice(1).map((zb, k) => quad(stations[k] - (k ? 2 : 0), zb + 2));
+  areas.push(quad(CREST.z - 6, over, xAt(CREST.z), xAt(CREST.z)));
+  return areas;
+}
+
+/**
+ * Rocks and pines along the pass's corridor, just outside its edges, so the
+ * limit reads. Their own random stream, so nothing else in Oakvale moves.
+ */
+function passEdges(ground: HeightField, line: readonly P2[]): Plant[] {
+  const rand = mulberry32(8841);
+  const { half, every, out } = PASS;
+  const plants: Plant[] = [];
+  const road = line.filter(([, z]) => z > FOREST.play + 3 && z < CREST.z - 1);
+  // The first pair right by the crest.
+  let walked: number = every;
+  for (let i = 1; i < road.length; i++) {
+    const [x0, z0] = road[i - 1];
+    const [x1, z1] = road[i];
+    const len = Math.hypot(x1 - x0, z1 - z0) || 1;
+    walked += len;
+    if (walked < every) continue;
+    walked = 0;
+    for (const side of [-1, 1]) {
+      const off = half + out[0] + rand() * (out[1] - out[0]);
+      const x = x1 + (-(z1 - z0) / len) * off * side;
+      const z = Math.min(CREST.z - 0.5, z1 + ((x1 - x0) / len) * off * side);
+      const pine = rand() < 0.6;
+      plants.push({
+        kind: pine ? 'pine' : 'rock',
+        x,
+        y: ground.at(x, z),
+        z,
+        yaw: rand() * Math.PI * 2,
+        scale: pine ? 0.8 + rand() * 0.4 : 0.8 + rand() * 1.0,
+        seed: Math.floor(rand() * 1e6),
+      });
+    }
+  }
+  return plants;
+}
+
+/** `line` (running north) from where it first reaches `z`, starting exactly on that line. */
+function upTo(line: P2[], z: number): P2[] {
+  const k = line.findIndex(([, lz]) => lz <= z);
+  if (k <= 0) return line;
+  const [ax, az] = line[k - 1];
+  const [bx, bz] = line[k];
+  const t = (az - z) / (az - bz);
+  const cut: P2 = [ax + (bx - ax) * t, z];
+  // Drop a sample that would sit a hair past the cut.
+  return Math.hypot(bx - cut[0], bz - cut[1]) < 0.3 ? [cut, ...line.slice(k + 1)] : [cut, ...line.slice(k)];
+}
+
+/**
+ * A road's heights eased so no stretch between its start and sample `to` is
+ * steeper than `grade`, its ends held: smoothed over that stretch until it holds.
+ */
+function easeGrade(line: readonly P2[], heights: number[], to: number, grade: number): number[] {
+  const h = heights.slice();
+  const steepest = () => {
+    let most = 0;
+    for (let i = 0; i < to; i++) most = Math.max(most, Math.abs(h[i + 1] - h[i]) / (Math.hypot(line[i + 1][0] - line[i][0], line[i + 1][1] - line[i][1]) || 1));
+    return most;
+  };
+  for (let round = 0; round < 5000 && steepest() > grade; round++) {
+    const was = h.slice();
+    for (let i = 1; i < to; i++) h[i] = (was[i - 1] + was[i] + was[i + 1]) / 3;
+  }
+  return h;
 }
 
 // ------------------------------------------------------------------ helpers

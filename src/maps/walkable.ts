@@ -1,9 +1,10 @@
 import type { Vector3 } from 'three';
 
-// Where you can walk in a zone: a shape on the floor plane, the union of some
-// convex areas (Oakvale's play square now; its pass's corridor and the moor
-// later). A body is kept inside it with its whole radius; where two areas
-// meet, their shared edges don't count, so you walk from one into the other.
+// Where you can walk: a shape on the floor plane, the union of some convex
+// areas (Oakvale's play square and its pass's corridor; Brackenmoor's own).
+// A body is kept inside it with its whole radius. Where two areas overlap,
+// the edges inside the other don't count, so you walk from one into the other:
+// areas that are to join overlap a little (a zone's reach over a seam).
 
 type P2 = readonly [number, number];
 
@@ -22,7 +23,7 @@ export class Walkable {
   private readonly edges: Edge[] = [];
 
   /** `areas` are convex polygons, their corners in order either way round. */
-  constructor(private readonly areas: readonly (readonly P2[])[]) {
+  constructor(readonly areas: readonly (readonly P2[])[]) {
     const xs = areas.flat().map((p) => p[0]);
     const zs = areas.flat().map((p) => p[1]);
     this.bounds = { minX: Math.min(...xs), maxX: Math.max(...xs), minZ: Math.min(...zs), maxZ: Math.max(...zs) };
@@ -53,6 +54,11 @@ export class Walkable {
         [minX, maxZ],
       ],
     ]);
+  }
+
+  /** Where you can walk in any of `shapes`: every zone's walkable areas as one (the World's). */
+  static union(shapes: readonly Walkable[]): Walkable {
+    return new Walkable(shapes.flatMap((s) => s.areas));
   }
 
   /** Is (x, z) inside the shape? */

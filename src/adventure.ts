@@ -11,7 +11,7 @@ import { Particles } from './fx/particles';
 import { sfx, updateListener } from './fx/sfx';
 import { Shockwaves } from './fx/shockwave';
 import { SwordTrail } from './fx/trail';
-import type { Respawn, Zone } from './maps/types';
+import type { Respawn, StartingZone, Zone } from './maps/types';
 import { Hale } from './people/hale';
 import { Villagers } from './people/villagers';
 import { Player } from './player/player';
@@ -143,14 +143,17 @@ export class Adventure {
     camera: PerspectiveCamera,
     renderer: WebGLRenderer,
     /** Where a new character starts: Oakvale. */
-    zone: Zone,
+    zone: StartingZone,
     /** The character to load, if any, and where to keep it. */
     save: Pick<Save, 'store' | 'record'>,
+    /** The zones over its seams (Brackenmoor), walked into with nothing in them. */
+    neighbours: readonly Zone[] = [],
   ) {
     const { record } = save;
     this.state = new AdventureState(record ?? undefined);
     this.saves = new SaveController(save.store, () => saveRecord(this.state.snapshot(), this.standing));
     this.world.attach(scene, camera, renderer);
+    for (const n of neighbours) this.world.add(n);
     this.world.load(zone);
     this.respawns = zone.respawns;
     this.respawn = zone.respawns.village;

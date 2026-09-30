@@ -118,7 +118,7 @@ export interface QuestPlace {
 /**
  * A zone's edge where a neighbour takes over, along z = `z` from x = `minX`
  * to `maxX`: its heights there, every `step` m from `minX`, which the
- * neighbour's land meets exactly.
+ * neighbour's land meets exactly, and the roads that run on over it.
  */
 export interface Seam {
   readonly z: number;
@@ -126,6 +126,8 @@ export interface Seam {
   readonly maxX: number;
   readonly step: number;
   readonly heights: readonly number[];
+  /** Where each road crosses the line, how wide it is, and which way it runs on (a unit vector over the floor plane). */
+  readonly roads: readonly { readonly x: number; readonly width: number; readonly dir: readonly [number, number] }[];
 }
 
 /** An outdoor region of the world, loaded into the World. */
@@ -141,32 +143,49 @@ export interface Zone extends MapBase {
   readonly root: Object3D;
   /** Its chunks on the world's grid, and how to build each at full or stand-in detail. */
   readonly chunks: ChunkSource;
-  /** Where you can walk, as a shape. */
+  /** Where you can walk, as a shape. It reaches CONFIG.world.ground.seam over each seam, into its neighbour's. */
   readonly walkable: Walkable;
+  /** The rectangle its land (its chunks' ground) covers, on the floor plane: the World asks it for heights there. */
+  readonly land: { readonly minX: number; readonly maxX: number; readonly minZ: number; readonly maxZ: number };
+  /** Push a point on the floor plane out of its trunks, rocks, walls and props, but not back inside where you can walk (the World does that, across zones). True if it moved. */
+  collide(p: Vector3, radius: number): boolean;
   /** Its heights along each seam with a neighbour. */
   readonly seams: readonly Seam[];
   /** Its fog, sky colours and light, which the World applies. */
   readonly atmosphere: Atmosphere;
   /** Its enemies, camp by camp. */
   readonly camps: readonly CampPlan[];
-  /** Where you wake after a death: the village's is by the inn's hearth, the mine's outside its mouth. */
-  readonly respawns: { readonly village: Respawn; readonly mine: Respawn };
   /** The buildings you walk into, built with the zone and hidden until their doors open. */
   readonly interiors: readonly Interior[];
   /** The old mine, built with the zone and hidden but for its adit until you walk in by its mouth. */
   readonly mine: Mine | null;
-  /** Where Marshal Hale, the quest giver, stands (yaw as a model turns: 0 faces +Z). */
-  readonly hale: Spot;
   /** Where the innkeeper, the smith and the farmer work. */
   readonly villagers: readonly VillagerSpot[];
   /** What lies about to be picked up by hand, shown while the adventure state says it lies there. */
   readonly pickups: readonly Pickup[];
-  /** Where each quest sends you, for the quest arrow. */
-  readonly places: Readonly<Record<Place, QuestPlace>>;
   /** The places that sound where they are. */
   readonly sounds: readonly PlaceSound[];
   /** Its trees, which its birds call from. */
   readonly trees: TreeCover;
+}
+
+/**
+ * The starting zone (Oakvale): a zone with somewhere to wake, a quest giver
+ * and the places the quests send you. A zone where nothing can hurt you
+ * (Brackenmoor) has none of it.
+ */
+export interface StartingZone extends Zone {
+  /** Where you wake after a death: the village's is by the inn's hearth, the mine's outside its mouth. */
+  readonly respawns: { readonly village: Respawn; readonly mine: Respawn };
+  /** Where Marshal Hale, the quest giver, stands (yaw as a model turns: 0 faces +Z). */
+  readonly hale: Spot;
+  /** Where each quest sends you, for the quest arrow. */
+  readonly places: Readonly<Record<Place, QuestPlace>>;
+}
+
+/** Is `zone` one a new character can start in? */
+export function isStartingZone(zone: Zone): zone is StartingZone {
+  return 'hale' in zone;
 }
 
 /** A map built whole, lights and all: the crypt hall. */

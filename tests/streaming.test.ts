@@ -100,7 +100,7 @@ describe('the chunk grid', () => {
 describe("Oakvale's zone", () => {
   it('registers by folder as a zone called Oakvale, at the grid origin; the crypt stays a whole-build map', () => {
     const forest = MAPS.find((m) => m.id === 'forest')!;
-    expect(forest).toMatchObject({ kind: 'zone', label: 'Oakvale', origin: { x: 0, z: 0 }, neighbours: [] });
+    expect(forest).toMatchObject({ kind: 'zone', label: 'Oakvale', origin: { x: 0, z: 0 }, neighbours: ['brackenmoor'] });
     expect(MAPS.find((m) => m.id === 'crypt')!.kind).toBe('whole');
   });
 
@@ -127,8 +127,9 @@ describe("Oakvale's chunk builder", () => {
   it('builds the whole of Oakvale between its chunks, as the one mesh did: every building, field and tree once', () => {
     let triangles = 0;
     for (const key of keys()) triangles += buildOakvaleChunk(plan, key, 'full').position.length / 9;
-    // Before streaming, the forest's 49 chunk meshes held 264,304 triangles between them.
-    expect(triangles).toBe(264304);
+    // Before streaming, the forest's 49 chunk meshes held 264,304 triangles between them;
+    // the pass's rocks and pines, opened to the crest (ticket 36), add 2,238.
+    expect(triangles).toBe(266542);
   }, 20000);
 
   it('makes stand-ins cheaper than full detail everywhere, and about half in the woods and the village', () => {
@@ -519,7 +520,8 @@ describe('the walkable area', () => {
   it("keeps you inside Oakvale's play square with your body's width to spare", () => {
     const { play } = FOREST;
     const w = plan.walkable;
-    expect(w.bounds).toEqual({ minX: -play, maxX: play, minZ: -play, maxZ: play });
+    // The square, and the pass's corridor on south to the crest and a metre over it.
+    expect(w.bounds).toEqual({ minX: -play, maxX: play, minZ: -play, maxZ: 140 + CONFIG.world.ground.seam });
     expect(push(w, 10, 10)).toEqual([10, 10]);
     expect(push(w, play + 5, 3)[0]).toBeCloseTo(play - r);
     expect(push(w, play - 0.05, 3)[0]).toBeCloseTo(play - r);

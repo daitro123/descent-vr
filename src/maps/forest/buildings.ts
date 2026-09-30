@@ -814,15 +814,25 @@ function logpile(b: ModelBuilder): void {
     .box(0.24, 0.16, 0.04, { at: [2.84, 0.55, 0.9], rot: [0, 0, -0.35], color: PAL.steel });
 }
 
+/**
+ * One weathered standing stone `h` m tall, its broad face turned by `yaw`,
+ * leaning a little by `tilt` (rad about X and Z), with a band of moss: the
+ * circle's, and Brackenmoor's border stone.
+ */
+export function standingStone(b: ModelBuilder, at: Vec3, h: number, yaw: number, tilt: readonly [number, number], light: boolean): void {
+  const [x, y, z] = at;
+  b.taper(0.95, 0.55, 0.6, 0.4, h, { at: [x, y - 0.3, z], rot: [tilt[0], yaw, tilt[1]], color: light ? PAL.stoneLight : PAL.stone, jitter: 0.1 });
+  b.box(0.7, 0.3, 0.45, { at: [x, y + h * 0.45, z], rot: [0, yaw, 0], color: GREEN.moss });
+}
+
 /** Seven weathered standing stones round a low altar with a few faint runes. */
 function stones(b: ModelBuilder, s: Structure, rand: () => number): void {
   for (const [x, z] of standingStones(s)) {
     const lx = x - s.x;
     const lz = z - s.z;
     const h = 2.3 + rand() * 1.0;
-    const yaw = Math.atan2(lx, lz);
-    b.taper(0.95, 0.55, 0.6, 0.4, h, { at: [lx, -0.3, lz], rot: [(rand() - 0.5) * 0.12, yaw, (rand() - 0.5) * 0.12], color: rand() < 0.5 ? PAL.stone : PAL.stoneLight, jitter: 0.1 });
-    b.box(0.7, 0.3, 0.45, { at: [lx, h * 0.45, lz], rot: [0, yaw, 0], color: GREEN.moss });
+    const tilt = [(rand() - 0.5) * 0.12, (rand() - 0.5) * 0.12] as const;
+    standingStone(b, [lx, 0, lz], h, Math.atan2(lx, lz), tilt, rand() >= 0.5);
   }
   b.box(1.9, 0.55, 1.2, { at: [0, 0.2, 0], color: PAL.stoneDark })
     .box(2.1, 0.12, 1.35, { at: [0, 0.53, 0], color: PAL.stone });

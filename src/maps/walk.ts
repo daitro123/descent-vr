@@ -4,11 +4,11 @@ import { XRInput } from '../player/input';
 import { Shield, Sword } from '../player/weapons';
 import type { Ground } from '../world/ground';
 import { World } from '../world/world';
-import { findMap, MAPS } from './registry';
+import { findMap, loadNeighbours, MAPS } from './registry';
 
 // `?map=<id>`: walk a map with the warrior's locomotion and no enemies, to
 // judge scale and layout from the ground. A zone is walked in the World, on
-// its ground; the crypt hall brings its own. In the headset: left stick moves
+// its ground, with its neighbours over their seams; the crypt hall brings its own. In the headset: left stick moves
 // (head-relative), right stick snap-turns. On a desktop: WASD or the arrow
 // keys walk, dragging looks around.
 
@@ -153,6 +153,8 @@ export async function startWalk(renderer: WebGLRenderer, scene: Scene, camera: P
   if (map.kind === 'zone') {
     const w = new World();
     w.attach(scene, camera, renderer);
+    // Its neighbours too, so you can walk over into them.
+    for (const n of await loadNeighbours(map)) w.add(n);
     w.load(map);
     world = floor = w;
     animate = (dt, c) => w.update(dt, c);

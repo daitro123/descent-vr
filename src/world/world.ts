@@ -14,6 +14,7 @@ import {
 } from 'three';
 import { CONFIG } from '../config';
 import type { Zone } from '../maps/types';
+import { Walkable } from '../maps/walkable';
 import { sharedModelMaterial } from '../models/materials';
 import type { Interior as InteriorId } from '../save/record';
 import { type Atmosphere, blendAtmospheres } from './atmosphere';
@@ -107,6 +108,8 @@ export class World implements Ground {
   private readonly lights: readonly PoolLight[];
   private readonly sky: Sky;
   private readonly zones: Zone[] = [];
+  /** Where you can walk in every zone loaded, as one shape: over a seam from one into the other. */
+  private walkable: Walkable | null = null;
   private readonly stager = new Stager();
   private readonly streamer = new Streamer(this.stager, sharedModelMaterial());
   /** Each zone's streamed chunks. */
@@ -189,8 +192,19 @@ export class World implements Ground {
 
   /** Add a zone (once), with its interiors, and make its atmosphere the World's. */
   load(zone: Zone): void {
+    this.add(zone);
+    this.apply(zone.atmosphere);
+  }
+
+  /**
+   * Add a zone (once), with its interiors, keeping the atmosphere as it is: a
+   * neighbour, streamed in beside the zone you're in and walked into over
+   * their seam.
+   */
+  add(zone: Zone): void {
     if (!this.zones.includes(zone)) {
       this.zones.push(zone);
+      this.walkable = Walkable.union(this.zones.map((z) => z.walkable));
       // Its chunks are the World's to stream, in a group of their own beside the zone's extras.
       const chunks = new Group();
       chunks.name = `${zone.id}-chunks`;
@@ -208,7 +222,6 @@ export class World implements Ground {
         this.root.add(zone.mine.root);
       }
     }
-    this.apply(zone.atmosphere);
   }
 
   /**
@@ -381,11 +394,16 @@ export class World implements Ground {
     }
   }
 
-  /** The loaded zone underfoot at (x, z): the one whose walkable area holds it, else the nearest. */
+  /**
+   * The loaded zone underfoot at (x, z): the one whose land holds it (on a
+   * seam's line, where their heights agree, the first loaded), else the one
+   * whose walkable area is nearest.
+   */
   zoneAt(x: number, z: number): Zone | undefined {
     let best: Zone | undefined;
     let bestGap = Infinity;
     for (const zone of this.zones) {
+      if (landGap(zone, x, z) === 0) return zone;
       const gap = zone.walkable.distance(x, z);
       if (gap < bestGap) [best, bestGap] = [zone, gap];
     }
@@ -547,8 +565,7 @@ export class World implements Ground {
 
   resolve(p: Vector3, radius: number): boolean {
     // In the mine its walls are all there is: the hillside's aren't.
-    let moved =
-      this.mineFloor(p.x, p.z) !== null ? this.underground!.mine.resolve(p, radius) : (this.zoneAt(p.x, p.z)?.resolve(p, radius) ?? false);
+    let moved = this.mineFloor(p.x, p.z) !== null ? this.underground!.mine.resolve(p, radius) : this.outside(p, radius);
     for (const { interior } of this.interiors) if (interior.resolve(p, radius)) moved = true;
     for (const b of this.bodies) {
       const dx = p.x - b.x;
@@ -562,6 +579,18 @@ export class World implements Ground {
       moved = true;
     }
     return moved;
+  }
+
+  /**
+   * Out of every zone's trunks, rocks and walls whose land is within
+   * CONFIG.world.ground.seam of `p` (both zones' by a seam), and back inside
+   * where you can walk in any of them.
+   */
+  private outside(p: Vector3, radius: number): boolean {
+    let moved = false;
+    const near = CONFIG.world.ground.seam;
+    for (const zone of this.zones) if (landGap(zone, p.x, p.z) <= near && zone.collide(p, radius)) moved = true;
+    return (this.walkable?.keepInside(p, radius) ?? false) || moved;
   }
 
   /** Would a body of `radius` at (x, z) be pushed out of something? */
@@ -605,6 +634,12 @@ export class World implements Ground {
     if (p.y <= floor + arrowWidth) return true;
     return p.y < floor + propHeight && this.blocked(p.x, p.z, arrowWidth);
   }
+}
+
+/** How far (x, z) is from `zone`'s land over the floor plane: 0 on it. */
+function landGap(zone: Zone, x: number, z: number): number {
+  const b = zone.land;
+  return Math.hypot(Math.max(b.minX - x, 0, x - b.maxX), Math.max(b.minZ - z, 0, z - b.maxZ));
 }
 
 /**

@@ -1,7 +1,7 @@
 import { Color, Fog, Group, type PerspectiveCamera, type Scene, Vector3, type WebGLRenderer } from 'three';
 import { CONFIG } from '../config';
-import { MAPS } from '../maps/registry';
-import type { GameMap } from '../maps/types';
+import { loadNeighbours, MAPS } from '../maps/registry';
+import type { GameMap, MapInfo } from '../maps/types';
 import { XRInput } from '../player/input';
 import { TextPanel } from '../ui/panel';
 import type { Ground } from '../world/ground';
@@ -10,7 +10,7 @@ import { TouchControls } from './touchControls';
 
 // `?fly`: fly freely through any map in src/maps to look it over, with no
 // enemies. `?fly=<id>` opens that map. Zones are shown in the World, lit by
-// its rig under its sky; the crypt hall brings its own lights. Flying ignores
+// its rig under its sky, with their neighbours over their seams; the crypt hall brings its own lights. Flying ignores
 // walls; walk mode puts you at eye height on the ground with the player's
 // collision, to see the map at the player's scale. Works in the headset, on
 // the desktop page, and on phones and tablets with on-screen touch controls.
@@ -162,18 +162,15 @@ export class MapViewer {
     this.index = ((index % n) + n) % n;
     const info = MAPS[this.index];
     const ticket = ++this.switches;
-    let pending = this.loaded.get(info.id);
-    if (!pending) {
-      pending = info.load();
-      this.loaded.set(info.id, pending);
-      pending.catch(() => this.loaded.delete(info.id)); // let a retry load it again
-    }
-    const map = await pending;
+    const map = await this.load(info);
+    // A zone's neighbours too, so you can fly on over into them.
+    const neighbours = map.kind === 'zone' ? await loadNeighbours(map, (n) => this.load(n)) : [];
     if (ticket !== this.switches) return;
 
     if (this.map?.kind === 'whole') this.scene.remove(this.map.root);
     this.map = map;
     if (map.kind === 'zone') {
+      for (const n of neighbours) this.world.add(n);
       this.world.load(map);
       this.world.attach(this.scene, this.camera, this.renderer);
     } else {
@@ -187,6 +184,17 @@ export class MapViewer {
     const query = new URLSearchParams(location.search);
     query.set('fly', info.id);
     history.replaceState(null, '', `?${query.toString().replace(/=(?=&|$)/g, '')}${location.hash}`);
+  }
+
+  /** A map, loaded once and kept, so switching back is instant. */
+  private load(info: MapInfo): Promise<GameMap> {
+    let pending = this.loaded.get(info.id);
+    if (!pending) {
+      pending = info.load();
+      this.loaded.set(info.id, pending);
+      pending.catch(() => this.loaded.delete(info.id)); // let a retry load it again
+    }
+    return pending;
   }
 
   /** Jump to one of the map's viewpoints (0 is the start). */
