@@ -1,7 +1,7 @@
 import { Vector3 } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
-import { buildLayout, CHESTS, FOREST, type ForestLayout, HALE, localToWorld, MAP_BOARD, SIGNPOSTS, type StructureKind, TENT, worldToLocal } from '../src/maps/forest/layout';
+import { buildLayout, CHESTS, FOREST, type ForestLayout, HALE, localToWorld, MAP_BOARD, SIGNPOSTS, type StructureKind, TENT, VEINS, worldToLocal } from '../src/maps/forest/layout';
 import { MINE, minePiece } from '../src/maps/forest/mine';
 import type { CampPlan, ChestPlan } from '../src/maps/types';
 import { nearestOnPolyline } from '../src/maps/forest/noise';
@@ -463,6 +463,65 @@ describe("the leader's orders", () => {
     expect(onFoot(sx, sz, 0.5)).toBe(true);
     // A hand's reach from your head, which is over your feet.
     expect(Math.hypot(o.x - sx, o.z - sz)).toBeLessThan(0.55);
+  });
+});
+
+describe("Oakvale's copper veins", () => {
+  const at = (kind: StructureKind) => layout.structures.find((s) => s.kind === kind)!;
+  const away = (v: { x: number; z: number }, p: { x: number; z: number }) => Math.hypot(v.x - p.x, v.z - p.z);
+  /** Where you stand to work it: before its ore, a body's width off its rock. */
+  const standBefore = (v: (typeof layout.spots)[number]): [number, number] =>
+    localToWorld(v, 0, CONFIG.professions.vein.body + CONFIG.player.bodyRadius + 0.1);
+
+  it('are 8: two by the smithy, two either side of the mine’s front, two in its gallery, one on the watchtower’s hill and one by the standing stones', () => {
+    const veins = layout.spots.filter((s) => s.kind === 'copperVein');
+    expect(veins.map((v) => `${v.id}, ${v.interior ?? 'outdoors'}`)).toEqual([
+      'smithy-east, outdoors',
+      'smithy-south, outdoors',
+      'mine-ridge-west, outdoors',
+      'mine-ridge-east, outdoors',
+      'watchtower, outdoors',
+      'standing-stones, outdoors',
+      'mine-gallery-1, mine',
+      'mine-gallery-2, mine',
+    ]);
+    const [smithyEast, smithySouth, west, east, tower, stones, g1, g2] = veins;
+    // Behind the smithy at the village's edge, a short walk from the anvil.
+    for (const v of [smithyEast, smithySouth]) expect(away(v, at('smithy'))).toBeLessThan(15);
+    for (const v of [west, east]) expect(away(v, layout.places.mine)).toBeLessThan(9);
+    expect(away(tower, at('tower'))).toBeLessThan(8);
+    expect(away(stones, at('stones'))).toBeLessThan(11);
+    // The gallery's two, on its floor, in its part of the mine: the old miners' timbered upper workings.
+    for (const v of [g1, g2]) {
+      expect(layout.mine.partAt(v.x, v.z)).toBe(MINE.parts.indexOf('gallery'));
+      expect(v.y).toBeCloseTo(layout.mine.mouth.y + minePiece('gallery').floor);
+    }
+    // Each stands on its ground, its ore towards where you'd come at it from.
+    for (const v of veins.filter((v) => v.interior === null)) {
+      expect(v.y, v.id).toBeCloseTo(layout.heightAt(v.x, v.z));
+      const plan = VEINS.outdoors.find((o) => o.id === v.id)!;
+      const [fx, fz] = localToWorld(v, 0, 1);
+      expect(away({ x: fx, z: fz }, { x: plan.face[0], z: plan.face[1] }), v.id).toBeLessThan(away(v, { x: plan.face[0], z: plan.face[1] }));
+    }
+  });
+
+  it('stand where you can walk up to their ore, clear of trees, rocks and bushes', () => {
+    const r = CONFIG.player.bodyRadius;
+    for (const v of layout.spots) {
+      const [sx, sz] = standBefore(v);
+      if (v.interior === 'mine') {
+        expect(layout.mine.groundAt(sx, sz), v.id).not.toBeNull();
+        expect(layout.mine.resolve(new Vector3(sx, 0, sz), r), `${v.id}: standing before it`).toBe(false);
+        // Its rock is solid in the mine.
+        expect(layout.mine.resolve(new Vector3(v.x + 0.3, 0, v.z), r), v.id).toBe(true);
+        continue;
+      }
+      expect(layout.colliders.resolve(new Vector3(sx, 0, sz), r), `${v.id}: standing before it`).toBe(false);
+      expect(onFoot(sx, sz, 0.5), v.id).toBe(true);
+      expect(layout.colliders.resolve(new Vector3(v.x + 0.3, 0, v.z), r), `${v.id}: its rock`).toBe(true);
+      const growing = layout.plants.filter((p) => p.kind !== 'grass' && p.kind !== 'flower' && away(v, p) < VEINS.clear.plant);
+      expect(growing.map((p) => p.kind), v.id).toEqual([]);
+    }
   });
 });
 

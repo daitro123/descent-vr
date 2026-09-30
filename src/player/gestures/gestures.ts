@@ -39,6 +39,8 @@ export interface GestureHost {
   use(ability: Ability, aim: Aim): Use;
   /** Gestures don't arm now: the bag is open, say. */
   held?(): boolean;
+  /** The place the right hand is in that belongs to something else (the tool loop), if any: a grip there never arms. */
+  taken?(): string | null;
   /** The class's own attack is in the right hand (an arrow nocked, a bolt charging). */
   busy?(): boolean;
 }
@@ -125,6 +127,7 @@ export class Gestures {
         squeeze: right.squeeze,
         tracked: right.grip.visible && player.alive,
         busy: this.host.busy?.() ?? false,
+        taken: this.host.taken?.() ?? null,
         dt,
       });
       if (this.recorder.armed) this.drawTrail();
