@@ -280,6 +280,8 @@ async function startMapViewer(
 async function startPrototype(renderer: WebGLRenderer, scene: Scene, camera: PerspectiveCamera, device: unknown, name: string): Promise<void> {
   // ?proto=brew: PROTOTYPE of brewing at the alchemy table (.scratch/professions/issues/07-…).
   if (name === 'brew') return (await import('./professions/prototypes/brew')).startBrewPrototype(renderer, scene, camera, device);
+  // ?proto=pick: PROTOTYPE of swinging the pick and cutting herbs (.scratch/professions/issues/05-…).
+  if (name === 'pick') return (await import('./professions/prototypes/pick')).startPickPrototype(renderer, scene, camera, device);
   const intro = document.getElementById('intro');
   if (intro) intro.textContent = `No prototype called "${name}".`;
 }
