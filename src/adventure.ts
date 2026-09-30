@@ -211,6 +211,9 @@ export class Adventure {
           })
         : null;
     if (this.throne) scene.add(this.throne.root);
+    // The mine's undead and the Warden are uploaded with the mine's meshes, as you come near its mouth.
+    for (const camp of this.camps.camps) if (camp.plan.interior === 'mine') this.world.stageWith('mine', camp.root);
+    if (this.throne) this.world.stageWith('mine', this.throne.root);
 
     this.pickups = new Pickups(zone.pickups);
     scene.add(this.pickups.root);
@@ -227,6 +230,8 @@ export class Adventure {
     });
     for (const v of this.villagers.all) this.world.addBody(v.body);
     scene.add(this.villagers.root);
+    // The outdoors' villagers with the chunks round you; the innkeeper is the inn's (its room's).
+    this.world.stageWith(null, this.villagers.root);
     this.villagers.warm(renderer, camera, scene);
     // The smith's hammer rings on the anvil with each blow of their work.
     this.ambience = new Ambience(zone.sounds, zone.trees);

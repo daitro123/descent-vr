@@ -1,4 +1,18 @@
-import { HemisphereLight, DirectionalLight, type InstancedMesh, type Light, type Mesh, type MeshBasicMaterial, type Object3D, PerspectiveCamera, PointLight, Vector3 } from 'three';
+import {
+  BoxGeometry,
+  DirectionalLight,
+  Group,
+  HemisphereLight,
+  type InstancedMesh,
+  type Light,
+  Mesh,
+  MeshBasicMaterial,
+  type Object3D,
+  PerspectiveCamera,
+  PointLight,
+  Scene,
+  Vector3,
+} from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
 import { Camps, type You } from '../src/enemies/camps';
@@ -394,18 +408,23 @@ describe('walking into the inn and out again', () => {
 
   it('uploads the room unseen as you come within 40 m of its door, long before it opens', () => {
     const { w, eye, stand, room, inn } = walkable();
+    const scene = new Scene();
+    w.attach(scene, eye);
     const mesh = room.room.children.find((o) => o.name === 'inn-room') as Mesh;
     const material = mesh.material;
-    // From the door's line out along its middle: the first frame within reach stages it, once.
+    // From the door's line out along its middle: the first frame within reach stages it, once, round its render.
     const staged: number[] = [];
     for (let d = 60; d >= 20; d -= 0.5) {
       stand(0, inn.hd + d);
       w.update(1 / 72, eye);
+      expect(mesh.material).toBe(material);
+      (scene.onBeforeRender as () => void)();
       if (mesh.material !== material) {
         staged.push(d);
         // Shown for the render, uncullable, drawing nothing; the rest of the room is shut away as before.
         expect([room.room.visible, mesh.frustumCulled, (mesh.material as MeshBasicMaterial).visible]).toEqual([true, false, false]);
       }
+      (scene.onAfterRender as () => void)();
     }
     expect(staged).toEqual([CONFIG.interiors.stage]);
     expect([room.room.visible, mesh.material, mesh.frustumCulled]).toEqual([false, material, true]);
@@ -806,6 +825,52 @@ describe('the old mine', () => {
     ]);
     expect(w.interior).toBe(null);
     expect(w.heightAt(adit.x, adit.z)).toBe(oakvale.heightAt(adit.x, adit.z));
+  });
+
+  it('uploads its undead and the Warden with its meshes as you come within 40 m of its mouth, and the outdoors with each fill', () => {
+    const { w, eye, stand } = walkable();
+    const scene = new Scene();
+    w.attach(scene, eye);
+    const render = (look: () => void) => {
+      (scene.onBeforeRender as () => void)();
+      look();
+      (scene.onAfterRender as () => void)();
+    };
+    const lit = new MeshBasicMaterial();
+    // A body in a part of the mine that isn't drawn, as the Adventure's undead are.
+    const undead = new Group();
+    const body = new Mesh(new BoxGeometry(), lit);
+    body.visible = false;
+    undead.add(body);
+    scene.add(undead);
+    w.stageWith('mine', undead);
+    const staged: number[] = [];
+    for (let d = 60; d >= 20; d -= 0.5) {
+      stand(0, d);
+      w.update(1 / 72, eye);
+      render(() => {
+        if (body.material !== lit) staged.push(d);
+      });
+    }
+    expect(staged).toHaveLength(1);
+    expect(staged[0]).toBeCloseTo(CONFIG.interiors.stage, 0);
+    expect([body.visible, body.material]).toEqual([false, lit]);
+    // Staged with it once you're near: at the next render.
+    const late = new Mesh(new BoxGeometry(), lit);
+    late.visible = false;
+    scene.add(late);
+    w.stageWith('mine', late);
+    render(() => expect([late.visible, (late.material as MeshBasicMaterial).visible]).toEqual([true, false]));
+    // Someone standing about outdoors, and the chunks, uploaded with each fill, in view or not.
+    const villager = new Mesh(new BoxGeometry(), lit);
+    scene.add(villager);
+    w.stageWith(null, villager);
+    const p = inMine(0, 30);
+    w.fill(p.x, p.z);
+    const chunk = w.chunksOf(oakvale)!.children[0] as Mesh;
+    render(() => expect([villager.frustumCulled, villager.material, chunk.frustumCulled]).toEqual([false, lit, false]));
+    expect([villager.frustumCulled, chunk.frustumCulled]).toEqual([true, true]);
+    expect(() => w.stageWith('house', new Group())).not.toThrow();
   });
 
   it('wakes you on the rail bed a few metres out, facing the mouth, clear of everything', () => {

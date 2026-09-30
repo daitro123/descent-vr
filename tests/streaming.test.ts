@@ -252,6 +252,8 @@ describe('the streamer', () => {
   const frame = (s: ReturnType<typeof setup>, at: Vector3, far = 100) => {
     s.stager.restore();
     s.streamer.update(at, reachTo(far));
+    // The render: what's staged is staged until the next frame puts it back.
+    s.stager.apply();
   };
 
   it('fills round you at once on loading in, then builds at most one chunk a frame as you walk, nearest first', () => {
@@ -327,7 +329,7 @@ describe('the streamer', () => {
 });
 
 describe('staging', () => {
-  it("uploads a hidden room's meshes without drawing them, leaves what shows alone, and puts all back", () => {
+  it("uploads a hidden room's meshes at the render without drawing them, draws what shows as it would, and puts all back", () => {
     const stager = new Stager();
     const lit = new MeshBasicMaterial();
     const room = new Group();
@@ -340,14 +342,17 @@ describe('staging', () => {
     const root = new Group();
     root.add(room, door);
     stager.stage(root);
+    // Nothing changes until the render.
+    expect([room.visible, stager.busy]).toEqual([false, true]);
+    stager.apply();
     expect(room.visible).toBe(true);
     expect((inside.material as MeshBasicMaterial).visible).toBe(false);
     expect(inside.frustumCulled).toBe(false);
-    // The door already draws; a light never comes on for it.
-    expect(door.material).toBe(lit);
+    // The door already draws, and uploads out of view too; a light never comes on for it.
+    expect([door.material, door.frustumCulled]).toEqual([lit, false]);
     expect(lamp.visible).toBe(false);
     stager.restore();
-    expect([room.visible, inside.material, inside.frustumCulled]).toEqual([false, lit, true]);
+    expect([room.visible, inside.material, inside.frustumCulled, door.frustumCulled, stager.busy]).toEqual([false, lit, true, true, false]);
   });
 });
 

@@ -2,9 +2,11 @@ import { type Light, type Material, type Mesh, MeshBasicMaterial, type Object3D 
 
 // The renderer uploads a mesh's vertices the first time it draws it, and that
 // upload lands in the frame the mesh is first seen. Staging moves it earlier:
-// for one render the mesh is shown, uncullable, with a material that never
-// draws, so the renderer uploads it and draws nothing. The next frame puts
-// everything back.
+// for one render a hidden mesh is shown, uncullable, with a material that
+// never draws, so the renderer uploads it and draws nothing; a shown one is
+// made uncullable, so it uploads even out of view. The World asks for it,
+// and it happens round the next render alone (the scene's `onBeforeRender`
+// and `onAfterRender`), whatever changes what's shown in between.
 
 /** What a staged mesh was before it was staged. */
 interface Was {
@@ -16,39 +18,34 @@ interface Was {
 export class Stager {
   /** Never drawn: the renderer still uploads what wears it. */
   private readonly hidden = new MeshBasicMaterial({ visible: false });
+  /** What the next render stages, and whether every mesh under it is new (drawn nothing). */
+  private readonly queued: { readonly root: Object3D; readonly all: boolean }[] = [];
   private readonly meshes: Was[] = [];
   private readonly shown: { readonly object: Object3D; readonly visible: boolean }[] = [];
 
-  /** Is anything staged for the next render? */
+  /** Is anything waiting for the next render? */
   get busy(): boolean {
-    return this.meshes.length > 0;
+    return this.queued.length > 0;
   }
 
   /**
-   * Upload the meshes under `root` at the next render without drawing them:
-   * those hidden (by themselves or anything between them and `root`), or
-   * every one if `all` (a mesh new to the scene). What's shown is left to
-   * draw as it is. `root`'s own parents must be showing.
+   * At the next render, upload the meshes under `root` without drawing any
+   * that aren't showing: those hidden (by themselves or anything between
+   * them and `root`) wear a material that never draws, or all of them if
+   * `all` (a mesh new to the scene); those showing draw as they would, but
+   * even out of view. `root`'s own parents must be showing.
    */
   stage(root: Object3D, all = false): void {
-    const visit = (o: Object3D, hidden: boolean) => {
-      // A light shown for a frame would change the lit programs: leave it, and what's under it, hidden.
-      if ((o as Light).isLight && !o.visible) return;
-      hidden ||= !o.visible;
-      if (!o.visible) this.show(o);
-      // Meshes, and sprites, points and lines too: whatever draws with a material.
-      if ('material' in o && (all || hidden)) {
-        const mesh = o as Mesh;
-        this.meshes.push({ mesh, material: mesh.material, frustumCulled: mesh.frustumCulled });
-        mesh.material = this.hidden;
-        mesh.frustumCulled = false;
-      }
-      for (const child of o.children) visit(child, hidden);
-    };
-    visit(root, false);
+    this.queued.push({ root, all });
   }
 
-  /** Put back everything the last render staged. Call before anything else reads or sets what's shown. */
+  /** Just before a render: stage what's queued. */
+  apply(): void {
+    for (const { root, all } of this.queued) this.visit(root, false, all);
+    this.queued.length = 0;
+  }
+
+  /** Just after it: put everything back. */
   restore(): void {
     for (const { mesh, material, frustumCulled } of this.meshes) {
       mesh.material = material;
@@ -59,8 +56,21 @@ export class Stager {
     this.shown.length = 0;
   }
 
-  private show(object: Object3D): void {
-    this.shown.push({ object, visible: object.visible });
-    object.visible = true;
+  private visit(o: Object3D, hidden: boolean, all: boolean): void {
+    // A light shown for a frame would change the lit programs: leave it, and what's under it, hidden.
+    if ((o as Light).isLight && !o.visible) return;
+    if (!o.visible) {
+      hidden = true;
+      this.shown.push({ object: o, visible: false });
+      o.visible = true;
+    }
+    // Meshes, and sprites, points and lines too: whatever draws with a material.
+    if ('material' in o) {
+      const mesh = o as Mesh;
+      this.meshes.push({ mesh, material: mesh.material, frustumCulled: mesh.frustumCulled });
+      if (all || hidden) mesh.material = this.hidden;
+      mesh.frustumCulled = false;
+    }
+    for (const child of o.children) this.visit(child, hidden, all);
   }
 }

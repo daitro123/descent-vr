@@ -16,8 +16,8 @@
 //    build's there; the chunks loaded at each detail; and never more than one
 //    chunk built in a frame.
 // 3. `?perf` shows the loaded chunks by detail.
-// 4. At ?map=forest, coming within 40 m of the mine's mouth uploads its
-//    hidden meshes, and walking in past the bend uploads nothing more.
+// 4. At ?map=forest, coming within 40 m of the mine's mouth uploads every one
+//    of its meshes, hidden as they are.
 //
 // Playwright is the global install; Chromium is the pre-installed one.
 
@@ -106,6 +106,10 @@ async function pictures(url) {
   await page.addStyleTag({ content: '#intro { display: none !important; }' });
   await frames(4);
   await settled('map', frames);
+  counts.mineLight = await page.evaluate(() => window.__descent.world.underground?.switch.light ?? 0);
+  // The build before streaming could start with the mine's light up for a few seconds (a first
+  // frame's time from before its timer, fixed with streaming): wait it out, to compare like with like.
+  await page.waitForFunction(() => !(window.__descent.world.underground?.switch.light > 0), null, { timeout: 120000 });
   await frames(2);
   out['map-start'] = await page.screenshot();
   counts.map = await programs();
@@ -210,6 +214,7 @@ async function walkSouth(url) {
 
 // 1. The pictures, against the older build's.
 const now = await pictures(base);
+check(now.counts.mineLight === 0, `?map=forest starts in the daylight, the mine's light off (${now.counts.mineLight.toFixed(2)})`);
 console.log(`programs: ?fly=forest after every spot ${now.counts.fly}, ?map=forest ${now.counts.map}, the Adventure ${now.counts.adventure}`);
 if (shots) for (const [name, png] of Object.entries(now.out)) await import('node:fs').then((fs) => fs.writeFileSync(`${shots}/${name}.png`, png));
 if (before) {
@@ -241,38 +246,40 @@ if (before) {
   for (const s of worse.slice(0, 5)) console.log(`     over at ${sample(s)}`);
 }
 
-// 4. The mine's meshes, uploaded unseen from 40 m.
+// 4. The mine's meshes, uploaded unseen from 40 m: every array the page hands WebGL is noted.
 await fresh();
+await page.addInitScript(() => {
+  window.__uploaded = new WeakSet();
+  const bufferData = WebGL2RenderingContext.prototype.bufferData;
+  WebGL2RenderingContext.prototype.bufferData = function (target, data, ...rest) {
+    if (data && typeof data === 'object') window.__uploaded.add(data);
+    return bufferData.call(this, target, data, ...rest);
+  };
+});
 await page.goto(`${base}/?map=forest&noemulate`);
 await page.waitForFunction(() => window.__descent?.map, null, { timeout: 120000 });
 await frames(3);
-const mine = await page.evaluate(() => {
-  const { mine } = window.__descent.world;
-  return { mouth: mine.mouth, route: mine.route.slice(0, 40), stage: 40 };
-});
-const geometries = () => page.evaluate(() => window.__descent.renderer.info.memory.geometries);
+const mouth = await page.evaluate(() => window.__descent.world.mine.mouth);
 /** Stand `d` m out from the mine's mouth along its front, facing it. */
-const outFront = (d) => {
-  const { x, z, yaw } = mine.mouth;
-  return [x + Math.sin(yaw) * d, z + Math.cos(yaw) * d, yaw];
-};
+const outFront = (d) => [mouth.x + Math.sin(mouth.yaw) * d, mouth.z + Math.cos(mouth.yaw) * d, mouth.yaw + Math.PI];
+/** The mine's meshes whose vertices aren't on the GPU yet. */
+const notUploaded = () =>
+  page.evaluate(() => {
+    const out = [];
+    window.__descent.world.mine.root.traverse((o) => o.geometry && !window.__uploaded.has(o.geometry.attributes.position.array) && out.push(o.name));
+    return out;
+  });
 await page.evaluate(([x, z, yaw]) => window.__descent.teleport(x, z, yaw), outFront(45));
-await frames(3);
-await settled('map', frames);
-const far = await geometries();
+await frames(4);
+const far = await notUploaded();
 await page.evaluate(([x, z, yaw]) => window.__descent.teleport(x, z, yaw), outFront(38));
-await frames(3);
-await settled('map', frames);
-const staged = await geometries();
-// Walk in along the route, past the bend and on through the cart hall.
-for (const p of mine.route) {
-  await page.evaluate(([x, z]) => window.__descent.teleport(x, z, window.__descent.walker.rig.rotation.y), [p.x, p.z]);
-  await frames(1);
-}
-await frames(3);
-const inside = await page.evaluate(() => ({ geometries: window.__descent.renderer.info.memory.geometries, interior: window.__descent.world.interior }));
-check(staged > far && inside.geometries === staged && inside.interior === 'mine',
-  `the mine's meshes upload from 40 m out (${far} geometries at 45 m, ${staged} at 38 m) and walking in past its bend uploads nothing more (${inside.geometries}, in the ${inside.interior})`);
+await frames(2);
+const near = await notUploaded();
+const inside = await page.evaluate(() => window.__descent.world.interior);
+check(
+  far.length > 0 && near.length === 0 && inside === null,
+  `the mine's meshes upload unseen from 40 m out: at 45 m ${far.length ? `${far.join(', ')} not yet` : 'all already'}; at 38 m, still outside, ${near.length ? `${near.join(', ')} not yet` : 'all of them'}`,
+);
 
 check(errors.length === 0, `no page errors${errors.length ? `: ${errors.slice(0, 3).join(' | ')}` : ''}`);
 await browser.close();
