@@ -332,8 +332,9 @@ export class Bag {
     const shows = nothingShown();
     const probe = input.probes[carry.probe];
     const hand = this.track[carry.hand];
-    const shelf = carry.from.in === 'shelf' ? input.shelf : undefined;
-    if (!probe || !input.hands[carry.hand].tracked || shelf === null) {
+    const shelf = input.shelf ?? null;
+    // Carried off a shelf that's gone (the board folded), it goes back there.
+    if (!probe || !input.hands[carry.hand].tracked || (carry.from.in === 'shelf' && !shelf)) {
       this.cancel();
       return shows;
     }

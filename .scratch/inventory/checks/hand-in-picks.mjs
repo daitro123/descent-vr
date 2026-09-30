@@ -310,7 +310,7 @@ await standBy(1.3);
     const i = 7 + 5;
     const C = frames.material.color.constructor;
     const now = new C(frames.instanceColor.getX(i), frames.instanceColor.getY(i), frames.instanceColor.getZ(i));
-    return { red: now.equals(new C(0xd03030)), is: `#${now.getHexString()}` };
+    return { red: now.getHexString() === new C(0xd03030).getHexString(), is: `#${now.getHexString()}` };
   });
   check(red.red, `over a slot of the full bag it shows red (${red.is})`);
   await grip('right', 0);
