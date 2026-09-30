@@ -1,5 +1,7 @@
 import { CONFIG } from './config';
 import {
+  type Buff,
+  type BuffKind,
   buyPrice,
   type ClassId,
   GEAR_SLOTS,
@@ -7,6 +9,7 @@ import {
   type GearSlot,
   type ItemDef,
   type ItemId,
+  isPotion,
   itemOf,
   sellPrice,
   stackOf,
@@ -63,8 +66,12 @@ export type InventoryEffect =
   | { readonly kind: 'dropped'; readonly stack: Stack }
   /** Taken in but with no room for it: it stays where it lay. */
   | { readonly kind: 'left'; readonly stack: Stack }
-  /** A potion drunk, healing this share of your maximum health. */
-  | { readonly kind: 'drank'; readonly id: ItemId; readonly heal: number }
+  /** A potion drunk: healing this share of your maximum health, giving this much rage, giving back this share of your mana. */
+  | { readonly kind: 'drank'; readonly id: ItemId; readonly heal: number; readonly rage?: number; readonly mana?: number }
+  /** A buff on you (a whetstone rubbed along the blade, an elixir drunk), replacing any of its kind, for `seconds`. */
+  | { readonly kind: 'buff'; readonly id: ItemId; readonly buff: BuffKind; readonly damage: number; readonly seconds: number }
+  /** A buff run out. */
+  | { readonly kind: 'buffEnded'; readonly buff: BuffKind }
   /** The belt dims for this long. */
   | { readonly kind: 'cooldown'; readonly seconds: number }
   /** The vendor's Sold row now, newest first. */
@@ -90,6 +97,16 @@ export interface InventorySave {
   readonly chests: readonly string[];
   /** Seconds left before the belt's potions can be drunk again. */
   readonly cooldown: number;
+}
+
+/** A buff on you now: what gave it, what it adds, and how long it has left. Not saved. */
+export interface ActiveBuff {
+  readonly kind: BuffKind;
+  readonly id: ItemId;
+  /** Your damage is this much more while it lasts: 0.05 for 5% more. */
+  readonly damage: number;
+  /** Seconds left. */
+  readonly left: number;
 }
 
 /** Who wears the gear: their class decides the lock and the main attribute, and their level what they can wear. */
@@ -139,6 +156,8 @@ export class Inventory {
   private readonly opened: string[];
   private dim: number;
   private readonly soldRow: Sold[] = [];
+  /** The buffs on you, one of each kind: they aren't saved, so a load starts with none. */
+  private readonly on: ActiveBuff[] = [];
 
   /** A new character's things, or ones restored from a save. */
   constructor(
@@ -221,6 +240,16 @@ export class Inventory {
   /** Seconds before the belt's potions can be drunk again. */
   get cooldown(): number {
     return this.dim;
+  }
+
+  /** The buffs on you now, one of each kind at most, in the order they were put on. */
+  get buffs(): readonly ActiveBuff[] {
+    return this.on;
+  }
+
+  /** How much more damage your buffs give: 0.15 for the elixir's 10% and the whetstone's 5% together. */
+  get boost(): number {
+    return this.on.reduce((n, b) => n + b.damage, 0);
   }
 
   /** The chests opened, by id. */
@@ -459,24 +488,54 @@ export class Inventory {
    * same potion in the bag.
    */
   drink(slot: number): InventoryEffect[] {
-    const where: Where = { in: 'belt', slot };
-    if (!this.exists(where)) return refuse('slot', where);
-    const s = this.at(where);
+    return this.use({ in: 'belt', slot });
+  }
+
+  /**
+   * Use one of what's at `from`, a bag or belt slot: drink a potion, drink
+   * the elixir or rub the whetstone along your blade. A potion (the healing
+   * potion, the rage draught, the mana potion) is on the shared cooldown and
+   * starts it; a buff isn't, and replaces any buff of its kind, refused for a
+   * class it isn't for. A belt slot used up refills from the same item's first
+   * stack in the bag.
+   */
+  use(from: Where): InventoryEffect[] {
+    if ((from.in !== 'bag' && from.in !== 'belt') || !this.exists(from)) return refuse('slot', from);
+    const s = this.at(from);
     const item = s && itemOf(s.id);
-    if (!s || item?.kind !== 'consumable') return refuse('empty', where);
-    if (this.dim > 0) return refuse('cooldown', where);
-    this.dim = CONFIG.belt.cooldown;
-    const effects: InventoryEffect[] = [{ kind: 'drank', id: s.id, heal: item.heal }, ...this.remove(where, 1), { kind: 'cooldown', seconds: this.dim }];
-    if (s.count === 1) {
-      const from = this.slots.bag.findIndex((b) => b?.id === s.id);
-      if (from >= 0) effects.push(...this.move({ in: 'bag', slot: from }, where));
+    if (!s || item?.kind !== 'consumable') return refuse('empty', from);
+    const effects: InventoryEffect[] = [];
+    if (item.buff) {
+      if (item.buff.for && !item.buff.for.includes(this.wearer.class)) return refuse('class', from);
+      effects.push(this.putOn(s.id, item.buff), ...this.remove(from, 1));
+    } else {
+      if (isPotion(item) && this.dim > 0) return refuse('cooldown', from);
+      this.dim = CONFIG.belt.cooldown;
+      const drank: InventoryEffect = { kind: 'drank', id: s.id, heal: item.heal, ...(item.rage ? { rage: item.rage } : {}), ...(item.mana ? { mana: item.mana } : {}) };
+      effects.push(drank, ...this.remove(from, 1), { kind: 'cooldown', seconds: this.dim });
+    }
+    if (from.in === 'belt' && s.count === 1) {
+      const bagSlot = this.slots.bag.findIndex((b) => b?.id === s.id);
+      if (bagSlot >= 0) effects.push(...this.move({ in: 'bag', slot: bagSlot }, from));
     }
     return effects;
   }
 
-  /** Time passing: the belt's cooldown runs down. */
-  tick(dt: number): void {
+  /** Time passing: the belt's cooldown runs down, and so do your buffs, each reporting as it runs out. */
+  tick(dt: number): InventoryEffect[] {
     this.dim = Math.max(0, this.dim - dt);
+    if (!this.on.length) return [];
+    const ended: InventoryEffect[] = [];
+    for (let i = this.on.length - 1; i >= 0; i--) {
+      const b = this.on[i];
+      const left = b.left - dt;
+      if (left > 0) this.on[i] = { ...b, left };
+      else {
+        this.on.splice(i, 1);
+        ended.unshift({ kind: 'buffEnded', buff: b.kind });
+      }
+    }
+    return ended;
   }
 
   /** Open chest `id` once, taking what's in it (nothing, for a chest whose contents come out on the ground). */
@@ -508,6 +567,14 @@ export class Inventory {
       default:
         return item.kind === 'quest' ? 'quest' : null;
     }
+  }
+
+  /** Put `buff` on you from `id`, for its whole time, in place of any of its kind. */
+  private putOn(id: ItemId, buff: Buff): InventoryEffect {
+    const i = this.on.findIndex((b) => b.kind === buff.kind);
+    if (i >= 0) this.on.splice(i, 1);
+    this.on.push({ kind: buff.kind, id, damage: buff.damage, left: buff.seconds });
+    return { kind: 'buff', id, buff: buff.kind, damage: buff.damage, seconds: buff.seconds };
   }
 
   /** Is `where` one of the slots there are? */

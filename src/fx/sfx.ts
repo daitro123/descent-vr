@@ -419,6 +419,25 @@ export const sfx = {
   pickup() {
     tone(500, 1000, 0.15, 'sine', 0.2);
   },
+  /** The whetstone drawn along the edge: a short, gritty rasp. */
+  scrape(at?: Vector3) {
+    noise(0.12, 0.3, 3800 + Math.random() * 800, at, 'bandpass', 0, 3);
+    noise(0.08, 0.12, 6500, at, 'highpass', 0.03);
+  },
+  /** The edge sharpened: a clean ring off the steel. */
+  sharpened(at?: Vector3) {
+    tone(2640, 2600, 0.5, 'sine', 0.08, at);
+    tone(3960, 3900, 0.35, 'sine', 0.04, at, 0.02);
+  },
+  /** Two swallows, as a flask is drunk. */
+  gulp(at?: Vector3) {
+    tone(260, 110, 0.13, 'sine', 0.4, at);
+    tone(240, 100, 0.15, 'sine', 0.35, at, 0.17);
+  },
+  /** A buff taking hold: a low shimmer rising. */
+  buff() {
+    [330, 440, 660].forEach((f, i) => tone(f, f * 1.02, 0.4, 'triangle', 0.07, undefined, i * 0.07));
+  },
   /** A quest item taken by hand: a crisp rustle of parchment and a soft chime. */
   parchment(at?: Vector3) {
     noise(0.09, 0.35, 3200, at, 'bandpass', 0, 1.5);

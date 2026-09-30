@@ -235,9 +235,10 @@ const stepAt = (level: number) => 1 + CONFIG.levels.step * (level - 1);
  * level 1, 180 and ×1.8 at 5. Your weapon's damage rating adds to your damage
  * (Hale's old longsword adds one level's step), and gear's armour cuts what
  * you take. Talents add their abilities, a share of health (Toughness), and
- * the numbers Combat reads (`talents`).
+ * the numbers Combat reads (`talents`). Buffs on you (`boost`: 0.05 for a
+ * whetstone) make all of that damage so much more.
  */
-export function statsAt(level: number, worn: Worn = WORN_NOTHING, klass: ClassId = 'warrior', spent: Spent = {}): Stats {
+export function statsAt(level: number, worn: Worn = WORN_NOTHING, klass: ClassId = 'warrior', spent: Spent = {}, boost = 0): Stats {
   const A = CONFIG.items.attribute;
   const stamina = attributesAt(level) + worn.stamina;
   const main = attributesAt(level) + worn.main;
@@ -247,7 +248,7 @@ export function statsAt(level: number, worn: Worn = WORN_NOTHING, klass: ClassId
     attribute: mainOf(klass),
     main,
     maxHp: Math.round(A.health * stamina * (1 + talents.health)),
-    damage: A.damage * main + worn.damage,
+    damage: (A.damage * main + worn.damage) * (1 + boost),
     armour: worn.armour,
     resource: resourceOf(klass, main),
     abilities: [...abilitiesAt(klass, level), ...talentAbilities(spent)],
@@ -478,7 +479,7 @@ export class AdventureState {
   }
 
   get stats(): Stats {
-    return statsAt(this.level, this.inventory.numbers, this.class, this.spent);
+    return statsAt(this.level, this.inventory.numbers, this.class, this.spent, this.inventory.boost);
   }
 
   /**

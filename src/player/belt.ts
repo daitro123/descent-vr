@@ -21,7 +21,7 @@ import {
 import { CONFIG } from '../config';
 import { audio, sfx } from '../fx/sfx';
 import type { Inventory, InventoryEffect, Stack } from '../inventory';
-import { itemOf } from '../items';
+import { isPotion, itemOf } from '../items';
 import { createModelMaterial, type ModelMaterial, sharedModelMaterial } from '../models/materials';
 import { modelOf } from '../ui/bag/looks';
 import { BeltFrame, HIPS } from './beltZones';
@@ -37,7 +37,8 @@ import type { Player } from './player';
 // cancels it and keeps the potion in your hand. Let go of the grip and the
 // flask goes back, and the weapon comes back. A drink dims every flask on the
 // belt for the shared cooldown, a thin ring round each draining as it runs,
-// and a slot drunk empty refills from its stack in the bag. Every drink goes
+// and a slot drunk empty refills from its stack in the bag. The elixir, which
+// isn't a potion, can be drunk from the belt too, and never dims. Every drink goes
 // through the inventory, whose effects the Adventure shows (the heal among
 // them) and saves (.scratch/inventory/spec.md, "The belt").
 
@@ -262,8 +263,11 @@ export class Belt {
     return !!this.stack(i) && this.hands.left.slot !== i && this.hands.right.slot !== i;
   }
 
-  private get dimmed(): boolean {
-    return this.world.inventory.cooldown > 0;
+  /** Slot `i`'s flask is dimmed: a potion, while the shared cooldown runs (the elixir never is). */
+  private dimmed(i: number): boolean {
+    const stack = this.stack(i);
+    const item = stack && itemOf(stack.id);
+    return this.world.inventory.cooldown > 0 && !!item && isPotion(item);
   }
 
   private updateHand(h: HandHold, dt: number): void {
@@ -285,7 +289,7 @@ export class Belt {
 
     // A tick as the hand arrives at a flask it could take.
     const free = !world.busy?.(h.hand);
-    const near = tracked && free && player.alive && h.slot < 0 && !this.dimmed ? this.frame.nearest(HIPS, _p, B.near, (i) => this.onShow(i)) : -1;
+    const near = tracked && free && player.alive && h.slot < 0 ? this.frame.nearest(HIPS, _p, B.near, (i) => this.onShow(i) && !this.dimmed(i)) : -1;
     if (near >= 0 && near !== h.near) world.buzz(h.hand, B.buzz.tick.intensity, B.buzz.tick.ms);
     h.near = near;
 
@@ -294,7 +298,7 @@ export class Belt {
     if (h.slot < 0 && tracked && free && gripDown && h.weapon === 'held') {
       const at = this.frame.nearest(HIPS, _p, B.near, (i) => this.onShow(i));
       if (at >= 0) {
-        if (this.dimmed) this.refuse(h, at);
+        if (this.dimmed(at)) this.refuse(h, at);
         else this.take(h, at);
       }
     } else if (h.slot >= 0 && !h.gripHeld) {
@@ -454,7 +458,7 @@ export class Belt {
   private showSlot(s: SlotView, i: number, dt: number, carried: BeltTarget | null): void {
     const stack = this.stack(i);
     const out = this.hands.left.slot === i || this.hands.right.slot === i;
-    const dim = this.dimmed;
+    const dim = this.dimmed(i);
     const id = stack?.id ?? null;
     if (id !== s.shows) {
       s.shows = id;
