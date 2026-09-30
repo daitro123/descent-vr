@@ -27,9 +27,14 @@
 //   your walking pace;
 // - the mage stands off, charges a bolt at the wand's tip for 0.6 s and throws
 //   it at the nearest enemy; the ward held up against a blow that's coming;
-//   Frost Nova on A from level 2 when something reaches you, then a blink back
+//   Frost Nova on X from level 2 when something reaches you, then a blink back
 //   on B; a Fireball drawn as a ring from level 3 on a pack; and it backs off
 //   at your walking pace.
+// The ranger and the mage walk up closer when four shots in a row haven't hurt
+// their mark (a lip of ground in the way, as at the watchtower), and in the
+// Warden's hall neither backs or blinks out through its gate (the Warden would
+// walk back to its throne whole). When nobody is left to fight near you, the
+// script waits for any enemy walking home to get there, then goes to it.
 // Steps are no faster than your walk: the script keeps a tally of the metres
 // you could have walked since you last moved. A talent point is spent as each
 // level brings one, out of the fight: the warrior's in Protection (Toughness,
@@ -302,13 +307,15 @@ function install() {
       tick();
     }
     const drunk = belt.log.drunk > was.drunk;
+    // Health the frame it was drunk, before the camp's next blows land.
+    const rose = drunk ? player.hp : hp;
     squeeze('right', 0);
     for (let i = 0; i < 4; i++) {
       defend();
       hold('right', DOWN.right);
       tick();
     }
-    return { took, drunk, t, before: hp, after: drunk ? hp + (player.hp - hp) : hp, rose: drunk ? player.hp : hp, max: player.maxHp, fighting, was, belt: adventure.state.inventory.belt[1]?.count ?? 0, cooldown: adventure.state.inventory.cooldown };
+    return { took, drunk, t, before: hp, after: rose, rose, max: player.maxHp, fighting, was, belt: adventure.state.inventory.belt[1]?.count ?? 0, cooldown: adventure.state.inventory.cooldown };
   };
   /** Face (x, z) where you stand. */
   const face = (x, z) => {
@@ -847,6 +854,16 @@ const look = () =>
 const camp = (id) =>
   page.evaluate((id) => window.__descent.camps.camps.find((c) => c.plan.id === id).members.map((m) => ({ alive: m.enemy.alive, mind: m.mind })), id);
 const alive = async (id) => (await camp(id)).filter((m) => m.alive).length;
+/** Who of camp `id` still stands, where and doing what, for a failed fight's message. */
+const standing = (id) =>
+  page.evaluate((id) => {
+    const me = window.__play.head();
+    return window.__descent.camps.camps
+      .find((c) => c.plan.id === id)
+      .members.filter((m) => m.enemy.alive)
+      .map(({ enemy: e }) => `${e.kind} ${Math.round(Math.hypot(e.position.x - me.x, e.position.z - me.z))} m off, ${e.state}${e.post?.evading ? ' walking home' : ''}${e.hittable ? '' : ', not hittable'}`)
+      .join('; ');
+  }, id);
 
 /** An item's catalogue entry, from the dev server's source (the game's own module). */
 const items = async (ids) => page.evaluate(async (ids) => {
@@ -981,6 +998,10 @@ async function battle(opts, back, rounds = 40, lives = 4) {
   for (;;) {
     const r = await fightUntil(opts, rounds);
     if (r === 'lost' && strays++ < 6) {
+      // One walking home can't be fought on the way: let it get there first.
+      await page.evaluate(() => {
+        for (let i = 0; i < 30 && window.__descent.adventure.gatherFoes().some((e) => e.alive && e.post?.evading); i++) window.__play.wait(1);
+      });
       await back();
       continue;
     }
@@ -1325,7 +1346,7 @@ let s = await look();
   );
   check(sip?.belt === 2 && sip.cooldown > 55, `two left on the hip, the belt dimmed for ${sip?.cooldown.toFixed(0)} s`);
   fought = await clearCamp('lumberCamp');
-  check(fought.r === 'done' && (await alive('lumberCamp')) === 0, `the lumber camp's five fought, its leader too (${fought.deaths} deaths${fought.r === 'done' ? '' : `, ${fought.r} with ${await alive('lumberCamp')} standing`})`);
+  check(fought.r === 'done' && (await alive('lumberCamp')) === 0, `the lumber camp's five fought, its leader too (${fought.deaths} deaths${fought.r === 'done' ? '' : `, ${fought.r} with ${await alive('lumberCamp')} standing: ${await standing('lumberCamp')}`})`);
   await lootUp('the lumber camp');
   await stage('patrol');
   fought = await clearCamp('patrol');
@@ -1364,7 +1385,7 @@ let s = await look();
   await page.evaluate(() => window.__descent.teleport(28, -57, -Math.PI / 2));
   await page.evaluate(() => window.__play.wait(0.3));
   const fought = await clearCamp('watchtower');
-  check(fought.r === 'done' && (await alive('watchtower')) === 0, `the watchtower's three fought (${fought.deaths} deaths${fought.r === 'done' ? '' : `, ${fought.r} with ${await alive('watchtower')} standing`})`);
+  check(fought.r === 'done' && (await alive('watchtower')) === 0, `the watchtower's three fought (${fought.deaths} deaths${fought.r === 'done' ? '' : `, ${fought.r} with ${await alive('watchtower')} standing: ${await standing('watchtower')}`})`);
   await lootUp('the watchtower');
   await stage('watchtower chest');
   const hill = await openChest('oakvale-watchtower');
