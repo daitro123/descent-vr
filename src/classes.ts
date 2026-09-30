@@ -14,9 +14,10 @@ export const CLASSES = ['warrior', 'ranger', 'mage'] as const satisfies readonly
 
 /**
  * The classes a new character can be, and the arena's `&class=` plays: only
- * those that are built. The ranger joins with abilities ticket 21.
+ * those that are built. The ranger joined with abilities ticket 21 and the
+ * mage with ticket 23.
  */
-export const PLAYABLE: readonly ClassId[] = ['warrior', 'mage'];
+export const PLAYABLE: readonly ClassId[] = ['warrior', 'ranger', 'mage'];
 
 /** Is `name` a class that's built? */
 export const playable = (name: string | undefined): name is ClassId => PLAYABLE.some((c) => c === name);

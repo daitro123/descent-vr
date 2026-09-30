@@ -26,7 +26,11 @@ import { TALENT, type TalentRefusal } from '../../talents';
 // A panel can open beside the bag's (the stash's, by touching its chest's
 // lid): the bag's opens with it, with no reach, and things are carried
 // between the two as within the bag's; both close together
-// (.scratch/inventory/issues/15-the-stash.md).
+// (.scratch/inventory/issues/15-the-stash.md). A vendor's wares board opens
+// the same way, placed beside the vendor, but its slots are wares rather
+// than places in your things: carried off it into a bag slot a ware is
+// bought, and something of yours let go over it is sold
+// (.scratch/inventory/issues/14-vendors.md).
 // Items offered beside it (a hand-in's pick on Hale's board) are carried the
 // same way, into a bag slot to take one: grip one with the bag shut and it
 // swings round with the item already in hand (12-quest-items-and-hand-in-picks.md).
@@ -78,8 +82,10 @@ export interface Shelf {
   show(hover: number | null, lifted: number | null): void;
 }
 
-/** Where a carried item came from: a place in your things, or a shelf beside the bag. */
-type From = Where | { readonly in: 'shelf'; readonly index: number };
+/** Where a carried item came from: a place in your things, a shelf beside the bag, or a vendor's wares. */
+type From = Where | { readonly in: 'shelf'; readonly index: number } | Ware;
+/** A ware carried off a vendor's board, by its slot there. */
+type Ware = { readonly in: 'ware'; readonly index: number };
 
 /** What the bag does beyond the panel. */
 export interface BagWorld {
@@ -110,8 +116,8 @@ export interface BesidePanel {
   close(): void;
   /** Your things changed: fill its slots again. */
   changed(): void;
-  /** The place in your things its slot `i` on the page showing is. */
-  where(i: number): Where;
+  /** The place in your things its slot `i` on the page showing is: none for a vendor's ware, which is traded. */
+  where(i: number): Where | null;
   /** Its slot `world` touches, if any. */
   spotAt(world: Vector3, reach: Reach): number | null;
   /** Where letting a carried item go at `world` puts it, if on this panel. */
@@ -121,6 +127,35 @@ export interface BesidePanel {
   /** Is `world` over it? */
   over(world: Vector3, reach: Reach): boolean;
   update(dt: number, shows: BesideShows): void;
+  /** A vendor's wares: its slots are traded rather than places in your things. */
+  readonly trade?: Trade;
+}
+
+/**
+ * Buying and selling on a vendor's wares board beside the bag's panel. A
+ * ware carried off it goes only into a bag slot (let go anywhere else, it
+ * goes back), and something of yours let go over it is sold. Its target,
+ * while something of yours is over it, is the slot it's over, or −1 for
+ * anywhere else on it.
+ */
+export interface Trade {
+  /** What it is, for the log: "the smith's wares". */
+  readonly name: string;
+  stackAt(i: number): Stack | null;
+  /** Why the grip can't take what's in slot `i` (too few coins), or null. */
+  canLift(i: number): Refusal | null;
+  /** Why what's in slot `i` can't go to `to`, or null. */
+  checkTake(i: number, to: Where): Refusal | null;
+  /** Carry what's in slot `i` to `to`: buy it. */
+  take(i: number, to: Where): InventoryEffect[];
+  /** What taking from slot `i` is called, for the log: "bought". */
+  takes(i: number): string;
+  /** Why `from` can't be given to it, or null. */
+  checkGive(from: Where): Refusal | null;
+  /** Give it what's at `from`: sell it. */
+  give(from: Where): InventoryEffect[];
+  /** What giving is called, for the log: "sold". */
+  readonly gives: string;
 }
 
 /** What a panel beside the bag's shows this frame, as `PanelShows` does for the bag's, by its slots on the page showing. */
@@ -196,6 +231,8 @@ export class Bag {
   private readonly onTab: (Tab | null)[] = [];
   /** The panel open beside the bag's, if any. */
   private beside: BesidePanel | null = null;
+  /** Placed where it was put (beside a vendor's wares) rather than in front of you: it stays there. */
+  private pinned = false;
   private tabArming = 0;
 
   constructor(
@@ -238,17 +275,25 @@ export class Bag {
     this.beside?.changed();
   }
 
+  /** Is it open where it was put, beside a vendor's wares, rather than where you reached for it? */
+  get isPinned(): boolean {
+    return this.isOpen && this.pinned;
+  }
+
   /**
    * Open `beside` next to the bag's panel, which comes round in front of a
    * head at `head` looking along `gaze`, with no reach: the stash's, when its
-   * chest's lid is touched.
+   * chest's lid is touched. With `at`, the bag's panel stands there instead,
+   * turned to the head, and stays put: a vendor's wares, by the vendor.
    */
-  openBeside(beside: BesidePanel, head: Vector3, gaze: Vector3, probes: readonly (BagProbe | null)[], why: string): void {
+  openBeside(beside: BesidePanel, head: Vector3, gaze: Vector3, probes: readonly (BagProbe | null)[], why: string, at?: Vector3): void {
     this.cancel();
     if (this.beside !== beside) this.beside?.close();
     this.beside = beside;
     if (beside.root.parent !== this.panel.root) this.panel.root.add(beside.root);
-    this.panel.place(head, gaze);
+    if (at) this.panel.placeAt(at, head);
+    else this.panel.place(head, gaze);
+    this.pinned = !!at;
     this.panel.setPage('bag');
     beside.show();
     this.armTabs(probes);
@@ -268,6 +313,7 @@ export class Bag {
   private shutBeside(): void {
     this.beside?.close();
     this.beside = null;
+    this.pinned = false;
   }
 
   private log(line: string): void {
@@ -328,7 +374,8 @@ export class Bag {
       } else this.open(reached.hand, reached.speed, input);
     } else if (reached) this.log(`not opened: ${reached.hand} hand too fast (${reached.speed.toFixed(1)} m/s)`);
 
-    if (this.isOpen && this.panel.follow(head, gaze) === 'walkedAway') {
+    // Put beside a vendor's wares, it stays put, and shuts with them.
+    if (this.isOpen && !this.pinned && this.panel.follow(head, gaze) === 'walkedAway') {
       this.cancel();
       this.shutBeside();
       this.log('closed: walked away');
@@ -423,6 +470,8 @@ export class Bag {
   }
 
   private stackAt(spot: Spot): Stack | null {
+    const trade = this.beside?.trade;
+    if (spot.in === 'beside' && trade) return trade.stackAt(spot.i);
     const where = this.where(spot);
     return where ? this.world.inventory.at(where) : null;
   }
@@ -441,6 +490,7 @@ export class Bag {
   /** Bring the panel round in front of you. */
   private place(input: BagInput, why: string): void {
     this.panel.place(input.head, input.gaze);
+    this.pinned = false;
     this.armTabs(input.probes);
     sfx.parchment();
     this.log(`opened: ${why}`);
@@ -464,14 +514,16 @@ export class Bag {
       const stack = spot && this.stackAt(spot);
       if (!probe || !spot || !stack) continue;
       if (this.track[probe.hand].gripDown) {
-        const from = this.where(spot)!;
-        if (from.in === 'quest') {
+        const trade = spot.in === 'beside' ? this.beside?.trade : undefined;
+        const from: From = trade && spot.in === 'beside' ? { in: 'ware', index: spot.i } : this.where(spot)!;
+        const no = trade && from.in === 'ware' ? trade.canLift(from.index) : from.in === 'quest' ? 'quest' : null;
+        if (no) {
           world.buzz(probe.hand, B.refused.intensity, B.refused.ms);
-          this.log(`refused (${REFUSED.quest}): ${itemOf(stack.id)?.name}`);
+          this.log(`refused (${REFUSED[no]}): ${itemOf(stack.id)?.name}`);
         } else {
           this.carry = { from, page: this.pageOf(spot), spot, stack, probe: i, hand: probe.hand };
           world.buzz(probe.hand, B.pick.intensity, B.pick.ms);
-          this.log(`picked up: ${itemOf(stack.id)?.name} from ${label(from)}`);
+          this.log(`picked up: ${itemOf(stack.id)?.name} from ${from.in === 'ware' ? trade!.name : label(from as Where)}`);
           return this.carrying(input);
         }
       }
@@ -507,11 +559,18 @@ export class Bag {
     this.held.scale.setScalar(0.12);
     this.held.visible = true;
     const target = this.targetAt(probe.at, carry.stack.id);
-    const to = target && this.where(target);
     const { from, spot } = carry;
     const lifted = spot && (spot.in === 'gear' || carry.page === this.pageOf(spot)) ? spot : null;
     shows.lifted = lifted;
     shows.card = carry.stack;
+    const trade = this.beside?.trade;
+    if (trade && from.in !== 'shelf') return this.trading(input, trade, from, target, lifted, shows);
+    // A ware whose board has gone goes back there.
+    if (from.in === 'ware') {
+      this.cancel();
+      return shows;
+    }
+    const to = target && this.where(target);
     shows.cardOver = target ?? lifted;
     const refusal = (to: Where) => (from.in === 'shelf' ? shelf!.check(from.index, to) : inventory.check(from, to));
     shows.target = target && { spot: target, fits: !!to && refusal(to) === null };
@@ -549,20 +608,72 @@ export class Bag {
       world.apply(effects, probe.at);
     } else if (this.panel.over(probe.at, CONFIG.bag.release) || this.beside?.over(probe.at, CONFIG.bag.release)) {
       this.log(`back: ${name} to ${label(from)}`);
-    } else {
-      const effects = inventory.move(from, { in: 'ground' });
-      const dropped = effects.find((e) => e.kind === 'dropped');
-      if (dropped) {
-        world.drop(dropped.stack, probe.at, hand.velocity);
-        world.buzz(carry.hand, B.place.intensity, B.place.ms);
-        this.log(`dropped: ${name}`);
-      } else {
-        world.buzz(carry.hand, B.refused.intensity, B.refused.ms);
-        this.log(`refused: ${name} can't be dropped`);
-      }
-      world.apply(effects, probe.at);
-    }
+    } else this.dropOff(from, name, probe.at, carry.hand);
     return shows;
+  }
+
+  /**
+   * Carrying beside a vendor's wares: a ware goes only into a bag slot, and
+   * something of yours let go over their board is sold, moved within your
+   * things, or dropped off both.
+   */
+  private trading(input: BagInput, trade: Trade, from: Where | Ware, target: Spot | null, lifted: Spot | null, shows: PanelShows): PanelShows {
+    const carry = this.carry!;
+    const { world } = this;
+    const { inventory } = world;
+    const B = CONFIG.bag.buzz;
+    const probe = input.probes[carry.probe]!;
+    const onBoard = target?.in === 'beside' || (!target && !!this.beside?.over(probe.at, CONFIG.bag.release));
+    // Your slot it's over, if not the board's.
+    const mine = target?.in === 'beside' ? null : target;
+    const to = mine && this.where(mine);
+    const ware = from.in === 'ware' ? from.index : null;
+    const mineFrom = from.in === 'ware' ? null : from;
+    // A ware's card stays on the board, saying what it costs.
+    shows.cardOver = ware !== null ? lifted : (mine ?? (onBoard ? null : lifted));
+    if (ware === null && onBoard) shows.card = null;
+    if (ware !== null) shows.target = mine && { spot: mine, fits: !!to && trade.checkTake(ware, to) === null };
+    else if (onBoard) shows.target = { spot: { in: 'beside', i: target?.in === 'beside' ? target.i : -1 }, fits: trade.checkGive(mineFrom!) === null };
+    else shows.target = mine && { spot: mine, fits: !!to && inventory.check(mineFrom!, to) === null };
+    if (this.track[carry.hand].held) return shows;
+
+    // Let go.
+    this.cancel();
+    shows.lifted = null;
+    shows.target = null;
+    const name = itemOf(carry.stack.id)?.name;
+    const done = (effects: InventoryEffect[], what: string, where: string) => {
+      const refused = effects.find((e) => e.kind === 'refused');
+      world.buzz(carry.hand, refused ? B.refused.intensity : B.place.intensity, refused ? B.refused.ms : B.place.ms);
+      this.log(refused ? `refused (${REFUSED[refused.reason]}): ${name} to ${where}` : `${what}: ${name} to ${where}`);
+      world.apply(effects, probe.at);
+    };
+    if (ware !== null) {
+      if (to) done(trade.take(ware, to), trade.takes(ware), label(to));
+      else this.log(`back: ${name} to ${trade.name}`);
+    } else if (onBoard) done(trade.give(mineFrom!), trade.gives, trade.name);
+    else if (to) {
+      if (!same(to, mineFrom!)) done(inventory.move(mineFrom!, to), to.in === 'gear' ? 'wore' : 'moved', label(to));
+    } else if (this.panel.over(probe.at, CONFIG.bag.release)) this.log(`back: ${name} to ${label(mineFrom!)}`);
+    else this.dropOff(mineFrom!, name, probe.at, carry.hand);
+    return shows;
+  }
+
+  /** Let go of away from the panels: it's dropped on the ground, falling from `at`. */
+  private dropOff(from: Where, name: string | undefined, at: Vector3, hand: Handedness): void {
+    const { world } = this;
+    const B = CONFIG.bag.buzz;
+    const effects = world.inventory.move(from, { in: 'ground' });
+    const dropped = effects.find((e) => e.kind === 'dropped');
+    if (dropped) {
+      world.drop(dropped.stack, at, this.track[hand].velocity);
+      world.buzz(hand, B.place.intensity, B.place.ms);
+      this.log(`dropped: ${name}`);
+    } else {
+      world.buzz(hand, B.refused.intensity, B.refused.ms);
+      this.log(`refused: ${name} can't be dropped`);
+    }
+    world.apply(effects, at);
   }
 
   /** The tab `at` touches: the bag panel's, a page's of the panel beside it, or a talent page button. */

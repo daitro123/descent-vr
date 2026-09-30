@@ -5,9 +5,9 @@ import type { Game } from '../game';
 // warrior's arena (abilities map, `.scratch/abilities/`) until that class is
 // built. Each is loaded only when asked for; an unknown class leaves the
 // warrior as it is. `&gestures` adds the gesture prototype over whichever
-// class it is. The mage is built (abilities ticket 23): `&class=mage` plays
-// it, and its prototype (`src/prototype/mage/`) is kept in the code for
-// Tom to compare, no longer loaded by any flag.
+// class it is. Built classes' prototypes are kept in the code for Tom to
+// compare: the ranger's at `&class=ranger-prototype` (abilities ticket 21),
+// the mage's (`src/prototype/mage/`, ticket 23) no longer loaded by any flag.
 
 export interface ClassPrototype {
   /** Once a frame, after the game's own update. */
@@ -15,7 +15,7 @@ export interface ClassPrototype {
 }
 
 const PROTOTYPES: Record<string, () => Promise<(game: Game, scene: Scene) => ClassPrototype>> = {
-  ranger: async () => (await import('./ranger/rangerPrototype')).startRangerPrototype,
+  'ranger-prototype': async () => (await import('./ranger/rangerPrototype')).startRangerPrototype,
 };
 
 /**

@@ -14,6 +14,7 @@ import { ABILITY_COLOUR, blocked, type Refusal, sweptTo, throwTarget } from './a
 import { assist, type Bolt, Bolts } from './bolts';
 import { afterBlock, BOLT_CHARGES, type BoltCharge, boltDamage, type BoltShape, chainFrom, within } from './mage';
 import { Blizzard, blizzardAt } from './blizzard';
+import { RangerKit } from './ranger';
 import { type BladeResult, bladeTarget, type Defender, sweepBlade, sweepStrike, type SweepResult } from './strike';
 import { ThrownAxes } from './thrownAxes';
 import type { Handedness } from '../player/input';
@@ -26,8 +27,9 @@ export interface CombatEvents {
 
 /**
  * What came of using an ability: cast, or why not (still cooling down, not
- * enough rage, nobody in reach to throw at, already waiting on your next
- * attack, or an ability not built yet), in which case nothing was spent.
+ * enough of your class's bar, nobody in reach to throw at or nothing to use
+ * it on, already waiting on your next attack, or an ability not built yet),
+ * in which case nothing was spent.
  */
 export type Use = 'cast' | Refusal | 'no target' | 'waiting' | 'unbuilt';
 
@@ -134,6 +136,8 @@ export class Combat implements ArrowResolver {
   readonly bolts: Bolts;
   /** The mage's Blizzard, falling or not. */
   readonly blizzard: Blizzard;
+  /** The ranger's bow, arrows, ward and traps: a ranger's only. */
+  readonly ranger: RangerKit | null;
   private swinging = false;
   private slamCooldown = 0;
   private readonly defender: Defender;
@@ -151,6 +155,10 @@ export class Combat implements ArrowResolver {
     this.axes = new ThrownAxes(parent);
     this.bolts = new Bolts(parent);
     this.blizzard = new Blizzard(parent);
+    this.ranger =
+      player.klass === 'ranger'
+        ? new RangerKit(player, fx, { land: (e, d, head, at, push) => this.arrowLands(e, d, head, at, push), evade: (at) => this.evade(at), reflect: (a, label) => this.reflectArrow(a, label) }, parent)
+        : null;
     const B = CONFIG.player.body;
     const S = CONFIG.shield;
     this.defender = {
@@ -174,6 +182,7 @@ export class Combat implements ArrowResolver {
     this.updateSword(enemies);
     this.updateBash(enemies);
     this.updateGroundSlam(enemies);
+    this.ranger?.update(dt, enemies);
     this.projectiles.update(dt, this);
     this.axes.update(dt, (enemy, at, dir, from) => this.axeLands(enemy, at, dir, from));
     this.bolts.update(dt, enemies, this.player.ground, this.fx.particles, (bolt, enemy, at, crit) => this.boltLands(bolt, enemy, at, crit));
@@ -306,13 +315,32 @@ export class Combat implements ArrowResolver {
     if (killed) this.onKill(other);
   }
 
+  /** The class's own attack has the right hand (an arrow nocked): no gesture arms. */
+  get busy(): boolean {
+    return this.ranger?.drawing ?? false;
+  }
+
+  /** Nothing in flight or lying about, nothing on the string: after death, or a new run. */
+  clear(): void {
+    this.projectiles.clear();
+    this.axes.clear();
+    this.bolts.clear();
+    this.blizzard.clear();
+    this.ranger?.clear();
+  }
+
   /**
    * A / X: the War Cry, or Frost Nova, whichever your class's level has
    * brought (neither, before level 2). Frost Nova says why it can't be used
-   * over your hands, with a dull buzz, as a gesture does.
+   * over your hands, with a dull buzz, as a gesture does. The ranger's is
+   * Power Shot while an arrow is drawn, which says over the bow what came of it.
    */
   press(enemies: Enemy[]): void {
-    const { player } = this;
+    const { player, ranger } = this;
+    if (ranger) {
+      if (ranger.drawing && player.can('powerShot') && player.alive) ranger.say(this.use('powerShot'));
+      return;
+    }
     if (!player.can('frostNova')) {
       this.warCry(enemies);
       return;
@@ -333,7 +361,8 @@ export class Combat implements ArrowResolver {
 
   /**
    * Use an ability, aimed from the right hand where it points somewhere:
-   * spend its cost and start its cooldown, or say why not and spend nothing.
+   * spend its cost from your class's bar and start its cooldown, or say why
+   * not and spend nothing.
    */
   use(ability: Ability, aim?: Aim): Use {
     const { player } = this;
@@ -397,11 +426,36 @@ export class Combat implements ArrowResolver {
         sfx.blizzard(_p);
         this.fx.text.spawn('BLIZZARD', _a.copy(_p).setY(_p.y + 1.4), { color: '#e4f4ff', scale: 0.18 });
         break;
+      case 'powerShot':
+      case 'snareTrap': {
+        if (!this.ranger) return 'unbuilt';
+        const used = ability === 'powerShot' ? this.ranger.powerShot() : this.ranger.snareTrap();
+        if (used !== 'cast') return used;
+        player.abilities.used(ability);
+        break;
+      }
       default:
         return 'unbuilt';
     }
     player.resource -= cost;
     return 'cast';
+  }
+
+  /** One of the ranger's arrows lands on `enemy` (ranger.ts): the blow as dealt, with the sword's feedback. */
+  private arrowLands(enemy: Enemy, damage: number, head: boolean, at: Vector3, push: Vector3): boolean {
+    this.player.headPosition(_a);
+    const bright = head || enemy.exposed > 0;
+    const exposed = enemy.exposed > 0;
+    const killed = enemy.takeHit(damage, push, { from: _a });
+    combatStats.hits++;
+    if (head) combatStats.crits++;
+    this.impactFx(enemy, at, push, bright);
+    this.fx.text.spawn(head ? `${damage}!` : `${damage}`, at, { color: head ? '#ffd23a' : exposed ? '#9fd8ff' : '#ffffff', scale: head ? 0.3 : 0.22 });
+    sfx.hit(head, at);
+    if (head) this.events.hitStop(CONFIG.feel.hitStop * 1.2);
+    this.events.onEnemyHit(enemy, killed);
+    if (killed) this.onKill(enemy);
+    return killed;
   }
 
   /**
@@ -946,6 +1000,8 @@ export class Combat implements ArrowResolver {
     const d = this.defender;
     if (!player.alive) return null;
     const R = CONFIG.arrow.hitRadius;
+    const warded = this.ranger?.arrowContact(prev, pos, arrow);
+    if (warded) return warded;
 
     if (d.shieldInverse) {
       _a.copy(prev).applyMatrix4(d.shieldInverse);

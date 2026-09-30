@@ -157,6 +157,16 @@ export class BagPanel {
     this.dirty = true;
   }
 
+  /** Put it at `at`, turned to a head at `head`: beside a vendor, with their wares on its left. */
+  placeAt(at: Vector3, head: Vector3): void {
+    this.root.position.copy(at);
+    this.root.lookAt(head);
+    this.root.updateMatrixWorld(true);
+    this.open = true;
+    this.root.visible = true;
+    this.dirty = true;
+  }
+
   close(): void {
     this.open = false;
     this.root.visible = false;

@@ -244,6 +244,23 @@ export const sfx = {
     tone(160, 90, 0.6, 'triangle', 0.22, at);
     noise(0.3, 0.35, 2200, at, 'bandpass', 0, 0.6);
   },
+  /** Power Shot: the nocked arrow takes its glow, a bright rising ring over the string's creak. */
+  powerShot(at?: Vector3) {
+    tone(660, 1320, 0.25, 'triangle', 0.12, at);
+    tone(990, 1980, 0.2, 'sine', 0.06, at, 0.05);
+    noise(0.12, 0.15, 3000, at, 'bandpass', 0, 2);
+  },
+  /** Snare Trap: iron jaws set down and cocked, a clank and a ratchet. */
+  snareTrap(at?: Vector3) {
+    tone(220, 180, 0.12, 'square', 0.12, at);
+    noise(0.08, 0.3, 1800, at, 'bandpass', 0.05, 3);
+    noise(0.06, 0.25, 2400, at, 'bandpass', 0.12, 3);
+  },
+  /** A trap snaps shut on an enemy: a hard iron clap. */
+  trapSnap(at?: Vector3) {
+    noise(0.07, 0.6, 2200, at, 'bandpass', 0, 1.5);
+    tone(320, 120, 0.15, 'square', 0.18, at);
+  },
   /** Frost Nova: a glassy crack, then a cold hiss spreading out. */
   frostNova() {
     tone(1800, 900, 0.25, 'triangle', 0.12);

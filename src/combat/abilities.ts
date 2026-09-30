@@ -15,6 +15,8 @@ export const ABILITY_COLOUR: Readonly<Partial<Record<Ability, number>>> = {
   sweepingStrikes: 0xff5a40, // red: the second blow's embers
   mortalStrike: 0xb01830, // deep blood red: the blade's edge while it's armed
   shieldSlam: 0xe0e8f0, // bright steel: the shield's rim while it's armed
+  powerShot: 0xffe07a, // a hot gold-white: the nocked arrow's glow
+  snareTrap: 0x8fd060, // a leaf green: the trap set down and the root it springs
   frostNova: 0xbfe8ff, // a pale ice blue: the frost that bursts from you
   fireball: 0xff7a20, // orange: the burning bolt and its burst
   frostbolt: 0x4fb8ff, // a deep ice blue: the frost bolt and the frost it leaves

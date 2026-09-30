@@ -29,7 +29,8 @@ export function refill(bar: Resource, now: number, fighting: boolean, dt: number
  * You: XR rig (camera + controllers), locomotion, collision, your class's
  * bar, and the warrior's sword (right hand) and shield (left hand). The mage
  * holds neither: its hands are player/mage.ts's, and its ward is the shield
- * to Combat, on the left grip only while raised.
+ * to Combat, on the left grip only while raised. The ranger's hands are empty
+ * here too, for the bow is Combat's (combat/ranger.ts).
  */
 export class Player {
   readonly rig = new Group();
@@ -70,7 +71,7 @@ export class Player {
     renderer: WebGLRenderer,
     /** What you stand on and bump into: the arena, or a zone. */
     readonly ground: Ground,
-    /** Your class: the warrior's sword and shield, or the mage's hands. */
+    /** Your class: the warrior's sword and shield, the mage's hands, or the ranger's (the bow is Combat's). */
     readonly klass: ClassId = 'warrior',
   ) {
     this.stats = arena(klass);
@@ -100,7 +101,7 @@ export class Player {
       this.shield.model.removeFromParent();
       right.grip.add(this.tools.right);
       left.grip.add(this.tools.left);
-    } else {
+    } else if (this.klass === 'warrior') {
       right.grip.add(this.sword.model);
       left.grip.add(this.shield.model);
     }
