@@ -35,26 +35,27 @@ All under 10 draw calls and 5,000 triangles, with the pool's 4 point lights at m
 
 ### The runs
 
-Each class, final script, after merging main (Inventory 17's run, Herbalism, using what professions make):
+Each class, final script, after merging main (Inventory 17's run, Herbalism, using what professions make, trainers and intro quests):
 
 | | Warrior | Ranger | Mage |
 |---|---|---|---|
-| Checks | 53, all ok | 53, all ok | 53, all ok |
-| Deaths | 0 | 0 | 0 |
+| Checks | 53, all ok | 52, all ok | 53, all ok |
+| Deaths | 1, at the lumber camp (woke, walked back and cleared it) | 0 | 0 |
 | Levels (Raiders, Lumber Camp, after the mine, What Lies Below) | 2, 3, 5, 5 | 2, 3, 5, 5 | 2, 3, 5, 5 |
 | Talents at the end | Toughness 3, Iron Arm 1 | Steady Aim 3, Swift Arrows 1 | Ignite 3, Critical Mass 1 |
-| How it fought | 316 swings, 173 landed | 60 arrows (13 Power Shots), 6 Snare Traps | 126 bolts, 4 Fireballs, 3 Frost Novas, 18 blinks, the ward up 26 times |
-| The drink at the lumber camp | 111 to 137 of 137 | 92 to 130 of 130 | 79 to 130 of 130 |
+| How it fought | 251 swings, 172 landed | 60 arrows (12 Power Shots), 3 Snare Traps | 144 bolts, 7 Fireballs, 6 Frost Novas, 19 blinks, the ward up 24 times |
+| The drink at the lumber camp | 90 to 137 of 137 | 88 to 130 of 130 | 89 to 140 of 140 |
+| The Warden | first try | first try | second try (knocked out through the gate once; it walked back to its throne whole) |
 | Reward, drawn as | Hale's Old Longsword, `hale` | Hale's Old Hunting Bow, `hunting-bow` | Crypt-Warded Staff, `crypt-staff` |
-| Coins before spending, at the end | 320, 518 | 418, 533 | 343, 452 |
-| The dig, the bag open (worst heading) | 44 calls, 12.4k triangles | 48 calls, 12.7k | 52 calls, 12.6k |
-| The smith, both boards open | 118 calls, 234k triangles | 122 calls, 235k | 118 calls, 234k |
+| Coins before spending, at the end | 330, 484 | 294, 483 | 335, 472 |
+| The dig, the bag open (worst heading) | 56 calls, 12.8k triangles | 50 calls, 13.0k | 46 calls, 12.7k |
+| The smith, both boards open | 120 calls, 234k triangles | 114 calls, 229k | 134 calls, 245k |
 
-Each shape drawn was read as meant (0 misread). Every view kept the 4 point lights. The ranger's 418 coins is one run's swing with the Warden's roll; the route's expected total stays 333.
+Each shape drawn was read as meant (0 misread). Every view kept to the 4 point lights. The ranger's and mage's bags were full for one drop in the mine (the check allows it, as Inventory 17's does); the ranger's white buy wasn't worn, since what it wore was better. Coins before spending swing with the Warden's roll; the route's expected total stays 333. Earlier passing runs of the same script before the last merge of main gave the warrior, ranger and mage 0 deaths each.
 
 ### Checks
 
-- `.scratch/abilities/checks/whole-zone.mjs`: all three passed (the table above), about 55 minutes each with the three running at once in software rendering.
+- `.scratch/abilities/checks/whole-zone.mjs`: all three passed (the table above), about 57 minutes each with the three running at once in software rendering.
 - `.scratch/abilities/checks/effects-budget.mjs`: all passed (the table above).
 - `.scratch/abilities/checks/gestures.mjs`: all ok, with the two new prototype checks.
 - `npm run typecheck` clean; `npm test` 60 files, 1,281 tests passed.
@@ -62,13 +63,14 @@ Each shape drawn was read as meant (0 misread). Every view kept the 4 point ligh
 **Calls made on Tom's behalf:**
 
 - **The prototypes are kept, not removed** (the brief's change to this ticket): the mage's moves to `&class=mage-prototype` so `&class=mage` is only the built mage, and the README lists every prototype URL under Prototypes.
-- **Nothing was tuned.** Every class cleared the plain route with no deaths, so camp strength and the talents' first guesses stay as they are.
+- **Nothing was tuned.** Every class cleared the plain route, the ranger and mage with no deaths and the warrior with one at the lumber camp in the last run (none in the two full runs before it), so camp strength and the talents' first guesses stay as they are.
 - **The budget is checked per eye.** It's a budget for a frame drawn, and the Quest draws each eye; over both eyes the mage's moment is 10 calls and 8.3k triangles.
 - **Floating words are outside the abilities' budget**, as the game's text for every blow.
 - **The talent plans are one tree each, tier 1 then tier 2** (the ranger's Marksmanship, the mage's Fire, the warrior's Protection). Oakvale's four points don't reach tier 3.
 - **The fighters walk, not glide.** A step is only as long as your legs have had time for at the walking speed, and stops at walls (the blink's rule).
 - **Fighting the Warden, the ranged classes stay in its hall.** Backing out through its gate sends it back to its throne whole (spec), which is what first stopped the ranger. A player learns it once; the script keeps inside.
 - **Four harmless shots in a row mean walk closer.** At the watchtower the mage's bolts met the lip of the hill below the archer; a player would step up, so the script does.
+- **The script's idle seconds are real seconds.** The Adventure takes at most 1/30 s a frame, so the fighters' 0.1 s idle steps had been a third as long, and "nobody to fight for 4 s" gave up while the Warden was still standing up off its throne. A long step is now taken in pieces. Each failed Warden try says why.
 - **One walking home is waited for.** An enemy that has broken off can't be hit on its way back, so when nobody is left to fight near you the script lets it get home first, then goes to it.
 
 ## For later
