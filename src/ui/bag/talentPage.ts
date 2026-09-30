@@ -212,7 +212,7 @@ function paintButton(
       c.textAlign = 'left';
       c.font = `bold ${Math.round(0.0135 * k)}px ${FONT}`;
       c.fillStyle = ink;
-      c.fillText(def.name, x + 0.006 * k, y + h * 0.36, w - 0.036 * k);
+      c.fillText(def.name, x + 0.006 * k, y + h * 0.36, w - 0.044 * k);
       c.font = `${Math.round(0.011 * k)}px ${FONT}`;
       c.fillStyle = def.ability ? (open ? '#9fd8ff' : '#3c4c58') : open ? '#a89c80' : '#4a3e30';
       c.fillText(def.ability ? 'ability' : `tier ${def.tier}`, x + 0.006 * k, y + h * 0.74);

@@ -299,7 +299,7 @@ export class BagPanel {
     });
     this.slots.coloured();
     this.slots.shown = this.talentPage ? 0 : this.grid ? SPOTS.length : SPOTS.length - CONFIG.bag.slots;
-    this.figure.visible = !this.talentPage;
+    this.slots.icons.visible = this.figure.visible = !this.talentPage;
     this.paintBoard(shows.tab, shows.button);
     this.showCard(shows.card, shows.cardOver);
     void dt;

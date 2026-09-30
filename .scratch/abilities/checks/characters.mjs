@@ -156,7 +156,7 @@ let first;
   await accept();
   first = await saved('character');
   const roster = await idb('roster');
-  check(first?.version === 4 && first.class === 'warrior' && first.name === y.name && first.quests.raiders.stage === 'active', `taking a quest writes ${first?.name}, a ${first?.class}, version ${first?.version}`);
+  check(first?.version === 5 && first.class === 'warrior' && first.name === y.name && first.quests.raiders.stage === 'active', `taking a quest writes ${first?.name}, a ${first?.class}, version ${first?.version}`);
   check(JSON.stringify(roster) === JSON.stringify({ version: 1, characters: ['character'], last: 'character' }), `and the roster listing them (${JSON.stringify(roster)})`);
 }
 
@@ -283,7 +283,7 @@ watch(page);
   await enterVR();
   await page.evaluate(() => (window.__descent.step(1 / 72), window.__descent.adventure.saves.onLeaving()));
   const r = await saved('character');
-  check(r?.version === 4 && r.name === 'Warrior' && r.inventory.coins === 23, `the first write is version ${r?.version}, ${r?.name}, ${r?.inventory.coins} coins`);
+  check(r?.version === 5 && r.name === 'Warrior' && r.inventory.coins === 23, `the first write is version ${r?.version}, ${r?.name}, ${r?.inventory.coins} coins`);
   check(JSON.stringify(await idb('roster')) === JSON.stringify({ version: 1, characters: ['character'], last: 'character' }), 'with the roster listing them');
 }
 
