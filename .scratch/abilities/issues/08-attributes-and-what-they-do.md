@@ -36,3 +36,5 @@ Settled on 2026-09-30 **by Claude on Tom's behalf**, taking the recommended opti
 - 10 health and 10% damage per point with +2 a level: round numbers that land exactly on today's curve, so nothing built changes.
 - A third from gear by 10: enough that a blue drop feels like a step, not so much that gear outweighs levels.
 - Same health for every class: tuning three health curves before anyone has held a bow or cast a spell would be guessing.
+
+**2026-09-30, after the Inventory map's [What an item is](../../inventory/issues/02-what-an-item-is.md):** Inventory owns gear's numbers, so its targets replace the budget above. A full set of greens of your level gives about a third of your total attributes, and blues about 40% (at level 10, about 14 Stamina and 14 of the main attribute from greens). Only greens and blues carry attributes; whites carry damage or armour. A weapon's damage rating adds to the damage multiplier the way Hale's longsword does today, and armour on gear cuts damage taken. Armour is an item's number, not an attribute, so "no secondary numbers yet" still holds for attributes.
