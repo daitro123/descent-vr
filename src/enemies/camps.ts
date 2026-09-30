@@ -123,6 +123,8 @@ export class Camp {
       switch (m.mind) {
         case 'idle':
           if (here && (hurt || (flat(e.position, you.feet) < notice && this.sees(e.position, you.feet)))) this.engage(m);
+          // Home still wounded, it heals once the wound ends.
+          else if (e.heals && e.hp < e.maxHp) e.hp = m.hp = e.maxHp;
           break;
         case 'fight':
           if (!here || flat(e.position, m.post) > leash) this.sendHome(m);
@@ -138,7 +140,9 @@ export class Camp {
           const lost = m.stalled > stuck.time && flat(e.position, you.feet) > stuck.away;
           if (lost) e.position.set(m.post.x, e.position.y, m.post.z);
           if (d < home || lost) {
-            e.hp = m.hp = e.maxHp;
+            // Home whole, unless Mortal Strike's wound still holds.
+            if (e.heals) e.hp = e.maxHp;
+            m.hp = e.hp;
             m.post.evading = false;
             m.mind = 'idle';
           }

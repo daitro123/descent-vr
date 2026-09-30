@@ -1,6 +1,6 @@
 import { Euler, Object3D, type PerspectiveCamera, Quaternion, type Scene, Vector3, type WebGLRenderer } from 'three';
 import { type Ability, type AdventureEvent, AdventureState, type Effect } from './adventureState';
-import { unlockLine } from './classes';
+import { type Shape, unlockLine } from './classes';
 import { CHAINS } from './quests';
 import { Combat } from './combat/combat';
 import { CONFIG } from './config';
@@ -58,6 +58,7 @@ import { Dropped } from './world/dropped';
 import { StashChest } from './world/stashChest';
 import type { Mine } from './world/mine';
 import { World } from './world/world';
+import { pointsAt, type Talent, TALENT_POINT_LINE, type TalentRefusal } from './talents';
 
 const _a = new Vector3();
 const _b = new Vector3();
@@ -233,9 +234,11 @@ export class Adventure {
     played: Pick<Played, 'key' | 'record' | 'who' | 'write'>,
     /** The zones over its seams (Brackenmoor), walked into with nothing in them. */
     neighbours: readonly Zone[] = [],
+    /** The top level, when a test raises it past the content's (`&cap=`). */
+    cap?: number,
   ) {
     const { key, record, who } = played;
-    this.state = new AdventureState(record ?? undefined, CHAINS, { class: who.class, character: key });
+    this.state = new AdventureState(record ?? undefined, CHAINS, { class: who.class, character: key, cap });
     const { inventory } = this.state;
     this.board.describe = (id) => cardText(id, 1, inventory.wearing, inventory.gear);
     this.saves = new SaveController(played, () => saveRecord(this.state.snapshot(), this.standing, Date.now(), who));
@@ -270,6 +273,14 @@ export class Adventure {
         buzz: (hand, intensity, ms) => this.player.input.pulse(hand, intensity, ms),
         apply: (effects, at) => this.applyThings(effects, at),
         drop: (stack, at, velocity) => this.dropped.drop(stack, at, velocity),
+        // The Talents tab: every press goes through the adventure state, out of a fight, and is shown and saved.
+        talents: {
+          state: this.state,
+          fighting: () => this.fighting,
+          spend: (talent: Talent) => this.onTalents({ kind: 'spend', talent, fighting: this.fighting }),
+          reset: () => this.onTalents({ kind: 'resetTalents', fighting: this.fighting }),
+          swap: (a: Shape, b: Shape) => this.onTalents({ kind: 'swap', shapes: [a, b], fighting: this.fighting }),
+        },
         beltAt: (at) => this.belt.slotNear(at),
       },
       atlas,
@@ -995,6 +1006,15 @@ export class Adventure {
     return probes;
   }
 
+  /** Something pressed on the Talents tab: into the adventure state at your head, and why nothing happened, if it didn't. */
+  private onTalents(event: AdventureEvent): TalentRefusal | null {
+    const effects = this.state.apply(event);
+    this.saves.onEffects(effects);
+    this.show(effects, this.you.head, false);
+    const refused = effects.find((e) => e.kind === 'talentRefused');
+    return refused?.kind === 'talentRefused' ? refused.reason : null;
+  }
+
   /** Something happened: into the adventure state, into the save if it earned anything, and show what it did at `at`. */
   private apply(event: AdventureEvent, at: Vector3): void {
     const effects = this.state.apply(event);
@@ -1052,6 +1072,11 @@ export class Adventure {
         case 'sold':
           this.wares.changed();
           break;
+        case 'talent':
+        case 'talentsReset':
+          // Your talents' numbers and abilities: Toughness's health, a talent ability's pip and shape.
+          this.dressHands();
+          break;
         case 'drank':
           this.player.heal(this.player.maxHp * e.heal);
           break;
@@ -1089,7 +1114,10 @@ export class Adventure {
       sfx.levelUp();
       text.banner(player.camera, `LEVEL ${level}`, '#ffd23a', 0.34, 0.3, banner);
     }
-    unlocks.forEach((a, i) => text.banner(player.camera, unlockLine(a), '#f0e0b0', 0.09, 0.08 - i * 0.12, lines));
+    const said = unlocks.map(unlockLine);
+    // Every level from 2 brings a talent point.
+    if (pointsAt(level) > pointsAt(level - 1)) said.push(TALENT_POINT_LINE);
+    said.forEach((line, i) => text.banner(player.camera, line, '#f0e0b0', 0.09, 0.08 - i * 0.12, lines));
   }
 
   /** Words floating up from `height` metres over `at`. */

@@ -61,6 +61,9 @@ const _capB = new Vector3();
 const _push = new Vector3();
 const _feet = new Vector3();
 const _vel = new Vector3();
+/** The warrior's tier-3 talent abilities' numbers. */
+const MORTAL_STRIKE = CONFIG.talents.trees.warrior.arms.mortalStrike;
+const SHIELD_SLAM = CONFIG.talents.trees.warrior.protection.shieldSlam;
 /** What flies from a bandit when a blow lands. */
 const HUMAN_BLOOD = 0x7a1812;
 const _to = new Vector3();
@@ -90,6 +93,10 @@ export const combatStats = {
   walled: 0,
   /** Second enemies Sweeping Strikes hit. */
   swept: 0,
+  /** Sword hits Mortal Strike doubled. */
+  mortalStrikes: 0,
+  /** Shield bashes Shield Slam turned into a stun. */
+  shieldSlams: 0,
   /** The mage's bolts thrown, and those that landed on an enemy. */
   bolts: 0,
   boltHits: 0,
@@ -244,10 +251,15 @@ export class Combat implements ArrowResolver {
       }
       _p.copy(res.point);
       const crit = res.zone === 'head';
+      const talents = this.player.stats.talents;
+      // Mortal Strike armed: this blow deals double, and the enemy can't heal for a while.
+      const mortal = this.player.abilities.left('mortalStrike') > 0;
       let damage = base * this.player.stats.damage;
-      if (crit) damage *= enemy.def.critMultiplier;
+      if (crit) damage *= enemy.def.critMultiplier * (1 + talents.headHit);
+      if (power >= 1) damage *= 1 + talents.fullSwing;
       if (enemy.exposed > 0) damage *= S.exposedMultiplier;
       if (this.player.frenzy > 0) damage *= S.frenzyMultiplier;
+      if (mortal) damage *= MORTAL_STRIKE.multiplier;
       damage = Math.round(damage);
 
       // Push along the blade's horizontal travel (world space).
@@ -265,13 +277,24 @@ export class Combat implements ArrowResolver {
         scale: crit ? 0.3 : 0.22,
       });
       sfx.hit(crit, _p);
+      if (mortal) this.mortalStrike(enemy, _p, killed);
       this.player.input.pulse('right', CONFIG.feel.hapticHit.intensity * (0.5 + 0.5 * power), CONFIG.feel.hapticHit.ms);
-      this.player.addRage(CONFIG.rage.perHit);
+      this.player.addRage(CONFIG.rage.perHit + talents.hitRage);
       this.events.hitStop(CONFIG.feel.hitStop * (0.5 + power) * (crit ? 1.5 : 1));
       this.events.onEnemyHit(enemy, killed);
       if (killed) this.onKill(enemy);
       if (this.player.abilities.left('sweepingStrikes') > 0) this.sweepOn(enemy, damage, _push, enemies);
     }
+  }
+
+  /** Mortal Strike's blow landed on `enemy` at `at`: the charge is spent, and it can't heal for a while. */
+  private mortalStrike(enemy: Enemy, at: Vector3, killed: boolean): void {
+    this.player.abilities.end('mortalStrike');
+    combatStats.mortalStrikes++;
+    if (!killed) enemy.wound(MORTAL_STRIKE.noHeal);
+    this.fx.particles.burst('blood', at, 14, undefined, ABILITY_COLOUR.mortalStrike);
+    this.fx.text.spawn('MORTAL STRIKE', at.clone().setY(at.y + 0.3), { color: '#ff6070', scale: 0.16 });
+    sfx.mortalHit(at);
   }
 
   /** Sweeping Strikes: the blow that landed on `hit` also strikes the nearest other enemy beside it, for a share of it. */
@@ -343,7 +366,8 @@ export class Combat implements ArrowResolver {
    */
   use(ability: Ability, aim?: Aim): Use {
     const { player } = this;
-    const refused = player.abilities.refuses(ability, player.resource);
+    const cost = player.costOf(ability);
+    const refused = player.abilities.refuses(ability, player.resource, cost);
     if (refused) return refused;
     const W = CONFIG.classes.warrior.abilities;
     switch (ability) {
@@ -357,14 +381,26 @@ export class Combat implements ArrowResolver {
         break;
       }
       case 'shieldWall':
-        player.abilities.used(ability, W.shieldWall.time);
+        player.abilities.used(ability, player.lastsOf(ability, W.shieldWall.time));
         player.shield.flash(ABILITY_COLOUR.shieldWall);
         sfx.shieldWall();
         player.input.pulse('left', 0.8, 120);
         break;
       case 'sweepingStrikes':
-        player.abilities.used(ability, W.sweepingStrikes.time);
+        player.abilities.used(ability, player.lastsOf(ability, W.sweepingStrikes.time));
         sfx.sweepingStrikes();
+        break;
+      // The warrior's tier-3 talents arm the next sword hit or shield bash, which spends the charge within its window.
+      case 'mortalStrike':
+        player.abilities.used(ability, MORTAL_STRIKE.window);
+        sfx.mortalStrike();
+        player.input.pulse('right', 0.8, 120);
+        break;
+      case 'shieldSlam':
+        player.abilities.used(ability, SHIELD_SLAM.window);
+        player.shield.flash(ABILITY_COLOUR.shieldSlam);
+        sfx.shieldSlam();
+        player.input.pulse('left', 0.8, 120);
         break;
       case 'frostNova':
         this.frostNova();
@@ -410,7 +446,7 @@ export class Combat implements ArrowResolver {
       default:
         return 'unbuilt';
     }
-    player.resource -= ABILITY[ability].cost;
+    player.resource -= cost;
     return 'cast';
   }
 
@@ -720,22 +756,40 @@ export class Combat implements ArrowResolver {
         combatStats.guardBreaks++;
       }
       _push.copy(_to).multiplyScalar(S.bashKnockback);
-      const killed = enemy.takeHit(Math.round(S.bashDamage * this.player.stats.damage), _push, { from: _p, ignorePoise: enemy.kind !== 'warden' });
+      const talents = this.player.stats.talents;
+      const bash = (S.bashDamage + talents.bashDamage) * this.player.stats.damage;
+      const killed = enemy.takeHit(Math.round(bash), _push, { from: _p, ignorePoise: enemy.kind !== 'warden' });
       // A steady brute (just out of a stagger) shrugs the bash off and keeps swinging.
       const interrupted = windingUp && !killed && !enemy.attacking;
       if (!killed && broke) enemy.expose(enemy.def.exposedTime * 0.7);
       else if (interrupted && enemy.kind !== 'warden') enemy.expose(enemy.def.exposedTime * 0.7);
+      // Shield Slam armed: this bash stuns and exposes, even a brute fresh out of a stagger; the Warden is only exposed.
+      const slam = this.player.abilities.left('shieldSlam') > 0;
+      if (slam) this.shieldSlam(enemy, killed);
       combatStats.bashes++;
-      const label = broke ? 'GUARD BREAK' : interrupted ? 'INTERRUPT' : 'BASH';
-      this.fx.text.spawn(label, _a.clone().setY(_a.y + 0.3), { color: '#ffb060', scale: 0.16 });
+      const label = slam ? 'SHIELD SLAM' : broke ? 'GUARD BREAK' : interrupted ? 'INTERRUPT' : 'BASH';
+      this.fx.text.spawn(label, _a.clone().setY(_a.y + 0.3), { color: slam ? '#e0e8f0' : '#ffb060', scale: 0.16 });
       this.fx.particles.burst('dust', _a, 6);
-      sfx.bash(_a);
-      this.player.input.pulse('left', 1, 80);
-      this.player.addRage(CONFIG.rage.perBash);
+      if (slam) {
+        this.fx.particles.burst('sparks', _a, 20, undefined, ABILITY_COLOUR.shieldSlam);
+        sfx.shieldSlamHit(_a);
+      } else sfx.bash(_a);
+      this.player.input.pulse('left', 1, slam ? 160 : 80);
+      this.player.addRage(CONFIG.rage.perBash + talents.bashRage);
       this.events.hitStop(0.05);
       this.events.onEnemyHit(enemy, killed);
       if (killed) this.onKill(enemy);
     }
+  }
+
+  /** Shield Slam's bash landed on `enemy`: the charge is spent, and it's stunned and exposed. */
+  private shieldSlam(enemy: Enemy, killed: boolean): void {
+    this.player.abilities.end('shieldSlam');
+    combatStats.shieldSlams++;
+    if (killed) return;
+    const { stun } = SHIELD_SLAM;
+    if (enemy.kind !== 'warden') enemy.stagger(stun);
+    enemy.expose(stun);
   }
 
   /** Earthshaker: drive the sword tip into the floor, fast, with enough rage, once your level has brought it. */
@@ -784,9 +838,10 @@ export class Combat implements ArrowResolver {
   warCry(enemies: Enemy[]): boolean {
     const A = CONFIG.warCry;
     const player = this.player;
-    if (!player.can('warCry') || !player.alive || player.rage < A.cost) return false;
+    const cost = player.costOf('warCry');
+    if (!player.can('warCry') || !player.alive || player.rage < cost) return false;
     const damage = Math.round(A.damage * player.stats.damage);
-    player.rage -= A.cost;
+    player.rage -= cost;
     player.frenzy = A.frenzyTime;
     player.feetPosition(_feet);
     for (const enemy of enemies) {
@@ -842,13 +897,15 @@ export class Combat implements ArrowResolver {
     const onShield = res.contact === 'shield';
     enemy.capsule(_a, _b);
     _to.subVectors(_a, this.defender.torsoTop).setY(0).normalize();
+    // Quick Guard: the parry comes easier, at a slower move into the blow.
+    const ease = 1 + player.stats.talents.parry;
     let parry: boolean;
     if (onShield) {
       _vel.copy(player.shield.centre.velocity).applyQuaternion(player.rig.quaternion);
       _p.subVectors(tip, prevTip).normalize();
-      parry = Math.max(_vel.dot(_to), -_vel.dot(_p)) >= CONFIG.shield.parrySpeed;
+      parry = Math.max(_vel.dot(_to), -_vel.dot(_p)) >= CONFIG.shield.parrySpeed / ease;
     } else {
-      parry = player.sword.tipSpeed >= CONFIG.sword.parrySpeed;
+      parry = player.sword.tipSpeed >= CONFIG.sword.parrySpeed / ease;
     }
     const at = res.point;
     if (parry) {
@@ -875,7 +932,8 @@ export class Combat implements ArrowResolver {
       this.fx.text.spawn('GUARD BREAK', at.clone().setY(at.y + 0.25), { color: '#ff8040', scale: 0.17 });
       sfx.guardBreak();
       if (onShield) {
-        player.shield.numb = CONFIG.shield.numbTime;
+        // Iron Arm numbs it less, and at its fullest not at all.
+        player.shield.numb = CONFIG.shield.numbTime * Math.max(0, 1 - player.stats.talents.numbLess);
         player.shield.flash(0xff6030);
       }
       this.hurtPlayer(held.chip, enemy, false);

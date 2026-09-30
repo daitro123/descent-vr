@@ -204,7 +204,7 @@ export class Gestures {
     const B = CONFIG.gestures.buzz.read;
     player.input.hands.right.grip.getWorldPosition(_p);
     particles.burst('magic', _p, 28, undefined, colour);
-    const cost = ABILITY[ability].cost;
+    const cost = player.costOf(ability);
     const paid = cost ? `  -${cost} ${player.stats.resource.kind}` : '';
     text.spawn(`${ABILITY[ability].name}${paid}`, _p.clone().setY(_p.y + 0.15), { color: hex(colour), scale: 0.1, life: 1.4 });
     player.input.pulse('right', B.intensity, B.ms);
