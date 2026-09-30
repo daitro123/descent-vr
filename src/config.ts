@@ -739,7 +739,7 @@ export const CONFIG = {
     // By what the enemy was: coins are `coins` × level × the role's `coins` (a whole number, evenly),
     // junk drops at `junk`, and one piece of gear at most, of a rarity by `gear`'s chances; a boss
     // drops every rarity in `every` instead. What the Warden raises drops nothing.
-    coins: [1, 3],
+    coins: [1, 4], // so the plain route pays about 330 before spending (inventory ticket 17: 1 to 3 paid about 275)
     roles: {
       ordinary: { coins: 1, junk: 0.4, gear: { white: 0.08, green: 0.03 }, every: [] },
       leader: { coins: 3, junk: 0.6, gear: { green: 0.75, blue: 0.25 }, every: [] },
