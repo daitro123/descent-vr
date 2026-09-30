@@ -33,7 +33,8 @@ npm run dev          # http://localhost:5173
     - `?showcase` pins the title-screen camera on the bestiary lineup, for reviewing models without a headset.
     - `&class=ranger` is a throwaway prototype of the ranger (`src/prototype/ranger/`, [How the ranger fights](.scratch/abilities/issues/05-how-the-ranger-fights.md)): a bow in the left hand instead of the sword and shield. Touch the string with your right hand and hold the trigger to nock an arrow, pull back and let go; a fuller draw hits harder and flies flatter, and a head shot crits. `&variant=` picks what the ranger does up close, and clicking the right stick cycles them: `ward` (the default: the left grip raises a short ward that stops arrows and, raised just in time, sends them back), `knife` (a knife in the draw hand, and swinging the bow parries a blow or swats an arrow back) or `kite` (two dashes and a longer step, but only 12 arrows, one back every 1.5 s).
     - `?class=mage` fights the waves as the mage, a prototype (`src/prototype/mage/`, [ticket](.scratch/abilities/issues/06-how-the-mage-fights.md)): hold a trigger to charge a bolt in that hand and let go mid-throw to cast it (a hard throw makes a small fast bolt, a gentle toss a big slow one); hold the left grip to raise a ward that blocks like the shield, spending mana; B/Y blinks 3.5 m. The right stick's click steps through three kits (`?kit=A`, the pick, `B` a wand, `C` a palm push with two casting hands), named on a panel over your left hand; `?cast=throw|wand|push`, `?focus=ward|wardOnly|caster`, `?move=blink|dash` and `?mana=free|spend` change one thing at a time.
-    - `&gestures` adds a throwaway prototype of abilities by gesture (`src/prototype/gestures/`, [ticket](.scratch/abilities/issues/07-using-abilities-by-gesture.md)) over the class, the warrior's too (`?arena&class=warrior&gestures`, or no `&class=`). Hold the **right** grip, draw a shape in the air in front of you, let go: a ring (from the top, clockwise), a Z, a V, a triangle (from the top, down to the right first) and, for the ranger and the mage, an S each cast a placeholder ability, a coloured burst paid for in rage, focus or mana; the ranger and the mage also have one on A/X. A grip squeezed at a shoulder, a hip or the tool loop never arms. A panel low on your left counts what was read. Clicking the right stick steps through its modes: FIGHT, DRILL (the fight holds still and the panel asks for each gesture in turn, counting how many were read right), JUNK (it asks for sword swings, bow draws or bolt throws with the grip held, and counts how many fired a gesture by mistake) and RECORD (what you draw becomes that gesture's template, kept in this browser; the left stick's click skips, A/X forgets). Clicking the left stick steps the gesture set (`&vocab=C`, shapes, is the pick; `A` mixes two flicks in, `B` is all flicks).
+    - `&class=warrior` (or no `&class=`) is the warrior at level 1 with every base ability to level 10: the War Cry, Earthshaker and the three gesture abilities, Heroic Throw, Shield Wall and Sweeping Strikes (see [Abilities by gesture](#abilities-by-gesture)). The arena keeps no save, so the first shape hangs in the air again on every visit until you draw it.
+    - `&gestures` swaps the game's gestures for the throwaway prototype of them (`src/prototype/gestures/`, [ticket](.scratch/abilities/issues/07-using-abilities-by-gesture.md)) over the class, the warrior's too (`?arena&gestures`): it stays for the ranger and the mage until they're built, and for recording templates. Hold the **right** grip, draw a shape in the air in front of you, let go: a ring (from the top, clockwise), a Z, a V, a triangle (from the top, down to the right first) and, for the ranger and the mage, an S each cast a placeholder ability, a coloured burst paid for in rage, focus or mana; the ranger and the mage also have one on A/X. A grip squeezed at a shoulder, a hip or the tool loop never arms. A panel low on your left counts what was read. Clicking the right stick steps through its modes: FIGHT, DRILL (the fight holds still and the panel asks for each gesture in turn, counting how many were read right), JUNK (it asks for sword swings, bow draws or bolt throws with the grip held, and counts how many fired a gesture by mistake) and RECORD (what you draw becomes that gesture's template, kept in this browser and logged to the console, for pasting into `src/player/gestures/recorded.ts`; the left stick's click skips, A/X forgets). Clicking the left stick steps the gesture set (`&vocab=C`, shapes, is the pick; `A` mixes two flicks in, `B` is all flicks).
   - `?bag` is a **prototype** of the bag and the gear panel (inventory ticket 03), in a quiet yard with a training dummy: reach over either shoulder and squeeze the grip to bring the bag round. `?bag=a` (touch an item with a fist or the sword's tip and hold the grip to carry it, the pick), `?bag=b` (press an item, then press where it goes) and `?bag=c` (grab it with your hand) are the three ways to move items; in the headset a click of the left stick switches between them, and the right stick swaps the slots' icons for small 3D models (`&models` starts with them). Nothing in it reaches the Adventure or the save.
   - `?perf` adds a readout of the frame rate, draw calls, triangles (both eyes), shader programs, the most bytes uploaded to the GPU in a frame and, in Oakvale, the chunks loaded at full detail and as far stand-ins, low on the left of your view, over Oakvale or the arena.
   - `?emulate` forces the emulator even when a real headset is present, and `?noemulate` rules it out (the page's desktop camera, for screenshots). `?emulate&nodevui` runs it without the DevUI, so controller poses are driven only by code (for scripted tests). `window.__descent` is the debug handle; in Oakvale it has `adventure`, `characters` (the roster: `slots`, `picked`, `play()`), `world`, `player`, `camps`, `state` (your level and XP, and what Hale, the tracker and the quest arrow show), `device` (the emulator's), `saved()` (resolves once no save write is in flight), `paused` (stops VR frames stepping the game), `teleport(x, z, yaw)` and `step(seconds)`, which runs the game without waiting for frames. The scripted checks in `.scratch/oakvale-starting-zone/checks/` drive it, `play-through.mjs` from `?newgame` to Brackenmoor.
@@ -58,9 +59,22 @@ Other commands: `npm test` runs the unit tests, `npm run typecheck`, `npm run bu
 | B / Y | **Dash**: a quick step in the stick's direction, or backwards if the stick is neutral. You can't be hit for a moment. |
 | A / X | **War Cry**: 50 rage for an area knockback and stagger, then 8 s of **frenzy** (the blade burns, +35% damage). |
 | Sword tip driven into the floor | **Earthshaker**: 35 rage for a shockwave where the tip lands |
+| Right grip held, a shape drawn, let go | An ability by gesture, from level 6 (in the arena, from the start): see below |
 | Hand or feet | Touch a red orb to heal a quarter of your health |
 
-The belt HUD (look down) shows health on the left orb and rage on the right orb, with pips for Earthshaker and War Cry beneath it. Between the orbs is the dash cooldown, and in the arena the wave and the enemies left. Rage builds from hits, blocks, parries and bashes.
+The belt HUD (look down) shows health on the left orb and rage on the right orb, with a pip beneath it for each ability your level has brought, lit while it's ready and you have the rage for it. Between the orbs is the dash cooldown, and in the arena the wave and the enemies left. Rage builds from hits, blocks, parries and bashes.
+
+### Abilities by gesture
+
+Hold the **right** grip, draw a shape in the air in front of you, and let go: the stroke is read once, on release. The grip ticks as it arms and a faint trail follows your hand. A shape read flashes the trail in its ability's colour, a burst leaves your hand with its own sound and a strong buzz, and the ability's name floats up with its cost. A stroke that reads as nothing is a grey puff, a "?" and two ticks, and costs nothing; so does a shape read when you haven't the rage ("not enough rage") or it isn't ready yet. The sword still cuts while the grip is held, and no swing, thrust or block reads as a shape. A grip squeezed over a shoulder (the bag), at a hip (a potion) or in the tool loop behind the right hip never arms, nor does a stroke held over 1.6 s. The first time a shape holds an ability, it hangs faintly in the air ahead of you, bright where it starts, until you've drawn it once.
+
+| Shape | Level | Ability | Rage | Cooldown | What it does |
+|---|---|---|---|---|---|
+| Ring (from the top, clockwise) | 6 | **Heroic Throw** | 15 | 6 s | A spectral axe flies up to 20 m at the nearest enemy within 15° of where your right hand faces (or, with none there, of where you look): 20 damage and a stagger. |
+| Z (across, down to the left, across) | 8 | **Shield Wall** | 25 | 30 s | For 6 s the shield glows gold, and a block takes no damage from any blow, the brute's heavy swing included, and doesn't numb the arm. The slam still can't be blocked. |
+| V (down, back up to the right) | 10 | **Sweeping Strikes** | 30 | 20 s | For 8 s every sword hit also strikes the nearest other enemy within 1.5 m of the one you hit, for 60%. |
+
+The level cap is 5 today, so in Oakvale these wait for a zone past it; the arena has them all.
 
 ## Playing Oakvale
 
@@ -131,6 +145,7 @@ src/
   prototype/         throwaway prototypes kept for trying on the headset, each behind its URL flag
     mage/            ?arena&class=mage: the mage's bolts, ward, blink and mana, in three kits
     ranger/          ?arena&class=ranger: the ranger's bow, with a ward, a knife or kiting
+    gestures/        ?arena&gestures: abilities by gesture over any class, with its drill, junk and record modes
   viewer/
     mapViewer.ts     ?fly: free flight through every map in maps/
     touchControls.ts on-screen stick, look and buttons for the viewer on phones
@@ -145,10 +160,15 @@ src/
     input.ts         XR controllers → left/right hands, sticks, buttons, haptics
     player.ts        rig, locomotion, snap turn, dash, collision, HP/rage/frenzy, body volumes
     weapons.ts       sword + shield; velocity tracking in rig space
+    gestures/        abilities by gesture: the recogniser (matcher.ts, recorder.ts; unit tested), the five shapes and
+                     their templates, and gestures.ts, which arms it on the right grip, shows the trail, the read and
+                     the shape not yet drawn, and uses the ability in the shape's slot
   combat/
     geometry.ts      segment–segment, segment–box, circle push-out (unit tested)
     strike.ts        an enemy weapon's swing swept against shield, sword and body (unit tested)
-    combat.ts        sword hits and crits, blocks and parries, bash, Earthshaker, War Cry, arrow outcomes
+    combat.ts        sword hits and crits, blocks and parries, bash, Earthshaker, War Cry, the gesture abilities, arrow outcomes
+    abilities.ts     the gesture abilities' rules: cooldowns, Heroic Throw's aim, Shield Wall's blocks, Sweeping Strikes' reach (unit tested)
+    thrownAxes.ts    Heroic Throw's axes in flight (instanced)
     projectiles.ts   arrows: flight, sticking, reflecting (instanced)
   enemies/
     enemy.ts         shared machinery: rising, steering, attack timeline, stagger/expose/kneel, deaths

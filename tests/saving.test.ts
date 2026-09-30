@@ -543,6 +543,17 @@ describe('your characters', () => {
     expect(fourth.play().record).toEqual(newRecord({ class: 'warrior', name: 'Aldric' }, 1));
   });
 
+  it("keeps the shapes each character has drawn: today's record's through the migration, and each character's apart", async () => {
+    const store = new MemoryStore({ [FIRST]: { ...V3, drawn: ['ring'] } });
+    const characters = await Characters.read(store);
+    const you = characters.play();
+    expect(you.record?.drawn).toEqual(['ring']);
+    await you.write(played(you.record, you.who).record);
+    await characters.make('warrior', 'Garrick', 5);
+    const again = await Characters.read(store);
+    expect(again.slots.map((s) => (s.kind === 'saved' ? s.record.drawn : 'none'))).toEqual([['ring'], undefined]);
+  });
+
   it('keeps at most three', async () => {
     const characters = await Characters.read(new MemoryStore());
     for (const name of ['Aldric', 'Brenna', 'Corwin']) expect(await characters.make('warrior', name)).not.toBeNull();

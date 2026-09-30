@@ -34,13 +34,13 @@ Built on 2026-09-30 **by Claude on Tom's behalf**, taking the recommended option
 - **Slots close up** when a character is deleted; empty slots are always last.
 - **Rename is a button beside Delete** rather than pressing the name, since pressing a slot picks it.
 - **The roster has its own version (1)**, so the character record's version only tracks the character's shape.
-- **Talents and gesture slots aren't in the record yet**: nothing holds them until tickets 19 and 25, which add them with the next bump (4 → 5).
+- **Talents aren't in the record yet**: nothing holds them until ticket 25, which adds them with the next bump (4 → 5). Ticket 19 (merged alongside) keeps the shapes you've drawn as an optional `drawn` list in `Progress`, so each character's record carries its own, and today's record keeps it through the 3 → 4 migration (tested).
 - **`?newgame` never deletes.** A save this page can't read is a slot saying so, with Delete; before, it blocked saving until `?newgame` deleted it. Only an unreadable roster (which no build writes) still plays unsaved.
 - Suggested names come from a list of 16 placeholders (`NAMES` in `store.ts`), one none of your characters has.
 
 **For later tickets:**
 
-- **19 (gestures):** the gesture slots belong in the character record: add them to `SaveRecord` (and `isCurrent`), bump `SAVE_VERSION` to 5 with a migration giving the defaults, and put them in `newRecord`. Merge main first in case 25 or an Inventory ticket bumped it.
+- **19 (gestures):** merged before this; its `drawn` rides in each character's record with the rest of `Progress`. If swapped gesture slots are ever saved, they go in the character record the same way.
 - **21 and 23 (the ranger, the mage):** add the class to `PLAYABLE` in `classes.ts` and its card appears in the form; `newRecord` already starts a character in its class's kit and the Adventure already makes the state of the record's class. The pending first-visit character is a warrior (`Characters.play()`); decide whether a first visit opens the form.
 - **24 (the mage's abilities at 6, 8 and 10):** nothing here; the class comes from the record.
 - **25 (talents):** points spent go in the character record with the same kind of bump.

@@ -14,7 +14,7 @@ export type Route =
   /**
    * `?arena`: the wave game. `?duel`, `?wave=N` and `?showcase` alone open it too.
    * `&class=<name>` swaps the warrior for a class prototype (`src/prototype/`), when one exists.
-   * `&gestures` adds the gesture abilities prototype (`src/prototype/gestures/`).
+   * `&gestures` swaps the game's gestures for their prototype (`src/prototype/gestures/`).
    */
   | { kind: 'arena'; firstWave: number; duel: boolean; showcase: boolean; playerClass?: string; gestures?: true }
   /** `?proto=<name>`: a throwaway professions prototype (src/professions/prototypes). */
