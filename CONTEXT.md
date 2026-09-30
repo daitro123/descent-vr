@@ -127,3 +127,43 @@ _Avoid_: emitter, sound source, point sound
 **Mix**:
 How loud and how muffled each part of the ambience is right now, following the light's cues: behind a shut door the outdoors goes quiet and muffled and the room's fires come up, past the mine's bend the outdoors gives way to the mine's own air, at the crypt's breach the drone rises, and while anything fights you it all dips.
 _Avoid_: mixer, ducking, audio state
+
+**Item**:
+Anything that can sit in the bag: gear, a consumable, a material, a quest item or junk.
+_Avoid_: object, thing, loot (loot is items as they drop)
+
+**Bag**:
+What you carry items in, on your back. You reach over your shoulder to pull it round and sort it. It starts with 16 slots.
+_Avoid_: backpack, pack, inventory (the inventory is the whole system: bag, gear, belt, coins and stash)
+
+**Gear**:
+The items you wear, one in each of seven slots: main hand, off hand, head, chest, hands, legs and feet. A weapon is gear locked to the class that fights with it; armour anyone can wear.
+_Avoid_: equipment, kit, outfit
+
+**Belt**:
+Two slots at your hips for what you use in the middle of a fight, taken by hand, like a potion you lift to your mouth.
+_Avoid_: quick slots, hotbar, holster (the health orbs and level you glance down at are the belt HUD, not the belt)
+
+**Loot**:
+Items and coins as they drop from enemies or lie in chests, before you take them. Loot glows in its rarity's colour, and a touch takes it.
+_Avoid_: drops, reward (a reward is what a hand-in pays)
+
+**Rarity**:
+How good an item is for its level, shown by the colour of its name and its glow: grey (junk), white, green or blue.
+_Avoid_: quality, tier, grade
+
+**Junk**:
+Grey items that are only worth selling.
+_Avoid_: trash, vendor trash
+
+**Coins**:
+The one currency. They take no slot in the bag.
+_Avoid_: gold, money, currency
+
+**Vendor**:
+A villager who buys and sells: in Oakvale, the smith (gear, and anything you bring) and the innkeeper (food and potions).
+_Avoid_: merchant, shopkeeper, trader
+
+**Stash**:
+The chest at the inn where you keep items you aren't carrying.
+_Avoid_: bank, storage, vault
