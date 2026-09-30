@@ -330,13 +330,24 @@ export class Inventory {
     return effects;
   }
 
-  /** Put a reward straight into its gear slot, whatever your level, with what you wore going into the bag. */
-  wear(id: ItemId): InventoryEffect[] {
-    const item = itemOf(id);
-    if (item?.kind !== 'gear') return refuse('slot');
-    const was = this.worn[item.slot];
-    const effects = this.put({ in: 'gear', slot: item.slot }, { id, count: 1 });
-    return was ? [...effects, ...this.take([{ id: was, count: 1 }])] : effects;
+  /**
+   * Take `stack` in as a reward (a hand-in's pick), into bag slot `to` or
+   * wherever it fits: refused, and left where it was offered, if there's no room.
+   */
+  receive(stack: Stack, to?: Where): InventoryEffect[] {
+    const no = this.checkReceive(stack, to);
+    if (no) return refuse(no, to);
+    return this.stowAt(stack, to);
+  }
+
+  /** Why `receive(stack, to)` would be refused, or null if it would go. */
+  checkReceive(stack: Stack, to?: Where): Refusal | null {
+    const item = itemOf(stack.id);
+    if (!item || item.kind === 'quest' || stack.count < 1) return 'slot';
+    if (!to) return this.room(stack.id) < stack.count ? 'full' : null;
+    if (to.in !== 'bag' || !this.exists(to)) return 'slot';
+    const dst = this.at(to);
+    return dst && (dst.id !== stack.id || dst.count + stack.count > stackOf(item)) ? 'full' : null;
   }
 
   /** Remove quest item `id` from the quest page, as a hand-in takes it. */
@@ -534,18 +545,19 @@ export class Inventory {
   /** Pay `price` for `stack`, into bag slot `to` or wherever it fits. */
   private purchase(stack: Stack, price: number, to?: Where): InventoryEffect[] {
     if (price > this.purse) return refuse('coins', to);
-    const effects: InventoryEffect[] = [];
-    if (to) {
-      if (to.in !== 'bag' || !this.exists(to)) return refuse('slot', to);
-      const dst = this.at(to);
-      if (dst && (dst.id !== stack.id || dst.count + stack.count > stackOf(itemOf(stack.id)!))) return refuse('full', to);
-      effects.push(...this.put(to, { id: stack.id, count: (dst?.count ?? 0) + stack.count }));
-    } else {
-      if (this.room(stack.id) < stack.count) return refuse('full');
-      this.stow(stack.id, stack.count, effects);
-    }
+    const no = this.checkReceive(stack, to);
+    if (no) return refuse(no, to);
+    const effects = this.stowAt(stack, to);
     this.purse -= price;
     return [...effects, { kind: 'coins', coins: this.purse }];
+  }
+
+  /** Put `stack`, which has room, into bag slot `to` or wherever it fits. */
+  private stowAt(stack: Stack, to?: Where): InventoryEffect[] {
+    const effects: InventoryEffect[] = [];
+    if (to) effects.push(...this.put(to, { id: stack.id, count: (this.at(to)?.count ?? 0) + stack.count }));
+    else this.stow(stack.id, stack.count, effects);
+    return effects;
   }
 }
 
