@@ -182,7 +182,7 @@ async function throwAt(pick, range = 4) {
     hold('right', [0.25, 1.5 - 4 * 0.004, 0.15 - (4 * 4.5) / 72]);
     tick();
     const b = bolts.length > n ? bolts[bolts.length - 1] : null;
-    const cast = b && { damage: b.damage, fire: b.fire, locked: b.target === window.__target };
+    const cast = b && { damage: b.damage, fire: b.charge === 'fireball', locked: b.target === window.__target };
     for (let t = 0; t < 1 && bolts.length; t += 1 / 72) {
       if (window.__target.alive) keepAt(window.__target, range);
       down();

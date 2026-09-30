@@ -5,8 +5,17 @@ import type { Ground } from '../world/ground';
 // The mage's rules, with nothing drawn (.scratch/abilities/spec.md, "The
 // mage"): how a throw shapes the bolt and how long a charge makes it hurt,
 // what the ward costs, how far a blink goes before a wall stops it, whom
-// Frost Nova catches and whom a Fireball's burst reaches. Combat and the
-// mage's hands (player/mage.ts) apply them; the tests drive them here.
+// Frost Nova catches, whom a Fireball's burst reaches and whom Chain
+// Lightning arcs to. Combat and the mage's hands (player/mage.ts) apply them;
+// the tests drive them here.
+
+/**
+ * The abilities that change the mage's next bolt (Fireball, Frostbolt, Chain
+ * Lightning). One waits at a time: drawing another while one waits spends
+ * nothing and says which is waiting.
+ */
+export const BOLT_CHARGES = ['fireball', 'frostbolt', 'chainLightning'] as const;
+export type BoltCharge = (typeof BOLT_CHARGES)[number];
 
 /** A bolt's size and speed. */
 export interface BoltShape {
@@ -86,4 +95,30 @@ export interface Caught {
 /** The enemies a burst at `at` reaches: every one a blow can land on whose body is within `radius` m, but `not`. */
 export function within<T extends Caught>(at: Vector3, radius: number, enemies: readonly T[], not: T | null = null): T[] {
   return enemies.filter((e) => e !== not && e.hittable && Math.hypot(e.position.x - at.x, e.position.z - at.z) - e.def.radius <= radius);
+}
+
+/**
+ * Whom Chain Lightning arcs on to from `struck`: up to `jumps` more enemies,
+ * each the nearest one a blow can land on within `reach` m of the last one
+ * struck (body to body), never one twice. In the order the arcs reach them.
+ */
+export function chainFrom<T extends Caught>(struck: T, enemies: readonly T[], jumps: number, reach: number): T[] {
+  const chain: T[] = [];
+  let from = struck;
+  while (chain.length < jumps) {
+    let best: T | null = null;
+    let near = Infinity;
+    for (const e of enemies) {
+      if (e === struck || chain.includes(e) || !e.hittable) continue;
+      const gap = Math.hypot(e.position.x - from.position.x, e.position.z - from.position.z) - e.def.radius - from.def.radius;
+      if (gap <= reach && gap < near) {
+        best = e;
+        near = gap;
+      }
+    }
+    if (!best) break;
+    chain.push(best);
+    from = best;
+  }
+  return chain;
 }

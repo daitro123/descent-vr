@@ -219,7 +219,9 @@ export class Gestures {
           ? `ready in ${Math.ceil(player.abilities.cooldown(ability))} s`
           : use === 'no target'
             ? 'nothing to throw at'
-            : 'not built yet';
+            : use === 'waiting'
+              ? waitingWords(ability, player.abilities.waitingOn())
+              : 'not built yet';
     this.say(`${name}: ${why}`, '#8090a0');
     const B = CONFIG.gestures.buzz.dull;
     player.input.pulse('right', B.intensity, B.ms);
@@ -338,3 +340,8 @@ function hintGeometry(shape: Shape): BufferGeometry {
 }
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
+
+/** Why an ability that changes your next attack waits: it already does, or another does. */
+function waitingWords(ability: Ability, waiting: Ability | null): string {
+  return !waiting || waiting === ability ? 'already waiting' : `${ABILITY[waiting].name} is waiting`;
+}
