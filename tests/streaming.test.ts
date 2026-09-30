@@ -70,8 +70,12 @@ describe("Oakvale's zone", () => {
 
 describe("Oakvale's chunk builder", () => {
   const same = (a: ChunkData, b: ChunkData) => {
-    // Byte for byte, NaNs and all.
-    for (const k of ['position', 'normal', 'color', 'fx', 'uv'] as const) expect(new Uint8Array(a[k].buffer), k).toEqual(new Uint8Array(b[k].buffer));
+    // Byte for byte, NaNs and all: the first byte that differs, if any (a deep equal over a million bytes takes seconds).
+    for (const k of ['position', 'normal', 'color', 'fx', 'uv'] as const) {
+      const [x, y] = [new Uint8Array(a[k].buffer), new Uint8Array(b[k].buffer)];
+      expect(y.length, k).toBe(x.length);
+      expect(x.findIndex((v, i) => v !== y[i]), k).toBe(-1);
+    }
     expect(a.sphere).toEqual(b.sphere);
   };
 
