@@ -3,6 +3,9 @@ import { CONFIG } from '../config';
 import type { SaveRecord } from './record';
 import type { SaveStore } from './store';
 
+/** What changes nothing the save keeps. */
+const UNSAVED: ReadonlySet<Effect['kind']> = new Set(['xp', 'refused', 'left', 'loot']);
+
 /**
  * When the Adventure writes its save: at once for anything earned or changed
  * (a quest taken, a count going up, a quest ready or handed in, a level, and
@@ -27,9 +30,13 @@ export class SaveController {
     private readonly snapshot: () => SaveRecord,
   ) {}
 
-  /** What the adventure state or the inventory did: anything but XP alone, or a refusal, is written at once. */
+  /**
+   * What the adventure state or the inventory did: anything but XP alone, a
+   * refusal, loot left on the ground (a full bag) or a drop lying there (not
+   * saved until taken) is written at once.
+   */
   onEffects(effects: readonly Effect[]): void {
-    if (effects.some((e) => e.kind !== 'xp' && e.kind !== 'refused')) this.write();
+    if (effects.some((e) => !UNSAVED.has(e.kind))) this.write();
   }
 
   /** The current zone, each frame: written when it changes. */
