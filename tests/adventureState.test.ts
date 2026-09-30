@@ -90,8 +90,8 @@ describe('a kill', () => {
     const loot = drop(leader)!;
     expect(loot).toMatchObject({ kind: 'loot' });
     if (loot.kind !== 'loot') return;
-    expect(loot.coins).toBeGreaterThanOrEqual(6);
-    expect(loot.coins).toBeLessThanOrEqual(18);
+    expect(loot.coins).toBeGreaterThanOrEqual(CONFIG.loot.coins[0] * 6);
+    expect(loot.coins).toBeLessThanOrEqual(CONFIG.loot.coins[1] * 6);
     const gear = loot.items.map((id) => CATALOGUE[id]).filter((i) => i.kind === 'gear');
     expect(gear).toHaveLength(1);
     expect(gear[0]).toMatchObject({ level: 2 });

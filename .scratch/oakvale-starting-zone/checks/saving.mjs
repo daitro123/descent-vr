@@ -378,7 +378,8 @@ await open('?emulate&nodevui');
   other.on('pageerror', (e) => errors.push(e.message));
   await other.goto(`${base}/?emulate&nodevui`);
   await other.waitForFunction(() => window.__descent?.adventure, null, { timeout: 120000 });
-  const offline = await other.locator('.save-note').innerText();
+  // Read straight off the page: a locator's wait here never saw the note, though it's there (inventory ticket 17).
+  const offline = await other.evaluate(() => document.querySelector('.save-note')?.textContent ?? '');
   const level = await other.evaluate(() => window.__descent.state.level);
   check(/won't be kept/.test(offline) && level === 1, `where IndexedDB won't open, the game plays (level ${level}) and the page says "${offline}"`);
   if (shots) await other.screenshot({ path: `${shots}/05-unsaved-note.png` });

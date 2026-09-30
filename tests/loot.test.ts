@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { Role } from '../src/adventureState';
 import { CATALOGUE, CLASS_MAIN, type ClassId, GEAR_SLOTS, type GearItem, itemOf, JUNK, LOOT_LEVELS, type Rarity } from '../src/items';
-import { type Fallen, type Loot, lootSeed, rollLoot, seeded } from '../src/loot';
+import { CONFIG } from '../src/config';
+import { planOakvale } from '../src/maps/forest/layout';
+import { type Fallen, type Loot, lootSeed, rollChest, rollLoot, seeded } from '../src/loot';
 import type { Family } from '../src/models/characters';
 
 // Loot, rolled from a seed: over many rolls each role lands the spec's rates
@@ -45,13 +47,15 @@ describe('a roll', () => {
 });
 
 describe('each role', () => {
-  it('an ordinary enemy: 1 to 3 × its level in coins, junk 40%, a white 8% and a green 3%', () => {
+  const [LOW, HIGH] = CONFIG.loot.coins;
+  it(`an ordinary enemy: ${LOW} to ${HIGH} × its level in coins, junk 40%, a white 8% and a green 3%`, () => {
     const loot = many(kill('ordinary', 2));
     const coins = loot.map((l) => l.coins);
-    expect(Math.min(...coins)).toBe(2);
-    expect(Math.max(...coins)).toBe(6);
+    expect(Math.min(...coins)).toBe(LOW * 2);
+    expect(Math.max(...coins)).toBe(HIGH * 2);
     // Every whole number in between, about evenly.
-    for (let c = 2; c <= 6; c++) expect(coins.filter((n) => n === c).length / ROLLS).toBeCloseTo(0.2, 1);
+    const each = 1 / ((HIGH - LOW) * 2 + 1);
+    for (let c = LOW * 2; c <= HIGH * 2; c++) expect(Math.abs(coins.filter((n) => n === c).length / ROLLS - each)).toBeLessThan(0.02);
     const r = rates(loot);
     expect(r.junk).toBeCloseTo(0.4, 1);
     expect(Math.abs(r.white - 0.08)).toBeLessThan(0.01);
@@ -65,8 +69,8 @@ describe('each role', () => {
     it(`a ${role}: three times the coins, junk 60%, and always one piece, 75% green and 25% blue`, () => {
       const loot = many(kill(role, 4, role === 'leader' ? 'bandit' : 'undead'));
       const coins = loot.map((l) => l.coins);
-      expect(Math.min(...coins)).toBe(12);
-      expect(Math.max(...coins)).toBe(36);
+      expect(Math.min(...coins)).toBe(LOW * 12);
+      expect(Math.max(...coins)).toBe(HIGH * 12);
       const r = rates(loot);
       expect(Math.abs(r.junk - 0.6)).toBeLessThan(0.02);
       expect(Math.abs(r.green - 0.75)).toBeLessThan(0.02);
@@ -79,8 +83,8 @@ describe('each role', () => {
   it('the Warden: ten times the coins, no junk, and a blue and a green every time', () => {
     const loot = many(kill('warden', 5, 'undead'));
     const coins = loot.map((l) => l.coins);
-    expect(Math.min(...coins)).toBe(50);
-    expect(Math.max(...coins)).toBe(150);
+    expect(Math.min(...coins)).toBe(LOW * 50);
+    expect(Math.max(...coins)).toBe(HIGH * 50);
     for (const l of loot) {
       expect(itemsOf([l], 'junk')).toEqual([]);
       expect(itemsOf([l], 'gear').map((i) => i.rarity)).toEqual(['blue', 'green']);
@@ -140,5 +144,24 @@ describe('the catalogue', () => {
     for (const kinds of Object.values(JUNK))
       for (const [base, name] of kinds)
         for (const level of LOOT_LEVELS) expect(itemOf(`${base}-${level}`)).toMatchObject({ kind: 'junk', rarity: 'grey', level, name });
+  });
+});
+
+describe("Oakvale's plain route", () => {
+  it('pays 300 to 400 coins before spending, on average: every camp, the Warden and the three chests', () => {
+    const oak = planOakvale();
+    const kills: Fallen[] = oak.camps.flatMap((c) => c.posts.map((p) => ({ role: p.role ?? 'ordinary', level: p.level ?? c.level, family: p.family })));
+    kills.push({ role: 'warden', level: CONFIG.warden.hall.level, family: 'undead' });
+    expect(kills).toHaveLength(4 + 5 + 2 + 3 + 7 + 1);
+    expect(oak.chests).toHaveLength(3);
+    const runs = 2000;
+    let total = 0;
+    for (let run = 0; run < runs; run++) {
+      kills.forEach((k, i) => (total += rollLoot(k, 'warrior', seeded(lootSeed('route', run, i))).coins));
+      oak.chests.forEach((c) => (total += rollChest(c.level, 'warrior', seeded(lootSeed('route', run, c.id))).coins));
+    }
+    const mean = total / runs;
+    expect(mean).toBeGreaterThanOrEqual(300);
+    expect(mean).toBeLessThanOrEqual(400);
   });
 });
