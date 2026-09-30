@@ -8,7 +8,14 @@ import type { CampId } from '../src/maps/types';
 // the tracker, XP, levels and the sword, the Warden on its throne and Hale's
 // sword at their hip. Kills anywhere are events like any other.
 
-const kill = (camp: CampId | null, level: number, role: Role = 'ordinary'): AdventureEvent => ({ kind: 'kill', camp, level, role });
+const kill = (camp: CampId | null, level: number, role: Role = 'ordinary'): AdventureEvent => ({
+  kind: 'kill',
+  camp,
+  level,
+  role,
+  family: camp === 'mine' || camp === null ? 'undead' : 'bandit',
+  seed: 1,
+});
 const ACCEPT: AdventureEvent = { kind: 'accept' };
 const HAND_IN: AdventureEvent = { kind: 'handIn' };
 const ORDERS: AdventureEvent = { kind: 'pickup', item: 'orders' };
@@ -23,8 +30,9 @@ const MINE = kill('mine', 3);
 const DIG_BRUTE = kill('mine', 4, 'deepBrute');
 const WARDEN = kill(null, 5, 'warden');
 
+/** Every effect of `events` but kills' drops (loot's own tests have those). */
 function play(state: AdventureState, ...events: AdventureEvent[]): Effect[] {
-  return events.flatMap((e) => state.apply(e));
+  return events.flatMap((e) => state.apply(e)).filter((e) => e.kind !== 'loot');
 }
 
 const times = (n: number, event: AdventureEvent) => Array.from({ length: n }, () => event);
@@ -66,7 +74,7 @@ describe('Raiders in the Fields', () => {
   it("counts the farm's bandits as they fall", () => {
     const state = new AdventureState();
     play(state, ACCEPT);
-    expect(state.apply(FARM)).toEqual([
+    expect(play(state, FARM)).toEqual([
       { kind: 'xp', amount: 10 },
       { kind: 'progress', quest: 'raiders', objective: 0, count: 1 },
     ]);
@@ -88,7 +96,7 @@ describe('Raiders in the Fields', () => {
   it('counts no more once ready: a fourth bandit pays its XP and nothing else', () => {
     const state = new AdventureState();
     play(state, ACCEPT, FARM, FARM, FARM);
-    expect(state.apply(FARM)).toEqual([{ kind: 'xp', amount: 10 }]);
+    expect(play(state, FARM)).toEqual([{ kind: 'xp', amount: 10 }]);
   });
 
   it('hands in for 80 XP and level 2, and Hale offers The Lumber Camp', () => {

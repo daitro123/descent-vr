@@ -9,6 +9,7 @@ import { Particles } from './fx/particles';
 import { sfx, updateListener } from './fx/sfx';
 import { Shockwaves } from './fx/shockwave';
 import { SwordTrail } from './fx/trail';
+import { Vines } from './fx/vines';
 import type { EnemyKind } from './models/characters';
 import { Player } from './player/player';
 import { BeltHud } from './ui/beltHud';
@@ -52,6 +53,7 @@ export class Game {
   private readonly shockwaves: Shockwaves;
   private readonly trail: SwordTrail;
   private readonly shadows = new BlobShadows();
+  private readonly vines = new Vines();
   private readonly orbs = new Orbs();
   private readonly hud: BeltHud;
   private readonly meleeTokens = new AttackTokens(CONFIG.tokens.melee, CONFIG.tokens.meleeGap);
@@ -75,7 +77,7 @@ export class Game {
     private readonly duel = false,
   ) {
     this.wave = firstWave - 1;
-    scene.add(this.arena.root, this.orbs.root, this.shadows.mesh);
+    scene.add(this.arena.root, this.orbs.root, this.shadows.mesh, this.vines.mesh);
     this.player = new Player(camera, renderer, this.arena);
     scene.add(this.player.rig);
     this.text = new FloatingText(scene);
@@ -155,6 +157,7 @@ export class Game {
     this.combat.projectiles.render();
 
     this.shadows.cast(this.ctx.playerFeet, this.enemies);
+    this.vines.place(this.enemies);
     if (sword.tip.valid) {
       sword.segment(rig, _a, _b);
       this.trail.update(dt, _a, _b, sword.hot, this.player.frenzy > 0);

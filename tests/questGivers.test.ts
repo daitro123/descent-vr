@@ -13,7 +13,14 @@ import { readSave, saveRecord } from '../src/save/record';
 // so two made-up one-quest chains stand in for them here, opening as theirs
 // will once Raiders in the Fields is handed in.
 
-const kill = (camp: CampId | null, level: number, role: Role = 'ordinary'): AdventureEvent => ({ kind: 'kill', camp, level, role });
+const kill = (camp: CampId | null, level: number, role: Role = 'ordinary'): AdventureEvent => ({
+  kind: 'kill',
+  camp,
+  level,
+  role,
+  family: camp === 'mine' || camp === null ? 'undead' : 'bandit',
+  seed: 1,
+});
 const accept = (giver?: GiverId): AdventureEvent => ({ kind: 'accept', giver });
 const handIn = (giver?: GiverId): AdventureEvent => ({ kind: 'handIn', giver });
 const gather = (spot: SpotKind): AdventureEvent => ({ kind: 'gathered', spot });
@@ -83,8 +90,9 @@ const withGivers = (...events: AdventureEvent[]) => {
   return state;
 };
 
+/** Every effect of `events` but kills' drops (loot's own tests have those). */
 function play(state: AdventureState, ...events: AdventureEvent[]): Effect[] {
-  return events.flatMap((e) => state.apply(e));
+  return events.flatMap((e) => state.apply(e)).filter((e) => e.kind !== 'loot');
 }
 
 /** The effects that aren't about the stand-in quests. */

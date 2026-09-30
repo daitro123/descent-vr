@@ -3,7 +3,9 @@ import { CONFIG, type EnemyConfig } from './config';
 import { Inventory, type InventoryEffect, type InventorySave } from './inventory';
 import { type ProfessionEffect, Professions, type ProfessionsSave, type RecipeId, type SpotKind } from './professions/professions';
 import { attributesAt, itemOf, type Worn, WORN_NOTHING } from './items';
+import { type Loot, rollLoot, seeded } from './loot';
 import type { CampId } from './maps/types';
+import type { Family } from './models/characters';
 import { BARKS, type Chain, CHAINS, type GiverId, type Item, type Objective, type Place, type Quest, type QuestId, type Sword, SWORDS, type VillagerId } from './quests';
 
 // The rules of progress in the Adventure, with no three.js in it: events in,
@@ -63,6 +65,10 @@ export type AdventureEvent =
       /** The enemy's own level. */
       readonly level: number;
       readonly role: Role;
+      /** Who it was, for the junk it drops. */
+      readonly family: Family;
+      /** Its loot's seed: from the camp, the enemy and the time (loot.ts, lootSeed). */
+      readonly seed: number;
     }
   /** "Accept" on a giver's board (Hale's without one): take the quest they have on offer. */
   | { readonly kind: 'accept'; readonly giver?: GiverId }
@@ -84,6 +90,8 @@ export type Effect =
   | { readonly kind: 'quest'; readonly quest: QuestId; readonly stage: Stage }
   /** One of a quest's objectives counted one more: `count` of its need. */
   | { readonly kind: 'progress'; readonly quest: QuestId; readonly objective: number; readonly count: number }
+  /** A kill's drop, lying where it fell: a pouch of coins and each item beside it. Not saved until taken. */
+  | ({ readonly kind: 'loot' } & Loot)
   /** What happened to your things: a reward put straight into your hand, say. */
   | InventoryEffect
   /** What happened to your professions: one learned, proficiency gained, a recipe known. */
@@ -466,9 +474,11 @@ export class AdventureState {
       case 'kill': {
         if (event.role === 'warden') this.beaten = true;
         const L = CONFIG.levels;
-        // A grey enemy, five or more levels below you, pays nothing, but still counts for your quests.
+        // A grey enemy, five or more levels below you, pays no XP, but still drops loot and counts for your quests.
         const xp = paysXp(event.level, this.level) ? this.earn(L.killXp * event.level * L.roles[event.role]) : [];
-        return [...xp, ...this.count((o) => credits(o, event.camp, event.role))];
+        const loot = rollLoot(event, this.class, seeded(event.seed));
+        const drop: Effect[] = loot.coins > 0 || loot.items.length ? [{ kind: 'loot', ...loot }] : [];
+        return [...drop, ...xp, ...this.count((o) => credits(o, event.camp, event.role))];
       }
       case 'pickup':
         return this.count((o) => o.kind === 'pickup' && o.item === event.item);

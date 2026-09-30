@@ -255,21 +255,21 @@ const told = [await lines()];
 await page.evaluate(() => {
   const { state } = window.__descent.adventure;
   state.apply({ kind: 'accept' });
-  for (let k = 0; k < 3; k++) state.apply({ kind: 'kill', camp: 'farm', level: 1, role: 'ordinary' });
+  for (let k = 0; k < 3; k++) state.apply({ kind: 'kill', camp: 'farm', level: 1, role: 'ordinary', family: 'bandit', seed: 1 });
   state.apply({ kind: 'handIn' });
 });
 told.push(await lines());
 await page.evaluate(() => {
   const { state } = window.__descent.adventure;
   state.apply({ kind: 'accept' });
-  for (let k = 0; k < 5; k++) state.apply({ kind: 'kill', camp: 'lumberCamp', level: 2, role: 'ordinary' });
+  for (let k = 0; k < 5; k++) state.apply({ kind: 'kill', camp: 'lumberCamp', level: 2, role: 'ordinary', family: 'bandit', seed: 1 });
   state.apply({ kind: 'pickup', item: 'orders' });
   state.apply({ kind: 'handIn' });
 });
 told.push(await lines());
 await page.evaluate(() => window.__descent.adventure.state.apply({ kind: 'accept' }));
 told.push(await lines());
-await page.evaluate(() => window.__descent.adventure.state.apply({ kind: 'kill', camp: null, level: 5, role: 'warden' }));
+await page.evaluate(() => window.__descent.adventure.state.apply({ kind: 'kill', camp: null, level: 5, role: 'warden', family: 'undead', seed: 1 }));
 told.push(await lines());
 check(told[1].farmer !== told[0].farmer && told[1].smith === told[0].smith, `the farmer's line moves on with Raiders in the Fields: "${told[1].farmer}"`);
 check(told[2].smith !== told[1].smith && told[2].innkeeper === told[0].innkeeper, `the smith's with The Lumber Camp: "${told[2].smith}"`);

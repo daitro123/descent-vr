@@ -215,8 +215,8 @@ const turnHead = async (yaw) => {
   await step(0.1);
 };
 const apply = (...events) => page.evaluate((events) => events.forEach((e) => window.__descent.adventure.apply(e, window.__descent.adventure.hale.position)), events);
-const farm = { kind: 'kill', camp: 'farm', level: 1, role: 'ordinary' };
-const bandit = { kind: 'kill', camp: 'lumberCamp', level: 2, role: 'ordinary' };
+const farm = { kind: 'kill', camp: 'farm', level: 1, role: 'ordinary', family: 'bandit', seed: 1 };
+const bandit = { kind: 'kill', camp: 'lumberCamp', level: 2, role: 'ordinary', family: 'bandit', seed: 1 };
 
 // 1. No quest yet.
 let a = await arrow();

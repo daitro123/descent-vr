@@ -73,6 +73,8 @@ export interface EnemyConfig {
   attacks: readonly AttackConfig[];
   /** Kinds without one never block. */
   guard?: GuardConfig;
+  /** How much of a root's or freeze's length (`hold`, 0: immune) and of a slow's strength (`slow`) it takes. All of both without one. */
+  takes?: { hold: number; slow: number };
 }
 
 export const CONFIG = {
@@ -490,6 +492,33 @@ export const CONFIG = {
     cooldown: 60, // s every potion on the belt dims for after you drink any of them
   },
 
+  // What a kill drops (loot.ts) and how it lies on the ground (world/drops.ts)
+  // (.scratch/inventory/issues/05-loot.md). Loot's item level is the enemy's.
+  loot: {
+    // By what the enemy was: coins are `coins` × level × the role's `coins` (a whole number, evenly),
+    // junk drops at `junk`, and one piece of gear at most, of a rarity by `gear`'s chances; a boss
+    // drops every rarity in `every` instead. What the Warden raises drops nothing.
+    coins: [1, 3],
+    roles: {
+      ordinary: { coins: 1, junk: 0.4, gear: { white: 0.08, green: 0.03 }, every: [] },
+      leader: { coins: 3, junk: 0.6, gear: { green: 0.75, blue: 0.25 }, every: [] },
+      deepBrute: { coins: 3, junk: 0.6, gear: { green: 0.75, blue: 0.25 }, every: [] },
+      warden: { coins: 10, junk: 0, gear: {}, every: ['blue', 'green'] },
+      raised: { coins: 0, junk: 0, gear: {}, every: [] },
+    } satisfies Record<Role, { coins: number; junk: number; gear: Partial<Record<Rarity, number>>; every: Rarity[] }>,
+    levels: 5, // loot's items come at item levels 1 to this; an enemy above it drops this level's
+    lifetime: 300, // s a drop lies, through your death too
+    most: 12, // drops lying at once: past this the oldest goes
+    ring: 0.4, // m from the pouch its items lie, round it
+    hover: 0.3, // m over the ground each item turns, slowly
+    spin: 0.8, // rad/s
+    size: 0.3, // m: an item's model, about this big
+    rim: 0.9, // how brightly a rarity's colour glows round each model's edge
+    beam: { height: 2, radius: 0.025, opacity: 0.55 }, // green and blue items' unlit, additive beams
+    full: { flash: 1.6, rate: 6, float: 1.2 }, // s a full bag flashes an item red, flashes per s, s "Bag full" floats
+    buzz: { take: { intensity: 0.8, ms: 70 }, full: { intensity: 1, ms: 160 } }, // in the hand that touched it
+  },
+
   // Professions (professions/professions.ts; .scratch/professions/spec.md): the
   // grades, the kinds of gathering spot, the Apprentice recipes and the numbers
   // of what they make. Proficiency climbs by `gain` for each spot emptied and
@@ -763,6 +792,7 @@ export const CONFIG = {
       critMultiplier: 1.6,
       orbChance: 1,
       death: 'topple',
+      takes: { hold: 0.5, slow: 0.5 }, // shrugs off half
       attacks: [
         { pose: 'slashR', kind: 'melee', windup: 1.05, active: 0.3, recover: 0.9, damage: 22, blockable: true, guardBreak: true, aim: true, weight: 2 },
         { pose: 'slam', kind: 'slam', windup: 1.25, active: 0.25, recover: 1.6, damage: 30, blockable: false, radius: 1.5, exposeOnRecover: true, weight: 1 },
@@ -784,6 +814,7 @@ export const CONFIG = {
       critMultiplier: 2,
       orbChance: 0,
       death: 'shatter',
+      takes: { hold: 0, slow: 0.5 }, // no root or freeze holds it: it stays a boss fight
       attacks: [
         { pose: 'slashR', kind: 'melee', windup: 0.85, active: 0.28, recover: 0.3, damage: 18, blockable: true, aim: true, weight: 2, next: 1 },
         { pose: 'slashL', kind: 'melee', windup: 0.5, active: 0.28, recover: 0.3, damage: 18, blockable: true, aim: true, weight: 0, next: 2 },

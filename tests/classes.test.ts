@@ -12,7 +12,10 @@ import { CHAINS } from '../src/quests';
 // abilities. Driven through the state's own seam: a character of a class at
 // a level, and the kills it's fed.
 
-const kill = (level: number): AdventureEvent => ({ kind: 'kill', camp: 'farm', level, role: 'ordinary' });
+const kill = (level: number): AdventureEvent => ({ kind: 'kill', camp: 'farm', level, role: 'ordinary', family: 'bandit', seed: 1 });
+
+/** Feed `state` an event: what it did, without the loot a kill drops (the loot's own tests look at that). */
+const feed = (state: AdventureState, event: AdventureEvent) => state.apply(event).filter((e) => e.kind !== 'loot');
 
 /** A new character of `klass`, with the level cap at `cap`. */
 const fresh = (klass: ClassId, cap?: number) => new AdventureState(undefined, CHAINS, { class: klass, cap });
@@ -26,14 +29,14 @@ function character(klass: ClassId, level: number, gear: Partial<Record<GearSlot,
 /** Earn `xp` from level-1 kills, 10 at a time; returns every effect. */
 function earn(state: AdventureState, xp: number): Effect[] {
   const effects: Effect[] = [];
-  for (let i = 0; i < xp / 10; i++) effects.push(...state.apply(kill(1)));
+  for (let i = 0; i < xp / 10; i++) effects.push(...feed(state, kill(1)));
   return effects;
 }
 
 /** Climb to `level` on kills of your own level, ten a level; returns every effect. */
 function climb(state: AdventureState, level: number): Effect[] {
   const effects: Effect[] = [];
-  while (state.level < level) effects.push(...state.apply(kill(state.level)));
+  while (state.level < level) effects.push(...feed(state, kill(state.level)));
   return effects;
 }
 
@@ -130,7 +133,7 @@ describe('the level curve', () => {
     for (let level = 2; level <= 20; level++) {
       const from = state.level;
       let kills = 0;
-      for (; state.level < level; kills++) state.apply(kill(from));
+      for (; state.level < level; kills++) feed(state, kill(from));
       expect([state.level, state.xp, kills]).toEqual([level, xpToReach(level), 10]);
     }
     expect(state.xpToNext).toBe(0);
@@ -141,11 +144,11 @@ describe('the level curve', () => {
     expect(CONFIG.levels.cap).toBe(5);
     const state = fresh('ranger');
     earn(state, 990);
-    expect(state.apply(kill(5))).toEqual([
+    expect(feed(state, kill(5))).toEqual([
       { kind: 'xp', amount: 10 },
       { kind: 'level', level: 5, unlocks: [] },
     ]);
-    expect(state.apply(kill(5))).toEqual([]);
+    expect(feed(state, kill(5))).toEqual([]);
     expect(state.xp).toBe(1000);
     expect(state.level).toBe(5);
     expect(state.xpToNext).toBe(0);
@@ -163,24 +166,24 @@ describe('the level curve', () => {
 describe('grey enemies', () => {
   it('pay nothing once they are five or more levels below you', () => {
     const state = character('warrior', 6);
-    expect(state.apply(kill(1))).toEqual([]);
-    expect(state.apply(kill(2))).toEqual([{ kind: 'xp', amount: 20 }]);
+    expect(feed(state, kill(1))).toEqual([]);
+    expect(feed(state, kill(2))).toEqual([{ kind: 'xp', amount: 20 }]);
     const ten = character('mage', 10);
-    expect(ten.apply(kill(5))).toEqual([]);
-    expect(ten.apply(kill(6))).toEqual([{ kind: 'xp', amount: 60 }]);
+    expect(feed(ten, kill(5))).toEqual([]);
+    expect(feed(ten, kill(6))).toEqual([{ kind: 'xp', amount: 60 }]);
   });
 
   it("never turn up on Oakvale's own route: the farm's level 1 still pays at level 5", () => {
     const state = fresh('warrior');
     earn(state, 1000 - 10);
     expect(state.level).toBe(4);
-    expect(state.apply(kill(1))).toEqual([{ kind: 'xp', amount: 10 }, { kind: 'level', level: 5, unlocks: [] }]);
+    expect(feed(state, kill(1))).toEqual([{ kind: 'xp', amount: 10 }, { kind: 'level', level: 5, unlocks: [] }]);
   });
 
   it('still count for a quest', () => {
     const state = character('warrior', 6);
     state.apply({ kind: 'accept' });
-    expect(state.apply(kill(1))).toEqual([{ kind: 'progress', quest: 'raiders', objective: 0, count: 1 }]);
+    expect(feed(state, kill(1))).toEqual([{ kind: 'progress', quest: 'raiders', objective: 0, count: 1 }]);
   });
 });
 
