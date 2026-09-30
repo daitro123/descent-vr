@@ -72,6 +72,10 @@ _Avoid_: kind, type, class, AI
 Who an enemy is, whatever its behaviour: the bandits or the undead. A bandit archer and an undead archer share a behaviour but not a family.
 _Avoid_: faction, race, type
 
+**Rooted**, **frozen**, **slowed**:
+What an ability can hold an enemy in for a while. Rooted, it can't walk but strikes what's in reach; frozen, it does nothing until the time runs out or a hit breaks it; slowed, it walks and winds up slower by a fraction. Brutes take half; the Warden ignores roots and freezes.
+_Avoid_: stun (a stagger is the game's stun), snare, debuff, crowd control
+
 **Human body**:
 The one body every person wears, bandits and friendly characters alike, dressed per character. The undead are skeletons instead.
 _Avoid_: human model, NPC mesh
@@ -173,8 +177,12 @@ Two slots at your hips for what you use in the middle of a fight, taken by hand,
 _Avoid_: quick slots, hotbar, holster (the health orbs and level you glance down at are the belt HUD, not the belt)
 
 **Loot**:
-Items and coins as they drop from enemies or lie in chests, before you take them. Loot glows in its rarity's colour, and a touch takes it.
+Items and coins as they drop from enemies or come out of chests, before you take them. Loot glows in its rarity's colour, and a touch takes it.
 _Avoid_: drops, reward (a reward is what a hand-in pays)
+
+**Chest**:
+A box standing at one of a zone's places, opened once per character by touching its lid. It holds coins and a green or blue by its area's level, which come out as loot on the ground beside it; it stays open, and empty, for good.
+_Avoid_: treasure, lootbox, container (the stash is a chest you keep things in, not one you open once)
 
 **Rarity**:
 How good an item is for its level, shown by the colour of its name and its glow: grey (junk), white, green or blue.
