@@ -238,6 +238,9 @@ describe("each class's abilities", () => {
       ['heroicThrow', 'ring', 15, 6],
       ['shieldWall', 'z', 25, 30],
       ['sweepingStrikes', 'v', 30, 20],
+      // The warrior's tier-3 talents' abilities (issues/11), both in the triangle.
+      ['mortalStrike', 'triangle', 30, 8],
+      ['shieldSlam', 'triangle', 20, 10],
       ['powerShot', 'drawing', 20, 4],
       ['snareTrap', 'ring', 20, 10],
       ['volley', 'z', 35, 12],

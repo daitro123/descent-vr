@@ -26,9 +26,26 @@ export const CLASS_CARD: Readonly<Record<ClassId, { readonly name: string; reado
 };
 
 type Table = typeof CONFIG.classes;
+type Trees = typeof CONFIG.talents.trees;
 
 /** A base ability of some class: what a level brings besides your plain kit. */
-export type Ability = { [C in ClassId]: keyof Table[C]['abilities'] }[ClassId];
+export type BaseAbility = { [C in ClassId]: keyof Table[C]['abilities'] }[ClassId];
+
+/** Every talent row of a class's trees, whatever tree it's in. */
+type RowOf<C extends ClassId> = { [T in keyof Trees[C]]: Trees[C][T][keyof Trees[C][T]] }[keyof Trees[C]];
+/** The talents of a class's trees that grant an ability: the ones with a `use`. */
+type AbilityTalentOf<C extends ClassId> = {
+  [T in keyof Trees[C]]: { [K in keyof Trees[C][T]]: Trees[C][T][K] extends { readonly use: string } ? K : never }[keyof Trees[C][T]];
+}[keyof Trees[C]];
+
+/** An ability a talent grants (talents.ts): the talent and its ability share an id. */
+export type TalentAbility = { [C in ClassId]: AbilityTalentOf<C> }[ClassId] & string;
+
+/** Any ability: a base one a level brings, or one a talent grants. */
+export type Ability = BaseAbility | TalentAbility;
+
+/** A talent row as the config holds it, of any class. */
+export type TalentRow = { [C in ClassId]: RowOf<C> }[ClassId];
 
 /** A shape drawn in the air with the right grip held: each gesture ability starts in one (player/gestures/). */
 export type Shape = 'ring' | 'z' | 'v' | 'triangle' | 's';
@@ -45,12 +62,14 @@ export type Use = 'button' | 'drawing' | 'earthshaker' | Shape;
 /** The bar a class's abilities spend. */
 export type ResourceKind = 'rage' | 'focus' | 'mana';
 
-/** One base ability, as data. */
+/** One ability, as data. */
 export interface AbilityDef {
   readonly id: Ability;
   readonly class: ClassId;
-  /** The level that brings it. */
+  /** The level that brings it; for one a talent grants, the first level its tier can be open by. */
   readonly level: number;
+  /** Granted by the talent of the same id, not by a level. */
+  readonly byTalent: boolean;
   readonly use: Use;
   /** What it spends of the class's resource. */
   readonly cost: number;
@@ -77,6 +96,8 @@ const NAMES: Readonly<Record<Ability, string>> = {
   frostbolt: 'Frostbolt',
   chainLightning: 'Chain Lightning',
   blizzard: 'Blizzard',
+  mortalStrike: 'Mortal Strike',
+  shieldSlam: 'Shield Slam',
 };
 
 /** A shape as the level-up says it. */
@@ -102,24 +123,37 @@ const OWN: Partial<Record<Ability, { readonly cost: number; readonly cooldown: n
   earthshaker: { cost: CONFIG.groundSlam.cost, cooldown: CONFIG.groundSlam.cooldown },
 };
 
-/** Every base ability of every class, by id. */
+/** The first level a talent in `tier` can be taken by: a point a level from `CONFIG.talents.from`, `CONFIG.talents.tier` a tier. */
+const tierLevel = (tier: number) => CONFIG.talents.from + CONFIG.talents.tier * (tier - 1);
+
+/** Every ability of every class, by id: the base ones, then those talents grant. */
 export const ABILITY: Readonly<Record<Ability, AbilityDef>> = Object.fromEntries(
-  CLASSES.flatMap((klass) =>
-    Object.entries(CONFIG.classes[klass].abilities).map(([key, row]) => {
+  CLASSES.flatMap((klass) => [
+    ...Object.entries(CONFIG.classes[klass].abilities).map(([key, row]) => {
       const id = key as Ability;
       const r = row as { readonly level: number; readonly use: Use; readonly cost?: number; readonly cooldown?: number };
-      const def: AbilityDef = { id, class: klass, level: r.level, use: r.use, cost: r.cost ?? 0, cooldown: r.cooldown ?? 0, name: NAMES[id], ...OWN[id] };
+      const def: AbilityDef = { id, class: klass, level: r.level, byTalent: false, use: r.use, cost: r.cost ?? 0, cooldown: r.cooldown ?? 0, name: NAMES[id], ...OWN[id] };
       return [id, def];
     }),
-  ),
+    ...Object.values(CONFIG.talents.trees[klass] as Readonly<Record<string, Readonly<Record<string, object>>>>).flatMap((tree) =>
+      Object.entries(tree)
+        .filter(([, row]) => 'use' in row)
+        .map(([key, row]) => {
+          const id = key as Ability;
+          const r = row as { readonly tier: number; readonly use: Use; readonly cost?: number; readonly cooldown?: number };
+          const def: AbilityDef = { id, class: klass, level: tierLevel(r.tier), byTalent: true, use: r.use, cost: r.cost ?? 0, cooldown: r.cooldown ?? 0, name: NAMES[id] };
+          return [id, def];
+        }),
+    ),
+  ]),
 ) as Record<Ability, AbilityDef>;
 
-/** Every base ability of every class. */
+/** Every ability of every class, base and granted by talents. */
 export const ABILITIES = Object.keys(ABILITY) as Ability[];
 
-/** A class's base abilities, in the order the levels bring them. */
+/** A class's base abilities, in the order the levels bring them: none a talent grants. */
 export const abilitiesOf = (klass: ClassId): readonly Ability[] =>
-  ABILITIES.filter((a) => ABILITY[a].class === klass).sort((a, b) => ABILITY[a].level - ABILITY[b].level);
+  ABILITIES.filter((a) => ABILITY[a].class === klass && !ABILITY[a].byTalent).sort((a, b) => ABILITY[a].level - ABILITY[b].level);
 
 /** A class's base abilities a character of `level` has. */
 export const abilitiesAt = (klass: ClassId, level: number): readonly Ability[] => abilitiesOf(klass).filter((a) => ABILITY[a].level <= level);
@@ -130,19 +164,53 @@ export const isShape = (use: Use): use is Shape => (SHAPES as readonly string[])
 /** Which ability each shape holds: none, until one of `abilities` is drawn in it. */
 export type Slots = Readonly<Record<Shape, Ability | null>>;
 
+/** Where the gesture slots' swaps have put abilities: the shape each ability moved is in now. */
+export type Placed = Readonly<Partial<Record<Ability, Shape>>>;
+
 /**
- * The gesture slots of a character with `abilities`, filled by default: each
- * base gesture ability in the shape it starts in (.scratch/abilities/spec.md,
- * "The adventure state learns classes"). Each shape always casts what its slot
- * holds, so the shapes you know never change meaning.
+ * The gesture slots of a character with `abilities` (base ones in the order
+ * the levels brought them, then those talents grant), after the swaps that
+ * `placed` them (.scratch/abilities/spec.md, "The adventure state learns
+ * classes"): each ability a swap put somewhere is there, if it's free; the
+ * rest are in the shape they start in (a base ability's own, a tier-3 talent
+ * ability's the triangle) if it's free, else in the next free shape. Each
+ * shape always casts what its slot holds, so the shapes you know never change
+ * meaning; with no shape free, an ability has none.
  */
-export function slotsOf(abilities: readonly Ability[]): Slots {
+export function slotsOf(abilities: readonly Ability[], placed: Placed = {}): Slots {
   const slots = Object.fromEntries(SHAPES.map((s) => [s, null])) as Record<Shape, Ability | null>;
-  for (const a of abilities) {
-    const { use } = ABILITY[a];
-    if (isShape(use) && slots[use] === null) slots[use] = a;
+  const gestures = abilities.filter((a) => isShape(ABILITY[a].use));
+  const unplaced: Ability[] = [];
+  for (const a of gestures) {
+    const at = placed[a];
+    if (at && slots[at] === null) slots[at] = a;
+    else unplaced.push(a);
+  }
+  const later: Ability[] = [];
+  for (const a of unplaced) {
+    const use = ABILITY[a].use as Shape;
+    if (slots[use] === null) slots[use] = a;
+    else later.push(a);
+  }
+  for (const a of later) {
+    const free = SHAPES.find((s) => slots[s] === null);
+    if (free) slots[free] = a;
   }
   return slots;
+}
+
+/**
+ * Where abilities are placed once the slots in shapes `a` and `b` swap:
+ * `placed` with the ability each held moved to the other. Swapping with an
+ * empty shape moves the one ability there.
+ */
+export function swapped(slots: Slots, a: Shape, b: Shape, placed: Placed = {}): Placed {
+  const moved: Partial<Record<Ability, Shape>> = { ...placed };
+  const inA = slots[a];
+  const inB = slots[b];
+  if (inA) moved[inA] = b;
+  if (inB) moved[inB] = a;
+  return moved;
 }
 
 /** What the level-up says about an ability it brings: its name, and how to use it. */

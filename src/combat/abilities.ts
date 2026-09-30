@@ -3,8 +3,9 @@ import { ABILITY, type Ability } from '../classes';
 import { type AttackConfig, CONFIG } from '../config';
 
 // The rules of the abilities cast by gesture, with nothing drawn: each
-// ability's cooldown and how long it lasts, whom Heroic Throw flies at, what
-// a block costs behind Shield Wall, and whom Sweeping Strikes also hits.
+// ability's cooldown and how long it lasts (or how long the next blow it arms
+// waits: Mortal Strike, Shield Slam), whom Heroic Throw flies at, what a block
+// costs behind Shield Wall, and whom Sweeping Strikes also hits.
 // Combat applies them (combat.ts); the tests drive them here.
 
 /** Each gesture ability's colour: its trail and burst as it's read, and what it does in the world. */
@@ -12,6 +13,8 @@ export const ABILITY_COLOUR: Readonly<Partial<Record<Ability, number>>> = {
   heroicThrow: 0x80e0ff, // a pale spectral blue: the axe
   shieldWall: 0xffc84a, // gold: the shield's glow
   sweepingStrikes: 0xff5a40, // red: the second blow's embers
+  mortalStrike: 0xb01830, // deep blood red: the blade's edge while it's armed
+  shieldSlam: 0xe0e8f0, // bright steel: the shield's rim while it's armed
 };
 
 /** Why an ability can't be used now: still cooling down, or not enough of the class's resource. */
@@ -37,10 +40,10 @@ export class AbilityClock {
     return this.lasting.get(ability) ?? 0;
   }
 
-  /** Can `ability` be used with `resource` in the bar? Null if so, or why not. */
-  refuses(ability: Ability, resource: number): Refusal | null {
+  /** Can `ability`, costing `cost` (its own unless talents change it), be used with `resource` in the bar? Null if so, or why not. */
+  refuses(ability: Ability, resource: number, cost = ABILITY[ability].cost): Refusal | null {
     if (this.cooldown(ability) > 0) return 'cooling';
-    if (resource < ABILITY[ability].cost) return 'poor';
+    if (resource < cost) return 'poor';
     return null;
   }
 
@@ -48,6 +51,11 @@ export class AbilityClock {
   used(ability: Ability, lasts = 0): void {
     if (ABILITY[ability].cooldown > 0) this.cooling.set(ability, ABILITY[ability].cooldown);
     if (lasts > 0) this.lasting.set(ability, lasts);
+  }
+
+  /** What `ability` started is over before its time: the blow it armed has landed. */
+  end(ability: Ability): void {
+    this.lasting.delete(ability);
   }
 
   /** Everything ready again, nothing lasting: after death, or a new run. */

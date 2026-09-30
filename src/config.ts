@@ -323,6 +323,7 @@ export const CONFIG = {
   levels: {
     xp: 100, // level L needs this × (L − 1) more XP than level L − 1: 100, 300, 600 and 1,000 in all to 2, 3, 4 and 5; 19,000 to 20
     cap: 5, // the top level the content has quests and camps for; XP past it is dropped
+    most: 20, // the highest a test may raise the cap to (`&cap=`): the curve is sketched to 20
     grey: 5, // an enemy this many levels or more below you pays no XP
     step: 0.2, // an enemy's health and damage, times 1 + this per level above 1 (your attributes make the same step)
     killXp: 10, // a kill pays this per enemy level…
@@ -380,6 +381,46 @@ export const CONFIG = {
         // Ice falls for `time` s over a `radius` m circle where you point: `damage` every `every` s and a `slow` slow.
         blizzard: { level: 10, use: 's', cost: 40, cooldown: 30, time: 5, radius: 4, damage: 6, every: 0.5, slow: 0.5, aimDeg: 15 },
       },
+    },
+  },
+
+  // Talents (talents.ts; .scratch/abilities/issues/10-talent-tree-rules.md, and the class tickets 11 to 13):
+  // a point every level from `from`, spent in either of your class's two trees out of a fight. A tier
+  // opens once `tier` points are spent in its tree for each tier above it (tier 2 at 3, tier 3 at 6).
+  // Each talent has its tier, the most points it takes, and either what each point `adds` to your
+  // numbers or, with a `use`, the ability it grants (its cost, cooldown and numbers beside it). What
+  // a point adds: `cost:<ability>` to that ability's cost, `lasts:<ability>` to how long it lasts (s),
+  // and the rest to the number Combat reads by that name (0 without talents). Tiers 4 and 5 are
+  // sketched in the class tickets and not built.
+  talents: {
+    from: 2,
+    tier: 3,
+    trees: {
+      warrior: {
+        // Arms: the sword, offence.
+        arms: {
+          deepCuts: { tier: 1, max: 3, adds: { headHit: 0.1 } }, // a head hit deals this much more
+          bloodRage: { tier: 1, max: 2, adds: { hitRage: 2 } }, // rage a sword hit builds, on top of rage.perHit
+          tactician: { tier: 2, max: 2, adds: { 'cost:warCry': -10 } },
+          heavySwing: { tier: 2, max: 3, adds: { fullSwing: 0.05 } }, // a swing at full damage speed deals this much more
+          // Your next sword hit within `window` s deals `multiplier` times, and the enemy can't heal for `noHeal` s, walking home included.
+          mortalStrike: { tier: 3, max: 1, use: 'triangle', cost: 30, cooldown: 8, window: 3, multiplier: 2, noHeal: 10 },
+          sweepingMastery: { tier: 3, max: 2, adds: { 'lasts:sweepingStrikes': 2 } },
+        },
+        // Protection: the shield, holding a crowd.
+        protection: {
+          toughness: { tier: 1, max: 3, adds: { health: 0.05 } }, // of your maximum health
+          shieldSpikes: { tier: 1, max: 2, adds: { bashDamage: 5, bashRage: 4 } }, // on top of shield.bashDamage and rage.perBash
+          quickGuard: { tier: 2, max: 2, adds: { parry: 0.25 } }, // the parry comes this much easier: its speed divided by 1 + this
+          ironArm: { tier: 2, max: 3, adds: { numbLess: 1 / 3 } }, // a blocked heavy blow numbs the arm this much less
+          // Your next shield bash within `window` s stuns for `stun` s and exposes for as long, even a brute (not the Warden).
+          shieldSlam: { tier: 3, max: 1, use: 'triangle', cost: 20, cooldown: 10, window: 3, stun: 3 },
+          unbreakable: { tier: 3, max: 2, adds: { 'lasts:shieldWall': 2 } },
+        },
+      },
+      // The ranger's and the mage's trees come with abilities ticket 26.
+      ranger: {},
+      mage: {},
     },
   },
 

@@ -55,6 +55,26 @@ describe('the ability clock', () => {
   });
 });
 
+describe("the warrior's tier-3 talent abilities", () => {
+  it('arm the next blow for their window, which landing ends early, each on its own cooldown', () => {
+    const T = CONFIG.talents.trees.warrior;
+    const clock = new AbilityClock();
+    expect(clock.refuses('mortalStrike', 29)).toBe('poor');
+    expect(clock.refuses('mortalStrike', 29, 25)).toBeNull();
+    clock.used('mortalStrike', T.arms.mortalStrike.window);
+    clock.used('shieldSlam', T.protection.shieldSlam.window);
+    clock.tick(1);
+    expect(clock.left('mortalStrike')).toBeCloseTo(2);
+    clock.end('mortalStrike');
+    expect(clock.left('mortalStrike')).toBe(0);
+    expect(clock.cooldown('mortalStrike')).toBeCloseTo(T.arms.mortalStrike.cooldown - 1);
+    clock.tick(2.1);
+    // Not spent within its window, the charge lapses.
+    expect(clock.left('shieldSlam')).toBe(0);
+    expect(clock.cooldown('shieldSlam')).toBeCloseTo(T.protection.shieldSlam.cooldown - 3.1);
+  });
+});
+
 describe('Heroic Throw', () => {
   const from = new Vector3(0, 1.3, 0);
   const ahead = new Vector3(0, 0, -1);
