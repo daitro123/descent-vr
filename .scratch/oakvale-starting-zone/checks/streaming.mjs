@@ -212,74 +212,84 @@ async function walkSouth(url) {
   return { steps, perf };
 }
 
+// ONLY=pictures, walk or mine runs just that part.
+const only = process.env.ONLY;
+const part = (name) => !only || only === name;
+
 // 1. The pictures, against the older build's.
-const now = await pictures(base);
-check(now.counts.mineLight === 0, `?map=forest starts in the daylight, the mine's light off (${now.counts.mineLight.toFixed(2)})`);
-console.log(`programs: ?fly=forest after every spot ${now.counts.fly}, ?map=forest ${now.counts.map}, the Adventure ${now.counts.adventure}`);
-if (shots) for (const [name, png] of Object.entries(now.out)) await import('node:fs').then((fs) => fs.writeFileSync(`${shots}/${name}.png`, png));
-if (before) {
-  const old = await pictures(before);
-  console.log(`programs before streaming: ?fly=forest ${old.counts.fly}, ?map=forest ${old.counts.map}, the Adventure ${old.counts.adventure}`);
-  check(now.counts.fly <= old.counts.fly && now.counts.map <= old.counts.map && now.counts.adventure <= old.counts.adventure, 'no more shader programs than before streaming');
-  for (const [name, png] of Object.entries(now.out)) {
-    const d = await difference(png, old.out[name]);
-    if (shots) await import('node:fs').then((fs) => fs.writeFileSync(`${shots}/${name}-before.png`, old.out[name]));
-    check(d < 3, `${name} looks as before: pixels differ by ${d.toFixed(2)} of 255 on average`);
+if (part('pictures')) {
+  const now = await pictures(base);
+  check(now.counts.mineLight === 0, `?map=forest starts in the daylight, the mine's light off (${now.counts.mineLight.toFixed(2)})`);
+  console.log(`programs: ?fly=forest after every spot ${now.counts.fly}, ?map=forest ${now.counts.map}, the Adventure ${now.counts.adventure}`);
+  if (shots) for (const [name, png] of Object.entries(now.out)) await import('node:fs').then((fs) => fs.writeFileSync(`${shots}/${name}.png`, png));
+  if (before) {
+    const old = await pictures(before);
+    console.log(`programs before streaming: ?fly=forest ${old.counts.fly}, ?map=forest ${old.counts.map}, the Adventure ${old.counts.adventure}`);
+    check(now.counts.fly <= old.counts.fly && now.counts.map <= old.counts.map && now.counts.adventure <= old.counts.adventure, 'no more shader programs than before streaming');
+    for (const [name, png] of Object.entries(now.out)) {
+      const d = await difference(png, old.out[name]);
+      if (shots) await import('node:fs').then((fs) => fs.writeFileSync(`${shots}/${name}-before.png`, old.out[name]));
+      check(d < 3, `${name} looks as before: pixels differ by ${d.toFixed(2)} of 255 on average`);
+    }
   }
 }
 
 // 2 and 3. Walking north to south.
-const walk = await walkSouth(base);
-const most = walk.steps.at(-1).most;
-check(most <= 1, `walking north to south, at most one chunk built in a frame (most: ${most}; ${walk.steps.reduce((n, s) => n + s.built, 0)} in all over ${walk.steps.length} steps)`);
-const sample = (s) => `z ${s.z.toFixed(0)}: ${(s.triangles / 1000).toFixed(1)}k triangles, ${s.chunks.full} full ${s.chunks.standIn} far`;
-for (const s of walk.steps.filter((_, i) => i % 20 === 0)) console.log(`     ${sample(s)}`);
-check(/chunks\s+\d+ full \d+ far/.test(walk.perf), `?perf shows the chunks: "${walk.perf.split('\n').pop()}"`);
-if (before) {
-  const old = await walkSouth(before);
-  const worse = walk.steps.filter((s, i) => s.triangles > old.steps[i].triangles);
-  const sum = (steps) => steps.reduce((n, s) => n + s.triangles, 0);
-  check(
-    worse.length === 0,
-    `walking north to south, the frame's triangles never above before streaming (${(sum(walk.steps) / walk.steps.length / 1000).toFixed(1)}k a frame on average, against ${(sum(old.steps) / old.steps.length / 1000).toFixed(1)}k; most saved ${(Math.max(...walk.steps.map((s, i) => old.steps[i].triangles - s.triangles)) / 1000).toFixed(1)}k)`,
-  );
-  for (const s of worse.slice(0, 5)) console.log(`     over at ${sample(s)}`);
+if (part('walk')) {
+  const walk = await walkSouth(base);
+  const most = walk.steps.at(-1).most;
+  check(most <= 1, `walking north to south, at most one chunk built in a frame (most: ${most}; ${walk.steps.reduce((n, s) => n + s.built, 0)} in all over ${walk.steps.length} steps)`);
+  const sample = (s) => `z ${s.z.toFixed(0)}: ${(s.triangles / 1000).toFixed(1)}k triangles, ${s.chunks.full} full ${s.chunks.standIn} far`;
+  for (const s of walk.steps.filter((_, i) => i % 20 === 0)) console.log(`     ${sample(s)}`);
+  check(/chunks\s+\d+ full \d+ far/.test(walk.perf), `?perf shows the chunks: "${walk.perf.split('\n').pop()}"`);
+  if (before) {
+    const old = await walkSouth(before);
+    const worse = walk.steps.filter((s, i) => s.triangles > old.steps[i].triangles);
+    const sum = (steps) => steps.reduce((n, s) => n + s.triangles, 0);
+    check(
+      worse.length === 0,
+      `walking north to south, the frame's triangles never above before streaming (${(sum(walk.steps) / walk.steps.length / 1000).toFixed(1)}k a frame on average, against ${(sum(old.steps) / old.steps.length / 1000).toFixed(1)}k; most saved ${(Math.max(...walk.steps.map((s, i) => old.steps[i].triangles - s.triangles)) / 1000).toFixed(1)}k)`,
+    );
+    for (const s of worse.slice(0, 5)) console.log(`     over at ${sample(s)} (before: ${(old.steps[walk.steps.indexOf(s)].triangles / 1000).toFixed(1)}k)`);
+  }
 }
 
 // 4. The mine's meshes, uploaded unseen from 40 m: every array the page hands WebGL is noted.
-await fresh();
-await page.addInitScript(() => {
-  window.__uploaded = new WeakSet();
-  const bufferData = WebGL2RenderingContext.prototype.bufferData;
-  WebGL2RenderingContext.prototype.bufferData = function (target, data, ...rest) {
-    if (data && typeof data === 'object') window.__uploaded.add(data);
-    return bufferData.call(this, target, data, ...rest);
-  };
-});
-await page.goto(`${base}/?map=forest&noemulate`);
-await page.waitForFunction(() => window.__descent?.map, null, { timeout: 120000 });
-await frames(3);
-const mouth = await page.evaluate(() => window.__descent.world.mine.mouth);
-/** Stand `d` m out from the mine's mouth along its front, facing it. */
-const outFront = (d) => [mouth.x + Math.sin(mouth.yaw) * d, mouth.z + Math.cos(mouth.yaw) * d, mouth.yaw + Math.PI];
-/** The mine's meshes whose vertices aren't on the GPU yet. */
-const notUploaded = () =>
-  page.evaluate(() => {
-    const out = [];
-    window.__descent.world.mine.root.traverse((o) => o.geometry && !window.__uploaded.has(o.geometry.attributes.position.array) && out.push(o.name));
-    return out;
+if (part('mine')) {
+  await fresh();
+  await page.addInitScript(() => {
+    window.__uploaded = new WeakSet();
+    const bufferData = WebGL2RenderingContext.prototype.bufferData;
+    WebGL2RenderingContext.prototype.bufferData = function (target, data, ...rest) {
+      if (data && typeof data === 'object') window.__uploaded.add(data);
+      return bufferData.call(this, target, data, ...rest);
+    };
   });
-await page.evaluate(([x, z, yaw]) => window.__descent.teleport(x, z, yaw), outFront(45));
-await frames(4);
-const far = await notUploaded();
-await page.evaluate(([x, z, yaw]) => window.__descent.teleport(x, z, yaw), outFront(38));
-await frames(2);
-const near = await notUploaded();
-const inside = await page.evaluate(() => window.__descent.world.interior);
-check(
-  far.length > 0 && near.length === 0 && inside === null,
-  `the mine's meshes upload unseen from 40 m out: at 45 m ${far.length ? `${far.join(', ')} not yet` : 'all already'}; at 38 m, still outside, ${near.length ? `${near.join(', ')} not yet` : 'all of them'}`,
-);
+  await page.goto(`${base}/?map=forest&noemulate`);
+  await page.waitForFunction(() => window.__descent?.map, null, { timeout: 120000 });
+  await frames(3);
+  const mouth = await page.evaluate(() => window.__descent.world.mine.mouth);
+  /** Stand `d` m out from the mine's mouth along its front, facing it. */
+  const outFront = (d) => [mouth.x + Math.sin(mouth.yaw) * d, mouth.z + Math.cos(mouth.yaw) * d, mouth.yaw + Math.PI];
+  /** The mine's meshes whose vertices aren't on the GPU yet. */
+  const notUploaded = () =>
+    page.evaluate(() => {
+      const out = [];
+      window.__descent.world.mine.root.traverse((o) => o.geometry && !window.__uploaded.has(o.geometry.attributes.position.array) && out.push(o.name));
+      return out;
+    });
+  await page.evaluate(([x, z, yaw]) => window.__descent.teleport(x, z, yaw), outFront(45));
+  await frames(4);
+  const far = await notUploaded();
+  await page.evaluate(([x, z, yaw]) => window.__descent.teleport(x, z, yaw), outFront(38));
+  await frames(2);
+  const near = await notUploaded();
+  const inside = await page.evaluate(() => window.__descent.world.interior);
+  check(
+    far.length > 0 && near.length === 0 && inside === null,
+    `the mine's meshes upload unseen from 40 m out: at 45 m ${far.length ? `${far.join(', ')} not yet` : 'all already'}; at 38 m, still outside, ${near.length ? `${near.join(', ')} not yet` : 'all of them'}`,
+  );
+}
 
 check(errors.length === 0, `no page errors${errors.length ? `: ${errors.slice(0, 3).join(' | ')}` : ''}`);
 await browser.close();
