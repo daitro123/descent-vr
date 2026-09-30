@@ -1,6 +1,6 @@
 import { CONFIG } from '../config';
 import { blendPoses, type Pose } from '../models/rig';
-import type { VillagerId } from '../quests';
+import type { PersonId } from '../models/people';
 
 // What the villagers do all day, on the human body: pure loops of poses, shared
 // by the game and the model inspector so what loops on the plinth is what
@@ -271,9 +271,48 @@ function farmerLoop(): WorkLoop {
   ]);
 }
 
-/** A villager's work. The smith's bellows stand `bellowsTurn` rad round to their left from where they face the anvil. */
-export function workLoop(id: VillagerId, bellowsTurn = 0): WorkLoop {
+// ------------------------------------------------------------------ the herbalist
+
+/** At the bench's end, the bundle held before them: looking it over. */
+const HERB_HOLD: Pose = {
+  spine: [0.12, 0, 0],
+  head: [0.35, 0, 0],
+  upperArmL: [-0.35, -0.1, 0.1],
+  forearmL: [-1.25, 0, 0],
+  handL: [0.3, 0, 0],
+  upperArmR: [-0.3, 0.1, -0.1],
+  forearmR: [-1.1, 0, 0],
+  handR: [0.3, 0, 0],
+  thighL: [-0.04, 0, 0.03],
+  thighR: [0.03, 0, -0.03],
+};
+/** Reaching along the bench to their right for a sprig. */
+const HERB_REACH: Pose = { ...HERB_HOLD, spine: [0.3, -0.35, 0], head: [0.4, -0.3, 0], upperArmR: [-0.9, -0.35, -0.2], forearmR: [-0.35, 0, 0], handR: [0.5, 0, 0] };
+/** Holding the bundle up to the light. */
+const HERB_UP: Pose = { ...HERB_HOLD, spine: [0.02, 0, 0], head: [-0.15, 0, 0], upperArmL: [-1.3, -0.2, 0.15], forearmL: [-1.1, 0, 0] };
+
+function herbalistLoop(): WorkLoop {
+  const H = CONFIG.alchemyBench.herbalist;
+  const held = still(HERB_HOLD);
+  // Tying the sprig in: the right hand winds round the stems.
+  const tie: Segment = {
+    time: H.tie,
+    at: (u) => still(plus(HERB_HOLD, { forearmR: [0.15 * Math.sin(u * Math.PI * 8), 0, 0], handR: [0, 0.5 * Math.sin(u * Math.PI * 8), 0] })),
+  };
+  return loop([
+    move(H.reach, held, still(HERB_REACH)),
+    move(H.reach, still(HERB_REACH), held),
+    tie,
+    move(H.hang, held, still(HERB_UP)),
+    move(H.hang, still(HERB_UP), held),
+  ]);
+}
+
+/** A friendly character's work. The smith's bellows stand `bellowsTurn` rad round to their left from where they face the anvil. */
+export function workLoop(id: Exclude<PersonId, 'hale'>, bellowsTurn = 0): WorkLoop {
   switch (id) {
+    case 'herbalist':
+      return herbalistLoop();
     case 'smith':
       return smithLoop(bellowsTurn);
     case 'innkeeper':
