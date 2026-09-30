@@ -150,7 +150,7 @@ export class Adventure {
     const { record } = save;
     this.state = new AdventureState(record ?? undefined);
     this.saves = new SaveController(save.store, () => saveRecord(this.state.snapshot(), this.standing));
-    this.world.attach(scene, camera);
+    this.world.attach(scene, camera, renderer);
     this.world.load(zone);
     this.respawns = zone.respawns;
     this.respawn = zone.respawns.village;
@@ -249,10 +249,8 @@ export class Adventure {
     this.player.reset(x, z, yaw);
     this.lastHp = this.player.hp;
     // Oakvale round where you stand, all at once behind the page, and compiled now rather than when
-    // it first comes into view: the smoke over the village behind you at the start, and the
-    // signposts' names and the map board after a load elsewhere.
+    // it first comes into view (the World does that with the first fill).
     this.world.fill(x, z);
-    renderer.compile(zone.root, camera, scene);
   }
 
   update(dt: number): void {

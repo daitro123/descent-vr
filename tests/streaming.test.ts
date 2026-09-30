@@ -1,11 +1,12 @@
 import { BoxGeometry, Group, Mesh, MeshBasicMaterial, PointLight, Vector3 } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
-import { buildOakvaleChunk, oakvaleChunks } from '../src/maps/forest/chunks';
+import { buildOakvaleChunk, oakvaleBuilder, oakvaleChunks } from '../src/maps/forest/chunks';
 import { buildLayout, FOREST, type ForestLayout, OAKVALE_ATMOSPHERE } from '../src/maps/forest/layout';
 import { MAPS } from '../src/maps/registry';
 import { Walkable } from '../src/maps/walkable';
 import { type ChunkData, type ChunkKey, chunkAt, chunkBounds, chunkDistance, type ChunkSource, chunkKey, type Detail } from '../src/world/chunks';
+import { type ChunkPort, type ChunkReply, type ChunkRequest, type ChunkServerScope, ChunkWorker, serveChunks } from '../src/world/chunkWorker';
 import { Stager } from '../src/world/staging';
 import { Streamer } from '../src/world/streamer';
 import { beyondFog, decide, detailFor, reachTo } from '../src/world/streaming';
@@ -28,6 +29,50 @@ const keys = () => oakvaleChunks();
 function walk(path: readonly [number, number][]): Map<ChunkKey, Detail>[] {
   let now = new Map<ChunkKey, Detail>();
   return path.map(([x, z]) => (now = decide(x, z, keys(), now, reach)));
+}
+
+/** Two chunks byte for byte, NaNs and all: the first byte that differs, if any (a deep equal over a million bytes takes seconds). */
+function same(a: ChunkData, b: ChunkData): void {
+  for (const k of ['position', 'normal', 'color', 'fx', 'uv'] as const) {
+    const [x, y] = [new Uint8Array(a[k].buffer), new Uint8Array(b[k].buffer)];
+    expect(y.length, `${a.key} ${a.detail} ${k}`).toBe(x.length);
+    expect(x.findIndex((v, i) => v !== y[i]), `${a.key} ${a.detail} ${k}`).toBe(-1);
+  }
+  expect(a.sphere).toEqual(b.sphere);
+}
+
+/**
+ * A worker in this thread: `serveChunks` over `build`, each reply passed on
+ * as postMessage would, its arrays transferred. Requests wait for `answer`.
+ */
+function inThread(build: (key: ChunkKey, detail: Detail) => ChunkData) {
+  const asked: ChunkRequest[] = [];
+  const replies: { reply: ChunkReply; transfer: Transferable[] }[] = [];
+  /** Each chunk as the worker built it, before it was sent. */
+  const sent: ChunkData[] = [];
+  const scope: ChunkServerScope = { onmessage: null, postMessage: (reply, transfer) => replies.push({ reply, transfer }) };
+  serveChunks(scope, build);
+  const port: ChunkPort & { terminated: boolean } = {
+    onmessage: null,
+    onerror: null,
+    terminated: false,
+    postMessage: (request: ChunkRequest) => asked.push(request),
+    terminate: () => (port.terminated = true),
+  };
+  return {
+    port,
+    asked,
+    sent,
+    /** Build the first `n` asked for, in order, and hand each back. */
+    answer(n = Infinity) {
+      for (const request of asked.splice(0, n)) scope.onmessage!({ data: request });
+      for (const { reply, transfer } of replies.splice(0)) {
+        if ('data' in reply) sent.push(reply.data);
+        port.onmessage?.({ data: structuredClone(reply, { transfer }) } as MessageEvent<ChunkReply>);
+      }
+    },
+    fail: () => port.onerror?.({ message: 'lost' } as ErrorEvent),
+  };
 }
 
 describe('the chunk grid', () => {
@@ -69,16 +114,6 @@ describe("Oakvale's zone", () => {
 });
 
 describe("Oakvale's chunk builder", () => {
-  const same = (a: ChunkData, b: ChunkData) => {
-    // Byte for byte, NaNs and all: the first byte that differs, if any (a deep equal over a million bytes takes seconds).
-    for (const k of ['position', 'normal', 'color', 'fx', 'uv'] as const) {
-      const [x, y] = [new Uint8Array(a[k].buffer), new Uint8Array(b[k].buffer)];
-      expect(y.length, k).toBe(x.length);
-      expect(x.findIndex((v, i) => v !== y[i]), k).toBe(-1);
-    }
-    expect(a.sphere).toEqual(b.sphere);
-  };
-
   it('builds a chunk the same every time, whatever was built before it and from a plan made afresh', () => {
     for (const detail of ['full', 'standIn'] as const) {
       const first = buildOakvaleChunk(plan, '0,0', detail);
@@ -329,6 +364,111 @@ describe('the streamer', () => {
     const built = s.source.built.length;
     s.streamer.update(eye(150, 0), reachTo(100), false);
     expect(s.source.built.length).toBe(built);
+  });
+});
+
+describe("Oakvale's chunk worker", () => {
+  it('builds every chunk byte for byte as the main thread does, from a plan of its own, and hands each back without copying', () => {
+    const worker = inThread(oakvaleBuilder());
+    const back: ChunkData[] = [];
+    const client = new ChunkWorker(worker.port, (data) => back.push(data));
+    for (const detail of ['full', 'standIn'] as const) {
+      for (const key of keys()) client.request(key, detail);
+      expect(client.inFlight).toBe(keys().length);
+      expect(client.has('0,0', detail)).toBe(true);
+      worker.answer();
+      expect(client.inFlight).toBe(0);
+    }
+    expect(back.map((c) => `${c.key} ${c.detail}`)).toEqual(['full', 'standIn'].flatMap((d) => keys().map((k) => `${k} ${d}`)));
+    for (const chunk of back) same(chunk, buildOakvaleChunk(plan, chunk.key, chunk.detail));
+    // Transferred: what the worker built is left with nothing, every array of it.
+    expect(worker.sent.flatMap((c) => [c.position, c.normal, c.color, c.fx, c.uv]).every((a) => a.buffer.byteLength === 0)).toBe(true);
+  }, 60000);
+
+  it('passes on why a chunk failed, and is shut', () => {
+    const worker = inThread(() => {
+      throw new Error('no such chunk');
+    });
+    const client = new ChunkWorker(worker.port, () => {});
+    client.request('9,9', 'full');
+    worker.answer();
+    expect([client.failed, client.inFlight, worker.port.terminated]).toEqual([true, 0, true]);
+  });
+});
+
+describe('the streamer, with a worker', () => {
+  const material = new MeshBasicMaterial();
+  const setup = () => {
+    const source = boxes(9);
+    // The worker builds the same boxes, counted apart from the main thread's.
+    const off = boxes(9);
+    const worker = inThread(off.build.bind(off));
+    const root = new Group();
+    const stager = new Stager();
+    const streamer = new Streamer(stager, material);
+    streamer.add({ ...source, build: source.build.bind(source), worker: () => worker.port }, root);
+    return { source, off, worker, root, stager, streamer };
+  };
+  const eye = (x: number, z: number) => new Vector3(x, 1.6, z);
+  /** A frame round the render, as the World runs it: the chunks staged at its render. */
+  const frame = (s: ReturnType<typeof setup>, at: Vector3, far = 200) => {
+    s.stager.restore();
+    s.streamer.update(at, reachTo(far));
+    s.stager.apply();
+    return s.root.children.filter((m) => (m as Mesh).material !== material).map(keyOf);
+  };
+
+  it('asks its worker for the nearest chunks a few at a time, and uploads at most one a frame of what comes back', () => {
+    const s = setup();
+    s.streamer.fill(0, 0, reachTo(200));
+    const filled = s.source.built.length;
+    expect(s.streamer.offThread).toBe(true);
+    const staged: ChunkKey[] = [];
+    for (let frames = 0; frames < 200 && (frames === 0 || s.streamer.pending > 0); frames++) {
+      const now = frame(s, eye(100, 0));
+      expect(now.length).toBeLessThanOrEqual(CONFIG.streaming.perFrame);
+      staged.push(...now);
+      expect(s.worker.asked.length).toBeLessThanOrEqual(CONFIG.streaming.inFlight);
+      s.worker.answer();
+    }
+    expect(s.streamer.pending).toBe(0);
+    // Nothing more built here: all of it in the worker, asked for nearest first, and uploaded in that order.
+    expect(s.source.built.length).toBe(filled);
+    expect(staged.length).toBeGreaterThan(3);
+    expect(s.off.built).toEqual(staged.map((k) => s.off.built.find((b) => b.startsWith(`${k} `))));
+    const distances = staged.map((k) => chunkDistance(k, 100, 0));
+    expect(distances).toEqual([...distances].sort((a, b) => a - b));
+  });
+
+  it("forgets a chunk that comes back once it's no longer wanted", () => {
+    const s = setup();
+    s.streamer.fill(0, 0, reachTo(200));
+    frame(s, eye(100, 0));
+    frame(s, eye(100, 0));
+    expect(s.worker.asked.length).toBeGreaterThan(0);
+    // Back where it was filled before anything comes back: all that was asked for is wanted no more.
+    frame(s, eye(0, 0));
+    s.worker.answer();
+    expect([frame(s, eye(0, 0)), frame(s, eye(0, 0)), s.streamer.pending]).toEqual([[], [], 0]);
+  });
+
+  it("builds on the main thread once its worker fails, what it had asked for too, still one a frame", () => {
+    const s = setup();
+    s.streamer.fill(0, 0, reachTo(200));
+    frame(s, eye(100, 0));
+    frame(s, eye(100, 0));
+    const asked = s.worker.asked.map(({ key, detail }) => `${key} ${detail}`);
+    expect(asked.length).toBeGreaterThan(0);
+    s.worker.fail();
+    expect([s.worker.port.terminated, s.streamer.offThread]).toEqual([true, false]);
+    const filled = s.source.built.length;
+    for (let frames = 0; frames < 200 && s.streamer.pending > 0; frames++) {
+      const before = s.source.built.length;
+      expect(frame(s, eye(100, 0)).length).toBeLessThanOrEqual(1);
+      expect(s.source.built.length - before).toBeLessThanOrEqual(1);
+    }
+    expect(s.streamer.pending).toBe(0);
+    expect(s.source.built.slice(filled)).toEqual(expect.arrayContaining(asked));
   });
 });
 

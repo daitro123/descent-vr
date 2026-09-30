@@ -152,7 +152,7 @@ export async function startWalk(renderer: WebGLRenderer, scene: Scene, camera: P
   let world: World | null = null;
   if (map.kind === 'zone') {
     const w = new World();
-    w.attach(scene, camera);
+    w.attach(scene, camera, renderer);
     w.load(map);
     world = floor = w;
     animate = (dt, c) => w.update(dt, c);

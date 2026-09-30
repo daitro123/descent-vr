@@ -1,11 +1,13 @@
 import { BufferAttribute, BufferGeometry, Sphere, Vector3 } from 'three';
 import { CONFIG } from '../config';
+import type { ChunkPort } from './chunkWorker';
 
 // One grid of square chunks over every zone, in world metres: chunk (i, j)
 // is centred on (i, j) × CONFIG.streaming.chunk, so Oakvale's ±140 m is 7 by
 // 7 of them. Keys are global, so a position needs no zone to find its chunk.
 // A zone's chunk builder turns a key into plain arrays, free of the DOM, so it
-// runs in tests (and, later, a worker); the streamer makes them meshes.
+// runs in tests and in a worker (world/chunkWorker.ts); the streamer makes
+// them meshes.
 
 /** A chunk's key: its grid indices, "i,j". */
 export type ChunkKey = `${number},${number}`;
@@ -67,6 +69,12 @@ export interface ChunkData {
 export interface ChunkSource {
   readonly keys: readonly ChunkKey[];
   build(key: ChunkKey, detail: Detail): ChunkData;
+  /**
+   * A worker that builds them off the main thread, as `build` does, byte for
+   * byte (it runs world/chunkWorker.ts `serveChunks`). Without one, or where
+   * workers can't run, the streamer builds on the main thread.
+   */
+  worker?(): ChunkPort;
 }
 
 /** A chunk's arrays as a geometry for the model material, its bounding sphere already known. */

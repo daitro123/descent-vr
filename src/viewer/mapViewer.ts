@@ -175,7 +175,7 @@ export class MapViewer {
     this.map = map;
     if (map.kind === 'zone') {
       this.world.load(map);
-      this.world.attach(this.scene, this.camera);
+      this.world.attach(this.scene, this.camera, this.renderer);
     } else {
       this.world.detach(this.scene);
       this.scene.add(map.root);
