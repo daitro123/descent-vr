@@ -73,6 +73,8 @@ export interface EnemyConfig {
   attacks: readonly AttackConfig[];
   /** Kinds without one never block. */
   guard?: GuardConfig;
+  /** How much of a root's or freeze's length (`hold`, 0: immune) and of a slow's strength (`slow`) it takes. All of both without one. */
+  takes?: { hold: number; slow: number };
 }
 
 export const CONFIG = {
@@ -726,6 +728,7 @@ export const CONFIG = {
       critMultiplier: 1.6,
       orbChance: 1,
       death: 'topple',
+      takes: { hold: 0.5, slow: 0.5 }, // shrugs off half
       attacks: [
         { pose: 'slashR', kind: 'melee', windup: 1.05, active: 0.3, recover: 0.9, damage: 22, blockable: true, guardBreak: true, aim: true, weight: 2 },
         { pose: 'slam', kind: 'slam', windup: 1.25, active: 0.25, recover: 1.6, damage: 30, blockable: false, radius: 1.5, exposeOnRecover: true, weight: 1 },
@@ -747,6 +750,7 @@ export const CONFIG = {
       critMultiplier: 2,
       orbChance: 0,
       death: 'shatter',
+      takes: { hold: 0, slow: 0.5 }, // no root or freeze holds it: it stays a boss fight
       attacks: [
         { pose: 'slashR', kind: 'melee', windup: 0.85, active: 0.28, recover: 0.3, damage: 18, blockable: true, aim: true, weight: 2, next: 1 },
         { pose: 'slashL', kind: 'melee', windup: 0.5, active: 0.28, recover: 0.3, damage: 18, blockable: true, aim: true, weight: 0, next: 2 },
