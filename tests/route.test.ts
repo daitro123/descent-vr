@@ -18,6 +18,11 @@ describe('reading the page from its URL', () => {
     expect(readPage('?map=forest&newgame').route).toEqual({ kind: 'walk', map: 'forest' });
   });
 
+  it('opens a professions prototype at ?proto=<name>', () => {
+    expect(readPage('?proto=brew').route).toEqual({ kind: 'proto', name: 'brew' });
+    expect(readPage('?proto=brew&emulate').route).toEqual({ kind: 'proto', name: 'brew' });
+  });
+
   it('opens the arena at ?arena, as the plain URL did before', () => {
     expect(readPage('?arena').route).toEqual({ kind: 'arena', firstWave: 1, duel: false, showcase: false });
     expect(readPage('?arena&duel').route).toEqual({ kind: 'arena', firstWave: 1, duel: true, showcase: false });
@@ -83,6 +88,14 @@ describe('reading the page from its URL', () => {
     expect(readPage('?emulate')).toMatchObject({ emulate: 'yes', devUI: true });
     expect(readPage('?noemulate')).toMatchObject({ emulate: 'no' });
     expect(readPage('?arena&emulate&nodevui')).toMatchObject({ route: { kind: 'arena' }, emulate: 'yes', devUI: false });
+  });
+
+  it('opens the bag prototype at ?bag, on the way to move items asked for', () => {
+    expect(readPage('?bag').route).toEqual({ kind: 'bag', variant: 'a' });
+    expect(readPage('?bag=b').route).toEqual({ kind: 'bag', variant: 'b' });
+    expect(readPage('?bag=C&models').route).toEqual({ kind: 'bag', variant: 'c' });
+    expect(readPage('?bag=z').route).toEqual({ kind: 'bag', variant: 'a' });
+    expect(readPage('?bag&perf')).toMatchObject({ route: { kind: 'bag' }, perf: true });
   });
 
   it('accepts a query string with or without its question mark', () => {
