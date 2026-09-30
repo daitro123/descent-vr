@@ -11,6 +11,9 @@ A written **spec for the inventory**, ready to hand off as build tickets: the ba
 - **Domain:** a browser VR action RPG (Three.js + WebXR). The glossary is `CONTEXT.md`; the inventory's words are **item**, **bag**, **gear**, **belt**, **loot**, **rarity**, **junk**, **coins**, **vendor** and **stash**.
 - **What exists:** no inventory. Oakvale's spec ruled out loot, coins and equipping: the sword and shield sit in your hands, Hale's longsword replaces your sword at the last hand-in (`src/quests.ts`, `SWORDS`), enemies drop only healing orbs (`src/world/orbs.ts`), and the leader's orders are a quest pickup, not a bag item (`src/world/pickups.ts`). The save record is version 1 and holds `sword` (`src/save/record.ts`).
 - **Sibling maps:** Abilities (branch `claude/plan-abilities-8b66c9`) settles the classes (warrior, ranger, mage), each class's weapon and fighting style, and what each **attribute** means. Professions settles gathering and crafting; its materials are items in the bag, and it will send its needs from the inventory to this map. Tickets that wait on either say so.
+- **What the sibling maps settled** (relayed 2026-09-30, on Tom's behalf):
+  - Abilities: only Stamina (10 health each) and your class's main attribute (+10% of level-1 damage each) count; 10 of each at level 1, 2 more a level. A full green set of your level adds about a third by level 10; a blue piece is about 1.5 times a green. Talents are a page of the same over-the-shoulder panel, beside the bag and gear. Up to three characters, one save record each plus a roster; today's save becomes a warrior. Off hands (quiver, focus) wait on its ranger and mage prototypes.
+  - Professions (`.scratch/professions/`): tools aren't items but hang on a **tool loop** behind the main-hand hip, a third belt zone with the potion slots' mechanics. Materials: copper ore, rough stone, copper bar, Hearthleaf, Duskcap. Crafted consumables stack in the bag: minor healing potion, rage draught, minor mana potion (all on the belt), elixir of the keen eye and whetstone (one active at a time). Drinking any potion dims the belt's flasks for a shared 60 s cooldown; this map adopts it. Crafted gear (copper gauntlets) is ordinary gear. Crafted goods land in the bag, or wait on the station if it's full. Vendors buy all materials and crafted goods; the innkeeper sells only the minor healing potion, and the other consumables are crafted only. The save holds each profession, its proficiency and known recipes, in the same record version as the bag.
 - **Controls taken:** A/X is the War Cry, B/Y the dash, the stick click the run. Abilities wants gestures too.
 - **Hardware and testing:** Tom tests alone on his Quest 3. The performance budget is `docs/quest-3-browser-performance-budget.md`: 72 fps, about 300 draw calls, at most 4 point lights.
 - **Skills:** grilling tickets call `grilling` and `domain-modeling`. Prototype tickets call `prototype`. Research tickets call `research`, with findings in `.scratch/inventory/research/`.
@@ -26,7 +29,7 @@ A written **spec for the inventory**, ready to hand off as build tickets: the ba
   - Reach over your shoulder and squeeze the grip to pull the bag round; the panel opens in front of you. No button.
   - Two belt slots at the hips; grab a potion and lift it to your mouth to drink.
   - The world doesn't pause while the bag is open.
-  - One currency, "coins". The smith buys anything and sells basic gear; the innkeeper sells food and potions. Junk exists only to sell.
+  - One currency, "coins". The smith buys anything and sells basic gear; the innkeeper sells potions (narrowed by Professions to the minor healing potion). Junk exists only to sell.
   - Nothing is lost on death and nothing wears out.
   - Quest hand-ins offer a pick of two or three items, and What Lies Below offers a weapon for each class.
   - A stash in a chest at the inn. Letting go of an item outside the panel drops it on the ground, and it's gone once you leave.
@@ -36,17 +39,15 @@ A written **spec for the inventory**, ready to hand off as build tickets: the ba
 <!-- one line per resolved ticket: [title](link): gist -->
 
 - [VR inventories in shipped games](issues/01-vr-inventories-in-shipped-games.md): shipped games use the same mix; zones are spheres placed from the headset with a speed gate, every slot glows and ticks, the grip is free to use, and the menu button isn't.
-- [The belt and drinking a potion](issues/04-the-belt-and-drinking-a-potion.md): the grip takes a flask from a hip slot and that hand's weapon fades out until it's drunk (0.7 s at the mouth) or let go; the slot refills from its stack; prototype at `?belt`.
-- [What an item is](issues/02-what-an-item-is.md): five kinds; quest items on their own page; hand-made items whose numbers come from item level and rarity by one rule; white plain, green adds attributes, blue 30% more; no wearing gear above your level; weapons and off hands class-locked; a full green set is about a third of your attributes. On Tom's behalf.
+- [What an item is](issues/02-what-an-item-is.md): five kinds; quest items on their own page; hand-made items whose numbers come from item level and rarity by one rule; white plain, green adds attributes, blue about 1.5 times a green; no wearing gear above your level; weapons and off hands class-locked; a full green set is about a third of your attributes. On Tom's behalf.
 - [Loot](issues/05-loot.md): drops at the enemy's level and only for your class; coins always, junk and gear by role (a leader or deep brute always drops green or blue, the Warden a blue and a green); chests open once per character; a glowing pouch with unlit beams for green and blue, lying 5 minutes; a full bag leaves the item on the ground; healing orbs stay. On Tom's behalf.
+- [The belt and drinking a potion](issues/04-the-belt-and-drinking-a-potion.md): the grip takes a flask from a hip slot and that hand's weapon fades out until it's drunk (0.7 s at the mouth) or let go; the slot refills from its stack; prototype at `?belt`.
 
 ## Not yet specified
 
-- **Saving the inventory:** the record's version 2 (bag, gear, belt, coins, stash) and the migration from version 1's `sword`. It sharpens once [What an item is](issues/02-what-an-item-is.md), [The bag and the gear panel](issues/03-the-bag-and-the-gear-panel.md) and [Vendors and the stash](issues/06-vendors-and-the-stash.md) are settled.
-- **Professions' needs:** material stacks, gathering tools and where crafted items land, once the Professions map sends them.
+- **Saving the inventory:** the record's next version (bag, gear, belt, coins, stash, and Professions' learned professions and recipes, per character under Abilities' roster) and the migration from version 1's `sword`. Whichever map builds first takes version 2. It sharpens once [What an item is](issues/02-what-an-item-is.md), [The bag and the gear panel](issues/03-the-bag-and-the-gear-panel.md) and [Vendors and the stash](issues/06-vendors-and-the-stash.md) are settled.
 - **Bigger bags:** where they come from and how many slots they add.
 - **Each class's off hand:** what a quiver and a mage's focus do as gear, once Abilities settles how the ranger and mage fight.
-- **Consumables beyond healing potions:** food, mana potions, buffs; which exist hangs on Abilities' resources and Professions' crafting.
 
 ## Out of scope
 
