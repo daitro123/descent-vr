@@ -1,4 +1,5 @@
 import { CONFIG } from './config';
+import type { Family } from './models/characters';
 
 // The item catalogue, as data, and the one rule that gives an item its
 // numbers from its item level and rarity. Nothing here is hand-tuned per item:
@@ -46,6 +47,8 @@ export interface GearItem extends Common {
   readonly main?: MainAttribute;
   /** An off hand with no armour: the quiver and the focus. */
   readonly noArmour?: true;
+  /** Dropped by kills (loot.ts), at every loot level. */
+  readonly loot?: true;
 }
 
 export interface ConsumableItem extends Common {
@@ -107,7 +110,79 @@ const gear = (id: ItemId, name: string, slot: GearSlot, level: number, rarity: R
   ...more,
 });
 
-const junk = (id: ItemId, name: string, model: string): JunkItem => ({ id, name, kind: 'junk', level: 1, rarity: 'grey', model });
+/** Loot's item levels, 1 to `CONFIG.loot.levels`. */
+export const LOOT_LEVELS: readonly number[] = Array.from({ length: CONFIG.loot.levels }, (_, i) => i + 1);
+
+/** An item that comes at every loot level has one id per level: its base id and the level. */
+export const levelled = (base: string, level: number): ItemId => `${base}-${level}`;
+
+/** Oakvale's junk, by who drops it: the base id, its name and its model. */
+export const JUNK = {
+  bandit: [
+    ['worn-trinket', 'Worn Trinket', 'trinket'],
+    ['torn-cloth', 'Torn Cloth', 'cloth'],
+  ],
+  undead: [
+    ['bone-charm', 'Bone Charm', 'charm'],
+    ['grave-dust', 'Grave Dust', 'dust'],
+  ],
+} as const satisfies Record<Family, readonly (readonly [string, string, string])[]>;
+
+/** Junk at every loot level: sold only, and worth its item level × `CONFIG.items.sell.grey`. */
+const junk = (): JunkItem[] =>
+  Object.values(JUNK).flatMap((kinds) =>
+    kinds.flatMap(([base, name, model]) => LOOT_LEVELS.map((level): JunkItem => ({ id: levelled(base, level), name, kind: 'junk', level, rarity: 'grey', model }))),
+  );
+
+/**
+ * The gear loot drops, at every loot level: for each slot a white, a green and
+ * a blue (placeholder names). Weapons and off hands are the warrior's, the only
+ * class that wears gear yet; ticket 16 adds the ranger's and mage's. Green and
+ * blue armour comes once for each main attribute, so a drop can carry yours.
+ */
+const LOOT_GEAR: Readonly<Record<GearSlot, readonly [white: string, green: string, blue: string]>> = {
+  mainHand: ['Iron Longsword', 'Tempered Longsword', 'Moonsteel Longsword'],
+  offHand: ['Oak Heater Shield', 'Banded Heater Shield', 'Moonsteel Kite Shield'],
+  head: ['Leather Cap', 'Studded Coif', 'Chain Coif'],
+  chest: ['Padded Jerkin', 'Studded Jerkin', 'Chain Hauberk'],
+  hands: ['Leather Gloves', 'Studded Gloves', 'Chain Gauntlets'],
+  legs: ['Leather Trousers', 'Studded Leggings', 'Chain Leggings'],
+  feet: ['Leather Boots', 'Studded Boots', 'Chain Boots'],
+};
+
+/** A green or blue armour piece's name ends in its main attribute's. */
+const OF_THE: Readonly<Record<MainAttribute, string>> = { strength: 'Bear', agility: 'Fox', intellect: 'Owl' };
+
+/** How a loot piece is drawn: the warrior's blade is the plain sword's, the shield the round shield's; armour by its slot. */
+const LOOT_MODEL: Readonly<Record<GearSlot, string>> = {
+  mainHand: 'plain',
+  offHand: 'round-shield',
+  head: 'helm',
+  chest: 'chest',
+  hands: 'gloves',
+  legs: 'legs',
+  feet: 'boots',
+};
+
+const slug = (name: string) => name.toLowerCase().replace(/[^a-z]+/g, '-');
+
+function lootGear(): GearItem[] {
+  const out: GearItem[] = [];
+  for (const slot of GEAR_SLOTS) {
+    const hand = slot === 'mainHand' || slot === 'offHand';
+    (['white', 'green', 'blue'] as const).forEach((rarity, r) => {
+      const name = LOOT_GEAR[slot][r];
+      const mains: (MainAttribute | null)[] = hand || rarity === 'white' ? [null] : ['strength', 'agility', 'intellect'];
+      for (const main of mains)
+        for (const level of LOOT_LEVELS) {
+          const full = main ? `${name} of the ${OF_THE[main]}` : name;
+          const more: Partial<GearItem> = { loot: true, ...(hand ? { class: 'warrior' } : main ? { main } : {}) };
+          out.push(gear(levelled(slug(full), level), full, slot, level, rarity, LOOT_MODEL[slot], more));
+        }
+    });
+  }
+  return out;
+}
 
 const potion = CONFIG.items.minorHealingPotion;
 const made = CONFIG.professions.items;
@@ -129,7 +204,7 @@ const consumable = (id: ItemId, name: string, model: string, more: Omit<Consumab
 const gauntlets = (main: MainAttribute, of: string): GearItem =>
   gear(`copper-gauntlets-of-${main}`, `Copper Gauntlets of ${of}`, 'hands', made.copperGauntlets.level, made.copperGauntlets.rarity, 'copper-gauntlets', { main });
 
-/** Every item the game knows, by id. Later tickets add Oakvale's picks, the smith's stock and loot. */
+/** Every item the game knows, by id. Later tickets add Oakvale's picks and the smith's stock. */
 export const CATALOGUE: Readonly<Record<ItemId, ItemDef>> = Object.fromEntries(
   ([
     // The warrior's starting kit, as today: the plain sword and the round shield.
@@ -147,10 +222,8 @@ export const CATALOGUE: Readonly<Record<ItemId, ItemDef>> = Object.fromEntries(
     gear('hale-longsword', "Hale's Old Longsword", 'mainHand', 5, 'blue', 'hale', { class: 'warrior' }),
     { id: 'minor-healing-potion', name: 'Minor Healing Potion', kind: 'consumable', level: 1, rarity: 'white', model: 'flask-red', ...potion },
     { id: 'leaders-orders', name: "Leader's Orders", kind: 'quest', level: 2, rarity: 'white', model: 'scroll' },
-    junk('worn-trinket', 'Worn Trinket', 'trinket'),
-    junk('torn-cloth', 'Torn Cloth', 'cloth'),
-    junk('bone-charm', 'Bone Charm', 'charm'),
-    junk('grave-dust', 'Grave Dust', 'dust'),
+    ...junk(),
+    ...lootGear(),
     // Professions' materials, gathered and smelted in Oakvale.
     material('copper-ore', 'Copper Ore', 'ore-copper', made.copperOre.price),
     material('rough-stone', 'Rough Stone', 'stone-rough', made.roughStone.price),

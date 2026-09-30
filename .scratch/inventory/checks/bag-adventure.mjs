@@ -249,7 +249,7 @@ await page.evaluate(() => {
   const effects = state.inventory.take([
     { id: 'hale-longsword', count: 1 },
     { id: 'short-bow', count: 1 },
-    { id: 'bone-charm', count: 1 },
+    { id: 'bone-charm-1', count: 1 },
     { id: 'minor-healing-potion', count: 4 },
   ], 12);
   adventure.applyThings(effects, adventure.player.rig.position);
@@ -366,7 +366,9 @@ await step(0.1);
   await page.evaluate(() => {
     const { adventure } = window.__descent;
     const at = adventure.player.rig.position;
-    for (let i = 0; i < 40 && adventure.state.level < 5; i++) adventure.apply({ kind: 'kill', camp: null, level: 5, role: 'ordinary' }, at);
+    for (let i = 0; i < 40 && adventure.state.level < 5; i++) adventure.apply({ kind: 'kill', camp: null, level: 5, role: 'ordinary', family: 'undead', seed: i }, at);
+    // What they dropped at your feet would go into the bag: this is about the levels.
+    adventure.drops.clear();
   });
   await step(0.1);
   let s = await state();
@@ -387,16 +389,16 @@ await step(0.1);
   const off = { x: charm.x + 0.5, y: charm.y - 0.2, z: charm.z + 0.2 };
   await carry(2, off);
   let s = await state();
-  check(s.slots[2] === null && s.dropped.some((d) => d.id === 'bone-charm'), `the charm let go off the panel is dropped (${s.last})`);
+  check(s.slots[2] === null && s.dropped.some((d) => d.id === 'bone-charm-1'), `the charm let go off the panel is dropped (${s.last})`);
   await step(1.5);
   s = await state();
-  const lying = s.dropped.find((d) => d.id === 'bone-charm');
+  const lying = s.dropped.find((d) => d.id === 'bone-charm-1');
   const ground = await page.evaluate((p) => window.__descent.world.heightAt(p.x, p.z), lying);
   check(lying?.landed && Math.abs(lying.y - ground - 0.04) < 0.02, `and lies on the ground (${(lying?.y - ground).toFixed(2)} m over it)`);
   await fistAt('left', { x: lying.x, y: lying.y + 0.05, z: lying.z });
   await step(0.1);
   s = await state();
-  check(!s.dropped.length && s.slots.includes('bone-charm'), `a fist touching it takes it back into the bag (bag slot ${s.slots.indexOf('bone-charm') + 1})`);
+  check(!s.dropped.length && s.slots.includes('bone-charm-1'), `a fist touching it takes it back into the bag (bag slot ${s.slots.indexOf('bone-charm-1') + 1})`);
   await fistAt('left', await page.evaluate(() => {
     const d = window.__descent;
     const p = d.player.rig.localToWorld(d.player.rig.position.clone().set(-0.3, 0.9, 0.1));
@@ -459,7 +461,7 @@ await step(0.1);
   await enter();
   s = await state();
   check(s.gear.mainHand === 'hale-longsword' && s.gear.offHand === null && s.inHand === 'hale', `after a reload: Hale's sword in your hand, the shield off (${JSON.stringify(s.gear)})`);
-  check(s.slots.includes('plain-sword') && s.slots.includes('round-shield') && s.slots.includes('bone-charm') && s.coins === 12, `and the bag as you left it (${s.slots.filter(Boolean).join(', ')}; ${s.coins} coins)`);
+  check(s.slots.includes('plain-sword') && s.slots.includes('round-shield') && s.slots.includes('bone-charm-1') && s.coins === 12, `and the bag as you left it (${s.slots.filter(Boolean).join(', ')}; ${s.coins} coins)`);
 }
 
 check(errors.length === 0, `no page errors (${errors.join('; ')})`);
