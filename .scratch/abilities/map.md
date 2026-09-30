@@ -59,7 +59,7 @@ A written **spec for character development in combat**, ready to hand off as bui
 Written on 2026-09-30 from [spec.md](spec.md), **by Claude on Tom's behalf**, numbered on from the map's sixteen tickets in the same `issues/` folder. Each needs its own session. Each lists the tickets that genuinely block it; tickets with no open blockers can run side by side.
 
 1. [17: Classes, attributes and the level curve](issues/17-classes-attributes-and-the-level-curve.md): no blockers. Done.
-2. [18: Characters: the roster and the page before VR](issues/18-characters-the-roster-and-the-page-before-vr.md): after 17.
+2. [18: Characters: the roster and the page before VR](issues/18-characters-the-roster-and-the-page-before-vr.md): after 17. Done.
 3. [19: Gestures and the warrior's new abilities](issues/19-gestures-and-the-warriors-new-abilities.md): after 17. Done.
 4. [20: Rooted, frozen and slowed](issues/20-rooted-frozen-and-slowed.md): no blockers.
 5. [21: The ranger](issues/21-the-ranger.md): after 17 to 20.

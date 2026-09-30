@@ -12,6 +12,19 @@ export type { ClassId, MainAttribute };
 /** Every class, in the order the page before VR lists their cards. */
 export const CLASSES = ['warrior', 'ranger', 'mage'] as const satisfies readonly ClassId[];
 
+/**
+ * The classes a new character can be: only those that are built. The ranger
+ * joins with abilities ticket 21 and the mage with 23.
+ */
+export const PLAYABLE: readonly ClassId[] = ['warrior'];
+
+/** A class as the page before VR shows it: its name, and a line on how it fights. */
+export const CLASS_CARD: Readonly<Record<ClassId, { readonly name: string; readonly line: string }>> = {
+  warrior: { name: 'Warrior', line: 'Sword and shield up close. Blows given and taken build rage for the War Cry and Earthshaker.' },
+  ranger: { name: 'Ranger', line: 'A bow drawn by hand. Arrows from range, traps and a mark, fed by focus.' },
+  mage: { name: 'Mage', line: 'Spells cast from the hands. Frost holds them, fire finishes them, all on mana.' },
+};
+
 type Table = typeof CONFIG.classes;
 
 /** A base ability of some class: what a level brings besides your plain kit. */

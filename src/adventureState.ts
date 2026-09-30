@@ -252,8 +252,10 @@ export class AdventureState {
   private beaten = false;
   /** The shapes you've drawn an ability in at least once. */
   private readonly drawn = new Set<Shape>();
-  /** Your class: every character is a warrior until the roster (abilities ticket 18) makes others. */
+  /** Your class: a warrior unless the character's record says otherwise. */
   readonly class: ClassId;
+  /** Which character you are: their key in the save (the roster's), or your class where there's none (tests, a new state). */
+  readonly character: string;
   /** The top level: the content's (CONFIG.levels.cap), unless a test brings its own. */
   readonly cap: number;
   /** Your things, for your class. */
@@ -266,8 +268,9 @@ export class AdventureState {
    * `chains` (every one in the game, unless a test brings its own), of
    * `options.class` (a warrior unless it says).
    */
-  constructor(saved?: Progress, chains: readonly Chain[] = CHAINS, options: { readonly class?: ClassId; readonly cap?: number } = {}) {
+  constructor(saved?: Progress, chains: readonly Chain[] = CHAINS, options: { readonly class?: ClassId; readonly cap?: number; readonly character?: string } = {}) {
     this.class = options.class ?? 'warrior';
+    this.character = options.character ?? this.class;
     this.cap = options.cap ?? CONFIG.levels.cap;
     const you = this;
     const wearer = { class: this.class, get level() { return you.level; } };
@@ -534,12 +537,11 @@ export class AdventureState {
   /**
    * Open chest `id` at `level`, once per character: it's recorded open, and
    * what it holds, rolled from the chest and the character, comes out as a
-   * drop. Every character is a warrior for now, so the class stands for the
-   * character in the seed until the roster brings each its own id.
+   * drop, seeded by the chest and which character you are.
    */
   private openChest(id: string, level: number): Effect[] {
     if (this.inventory.isOpened(id)) return [];
-    const loot = rollChest(level, this.class, seeded(chestSeed(id, this.class)));
+    const loot = rollChest(level, this.class, seeded(chestSeed(id, this.character)));
     return [...this.inventory.openChest(id), { kind: 'loot', ...loot }];
   }
 

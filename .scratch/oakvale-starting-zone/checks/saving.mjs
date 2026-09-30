@@ -22,17 +22,19 @@
 //    at full health (120) with no rage, on The Lumber Camp at 0/5, every camp
 //    full; in VR you stand where you stood, facing the same way.
 // 5. Hiding the page, and ending VR, each write where you stand.
-// 6. `?newgame`: a dialog on the page before VR; "Carry on" keeps the save,
-//    "Start over" deletes it and starts a new character at the start. The
-//    flag leaves the address either way.
+// 6. `?newgame` (since abilities ticket 18, the roster): the new-character
+//    form on the page before VR; "Cancel" keeps the save and plays it, "Make"
+//    makes a second character at the start, keeping the first. The flag leaves
+//    the address either way.
 // 7. The arena and `?map=forest` never read or write the save.
 // 8. Where IndexedDB won't open, the game plays and the page says progress
-//    won't be kept. A newer build's record, and one this build can't read,
-//    are left alone, and the page says so; `?newgame` asks, then deletes it.
+//    won't be kept. A newer build's record is left alone, and the page says
+//    so. One this build can't read is left alone in its slot, a new character
+//    saved beside it, and Delete on the page deletes it.
 // 9. A record from before the inventory (version 1) loads as a warrior in the
 //    starting kit wearing the sword it had: Hale's old longsword in your hand,
 //    2.0 damage, Hale without it; the next write is the current version
-//    (3), with no professions learned.
+//    (4), with no professions learned.
 // 10. The debug handle's professions helpers (professions ticket 11): teaching
 //    Mining, setting Smithing's proficiency and filling the bag each write,
 //    and the record holds them.
@@ -94,7 +96,7 @@ const record = () =>
       };
     });
   });
-/** Put `r` where the game keeps its record, as another build would. */
+/** Put `r` where the game keeps its record, as another build would, with nothing else saved. */
 const put = (r) =>
   page.evaluate(
     (r) =>
@@ -102,11 +104,25 @@ const put = (r) =>
         const open = indexedDB.open('descent-vr');
         open.onsuccess = () => {
           const tx = open.result.transaction('save', 'readwrite');
+          tx.objectStore('save').clear();
           tx.objectStore('save').put(r, 'character');
           tx.oncomplete = () => (open.result.close(), done());
         };
       }),
     r,
+  );
+/** What the store holds under `key`. */
+const held = (key) =>
+  page.evaluate(
+    (key) =>
+      new Promise((done) => {
+        const open = indexedDB.open('descent-vr');
+        open.onsuccess = () => {
+          const get = open.result.transaction('save').objectStore('save').get(key);
+          get.onsuccess = () => (open.result.close(), done(get.result ?? null));
+        };
+      }),
+    key,
   );
 /** The record once every write in flight has landed. */
 const saved = async () => {
@@ -182,7 +198,7 @@ await enterVR();
 {
   await board('accept');
   let r = await saved();
-  check(r?.version === 3 && r.quests.raiders.stage === 'active', `taking Raiders in the Fields writes it (${r?.quests.raiders.stage})`);
+  check(r?.version === 4 && r.quests.raiders.stage === 'active', `taking Raiders in the Fields writes it (${r?.quests.raiders.stage})`);
   await step(4); // the camps finish rising out of the ground
   await standAt(54.5, 26, Math.atan2(-(60 - 54.5), -(33 - 26)));
   const counts = [];
@@ -271,32 +287,33 @@ await open('?emulate&nodevui');
 {
   const kept = await record();
   await page.goto(`${base}/?newgame&emulate&nodevui`);
-  await page.waitForSelector('#new-game[open]', { timeout: 60000 });
-  const asks = await page.locator('#new-game').innerText();
-  check(/level 2 character, on The Lumber Camp,/.test(asks), `a dialog asks first: "${asks.replace(/\s+/g, ' ').trim()}"`);
+  await page.waitForSelector('#new-character[open]', { timeout: 60000 });
+  const asks = (await page.locator('#new-character').innerText()).replace(/\s+/g, ' ').trim();
+  check(/A new character/.test(asks) && /Warrior/.test(asks), `the new-character form opens: "${asks}"`);
   await shot('03-newgame-asks');
-  await page.click('#new-game button[value=no]');
+  await page.click('#new-character button[value=cancel]');
   await page.waitForFunction(() => window.__descent?.adventure, null, { timeout: 120000 });
   let y = await you();
-  check(y.level === 2 && JSON.stringify(await record()) === JSON.stringify(kept), `"Carry on" keeps the save (level ${y.level})`);
+  check(y.level === 2 && JSON.stringify(await record()) === JSON.stringify(kept), `"Cancel" keeps the save and plays it (level ${y.level})`);
   check(!page.url().includes('newgame'), `and the flag leaves the address (${page.url()})`);
 
   await page.goto(`${base}/?newgame&emulate&nodevui`);
-  await page.waitForSelector('#new-game[open]', { timeout: 60000 });
-  await page.click('#new-game button[value=yes]');
+  await page.waitForSelector('#new-character[open]', { timeout: 60000 });
+  await page.click('#new-character button[value=make]');
   await page.waitForFunction(() => window.__descent?.adventure, null, { timeout: 120000 });
   y = await you();
   const start = await page.evaluate(() => window.__descent.world.zoneAt(0, 0).spawn);
-  check((await record()) === null, '"Start over" deletes the save');
+  check(JSON.stringify(await record()) === JSON.stringify(kept), '"Make" keeps the first character');
   check(
     y.level === 1 && y.xp === 0 && y.marker === 'offered' && y.tracker === null && near(y.x, start.x) && near(y.z, start.z),
-    `and starts a new character at the start (level ${y.level}, Hale ${y.marker}, at ${y.x.toFixed(2)}, ${y.z.toFixed(2)})`,
+    `and plays a new character at the start (level ${y.level}, Hale ${y.marker}, at ${y.x.toFixed(2)}, ${y.z.toFixed(2)})`,
   );
   check(!page.url().includes('newgame'), 'and the flag leaves the address');
   await enterVR();
   await board('accept');
-  const r = await saved();
-  check(r.level === 1 && r.quests.raiders.stage === 'active', 'the new character saves from there');
+  await page.evaluate(() => window.__descent.saved());
+  const r = await held('character-2');
+  check(r?.level === 1 && r.quests.raiders.stage === 'active', 'the new character saves from there, under its own key');
 }
 
 // 7. The arena and walking the map leave the save alone.
@@ -335,22 +352,21 @@ await open('?emulate&nodevui');
   const unreadable = { version: 2, level: 'five' };
   await put(unreadable);
   await open('?emulate&nodevui');
-  const said = await page.locator('.save-note').innerText();
-  check(/couldn't be read/.test(said) && (await you()).level === 1, `a record this build can't read: a new character, and the page says "${said}"`);
+  const slot = (await page.locator('#characters .slot').first().innerText()).replace(/\s+/g, ' ').trim();
+  check(/Can't be read/.test(slot) && (await you()).level === 1 && (await page.locator('.save-note').count()) === 0, `a record this build can't read: shown in its slot ("${slot}"), and a new character`);
   await enterVR();
   await board('accept');
   await page.evaluate(() => window.__descent.saved());
   check(JSON.stringify(await record()) === JSON.stringify(unreadable), 'and that record is left as it was');
-  await page.goto(`${base}/?newgame&emulate&nodevui`);
-  await page.waitForSelector('#new-game[open]', { timeout: 60000 });
-  const asks = (await page.locator('#new-game').innerText()).replace(/\s+/g, ' ').trim();
-  check(/can't read/.test(asks), `?newgame asks: "${asks}"`);
-  await page.click('#new-game button[value=yes]');
-  await page.waitForFunction(() => window.__descent?.adventure, null, { timeout: 120000 });
-  check((await record()) === null && (await page.locator('.save-note').count()) === 0, '"Start over" deletes it, and the note goes');
-  await enterVR();
-  await board('accept');
-  check((await saved())?.quests.raiders.stage === 'active', 'and the new character saves');
+  check((await held('character-2'))?.quests.raiders.stage === 'active', 'the new character saves beside it');
+  await page.evaluate(() => window.__descent.renderer.xr.getSession().end());
+  await page.click('#characters .slot:first-of-type .delete');
+  await page.waitForSelector('#delete-character[open]');
+  const asks = (await page.locator('#delete-character').innerText()).replace(/\s+/g, ' ').trim();
+  check(/can't read/.test(asks), `Delete asks: "${asks}"`);
+  await page.click('#delete-character button[value=yes]');
+  await page.waitForFunction(() => !document.querySelector('#characters .slot[data-kind]'));
+  check((await record()) === null && (await held('roster'))?.characters.join() === 'character-2', '"Delete" deletes it');
 
   const locked = await context.browser().newContext({ viewport: { width: 1200, height: 800 } });
   const other = await locked.newPage();
@@ -397,7 +413,7 @@ await open('?emulate&nodevui');
   await enterVR();
   await hidePage();
   const r = await saved();
-  check(r?.version === 3 && r.inventory.gear.mainHand === 'hale-longsword' && !('sword' in r), `the next write is version ${r?.version}, wearing ${r?.inventory.gear.mainHand}`);
+  check(r?.version === 4 && r.inventory.gear.mainHand === 'hale-longsword' && !('sword' in r), `the next write is version ${r?.version}, wearing ${r?.inventory.gear.mainHand}`);
   check(
     r && Object.keys(r.professions.learned).length === 0 && r.professions.recipes.length === 0,
     `with no professions learned (${JSON.stringify(r?.professions)})`,

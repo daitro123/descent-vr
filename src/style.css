@@ -65,9 +65,80 @@ canvas {
   color: #f08060;
 }
 
-/* ?newgame's question, before VR (ui/newGameDialog.ts). */
-#new-game {
-  max-width: min(360px, calc(100vw - 32px));
+/* Your characters on the page before VR (ui/characterPage.ts): three slots, the picked one marked. */
+#characters {
+  margin-top: 10px;
+  pointer-events: auto;
+}
+
+#characters h2 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  letter-spacing: 0.05em;
+  color: #e0b060;
+}
+
+#characters .slot {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+  margin-top: 6px;
+}
+
+#characters button,
+.page-dialog button {
+  padding: 6px 10px;
+  font: inherit;
+  color: #e8dcc0;
+  background: #3a2e1e;
+  border: 1px solid #8a7040;
+  cursor: pointer;
+}
+
+#characters .card,
+#characters .make {
+  flex: 1;
+  text-align: left;
+}
+
+#characters .card b,
+#characters .card span {
+  display: block;
+}
+
+#characters .card span {
+  color: #b8ab90;
+}
+
+#characters .slot[data-picked] .card {
+  background: #5a4424;
+  border-color: #e0b060;
+}
+
+#characters .slot[data-picked] .card b::before {
+  content: '▶ ';
+  color: #e0b060;
+}
+
+#characters .slot[data-kind] .card {
+  cursor: default;
+  color: #b8ab90;
+}
+
+#characters .make {
+  color: #b8ab90;
+  border-style: dashed;
+}
+
+#characters .delete,
+.page-dialog button[value='yes'] {
+  color: #ffd0b0;
+  border-color: #b05a3a;
+}
+
+/* The new-character form, renaming and deleting (ui/characterPage.ts); ?newgame opens the form. */
+.page-dialog {
+  max-width: min(400px, calc(100vw - 32px));
   padding: 14px 18px;
   color: inherit;
   background: rgb(20 16 12 / 0.95);
@@ -77,36 +148,77 @@ canvas {
   line-height: 1.5;
 }
 
-#new-game::backdrop {
+.page-dialog::backdrop {
   background: rgb(0 0 0 / 0.5);
 }
 
-#new-game h2 {
+.page-dialog h2 {
   margin: 0 0 6px;
   font-size: 16px;
   letter-spacing: 0.05em;
   color: #e0b060;
 }
 
-#new-game form {
+.page-dialog form > button,
+.page-dialog .buttons {
   display: flex;
   gap: 10px;
   justify-content: flex-end;
   margin-top: 12px;
 }
 
-#new-game button {
-  padding: 6px 14px;
-  font: inherit;
-  color: #e8dcc0;
-  background: #3a2e1e;
-  border: 1px solid #8a7040;
+.page-dialog form > button {
+  margin-left: auto;
+}
+
+.page-dialog fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.page-dialog legend,
+.page-dialog label.name {
+  color: #b8ab90;
+}
+
+.page-dialog .class-card {
+  display: block;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px solid #5a4a30;
   cursor: pointer;
 }
 
-#new-game button[value='yes'] {
-  color: #ffd0b0;
-  border-color: #b05a3a;
+.page-dialog .class-card:has(input:checked) {
+  background: #3a2e1e;
+  border-color: #e0b060;
+}
+
+.page-dialog .class-card input {
+  margin: 0 6px 0 0;
+}
+
+.page-dialog .class-card span {
+  display: block;
+  color: #b8ab90;
+}
+
+.page-dialog label.name {
+  display: block;
+  margin-top: 10px;
+}
+
+.page-dialog input[name='name'] {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 4px;
+  padding: 6px 8px;
+  font: inherit;
+  color: #e8dcc0;
+  background: #1a140e;
+  border: 1px solid #8a7040;
 }
 
 #viewer-hud {

@@ -1,7 +1,11 @@
 import type { Effect } from '../adventureState';
 import { CONFIG } from '../config';
 import type { SaveRecord } from './record';
-import type { SaveStore } from './store';
+
+/** Where the controller writes one character's record: its slot in the store (store.ts, `Played`). */
+export interface RecordWriter {
+  write(record: SaveRecord): Promise<void>;
+}
 
 /** What changes nothing the save keeps. */
 const UNSAVED: ReadonlySet<Effect['kind']> = new Set(['xp', 'refused', 'left', 'loot']);
@@ -25,7 +29,7 @@ export class SaveController {
   private zoneId: string | null = null;
 
   constructor(
-    private readonly store: SaveStore,
+    private readonly store: RecordWriter,
     /** The record as it would be written now. */
     private readonly snapshot: () => SaveRecord,
   ) {}
