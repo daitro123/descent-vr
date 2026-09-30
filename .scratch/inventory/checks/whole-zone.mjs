@@ -707,25 +707,26 @@ function install() {
     }
     return { left: d.state.pointsLeft, spent: d.state.pointsSpent, talents: { ...d.state.talents } };
   };
-  /** A fist onto a button of Hale's board: in front of it, then onto its face, then back down. */
-  const press = (button, hand = 'right') => {
-    const key = adventure.board.keys.find((k) => k.button === button);
-    if (!adventure.board.isOpen || !key) return false;
+  /** A fist onto a button of Hale's board (or `on`, another talk board): in front of it, then onto its face, then back down. */
+  const press = (button, hand = 'right', on = 'board') => {
+    const board = adventure[on];
+    const key = board.keys.find((k) => k.button === button);
+    if (!board.isOpen || !key) return false;
     const at = (o) => {
-      adventure.board.root.updateMatrixWorld(true);
+      board.root.updateMatrixWorld(true);
       return player.rig.worldToLocal(key.mesh.localToWorld(new V(0, 0, 0.02 + o))).toArray();
     };
     for (let i = 0; i < 8; i++) {
       hold(hand, at(0.15));
       tick();
     }
-    const was = `${adventure.board.isOpen} ${JSON.stringify(adventure.state.hale)}`;
+    const was = `${board.isOpen} ${JSON.stringify(adventure.state.hale)}`;
     for (let i = 0; i < 8; i++) {
       hold(hand, at(0));
       tick();
     }
     down();
-    return `${adventure.board.isOpen} ${JSON.stringify(adventure.state.hale)}` !== was;
+    return `${board.isOpen} ${JSON.stringify(adventure.state.hale)}` !== was;
   };
   /** A hand-in's pick `i` taken off Hale's board into the bag's first empty slot, as a carry lets it go there. */
   const pick = (i) => {
@@ -1562,6 +1563,9 @@ const junkValue = await page.evaluate(async () => {
   await stage('smith');
   await standBy('smith', 2);
   await page.evaluate(() => window.__play.wait(0.4));
+  // Since professions 18 the smith has Ore and Fire to offer after Raiders in the Fields: their talk board comes first, and "Trade" unfolds the wares.
+  const talked = await page.evaluate(() => window.__play.press('trade', 'right', 'vendorBoard'));
+  if (talked) note('the smith talked first (Ore and Fire on offer): "Trade" pressed');
   let w = await page.evaluate(() => ({ open: window.__descent.wares.isOpen, vendor: window.__descent.wares.vendor, bag: window.__descent.bag.isOpen }));
   check(w.open && w.vendor === 'smith' && w.bag, `walking up to the smith unfolds their wares, the bag panel beside them (${w.vendor})`);
   await stepUp();

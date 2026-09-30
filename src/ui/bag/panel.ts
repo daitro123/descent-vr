@@ -14,6 +14,7 @@ import {
   FACE,
   FIGURE,
   figureAt,
+  LEDGER,
   nearestSpot,
   overBoard,
   type Page,
@@ -33,6 +34,7 @@ import { BLANK_CELL, EMPTY_CELL, type IconAtlas, lookOf, RARITY_COLOUR } from '.
 import { cardKey, paintCard, SlotMeshes } from './pieces';
 import { buttonAt, buttonXY, pageKey, paintPage, type TalentActs, type TalentButton } from './talentPage';
 import type { Shape } from '../../classes';
+import { capOf, type Grade, PROFESSION_NAMES, type Professions } from '../../professions/professions';
 
 // The bag panel in the Adventure, promoted from the bag prototype's variant A
 // (ui/bag-prototype/panel.ts): it comes round when you reach for the bag.
@@ -82,7 +84,8 @@ const _c = new Color();
 export class BagPanel {
   readonly root = new Group();
   readonly card = new Card(CARD.w, CARD.h, { ppm: 1400 });
-  private readonly board = new Card(BOARD.right - BOARD.left, BOARD.top - BOARD.bottom, { ppm: 1100 });
+  /** The board, reaching down past the slots' far enough for the professions' lines under the coins. */
+  private readonly board = new Card(BOARD.right - BOARD.left, BOARD.top - LEDGER.bottom, { ppm: 1100 });
   private readonly slots: SlotMeshes;
   private readonly figure: Mesh<BufferGeometry>;
   private open = false;
@@ -99,10 +102,12 @@ export class BagPanel {
     private readonly atlas: IconAtlas,
     /** Your talents and gesture slots, for the talent page: without them it says there are none. */
     private readonly talents: TalentActs | null = null,
+    /** Your professions, a line each under your coins: none without them. */
+    private readonly professions: Ledger | null = null,
   ) {
     this.root.name = 'bag-panel';
     this.root.visible = false;
-    this.board.mesh.position.set((BOARD.left + BOARD.right) / 2, (BOARD.top + BOARD.bottom) / 2, 0);
+    this.board.mesh.position.set((BOARD.left + BOARD.right) / 2, (BOARD.top + LEDGER.bottom) / 2, 0);
     this.root.add(this.board.mesh);
 
     // Every slot's frame in one draw, and its icon (and the page's and the belt's slots' counts) from one atlas in another.
@@ -392,13 +397,14 @@ export class BagPanel {
     const talents = this.talentPage;
     const shows = talents && { lit: button, picked: this.picked, fighting: talents.fighting() };
     const talentKey = talents && shows ? pageKey(talents.state, shows) : '';
-    this.board.paint(`${page}|${lit}|${coins}|${talentKey}`, (c, w, h) => {
+    const ledger = talents && shows ? [] : ledgerLines(this.professions);
+    this.board.paint(`${page}|${lit}|${coins}|${talentKey}|${ledger.join()}`, (c, w) => {
       const k = w / (BOARD.right - BOARD.left);
       const px = (x: number) => (x - BOARD.left) * k;
       const py = (y: number) => (BOARD.top - y) * k;
       const tabBottom = py(TABS.y - TABS.h / 2);
       c.fillStyle = '#1c140c';
-      roundRect(c, 0, tabBottom, w, h - tabBottom, 14);
+      roundRect(c, 0, tabBottom, w, py(ledger.length ? LEDGER.bottom : BOARD.bottom) - tabBottom, 14);
       c.fill();
       c.font = `bold ${Math.round(TABS.h * k * 0.5)}px ${FONT}`;
       c.textAlign = 'center';
@@ -433,6 +439,10 @@ export class BagPanel {
       c.stroke();
       c.fillStyle = '#f0e0b0';
       c.fillText(text, px(COINS.x) + r, py(COINS.y) + 1);
+      // A line per profession learned, a pair to a row.
+      c.fillStyle = '#d8ccb0';
+      c.font = `${Math.round(LEDGER.font * k)}px ${FONT}`;
+      ledger.forEach((line, i) => c.fillText(line, px(LEDGER.x[i % 2]), py(LEDGER.y[Math.floor(i / 2)]) + 1));
       if (page === 'talents') {
         c.fillStyle = '#a89c80';
         c.font = `${Math.round(0.02 * k)}px ${FONT}`;
@@ -445,6 +455,11 @@ export class BagPanel {
     });
   }
 
+  /** Is it showing a line for a profession learned? */
+  get ledger(): readonly string[] {
+    return ledgerLines(this.professions);
+  }
+
   /** The card: over the slot it's for, kept within the board. */
   private showCard(stack: Stack | null, over: Spot | null): void {
     const { inventory } = this;
@@ -455,4 +470,22 @@ export class BagPanel {
     this.card.mesh.position.x = Math.max(BOARD.left + CARD.w / 2, Math.min(BOARD.right - CARD.w / 2, x));
     paintCard(this.card, text, cardKey(stack, inventory.gear, inventory.wearing.level));
   }
+}
+
+/** What the bag panel reads of your professions for its lines. */
+export type Ledger = Pick<Professions, 'learned' | 'proficiency' | 'grade'>;
+
+/** "Apprentice". */
+const titled = (grade: Grade) => grade[0].toUpperCase() + grade.slice(1);
+
+/**
+ * A line per profession learned, in pairs, gathering before making
+ * ("Mining: Apprentice 12/25"): a pair's two share a row.
+ */
+export function ledgerLines(professions: Ledger | null): string[] {
+  if (!professions) return [];
+  return professions.learned.map((p) => {
+    const grade = professions.grade(p)!;
+    return `${PROFESSION_NAMES[p]}: ${titled(grade)} ${professions.proficiency(p)}/${capOf(grade)}`;
+  });
 }

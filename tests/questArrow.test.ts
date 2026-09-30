@@ -13,6 +13,11 @@ const WAY: ArrowSpots = {
     lumberCamp: place(-50, -40, 13),
     // The mine's arrow points at its mouth; it hides from its front on.
     mine: place(-14, -72, 7, { x: -14, z: -78 }),
+    // The trainers' intro quests' places.
+    veins: place(23, 17, 6),
+    anvil: place(15, 13, 3),
+    fields: place(60, 49, 16),
+    bench: place(-20, 10, 6),
   },
   givers: { hale: { x: 1.5, z: 4.8 } },
 };

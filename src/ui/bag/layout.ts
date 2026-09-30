@@ -57,6 +57,13 @@ export const TABS = { y: 0.188, w: 0.086, h: 0.036, x: [-1, 0, 1].map((k) => GRI
 export const BOARD = { left: -0.315, right: 0.335, bottom: -0.225, top: TABS.y + TABS.h / 2 + 0.006 };
 /** The coin count, under the page's slots. */
 export const COINS = { x: GRID_MIDDLE, y: -0.19 };
+/**
+ * The professions learned, a line each under the coin count ("Mining:
+ * Apprentice 12/25"): a pair to a row, the gathering one under the figure and
+ * the making one under the slots. The board reaches down to `bottom` while
+ * there's one to show.
+ */
+export const LEDGER = { x: [FIGURE.x, GRID_MIDDLE] as const, y: [-0.237, -0.262] as const, bottom: -0.277, font: 0.017 };
 /** Where the card sits, over the panel. */
 export const CARD = { w: 0.28, h: 0.2, y: BOARD.top + 0.11 };
 

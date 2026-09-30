@@ -29,7 +29,8 @@ import { fits, type Knobs, knobsOf, pointsAt, refusal, type Spent, spentAll, spe
 // effects and answers out. The Adventure feeds it what happens in the world
 // and turns its effects into floats, sounds, your numbers and what Hale and
 // the tracker show; the save keeps its snapshot. Levels, XP and the quest
-// givers' chains live here: Marshal Hale's, and the trainers' once they come
+// givers' chains live here: Marshal Hale's, and the smith's and the
+// herbalist's intro quests, which teach their professions
 // (.scratch/oakvale-starting-zone/spec.md, "The adventure state";
 // .scratch/professions/spec.md, "Trainers and quests"). So does the
 // character's class, and what it makes of their level: attributes, health,
@@ -655,7 +656,9 @@ export class AdventureState {
       return h !== undefined && STAGES.indexOf(h.stage) >= STAGES.indexOf(stage);
     };
     let line = '';
-    for (const b of BARKS[villager]) if (!b.from || reached(b.from.quest, b.from.stage)) line = b.line;
+    for (const b of BARKS[villager]) {
+      if ((!b.from || reached(b.from.quest, b.from.stage)) && (!b.learned || this.professions.has(b.learned))) line = b.line;
+    }
     return line;
   }
 
@@ -754,19 +757,26 @@ export class AdventureState {
     return chain && this.current(chain);
   }
 
-  /** Take the quest `giver` has on offer: it goes to the bottom of the tracker. */
+  /**
+   * Take the quest `giver` has on offer: it goes to the bottom of the tracker.
+   * A trainer's intro quest teaches its pair of professions as you take it
+   * (nothing more if you've learned them already).
+   */
   private accept(giver: GiverId): Effect[] {
     const h = this.offeredBy(giver);
     if (h?.stage !== 'offered') return [];
     h.stage = 'active';
     h.taken = this.underWay.length;
-    return [{ kind: 'quest', quest: h.quest.id, stage: 'active' }];
+    const effects: Effect[] = [{ kind: 'quest', quest: h.quest.id, stage: 'active' }];
+    const { teaches } = h.quest;
+    if (teaches && !this.professions.has(teaches)) effects.push(...this.professions.learn(teaches));
+    return effects;
   }
 
   /**
    * Give back `giver`'s quest that's ready: the pick into your bag, what it
-   * had you pick up off the quest page, its XP, the next quest of their chain
-   * on offer, and the first of every chain it opens. With no room for the
+   * had you pick up off the quest page, its XP and coins, the next quest of
+   * their chain on offer, and the first of every chain it opens. With no room for the
    * pick, it's refused, and the pick and the quest wait on the board.
    */
   private handIn(giver: GiverId, pick?: ItemId, to?: Where): Effect[] {
@@ -788,6 +798,7 @@ export class AdventureState {
     const effects: Effect[] = [{ kind: 'quest', quest: quest.id, stage: 'handedIn' }, ...got];
     for (const o of quest.objectives) if (o.kind === 'pickup') effects.push(...this.inventory.giveUp(QUEST_ITEM[o.item]));
     effects.push(...this.earn(quest.xp));
+    if (quest.coins) effects.push(...this.inventory.take([], quest.coins));
     const opened = [h.chain, ...this.chains.filter((c) => c.after === quest.id)];
     for (const next of opened.map((c) => this.current(c))) {
       if (next?.stage !== 'locked') continue;

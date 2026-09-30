@@ -146,12 +146,14 @@ const state = () =>
   page.evaluate(() => {
     const d = window.__descent;
     const { adventure, player, state } = d;
-    const { bench, herbalist } = adventure;
+    const { bench } = adventure;
+    // The herbalist is a villager since the trainers (ticket 18): their body is one mesh, beside their bark's card.
+    const herbalist = adventure.villagers.get('herbalist');
     const inv = state.inventory;
     let drawn = true;
     for (let o = herbalist.root; o; o = o.parent) if (!o.visible) drawn = false;
     let meshes = 0;
-    herbalist.root.traverse((o) => o.isMesh && meshes++);
+    herbalist.root.traverse((o) => o.isMesh && o !== herbalist.bark.mesh && meshes++);
     return {
       bare: bench.bare,
       step: bench.step,

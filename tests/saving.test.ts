@@ -103,6 +103,9 @@ describe("the adventure state's snapshot", () => {
         // The Lumber Camp's second count is its orders: taken. It's the first (and only) quest under way.
         lumber: { stage: 'active', counts: [1, 1], taken: 1 },
         below: { stage: 'locked', counts: [0] },
+        // The trainers' intro quests, offered since Raiders in the Fields was handed in.
+        'ore-and-fire': { stage: 'offered', counts: [0, 0] },
+        'leaves-for-the-pot': { stage: 'offered', counts: [0, 0] },
       },
       wardenBeaten: false,
       professions: NO_PROFESSIONS,

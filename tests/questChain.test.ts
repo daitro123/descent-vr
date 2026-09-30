@@ -109,7 +109,7 @@ describe('Raiders in the Fields', () => {
     expect(play(state, FARM)).toEqual([{ kind: 'xp', amount: 10 }]);
   });
 
-  it('hands in for 80 XP and level 2, and Hale offers The Lumber Camp', () => {
+  it('hands in for 80 XP and level 2, and Hale offers The Lumber Camp, the smith and the herbalist their intro quests', () => {
     const state = new AdventureState();
     play(state, ACCEPT, FARM, FARM, FARM);
     expect(state.apply(HAND_IN)).toEqual([
@@ -118,6 +118,8 @@ describe('Raiders in the Fields', () => {
       { kind: 'xp', amount: 80 },
       { kind: 'level', level: 2, unlocks: ['warCry'] },
       { kind: 'quest', quest: 'lumber', stage: 'offered' },
+      { kind: 'quest', quest: 'ore-and-fire', stage: 'offered' },
+      { kind: 'quest', quest: 'leaves-for-the-pot', stage: 'offered' },
     ]);
     expect(state.xp).toBe(110);
     expect(state.hale).toEqual({ marker: 'offered', line: OFFERED[1], buttons: ['accept', 'notNow'], picks: [] });
@@ -489,7 +491,7 @@ describe('the chain moves one way', () => {
     for (const event of [...RAIDERS, ...LUMBER, ACCEPT, WARDEN, HAND_IN]) {
       for (const e of state.apply(event)) if (e.kind === 'quest' && e.stage === 'offered') offered.push(e.quest);
     }
-    expect(offered).toEqual(['lumber', 'below']);
+    expect(offered).toEqual(['lumber', 'ore-and-fire', 'leaves-for-the-pot', 'below']);
   });
 });
 

@@ -2,10 +2,10 @@ import { CONFIG } from '../config';
 
 // One rule for hands at a station (.scratch/professions/spec.md, "Stations"):
 // step within about 1.3 m of one, facing it and out of a fight, and both
-// hands become the station's (the smith's hammer and tongs at the anvil);
-// step back past about 2 m and they're yours again. A fight takes them back
-// at once. Once they're the station's, turning away (to the forge, the
-// bucket) keeps them.
+// hands become the station's (the smith's hammer and tongs at the anvil,
+// open hands at the alchemy bench); step back past about 2 m and they're
+// yours again. A fight takes them back at once. Once they're the station's,
+// turning away (to the forge, the bucket) keeps them.
 
 /** Where you stand to a station this frame. */
 export interface AtStation {
