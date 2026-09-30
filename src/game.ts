@@ -342,6 +342,7 @@ export class Game {
     this.combat.projectiles.clear();
     this.combat.axes.clear();
     this.combat.bolts.clear();
+    this.combat.blizzard.clear();
     this.mage?.clear();
     this.player.reset();
     this.wave = this.firstWave - 1;

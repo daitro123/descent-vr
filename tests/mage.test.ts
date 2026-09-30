@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { statsAt } from '../src/adventureState';
 import { ABILITY, abilitiesAt, PLAYABLE, resourceOf } from '../src/classes';
 import { Combat, type CombatFx, combatStats, resetCombatStats } from '../src/combat/combat';
-import { afterBlock, blinkTo, boltDamage, boltShape, wardRises, within } from '../src/combat/mage';
+import { blizzardAt } from '../src/combat/blizzard';
+import { afterBlock, blinkTo, boltDamage, boltShape, chainFrom, wardRises, within } from '../src/combat/mage';
 import { CONFIG } from '../src/config';
 import type { Enemy, EnemyContext } from '../src/enemies/enemy';
 import { createEnemy } from '../src/enemies/kinds';
@@ -21,12 +22,16 @@ import type { Ground } from '../src/world/ground';
 // poses, against real enemies. The tests check what a player would see: the
 // bolt a throw makes and where it lands, what the ward stops and what it
 // costs, where a blink puts you, who Frost Nova freezes and whom a
-// Fireball's burst reaches.
+// Fireball's burst reaches; and (ticket 24) whom a Frostbolt slows, whom
+// Chain Lightning arcs to, and what Blizzard does to whom stands in it.
 
 const DT = 1 / 72;
 const M = CONFIG.mage;
 const N = CONFIG.classes.mage.abilities.frostNova;
 const F = CONFIG.classes.mage.abilities.fireball;
+const FB = CONFIG.classes.mage.abilities.frostbolt;
+const CL = CONFIG.classes.mage.abilities.chainLightning;
+const BZ = CONFIG.classes.mage.abilities.blizzard;
 
 const flat: Ground = { resolve: () => false, lineOfSight: () => true, heightAt: () => 0, steer: Arena.prototype.steer, arrowStops: (p) => p.y <= 0 };
 
@@ -407,10 +412,10 @@ describe("Fireball's burst", () => {
     expect(m.combat.use('fireball')).toBe('waiting');
     expect(m.player.resource).toBe(100 - F.cost);
     const bolt = throwBolt(m)!;
-    expect(bolt.fire).toBe(true);
+    expect(bolt.charge).toBe('fireball');
     expect(bolt.damage).toBe(20 * F.multiplier);
     expect(m.player.abilities.primed('fireball')).toBe(false);
-    expect(throwBolt(m)!.fire).toBe(false);
+    expect(throwBolt(m)!.charge).toBe(null);
   });
 
   it('burns the one it hits for 1.5 times, and bursts for 10 on every other enemy within 2 m', () => {
@@ -444,5 +449,212 @@ describe("Fireball's burst", () => {
     const [a, b, c, d] = [e(1), e(2.3), e(2.4), e(1, false)];
     expect(within(at, F.radius, [a, b, c, d])).toEqual([a, b]);
     expect(within(at, F.radius, [a, b], a)).toEqual([b]);
+  });
+});
+
+describe("Frostbolt's slow", () => {
+  it('puts frost on the next bolt for 15 mana; one ability waits on a bolt at a time', () => {
+    const m = mage();
+    expect(m.combat.use('frostbolt')).toBe('cast');
+    expect(m.player.resource).toBe(100 - FB.cost);
+    expect(m.combat.use('frostbolt')).toBe('waiting');
+    expect(m.combat.use('fireball')).toBe('waiting');
+    expect(m.combat.use('chainLightning')).toBe('waiting');
+    expect(m.player.resource).toBe(100 - FB.cost);
+    expect(m.player.abilities.waitingOn()).toBe('frostbolt');
+    const bolt = throwBolt(m)!;
+    expect(bolt.charge).toBe('frostbolt');
+    expect(bolt.damage).toBe(20);
+    expect(throwBolt(m)!.charge).toBe(null);
+    expect(m.combat.use('fireball')).toBe('cast');
+  });
+
+  it('slows the enemy it hits by 40% for 5 s, once the blow has landed', () => {
+    const m = mage();
+    const grunt = m.add('grunt', 0, -5);
+    const beside = m.add('grunt', 1.2, -5.5);
+    m.combat.use('frostbolt');
+    throwBolt(m);
+    m.run(0.6);
+    expect(grunt.hp).toBe(grunt.def.hp - 20);
+    expect(grunt.slowness).toBeCloseTo(FB.slow, 5);
+    expect(grunt.afflictedFor('slowed')).toBeGreaterThan(FB.time - 1);
+    expect(beside.slowness).toBe(0);
+    expect(combatStats.chilled).toBe(1);
+    m.run(FB.time);
+    expect(grunt.slowness).toBe(0);
+  });
+
+  it('slows a brute and the Warden by half as much', () => {
+    for (const kind of ['brute', 'warden'] as const) {
+      const m = mage();
+      const e = m.add(kind, 0, -5);
+      m.combat.use('frostbolt');
+      throwBolt(m);
+      m.run(0.6);
+      expect(e.hp).toBeLessThan(e.def.hp);
+      expect(e.slowness).toBeCloseTo(FB.slow / 2, 5);
+    }
+  });
+
+  it('a plain bolt slows nothing', () => {
+    const m = mage();
+    const grunt = m.add('grunt', 0, -5);
+    throwBolt(m);
+    m.run(0.6);
+    expect(grunt.hp).toBe(grunt.def.hp - 20);
+    expect(grunt.slowness).toBe(0);
+  });
+});
+
+describe("Chain Lightning's arcs", () => {
+  it('arcs from the one it hits on to two more within 4 m, at 70% each, for 30 mana and 8 s', () => {
+    const m = mage();
+    const hit = m.add('grunt', 0, -5);
+    const second = m.add('grunt', 2.5, -6);
+    const third = m.add('grunt', 5.5, -7.5); // 4 m on from the second, 6 m from the first
+    const far = m.add('grunt', -6, -5);
+    expect(m.combat.use('chainLightning')).toBe('cast');
+    expect(m.player.resource).toBe(100 - CL.cost);
+    const bolt = throwBolt(m)!;
+    expect(bolt.charge).toBe('chainLightning');
+    m.run(0.6);
+    const arc = Math.round(20 * CL.share);
+    expect(hit.hp).toBe(hit.def.hp - 20);
+    expect(second.hp).toBe(second.def.hp - arc);
+    expect(third.hp).toBe(third.def.hp - arc);
+    expect(far.hp).toBe(far.def.hp);
+    expect(combatStats.arcs).toBe(2);
+    expect(m.combat.use('chainLightning')).toBe('cooling');
+  });
+
+  it('arcs on from one its bolt kills, and to nobody with nobody near', () => {
+    const m = mage();
+    const hit = m.add('grunt', 0, -5);
+    hit.hp = 5;
+    const next = m.add('grunt', 1.5, -5.5);
+    m.combat.use('chainLightning');
+    throwBolt(m);
+    m.run(0.6);
+    expect(hit.alive).toBe(false);
+    expect(next.hp).toBe(next.def.hp - Math.round(20 * CL.share));
+
+    const lone = mage();
+    const alone = lone.add('grunt', 0, -5);
+    lone.combat.use('chainLightning');
+    throwBolt(lone);
+    lone.run(0.6);
+    expect(alone.hp).toBe(alone.def.hp - 20);
+    expect(combatStats.arcs).toBe(1);
+  });
+
+  it('hops to the nearest each time, never one twice, only to bodies a blow can land on', () => {
+    const e = (x: number, z = 0, hittable = true) => ({ position: new Vector3(x, 0, z), def: { radius: 0.35 }, hittable });
+    const [a, b, c, d, down] = [e(0), e(3), e(6.5), e(20), e(1, 0, false)];
+    expect(chainFrom(a, [a, b, c, d, down], CL.jumps, CL.reach)).toEqual([b, c]);
+    // From b the nearest is a; the next arc leaves a, and c is too far from a.
+    expect(chainFrom(b, [a, b, c, d], CL.jumps, CL.reach)).toEqual([a]);
+    expect(chainFrom(a, [a, d], CL.jumps, CL.reach)).toEqual([]);
+    expect(chainFrom(a, [a, b, c], 1, CL.reach)).toEqual([b]);
+  });
+});
+
+describe("Blizzard's ice", () => {
+  const from = new Vector3(0, 1.5, 0);
+  const enemyAt = (x: number, z: number) => ({ position: new Vector3(x, 0, z), def: { radius: 0.35 }, hittable: true });
+
+  it('falls on the enemy nearest where the right hand faces, within 15°', () => {
+    const out = new Vector3();
+    const e = enemyAt(1, -10);
+    expect(blizzardAt(from, new Vector3(0, 0, -1), [e, enemyAt(8, -8)], flat, out).toArray()).toEqual([1, 0, -10]);
+  });
+
+  it('else where the hand’s line meets the floor, at most 15 m off, and short of a wall', () => {
+    const out = new Vector3();
+    blizzardAt(from, new Vector3(0, -0.5, -1).normalize(), [], flat, out);
+    expect(out.x).toBeCloseTo(0, 5);
+    expect(out.z).toBeCloseTo(-3, 5);
+    blizzardAt(from, new Vector3(0, 0.2, -1).normalize(), [], flat, out);
+    expect(out.z).toBeCloseTo(-BZ.range, 5);
+    const walled: Ground = { ...flat, lineOfSight: (_a, b) => b.z > -6.2 };
+    blizzardAt(from, new Vector3(0, 0, -1), [], walled, out);
+    expect(out.z).toBeCloseTo(-6, 5);
+    const room: Ground = { ...flat, arrowStops: (p) => p.y <= 0 || p.z < -7 };
+    blizzardAt(from, new Vector3(0, 0.7, -0.7).normalize(), [], room, out);
+    expect(out.z).toBeCloseTo(-7, 5);
+    blizzardAt(from, new Vector3(0, -1, 0), [], flat, out);
+    expect(out.toArray()).toEqual([0, 0, 0]);
+  });
+
+  it('bites every enemy in its 4 m circle for 6 every 0.5 s and slows it by half; outside, nothing', () => {
+    const m = mage();
+    const inside = m.add('grunt', 1, -8);
+    const edge = m.add('grunt', 4, -6);
+    const out = m.add('grunt', 7, -6);
+    m.frame();
+    const aim = { from: new Vector3(0.3, 1.4, -0.3), hand: new Vector3(0, -0.2, -1).normalize(), gaze: new Vector3(0, 0, -1) };
+    expect(m.combat.use('blizzard', aim)).toBe('cast');
+    expect(m.player.resource).toBe(100 - BZ.cost);
+    const at = m.combat.blizzard.centre.clone();
+    expect(Math.hypot(at.x - 1, at.z + 8)).toBeLessThan(1e-6); // on the grunt within 15°
+    m.run(1.9); // ticks at 0, 0.5, 1 and 1.5 s
+    expect(inside.hp).toBe(inside.def.hp - 4 * BZ.damage);
+    expect(edge.hp).toBe(edge.def.hp - 4 * BZ.damage);
+    expect(out.hp).toBe(out.def.hp);
+    expect(inside.slowness).toBeCloseTo(BZ.slow, 5);
+    expect(out.slowness).toBe(0);
+    expect(combatStats.blizzardHits).toBe(8);
+  });
+
+  it('falls for 5 s, 10 ticks in all, and a slow lingers a second after its last', () => {
+    const m = mage();
+    const brute = m.add('brute', 0, -6);
+    m.frame();
+    const aim = { from: new Vector3(0, 1.4, 0), hand: new Vector3(0, 0, -1), gaze: new Vector3(0, 0, -1) };
+    m.combat.use('blizzard', aim);
+    expect(m.combat.blizzard.active).toBe(true);
+    m.run(BZ.time + 0.3);
+    expect(m.combat.blizzard.active).toBe(false);
+    expect(brute.hp).toBe(brute.def.hp - (BZ.time / BZ.every) * BZ.damage);
+    expect(brute.slowness).toBeCloseTo(BZ.slow / 2, 5); // a brute takes half
+    m.run(BZ.linger);
+    expect(brute.slowness).toBe(0);
+  });
+
+  it('lets an enemy that walks out of it go a second later', () => {
+    const m = mage();
+    const grunt = m.add('grunt', 0, -6);
+    m.frame();
+    m.combat.use('blizzard', { from: new Vector3(0, 1.4, 0), hand: new Vector3(0, 0, -1), gaze: new Vector3(0, 0, -1) });
+    m.run(1);
+    expect(grunt.slowness).toBeCloseTo(BZ.slow, 5);
+    const hp = grunt.hp;
+    m.enemies.length = 0;
+    const away = m.add('grunt', 0, -12);
+    m.enemies.push(grunt);
+    grunt.position.set(0, 0, -12.5);
+    m.run(BZ.linger + 0.1);
+    expect(grunt.hp).toBe(hp);
+    expect(grunt.slowness).toBe(0);
+    expect(away.hp).toBe(away.def.hp);
+  });
+
+  it('costs 40 mana, waits out 30 s, and needs somewhere to point', () => {
+    const m = mage();
+    expect(m.combat.use('blizzard')).toBe('no target');
+    expect(m.player.resource).toBe(100);
+    const aim = { from: new Vector3(0, 1.4, 0), hand: new Vector3(0, -1, -1).normalize(), gaze: new Vector3(0, 0, -1) };
+    expect(m.combat.use('blizzard', aim)).toBe('cast');
+    expect(m.combat.use('blizzard', aim)).toBe('cooling');
+    m.player.abilities.clear();
+    m.player.resource = BZ.cost - 1;
+    expect(m.combat.use('blizzard', aim)).toBe('poor');
+  });
+
+  it('stays in the effects budget: two draw calls and under 500 triangles', () => {
+    const m = mage();
+    const { disc, shards } = m.combat.blizzard;
+    expect([disc.isMesh, shards.isInstancedMesh]).toEqual([true, true]);
+    expect(m.combat.blizzard.triangles).toBeLessThanOrEqual(500);
   });
 });
