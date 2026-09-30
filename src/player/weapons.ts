@@ -104,7 +104,8 @@ export class Sword {
 
   update(rig: Object3D, dt: number): void {
     const grip = this.model.parent;
-    if (!grip?.visible) {
+    // With no sword in the hand (the main hand empty) there's nothing to hit with.
+    if (!grip?.visible || !this.model.visible) {
       this.base.valid = this.tip.valid = this.hand.valid = this.tipValid = false;
       this.swing.reset();
       return;
@@ -211,7 +212,8 @@ export class Shield {
   }
 
   update(rig: Object3D, dt: number): void {
-    if (!this.model.parent?.visible) {
+    // With no shield on the arm (the off hand empty) there's nothing to block with.
+    if (!this.model.parent?.visible || !this.model.visible) {
       this.centre.valid = false;
       return;
     }
