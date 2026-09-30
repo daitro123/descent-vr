@@ -10,12 +10,12 @@
 // full health while the rest of a camp fights you. The bag is read through the
 // debug handle (`state.inventory`), not the bag panel (ticket 09).
 //
-// 1. A farm bandit falls: a pouch of 1 to 3 coins lies where it fell, with
+// 1. A farm bandit falls: a pouch of 1 to 4 coins (CONFIG.loot.coins) lies where it fell, with
 //    any item beside it at item level 1, the bandits' junk or a warrior's gear.
 // 2. The left fist touches the pouch, then each item: the coins and the items
 //    are yours, each with a buzz in the left hand, "+N coins" floats up, and
 //    the drop is gone.
-// 3. The lumber camp's leader falls: 6 to 18 coins and always one green or
+// 3. The lumber camp's leader falls: 6 to 24 coins and always one green or
 //    blue piece of item level 2 for a warrior, raising a beam. Walking over
 //    the drop takes it all into the bag.
 // 4. With the bag filled, a thug's drop (or, if none of the camp drops an
@@ -219,7 +219,9 @@ let farmDrop;
   farmDrop = t.pieces;
   check(t.lying === before.lying + 1 && roll?.role === 'ordinary' && roll.level === 1, `a farm bandit (level 1) falls and a drop lies (${JSON.stringify(roll)})`);
   const pouch = t.pieces.find((p) => p.item === null);
-  check(pouch && pouch.coins >= 1 && pouch.coins <= 3 && Math.hypot(pouch.at.x - m.x, pouch.at.z - m.z) < 0.6, `a pouch of ${pouch?.coins} coins where it fell`);
+  // A kill's coins: CONFIG.loot.coins × level × the role's share (inventory ticket 17 raised the top from 3 to 4).
+  const [low, high] = await page.evaluate(() => window.__descent.CONFIG.loot.coins);
+  check(pouch && pouch.coins >= low && pouch.coins <= high && Math.hypot(pouch.at.x - m.x, pouch.at.z - m.z) < 0.6, `a pouch of ${pouch?.coins} coins where it fell`);
   const items = await Promise.all(t.pieces.filter((p) => p.item).map((p) => itemOf(p.item)));
   check(
     items.every((i) => i.level === 1 && (i.kind === 'junk' ? /^(worn-trinket|torn-cloth)/.test(i.id) : i.kind === 'gear' && (i.class ?? 'warrior') === 'warrior')),
@@ -253,7 +255,8 @@ let farmDrop;
   let t = await look();
   const roll = t.rolled.at(-1);
   const pouch = t.pieces.find((p) => p.item === null);
-  check(roll?.role === 'leader' && roll.level === 2 && pouch?.coins >= 6 && pouch.coins <= 18, `the leader (level 2) drops ${pouch?.coins} coins`);
+  const [low, high] = await page.evaluate(() => window.__descent.CONFIG.loot.coins);
+  check(roll?.role === 'leader' && roll.level === 2 && pouch?.coins >= low * 6 && pouch.coins <= high * 6, `the leader (level 2) drops ${pouch?.coins} coins`);
   const items = await Promise.all(t.pieces.filter((p) => p.item).map(async (p) => ({ ...(await itemOf(p.item)), beam: p.beam })));
   const gear = items.filter((i) => i.kind === 'gear');
   check(
