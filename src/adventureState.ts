@@ -1,7 +1,9 @@
 import { CONFIG, type EnemyConfig } from './config';
 import { Inventory, type InventoryEffect, type InventorySave } from './inventory';
 import { type ClassId, itemOf, type Worn, WORN_NOTHING } from './items';
+import { type Loot, rollLoot, seeded } from './loot';
 import type { CampId } from './maps/types';
+import type { Family } from './models/characters';
 import { BARKS, CHAIN, CHAIN_DONE, type Item, type Objective, type Place, type QuestId, RETURN_TO_HALE, type Sword, SWORDS, type VillagerId } from './quests';
 
 // The rules of progress in the Adventure, with no three.js in it: events in,
@@ -53,6 +55,10 @@ export type AdventureEvent =
       /** The enemy's own level. */
       readonly level: number;
       readonly role: Role;
+      /** Who it was, for the junk it drops. */
+      readonly family: Family;
+      /** Its loot's seed: from the camp, the enemy and the time (loot.ts, lootSeed). */
+      readonly seed: number;
     }
   /** "Accept" on Hale's board: take the quest on offer. */
   | { readonly kind: 'accept' }
@@ -70,6 +76,8 @@ export type Effect =
   | { readonly kind: 'quest'; readonly quest: QuestId; readonly stage: Stage }
   /** One of a quest's objectives counted one more: `count` of its need. */
   | { readonly kind: 'progress'; readonly quest: QuestId; readonly objective: number; readonly count: number }
+  /** A kill's drop, lying where it fell: a pouch of coins and each item beside it. Not saved until taken. */
+  | ({ readonly kind: 'loot' } & Loot)
   /** What happened to your things: a reward put straight into your hand, say. */
   | InventoryEffect;
 
@@ -172,13 +180,15 @@ export class AdventureState {
   /** Each quest's objectives' counts. */
   private readonly counts: number[][] = CHAIN.map((q) => q.objectives.map(() => 0));
   private beaten = false;
-  /** Your things. Every character is a warrior until the Abilities map's roster brings classes. */
+  /** Your things. */
   readonly inventory: Inventory;
+  /** Every character is a warrior until the Abilities map's roster brings classes. */
+  private readonly klass: ClassId = 'warrior';
 
   /** A new character, or one restored from a snapshot. */
   constructor(saved?: Progress) {
     const you = this;
-    const wearer = { class: 'warrior' as ClassId, get level() { return you.level; } };
+    const wearer = { class: this.klass, get level() { return you.level; } };
     this.inventory = new Inventory(wearer, saved?.inventory);
     if (saved) this.restore(saved);
   }
@@ -342,7 +352,9 @@ export class AdventureState {
         if (event.role === 'warden') this.beaten = true;
         const L = CONFIG.levels;
         const xp = this.earn(L.killXp * event.level * L.roles[event.role]);
-        return [...xp, ...this.count((o) => credits(o, event.camp, event.role))];
+        const loot = rollLoot(event, this.klass, seeded(event.seed));
+        const drop: Effect[] = loot.coins > 0 || loot.items.length ? [{ kind: 'loot', ...loot }] : [];
+        return [...drop, ...xp, ...this.count((o) => credits(o, event.camp, event.role))];
       }
       case 'pickup':
         return this.count((o) => o.kind === 'pickup' && o.item === event.item);

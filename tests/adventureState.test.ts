@@ -10,7 +10,14 @@ import type { CampId } from '../src/maps/types';
 // drive it the same way and check what a player would notice: XP, level,
 // health, damage and what they can use.
 
-const kill = (level: number, role: Role = 'ordinary', camp: CampId | null = 'farm'): AdventureEvent => ({ kind: 'kill', camp, level, role });
+const kill = (level: number, role: Role = 'ordinary', camp: CampId | null = 'farm', seed = 1): AdventureEvent => ({
+  kind: 'kill',
+  camp,
+  level,
+  role,
+  family: camp === 'mine' || camp === null ? 'undead' : 'bandit',
+  seed,
+});
 
 /** The XP one kill pays a new character. */
 function paid(event: AdventureEvent): number {
@@ -27,6 +34,9 @@ function earn(state: AdventureState, xp: number): Effect[] {
 }
 
 const levelUps = (effects: Effect[]) => effects.filter((e) => e.kind === 'level');
+
+/** What a kill did besides its drop. */
+const noLoot = (effects: Effect[]) => effects.filter((e) => e.kind !== 'loot');
 
 /** What the warrior's starting kit adds up to, and with Hale's old longsword in hand instead. */
 const KIT = wornBy('warrior', ['plain-sword', 'round-shield', 'worn-tunic', 'worn-boots'].map((id) => CATALOGUE[id] as GearItem));
@@ -54,8 +64,8 @@ describe('a new character', () => {
 describe('a kill', () => {
   it('pays 10 XP per enemy level, and says what it paid', () => {
     const state = new AdventureState();
-    expect(state.apply(kill(1))).toEqual([{ kind: 'xp', amount: 10 }]);
-    expect(state.apply(kill(2))).toEqual([{ kind: 'xp', amount: 20 }]);
+    expect(noLoot(state.apply(kill(1)))).toEqual([{ kind: 'xp', amount: 10 }]);
+    expect(noLoot(state.apply(kill(2)))).toEqual([{ kind: 'xp', amount: 20 }]);
     expect(state.xp).toBe(30);
     expect(state.xpToNext).toBe(70);
   });
@@ -66,10 +76,37 @@ describe('a kill', () => {
     expect(paid(kill(5, 'warden'))).toBe(150);
   });
 
-  it('pays nothing for the skeletons the Warden raises', () => {
+  it('pays nothing for the skeletons the Warden raises, and they drop nothing', () => {
     const state = new AdventureState();
     expect(state.apply(kill(5, 'raised', null))).toEqual([]);
     expect(state.xp).toBe(0);
+  });
+
+  it("drops loot where it fell, rolled from the kill's seed for a warrior at the enemy's level", () => {
+    const drop = (event: AdventureEvent) => new AdventureState().apply(event).find((e) => e.kind === 'loot');
+    const leader = kill(2, 'leader', 'lumberCamp', 42);
+    expect(drop(leader)).toEqual(drop(leader));
+    const loot = drop(leader)!;
+    expect(loot).toMatchObject({ kind: 'loot' });
+    if (loot.kind !== 'loot') return;
+    expect(loot.coins).toBeGreaterThanOrEqual(6);
+    expect(loot.coins).toBeLessThanOrEqual(18);
+    const gear = loot.items.map((id) => CATALOGUE[id]).filter((i) => i.kind === 'gear');
+    expect(gear).toHaveLength(1);
+    expect(gear[0]).toMatchObject({ level: 2 });
+    // Lying on the ground isn't having it: nothing's in the bag, and no coins, until it's touched.
+    const state = new AdventureState();
+    state.apply(leader);
+    expect(state.inventory.coins).toBe(0);
+    expect(state.inventory.bag.every((s) => s === null)).toBe(true);
+  });
+
+  it('drops a blue and a green every time the Warden is beaten', () => {
+    for (let seed = 0; seed < 20; seed++) {
+      const loot = new AdventureState().apply(kill(5, 'warden', null, seed)).find((e) => e.kind === 'loot');
+      const rarities = loot?.kind === 'loot' ? loot.items.map((id) => CATALOGUE[id].rarity) : [];
+      expect(rarities).toEqual(['blue', 'green']);
+    }
   });
 });
 
@@ -139,7 +176,7 @@ describe('abilities', () => {
 
   it('come together when one kill passes two levels', () => {
     const state = new AdventureState();
-    expect(state.apply(kill(10, 'warden', null))).toEqual([
+    expect(noLoot(state.apply(kill(10, 'warden', null)))).toEqual([
       { kind: 'xp', amount: 300 },
       { kind: 'level', level: 2, unlocks: ['warCry'] },
       { kind: 'level', level: 3, unlocks: ['earthshaker'] },
@@ -151,7 +188,7 @@ describe('the level cap', () => {
   it('keeps only the XP up to 1,000, and says so', () => {
     const state = new AdventureState();
     earn(state, 990);
-    expect(state.apply(kill(2))).toEqual([
+    expect(noLoot(state.apply(kill(2)))).toEqual([
       { kind: 'xp', amount: 10 },
       { kind: 'level', level: 5, unlocks: [] },
     ]);
@@ -159,10 +196,10 @@ describe('the level cap', () => {
     expect(state.xpToNext).toBe(0);
   });
 
-  it('drops every kill past it', () => {
+  it("drops every kill's XP past it", () => {
     const state = new AdventureState();
     earn(state, 1000);
-    expect(state.apply(kill(5, 'warden', null))).toEqual([]);
+    expect(noLoot(state.apply(kill(5, 'warden', null)))).toEqual([]);
     expect(state.xp).toBe(1000);
     expect(state.level).toBe(5);
   });

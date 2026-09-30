@@ -15,11 +15,11 @@ import { MemoryStore, openSave, type SaveStore } from '../src/save/store';
 const ACCEPT: AdventureEvent = { kind: 'accept' };
 const HAND_IN: AdventureEvent = { kind: 'handIn' };
 const ORDERS: AdventureEvent = { kind: 'pickup', item: 'orders' };
-const FARM: AdventureEvent = { kind: 'kill', camp: 'farm', level: 1, role: 'ordinary' };
-const LUMBER: AdventureEvent = { kind: 'kill', camp: 'lumberCamp', level: 2, role: 'ordinary' };
-const LEADER: AdventureEvent = { kind: 'kill', camp: 'lumberCamp', level: 2, role: 'leader' };
-const DIG_BRUTE: AdventureEvent = { kind: 'kill', camp: 'mine', level: 4, role: 'deepBrute' };
-const WARDEN: AdventureEvent = { kind: 'kill', camp: null, level: 5, role: 'warden' };
+const FARM: AdventureEvent = { kind: 'kill', camp: 'farm', level: 1, role: 'ordinary', family: 'bandit', seed: 1 };
+const LUMBER: AdventureEvent = { kind: 'kill', camp: 'lumberCamp', level: 2, role: 'ordinary', family: 'bandit', seed: 1 };
+const LEADER: AdventureEvent = { kind: 'kill', camp: 'lumberCamp', level: 2, role: 'leader', family: 'bandit', seed: 1 };
+const DIG_BRUTE: AdventureEvent = { kind: 'kill', camp: 'mine', level: 4, role: 'deepBrute', family: 'undead', seed: 1 };
+const WARDEN: AdventureEvent = { kind: 'kill', camp: null, level: 5, role: 'warden', family: 'undead', seed: 1 };
 
 /** The whole chain on the plain route, one event at a time. */
 const ROUTE: AdventureEvent[] = [
@@ -226,12 +226,12 @@ describe('the save record', () => {
 
   it("drops an item the catalogue doesn't know on load, rather than failing the read", () => {
     const record = recordOf(new AdventureState().snapshot());
-    const bag = [{ id: 'axe-of-legends', count: 1 }, { id: 'torn-cloth', count: 2 }, ...record.inventory.bag.slice(2)];
+    const bag = [{ id: 'axe-of-legends', count: 1 }, { id: 'torn-cloth-1', count: 2 }, ...record.inventory.bag.slice(2)];
     const odd = { ...record, inventory: { ...record.inventory, bag, gear: { ...record.inventory.gear, head: 'crown-of-nowhere' } } };
     const read = readSave(stored(odd));
     if (read.kind !== 'saved') throw new Error(read.kind);
     const state = new AdventureState(read.record);
-    expect(state.inventory.bag.slice(0, 2)).toEqual([null, { id: 'torn-cloth', count: 2 }]);
+    expect(state.inventory.bag.slice(0, 2)).toEqual([null, { id: 'torn-cloth-1', count: 2 }]);
     expect(state.inventory.gear.head).toBeNull();
   });
 
@@ -287,7 +287,7 @@ describe('the in-memory store', () => {
     const state = new AdventureState();
     ROUTE.forEach((e) => state.apply(e));
     const { inventory } = state;
-    inventory.take([{ id: 'torn-cloth', count: 3 }, { id: 'minor-healing-potion', count: 12 }, { id: 'leaders-orders', count: 1 }], 42);
+    inventory.take([{ id: 'torn-cloth-1', count: 3 }, { id: 'minor-healing-potion', count: 12 }, { id: 'leaders-orders', count: 1 }], 42);
     // The plain sword Hale's replaced is in the bag's first slot, the cloth in its second.
     inventory.move({ in: 'bag', slot: 3 }, { in: 'stash', slot: 20 });
     inventory.move({ in: 'bag', slot: 2 }, { in: 'belt', slot: 0 });
@@ -467,7 +467,7 @@ describe('the save controller', () => {
     'a hand-in': [{ kind: 'quest', quest: 'raiders', stage: 'handedIn' }, { kind: 'xp', amount: 80 }],
     'a level-up': [{ kind: 'xp', amount: 10 }, { kind: 'level', level: 2, unlocks: ['warCry'] }],
     'a reward worn at once': [{ kind: 'slot', where: { in: 'gear', slot: 'mainHand' }, stack: { id: 'hale-longsword', count: 1 } }],
-    'loot taken': [{ kind: 'coins', coins: 5 }, { kind: 'slot', where: { in: 'bag', slot: 0 }, stack: { id: 'torn-cloth', count: 1 } }],
+    'loot taken': [{ kind: 'coins', coins: 5 }, { kind: 'slot', where: { in: 'bag', slot: 0 }, stack: { id: 'torn-cloth-1', count: 1 } }],
     'a potion drunk': [{ kind: 'drank', id: 'minor-healing-potion', heal: 0.4 }],
     'a chest opened': [{ kind: 'chest', chest: 'watchtower' }],
   };
@@ -480,10 +480,12 @@ describe('the save controller', () => {
     });
   }
 
-  it("doesn't write for XP alone, a refusal, or nothing", () => {
+  it("doesn't write for XP alone, a refusal, a drop lying on the ground, loot left there, or nothing", () => {
     const { store, controller } = saving();
     controller.onEffects([{ kind: 'xp', amount: 10 }]);
     controller.onEffects([{ kind: 'refused', reason: 'level' }]);
+    controller.onEffects([{ kind: 'loot', coins: 4, items: ['torn-cloth-1'] }, { kind: 'xp', amount: 10 }]);
+    controller.onEffects([{ kind: 'left', stack: { id: 'iron-longsword-2', count: 1 } }]);
     controller.onEffects([]);
     expect(store.writes).toHaveLength(0);
   });
@@ -494,7 +496,7 @@ describe('the save controller', () => {
     [ACCEPT, FARM, FARM].forEach((e) => state.apply(e));
     // The third bandit: its XP, a count and the quest ready.
     const third = state.apply(FARM);
-    expect(third.map((e) => e.kind)).toEqual(['xp', 'progress', 'quest']);
+    expect(third.map((e) => e.kind)).toEqual(['loot', 'xp', 'progress', 'quest']);
     controller.onEffects(third);
     expect(store.writes).toHaveLength(1);
   });
