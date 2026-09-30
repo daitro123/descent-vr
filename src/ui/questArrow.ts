@@ -1,18 +1,20 @@
 import type { ArrowTarget } from '../adventureState';
 import { CONFIG } from '../config';
 import type { QuestPlace } from '../maps/types';
-import type { Place } from '../quests';
+import { GIVERS, type GiverId, type Place } from '../quests';
 import type { Interior } from '../save/record';
 
 // The quest arrow's rules, with no three.js in it: where it points, when it
 // hides, and which way it turns on the tracker as you turn. The adventure
 // state says what it points at; the zone says where that is.
 
-/** Where the arrow's targets are in a zone: each quest's place, and Hale's spot. */
+/** Where the arrow's targets are in a zone: each quest's place, and the spot of each giver standing in it. */
 export interface ArrowSpots {
   readonly places: Readonly<Record<Place, QuestPlace>>;
-  readonly hale: { readonly x: number; readonly z: number };
+  readonly givers: Readonly<Partial<Record<GiverId, { readonly x: number; readonly z: number }>>>;
 }
+
+const isGiver = (target: ArrowTarget): target is GiverId => (GIVERS as readonly string[]).includes(target);
 
 /** Where you are, for the arrow: over the floor plane, and the building or the mine you're in. */
 export interface Whereabouts {
@@ -21,20 +23,24 @@ export interface Whereabouts {
   readonly interior: Interior | null;
 }
 
-/** The spot the arrow points at, as the crow flies. */
-export function arrowPoint(target: ArrowTarget, way: ArrowSpots): { readonly x: number; readonly z: number } {
-  return target === 'hale' ? way.hale : way.places[target];
+/** The spot the arrow points at, as the crow flies: none for a giver who doesn't stand in the zone. */
+export function arrowPoint(target: ArrowTarget, way: ArrowSpots): { readonly x: number; readonly z: number } | null {
+  return (isGiver(target) ? way.givers[target] : way.places[target]) ?? null;
 }
 
 /**
  * Does the arrow hide? Once you're at its place, in its clearing (for the old
- * mine, its front); within 10 m of Hale when it points at them, where their
- * gold "?" shows the way; and indoors and in the mine, where it would point
- * through walls and rock. It comes back as you step out.
+ * mine, its front); within 10 m of the giver it points at, where their gold
+ * "?" shows the way, or always for one who doesn't stand in the zone; and
+ * indoors and in the mine, where it would point through walls and rock. It
+ * comes back as you step out.
  */
 export function arrowHides(target: ArrowTarget, you: Whereabouts, way: ArrowSpots): boolean {
   if (you.interior !== null) return true;
-  if (target === 'hale') return Math.hypot(you.x - way.hale.x, you.z - way.hale.z) < CONFIG.tracker.arrow.nearHale;
+  if (isGiver(target)) {
+    const at = way.givers[target];
+    return !at || Math.hypot(you.x - at.x, you.z - at.z) < CONFIG.tracker.arrow.nearGiver;
+  }
   const { clearing } = way.places[target];
   return Math.hypot(you.x - clearing.x, you.z - clearing.z) < clearing.r;
 }

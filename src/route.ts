@@ -14,8 +14,9 @@ export type Route =
   /**
    * `?arena`: the wave game. `?duel`, `?wave=N` and `?showcase` alone open it too.
    * `&class=<name>` swaps the warrior for a class prototype (`src/prototype/`), when one exists.
+   * `&gestures` adds the gesture abilities prototype (`src/prototype/gestures/`).
    */
-  | { kind: 'arena'; firstWave: number; duel: boolean; showcase: boolean; playerClass?: string }
+  | { kind: 'arena'; firstWave: number; duel: boolean; showcase: boolean; playerClass?: string; gestures?: true }
   /** `?proto=<name>`: a throwaway professions prototype (src/professions/prototypes). */
   | { kind: 'proto'; name: string }
   /** `?belt=a|b|c`: PROTOTYPE, inventory ticket 04's belt, fighting duelists (`&calm`: only a drain on health). */
@@ -75,6 +76,7 @@ function chooseRoute(params: URLSearchParams): Route {
       duel: params.has('duel'),
       showcase: params.has('showcase'),
       playerClass: params.get('class') || undefined,
+      gestures: params.has('gestures') || undefined,
     };
   }
   if (params.has('bag')) {

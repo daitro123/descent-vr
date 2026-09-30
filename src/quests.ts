@@ -2,13 +2,23 @@ import type { Role, Stage } from './adventureState';
 import { CONFIG } from './config';
 import type { ItemId } from './items';
 import type { CampId } from './maps/types';
+import type { RecipeId, SpotKind } from './professions/professions';
 
-// Marshal Hale's quest chain, as data: what each quest asks, what it pays, and
-// what Hale says about it. The adventure state holds the rules that move you
-// through it. The lines are placeholders, cheap to change
+// The quest givers' chains, as data: what each quest asks, what it pays, and
+// what its giver says about it. The adventure state holds the rules that move
+// you through them. Marshal Hale's is the only chain until the trainers bring
+// theirs (.scratch/professions/spec.md, "Trainers and quests"). The lines are
+// placeholders, cheap to change
 // (.scratch/oakvale-starting-zone/spec.md, "Hale's board and the villagers' barks").
 
-export type QuestId = 'raiders' | 'lumber' | 'below';
+/** A quest's id, unique across every giver's chain: the save keys its progress by it. */
+export type QuestId = string;
+
+/** Everyone who gives quests: Marshal Hale, and the two trainers (.scratch/professions/spec.md, "Trainers and quests"). */
+export const GIVERS = ['hale', 'smith', 'herbalist'] as const;
+
+/** A quest giver. */
+export type GiverId = (typeof GIVERS)[number];
 
 /** Where a quest sends you, for the quest arrow: the farm, the lumber camp, or the old mine's mouth. */
 export type Place = 'farm' | 'lumberCamp' | 'mine';
@@ -22,12 +32,23 @@ export const SWORDS = ['plain', 'hale'] as const;
 /** A sword's look. */
 export type Sword = (typeof SWORDS)[number];
 
+/** What every objective has: its tracker line's text, how many it needs, and where it sends you if not the quest's own place. */
+interface Asks {
+  readonly text: string;
+  readonly need: number;
+  readonly place?: Place;
+}
+
 /** One thing a quest asks before it can be handed in. */
 export type Objective =
   /** Kills of one camp's members, or of an enemy of one role (the Warden, who is in no camp). */
-  | { readonly kind: 'kill'; readonly text: string; readonly need: number; readonly camp?: CampId; readonly role?: Role }
+  | (Asks & { readonly kind: 'kill'; readonly camp?: CampId; readonly role?: Role })
   /** Something picked up by hand. */
-  | { readonly kind: 'pickup'; readonly text: string; readonly need: number; readonly item: Item };
+  | (Asks & { readonly kind: 'pickup'; readonly item: Item })
+  /** Gathering from a kind of spot, once a spot. */
+  | (Asks & { readonly kind: 'gather'; readonly spot: SpotKind })
+  /** Making a recipe, once a finished make. */
+  | (Asks & { readonly kind: 'make'; readonly recipe: RecipeId });
 
 export interface Quest {
   readonly id: QuestId;
@@ -38,14 +59,27 @@ export interface Quest {
   readonly xp: number;
   /** An item it pays besides the XP, worn at once (items.ts). */
   readonly reward?: ItemId;
-  /** What Hale says while it's on offer, under way, and ready to hand in. */
+  /** What its giver says while it's on offer, under way, and ready to hand in. */
   readonly says: { readonly offered: string; readonly active: string; readonly ready: string };
+}
+
+/** One giver's quests, in the order they come: handing one in offers the next. */
+export interface Chain {
+  readonly giver: GiverId;
+  /** The quest whose hand-in opens the chain, offering its first: open from the start without one. */
+  readonly after?: QuestId;
+  readonly quests: readonly Quest[];
+  /** What the giver says before the chain opens (nothing without it), and once it's done. */
+  readonly closed?: string;
+  readonly done: string;
+  /** The tracker's one line once every objective of one of its quests is done. */
+  readonly returnTo: string;
 }
 
 const Q = CONFIG.quests;
 
-/** Hale's quests, in the order they come: handing one in offers the next. */
-export const CHAIN: readonly Quest[] = [
+/** Marshal Hale's quests. */
+const HALE_QUESTS: readonly Quest[] = [
   {
     id: 'raiders',
     title: 'Raiders in the Fields',
@@ -92,12 +126,16 @@ export const CHAIN: readonly Quest[] = [
   },
 ];
 
-/** What Hale says once the chain is done. */
-export const CHAIN_DONE =
-  "Oakvale's safe, thanks to you. There's more of the world south through the pass: Brackenmoor, and the roads beyond it.";
+/** Marshal Hale's chain, open from the start. */
+export const HALE: Chain = {
+  giver: 'hale',
+  quests: HALE_QUESTS,
+  done: "Oakvale's safe, thanks to you. There's more of the world south through the pass: Brackenmoor, and the roads beyond it.",
+  returnTo: 'Return to Marshal Hale',
+};
 
-/** The tracker's one line once every objective is done. */
-export const RETURN_TO_HALE = 'Return to Marshal Hale';
+/** Every giver's chain, one each: up to one quest from each can be under way at once. */
+export const CHAINS: readonly Chain[] = [HALE];
 
 /** The villagers who bark as you pass: Hale doesn't, since their board and marker are how they speak. */
 export const VILLAGERS = ['innkeeper', 'smith', 'farmer'] as const;

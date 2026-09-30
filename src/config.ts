@@ -4,6 +4,7 @@
 import type { Ability, Role } from './adventureState';
 import type { EnemyKind } from './models/characters';
 import type { GearSlot, Rarity } from './items';
+import type { Grade, RecipeRow, SpotKindRow } from './professions/professions';
 
 /** Which keyframe pair (enemies/poses.ts) an attack animates between. */
 export type AttackPoseName = 'chop' | 'slashR' | 'slashL' | 'slam' | 'draw' | 'summon';
@@ -438,6 +439,78 @@ export const CONFIG = {
     cooldown: 60, // s every potion on the belt dims for after you drink any of them
   },
 
+  // What a kill drops (loot.ts) and how it lies on the ground (world/drops.ts)
+  // (.scratch/inventory/issues/05-loot.md). Loot's item level is the enemy's.
+  loot: {
+    // By what the enemy was: coins are `coins` × level × the role's `coins` (a whole number, evenly),
+    // junk drops at `junk`, and one piece of gear at most, of a rarity by `gear`'s chances; a boss
+    // drops every rarity in `every` instead. What the Warden raises drops nothing.
+    coins: [1, 3],
+    roles: {
+      ordinary: { coins: 1, junk: 0.4, gear: { white: 0.08, green: 0.03 }, every: [] },
+      leader: { coins: 3, junk: 0.6, gear: { green: 0.75, blue: 0.25 }, every: [] },
+      deepBrute: { coins: 3, junk: 0.6, gear: { green: 0.75, blue: 0.25 }, every: [] },
+      warden: { coins: 10, junk: 0, gear: {}, every: ['blue', 'green'] },
+      raised: { coins: 0, junk: 0, gear: {}, every: [] },
+    } satisfies Record<Role, { coins: number; junk: number; gear: Partial<Record<Rarity, number>>; every: Rarity[] }>,
+    levels: 5, // loot's items come at item levels 1 to this; an enemy above it drops this level's
+    lifetime: 300, // s a drop lies, through your death too
+    most: 12, // drops lying at once: past this the oldest goes
+    ring: 0.4, // m from the pouch its items lie, round it
+    hover: 0.3, // m over the ground each item turns, slowly
+    spin: 0.8, // rad/s
+    size: 0.3, // m: an item's model, about this big
+    rim: 0.9, // how brightly a rarity's colour glows round each model's edge
+    beam: { height: 2, radius: 0.025, opacity: 0.55 }, // green and blue items' unlit, additive beams
+    full: { flash: 1.6, rate: 6, float: 1.2 }, // s a full bag flashes an item red, flashes per s, s "Bag full" floats
+    buzz: { take: { intensity: 0.8, ms: 70 }, full: { intensity: 1, ms: 160 } }, // in the hand that touched it
+  },
+
+  // Professions (professions/professions.ts; .scratch/professions/spec.md): the
+  // grades, the kinds of gathering spot, the Apprentice recipes and the numbers
+  // of what they make. Proficiency climbs by `gain` for each spot emptied and
+  // each thing made, up to its grade's cap. A later zone adds rows.
+  professions: {
+    // Each grade's proficiency cap, in order. Oakvale's trainers teach only Apprentice.
+    grades: { apprentice: 25, journeyman: 50, expert: 75, artisan: 100 } satisfies Record<Grade, number>,
+    // What emptying one spot of each kind puts in the bag. It refills `refill.after` s
+    // after it's taken, once you're `refill.away` m from it.
+    spots: {
+      copperVein: { profession: 'mining', grade: 'apprentice', needs: 0, gives: { 'copper-ore': 3, 'rough-stone': 1 }, gain: 1, refill: { after: 180, away: 30 } },
+      hearthleaf: { profession: 'herbalism', grade: 'apprentice', needs: 0, gives: { hearthleaf: 2 }, gain: 1, refill: { after: 180, away: 30 } },
+      duskcap: { profession: 'herbalism', grade: 'apprentice', needs: 0, gives: { duskcap: 2 }, gain: 1, refill: { after: 180, away: 30 } },
+    } satisfies Record<string, SpotKindRow>,
+    // What each recipe takes and makes, the proficiency it needs and pays, and the
+    // trainer's price in coins (null: taught with the profession). Recipes sharing a
+    // `lesson` are bought together, once: one price teaches every version of the gauntlets.
+    recipes: {
+      'copper-bar': { profession: 'smithing', station: 'anvil', grade: 'apprentice', takes: { 'copper-ore': 2 }, makes: 'copper-bar', needs: 0, gain: 1, price: null },
+      whetstone: { profession: 'smithing', station: 'anvil', grade: 'apprentice', takes: { 'rough-stone': 1 }, makes: 'whetstone', needs: 0, gain: 1, price: null },
+      'copper-gauntlets-of-strength': { profession: 'smithing', station: 'anvil', grade: 'apprentice', takes: { 'copper-bar': 4 }, makes: 'copper-gauntlets-of-strength', needs: 15, gain: 3, price: 25, lesson: 'copper-gauntlets' },
+      'copper-gauntlets-of-agility': { profession: 'smithing', station: 'anvil', grade: 'apprentice', takes: { 'copper-bar': 4 }, makes: 'copper-gauntlets-of-agility', needs: 15, gain: 3, price: 25, lesson: 'copper-gauntlets' },
+      'copper-gauntlets-of-intellect': { profession: 'smithing', station: 'anvil', grade: 'apprentice', takes: { 'copper-bar': 4 }, makes: 'copper-gauntlets-of-intellect', needs: 15, gain: 3, price: 25, lesson: 'copper-gauntlets' },
+      'minor-healing-potion': { profession: 'alchemy', station: 'bench', grade: 'apprentice', takes: { hearthleaf: 2 }, makes: 'minor-healing-potion', needs: 0, gain: 1, price: null },
+      'rage-draught': { profession: 'alchemy', station: 'bench', grade: 'apprentice', takes: { duskcap: 2 }, makes: 'rage-draught', needs: 5, gain: 1, price: 10 },
+      'minor-mana-potion': { profession: 'alchemy', station: 'bench', grade: 'apprentice', takes: { hearthleaf: 1, duskcap: 1 }, makes: 'minor-mana-potion', needs: 5, gain: 1, price: 10 },
+      'elixir-of-the-keen-eye': { profession: 'alchemy', station: 'bench', grade: 'apprentice', takes: { hearthleaf: 2, duskcap: 1 }, makes: 'elixir-of-the-keen-eye', needs: 10, gain: 1, price: 10 },
+    } satisfies Record<string, RecipeRow>,
+    // Oakvale's materials and what the recipes make (items.ts). Materials and
+    // consumables sell for a fixed price in coins; the gauntlets by the gear rule.
+    items: {
+      copperOre: { price: 1 },
+      roughStone: { price: 1 },
+      copperBar: { price: 3 },
+      hearthleaf: { price: 1 },
+      duskcap: { price: 1 },
+      rageDraught: { price: 3, rage: 30 }, // a potion, on the belt's shared cooldown
+      minorManaPotion: { price: 3, mana: 0.4 }, // the share of your maximum mana; does nothing until the mage has mana
+      // Buffs: not potions, so off the cooldown; one of each kind on you at a time, a new one replacing the old.
+      elixirOfTheKeenEye: { price: 4, damage: 0.1, seconds: 5 * 60 }, // added to your damage multiplier
+      whetstone: { price: 2, damage: 0.05, seconds: 10 * 60 }, // rubbed along a blade or arrowheads; never on the belt
+      copperGauntlets: { level: 5, rarity: 'green' }, // as good as a green drop at level 5, each version with Stamina
+    },
+  },
+
   // Marshal Hale at the crossroads (people/hale.ts).
   hale: {
     radius: 0.3, // m round them: they're solid, so you can't walk through them
@@ -502,7 +575,7 @@ export const CONFIG = {
     // The quest arrow at the left of the objective you're working on, pointing its way as the crow flies.
     arrow: {
       size: 0.022, // m across, on the tracker
-      nearHale: 10, // m: it hides this close to Hale, when it points at them (their gold "?" shows the way)
+      nearGiver: 10, // m: it hides this close to Hale (or any quest giver), when it points at them (their gold "?" shows the way)
     },
   },
 
