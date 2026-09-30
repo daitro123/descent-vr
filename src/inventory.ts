@@ -387,6 +387,26 @@ export class Inventory {
     return this.purchase({ id, count }, buyPrice(item) * count, to);
   }
 
+  /** Why `buy(id, count, to)` would be refused, or null if it would go: for the view to light a slot under a carried ware. */
+  checkBuy(id: ItemId, count = 1, to?: Where): Refusal | null {
+    const item = itemOf(id);
+    if (!item || item.kind === 'quest') return 'slot';
+    return this.checkPurchase({ id, count }, buyPrice(item) * count, to);
+  }
+
+  /** Why `buyBack(index, to)` would be refused, or null if it would go. */
+  checkBuyBack(index: number, to?: Where): Refusal | null {
+    const sold = this.soldRow[index];
+    return sold ? this.checkPurchase(sold, sold.price, to) : 'empty';
+  }
+
+  /** Why `sell(from)` would be refused, or null if it would go. */
+  checkSell(from: Where): Refusal | null {
+    if (from.in === 'quest') return 'quest';
+    if (from.in === 'ground' || !this.exists(from)) return 'slot';
+    return this.at(from) ? null : 'empty';
+  }
+
   /** Buy back the Sold row's `index`th, at what it fetched. */
   buyBack(index: number, to?: Where): InventoryEffect[] {
     const sold = this.soldRow[index];
@@ -399,10 +419,9 @@ export class Inventory {
 
   /** Sell `count` (all, by default) of what's at `from` to a vendor. Quest items can't be sold. */
   sell(from: Where, count?: number): InventoryEffect[] {
-    if (from.in === 'quest') return refuse('quest', from);
-    if (from.in === 'ground') return refuse('slot', from);
-    const src = this.at(from);
-    if (!src) return refuse('empty', from);
+    const no = this.checkSell(from);
+    if (no) return refuse(no, from);
+    const src = this.at(from)!;
     const n = Math.min(Math.max(1, Math.floor(count ?? src.count)), src.count);
     const price = sellPrice(itemOf(src.id)!) * n;
     this.purse += price;
@@ -533,19 +552,23 @@ export class Inventory {
 
   /** Pay `price` for `stack`, into bag slot `to` or wherever it fits. */
   private purchase(stack: Stack, price: number, to?: Where): InventoryEffect[] {
-    if (price > this.purse) return refuse('coins', to);
+    const no = this.checkPurchase(stack, price, to);
+    if (no) return refuse(no, to);
     const effects: InventoryEffect[] = [];
-    if (to) {
-      if (to.in !== 'bag' || !this.exists(to)) return refuse('slot', to);
-      const dst = this.at(to);
-      if (dst && (dst.id !== stack.id || dst.count + stack.count > stackOf(itemOf(stack.id)!))) return refuse('full', to);
-      effects.push(...this.put(to, { id: stack.id, count: (dst?.count ?? 0) + stack.count }));
-    } else {
-      if (this.room(stack.id) < stack.count) return refuse('full');
-      this.stow(stack.id, stack.count, effects);
-    }
+    if (to) effects.push(...this.put(to, { id: stack.id, count: (this.at(to)?.count ?? 0) + stack.count }));
+    else this.stow(stack.id, stack.count, effects);
     this.purse -= price;
     return [...effects, { kind: 'coins', coins: this.purse }];
+  }
+
+  /** Why paying `price` for `stack` into bag slot `to` (or wherever it fits) would be refused, or null. */
+  private checkPurchase(stack: Stack, price: number, to?: Where): Refusal | null {
+    if (price > this.purse) return 'coins';
+    if (!to) return this.room(stack.id) < stack.count ? 'full' : null;
+    if (to.in !== 'bag' || !this.exists(to)) return 'slot';
+    const dst = this.at(to);
+    if (dst && (dst.id !== stack.id || dst.count + stack.count > stackOf(itemOf(stack.id)!))) return 'full';
+    return null;
   }
 }
 

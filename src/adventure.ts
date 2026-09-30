@@ -29,8 +29,13 @@ import { type ArrowShown, QuestTracker } from './ui/questTracker';
 import { ZoneName } from './ui/zoneName';
 import { RunVignette } from './ui/runVignette';
 import { Bag, type BagHand } from './ui/bag/bag';
+import { BOARD as BAG_BOARD } from './ui/bag/layout';
 import { IconAtlas, lookOf } from './ui/bag/looks';
-import { type Probe, TalkBoard } from './ui/talkBoard';
+import { type Probe, TalkBoard, type TalkButton } from './ui/talkBoard';
+import { type VendorAt, WaresBoard } from './ui/wares/board';
+import { giverOf, isVendor, opensWith, type VendorId, vendorTalk } from './vendors';
+import { PEOPLE } from './models/people';
+import type { GiverId } from './quests';
 import { Drops, type Touch } from './world/drops';
 import { Orbs } from './world/orbs';
 import { Pickups } from './world/pickups';
@@ -43,6 +48,7 @@ const _a = new Vector3();
 const _b = new Vector3();
 const _gaze = new Vector3();
 const _haleHead = new Vector3();
+const _vendor: { -readonly [K in keyof VendorAt]: VendorAt[K] } = { id: 'smith', feet: new Vector3(), head: new Vector3() };
 const _float = new Vector3();
 const _look = new Quaternion();
 const _turn = new Euler();
@@ -117,6 +123,10 @@ export class Adventure {
   readonly ambience: Ambience;
   /** Hale's board, which unfolds as you walk up to them. */
   readonly board = new TalkBoard();
+  /** A vendor's talk board, while they have a quest to offer or take back: "Trade" sits beside its buttons. */
+  readonly vendorBoard = new TalkBoard('');
+  /** The smith's or the innkeeper's wares, unfolding beside them with the bag panel beside it. */
+  readonly wares: WaresBoard;
   /** The quest you're on, top left of your view. */
   readonly tracker = new QuestTracker();
   /** The zone's name, floating up as you cross into it and when you load in. */
@@ -208,6 +218,7 @@ export class Adventure {
     // Your hands, closed on what they hold, and the bag over your shoulder.
     this.player.showFists();
     this.dropped = new Dropped(this.world);
+    const atlas = new IconAtlas();
     this.bag = new Bag(
       {
         inventory: this.state.inventory,
@@ -215,8 +226,11 @@ export class Adventure {
         apply: (effects, at) => this.applyThings(effects, at),
         drop: (stack, at, velocity) => this.dropped.drop(stack, at, velocity),
       },
-      new IconAtlas(),
+      atlas,
     );
+    this.wares = new WaresBoard(this.state.inventory, atlas);
+    scene.add(this.wares.root, this.vendorBoard.root);
+    this.wares.warm(renderer, camera, scene);
     const { left, right } = this.player.input.hands;
     this.bagHands = { left: { grip: left.grip, tracked: false, squeeze: 0 }, right: { grip: right.grip, tracked: false, squeeze: 0 } };
     scene.add(this.bag.root, this.dropped.root);
@@ -309,7 +323,11 @@ export class Adventure {
     this.world.fill(x, z);
     // From here on, crossing a seam is a moment: the zone's name floats up (and the game saves, in
     // `update`, once it knows where you stand); its sound follows the World's cues.
-    this.world.onZone = (zone) => this.zoneName.show(zone.label);
+    // Leaving a zone, what you sold there can't be bought back.
+    this.world.onZone = (zone) => {
+      this.zoneName.show(zone.label);
+      this.applyThings(this.state.inventory.leaveZone(), this.you.head);
+    };
     this.world.onAdd = (zone) => this.ambience.add(zone);
   }
 
@@ -363,6 +381,7 @@ export class Adventure {
     this.orbs.update(dt, player);
     this.loot(dt, outdoors);
     this.talk(dt);
+    this.trade(dt);
     this.updateBag(dt);
     this.villagers.update(dt, you.head, this.state);
     this.pickUp();
@@ -532,6 +551,96 @@ export class Adventure {
   }
 
   /**
+   * The smith and the innkeeper trade. Walk up to one looking their way and
+   * their wares board unfolds beside them, with the bag panel opening beside
+   * it; walk off and both fold. A vendor who has a quest to offer or take back
+   * talks first, with "Trade" beside the quest's buttons.
+   */
+  private trade(dt: number): void {
+    const { player, you, state, wares, vendorBoard, bag } = this;
+    player.camera.getWorldDirection(_gaze);
+    const vendor = this.vendorNear();
+    const giver = giverOf(vendor.id);
+    const shows = giver ? state.giver(giver) : null;
+    const eyes = { head: you.head, gaze: _gaze };
+    const probes = this.touching();
+    const talkFirst = !wares.isOpen && opensWith(shows) === 'talk';
+    if (talkFirst && !vendorBoard.isOpen) vendorBoard.name = PEOPLE[vendor.id].label;
+    const talk = shows ? vendorTalk(shows) : { line: '', buttons: ['trade'] as const };
+    const press = vendorBoard.update(dt, eyes, vendor, probes, talk, talkFirst);
+    if (press) this.vendorPress(press.button, press.hand, vendor, giver);
+
+    const happened = wares.update(dt, eyes, vendor, !talkFirst && !vendorBoard.isOpen, probes);
+    if (happened?.kind === 'unfolded') this.openBagBeside();
+    else if (happened?.kind === 'folded' && bag.isPinned) bag.close(`${wares.name} folded`);
+    else if (happened?.kind === 'sellJunk') this.sellJunk(happened.hand);
+    bag.beside = wares.isOpen ? wares : null;
+  }
+
+  /** The vendor nearest you that's drawn (the innkeeper only with the inn), where they stand. */
+  private vendorNear(): VendorAt {
+    let best = null;
+    let bestD = Infinity;
+    for (const v of this.villagers.all) {
+      if (!isVendor(v.id)) continue;
+      const d = v.far(this.you.head) + (v.shown ? 0 : 1e6);
+      if (d < bestD) {
+        best = v;
+        bestD = d;
+      }
+    }
+    const v = best!;
+    _vendor.id = v.id as VendorId;
+    v.root.getWorldPosition(_vendor.feet);
+    _vendor.head.copy(_vendor.feet).setY(_vendor.feet.y + v.headY);
+    return _vendor;
+  }
+
+  /** A press on a vendor's talk board: the quest's buttons go to the adventure state, and "Trade" unfolds the wares. */
+  private vendorPress(button: TalkButton, hand: 'left' | 'right', vendor: VendorAt, giver: GiverId | null): void {
+    const { intensity, ms } = CONFIG.talk.buzz;
+    this.player.input.pulse(hand, intensity, ms);
+    const { vendorBoard, wares } = this;
+    switch (button) {
+      case 'trade':
+        vendorBoard.fold();
+        wares.unfold(this.you.head, vendor);
+        this.openBagBeside();
+        break;
+      case 'accept':
+        vendorBoard.fold();
+        wares.hold();
+        if (giver) this.apply({ kind: 'accept', giver }, vendor.feet);
+        break;
+      case 'handIn':
+        // The talk goes on: they offer their next quest, or trade.
+        if (giver) this.apply({ kind: 'handIn', giver }, vendor.head);
+        if (giver) vendorBoard.show(vendorTalk(this.state.giver(giver)));
+        break;
+      case 'notNow':
+      case 'goodbye':
+        vendorBoard.fold();
+        wares.hold();
+    }
+  }
+
+  /** The bag panel opens beside the wares board, turned to you: no reach needed. */
+  private openBagBeside(): void {
+    this.bag.openAt(this.wares.bagSpot(_a, BAG_BOARD.left), this.you.head, `beside ${this.wares.name}`);
+  }
+
+  /** "Sell junk": every grey in the bag sold at once, with a buzz and the coins' sound; a light buzz with none. */
+  private sellJunk(hand: 'left' | 'right'): void {
+    const effects = this.state.inventory.sellJunk();
+    const B = CONFIG.vendors.buzz;
+    const { intensity, ms } = effects.length ? B.trade : B.nothing;
+    this.player.input.pulse(hand, intensity, ms);
+    if (!effects.length) return;
+    sfx.pickup();
+    this.applyThings(effects, this.wares.root.position);
+  }
+
+  /**
    * The bag: the reach over a shoulder, and the panel's slots and tabs under
    * your fists and the sword's tip. What you dropped lies on the ground, and
    * a fist touching it takes it back into the bag.
@@ -644,6 +753,7 @@ export class Adventure {
           break;
         case 'slot':
           this.bag.changed();
+          this.wares.changed();
           // Something worn or taken off (Hale's old longsword, straight into your hand, off their hip):
           // your hands show what you wear, and your numbers read it.
           if (e.where.in !== 'gear') break;
@@ -652,6 +762,10 @@ export class Adventure {
           break;
         case 'coins':
           this.bag.changed();
+          this.wares.changed();
+          break;
+        case 'sold':
+          this.wares.changed();
           break;
       }
     }

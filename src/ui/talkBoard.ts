@@ -1,20 +1,31 @@
-import { BoxGeometry, Group, Mesh, MeshBasicMaterial, Vector3 } from 'three';
-import type { Button, HaleShows } from '../adventureState';
+import { BoxGeometry, Group, Mesh, MeshBasicMaterial, type Object3D, Vector3 } from 'three';
+import type { Button } from '../adventureState';
 import { CONFIG } from '../config';
 import type { Handedness } from '../player/input';
 import { Card, FONT, parchment, wrap } from './card';
 
-// Talking to Marshal Hale: the talk prototype's variant A (in history at merge
-// 19ce545), built plainly since Tom plans to overhaul this UI once Oakvale is
-// built. Walk up to Hale looking their way and a parchment board unfolds
-// beside them, on your right and turned to you, with their name, their line
-// and chunky buttons you press with a fist or the sword's tip.
+// Talking to Marshal Hale, or to a vendor who has a quest for you: the talk
+// prototype's variant A (in history at merge 19ce545), built plainly since Tom
+// plans to overhaul this UI once Oakvale is built. Walk up to them looking
+// their way and a parchment board unfolds beside them, on your right and
+// turned to you, with their name, their line and chunky buttons you press with
+// a fist or the sword's tip. A vendor's board has "Trade" beside the rest.
 
-const LABEL: Record<Button, string> = { accept: 'Accept', notNow: 'Not now', handIn: 'Hand in', goodbye: 'Goodbye' };
-/** The buttons that move the chain on are green; the ones that only end the talk are brown. */
-const MOVES_ON: readonly Button[] = ['accept', 'handIn'];
-/** A button's size, in metres. */
+/** A button on a talk board: a giver's, or a vendor's "Trade". */
+export type TalkButton = Button | 'trade';
+
+/** What a talk board shows: a line, and the buttons under it. */
+export interface TalkShows {
+  readonly line: string;
+  readonly buttons: readonly TalkButton[];
+}
+
+const LABEL: Record<TalkButton, string> = { accept: 'Accept', notNow: 'Not now', handIn: 'Hand in', goodbye: 'Goodbye', trade: 'Trade' };
+/** The buttons that move the chain on are green; the ones that only end the talk (or trade) are brown. */
+const MOVES_ON: readonly TalkButton[] = ['accept', 'handIn'];
+/** A button's size, in metres: two share a row, and three narrow to fit. */
 const KEY = { w: 0.24, h: 0.09, d: 0.04 };
+const NARROW = { w: 0.18, pitch: 0.2 };
 const WOOD = 0x3a2716;
 const LIT = 0xf0c060;
 
@@ -26,14 +37,16 @@ export interface Probe {
 
 /** A button pressed, and by which hand (to buzz it). */
 export interface Press {
-  readonly button: Button;
+  readonly button: TalkButton;
   readonly hand: Handedness;
 }
 
 interface Key {
   readonly mesh: Mesh<BoxGeometry, MeshBasicMaterial>;
   readonly face: Card;
-  readonly button: Button;
+  readonly button: TalkButton;
+  /** Its width, in metres. */
+  readonly w: number;
   /** Seconds left of looking pushed in. */
   pushed: number;
   /** Probes (by index) resting inside it, which must leave before they can press it. */
@@ -46,7 +59,20 @@ const _right = new Vector3();
 const _to = new Vector3();
 const _local = new Vector3();
 
-/** Hale's board: unfolds as you walk up, shows what they say, and takes your presses. */
+/**
+ * Put `root` beside someone standing at `feet`, on the right of a head at
+ * `head` facing them, `out` m from them towards it and `side` m to its right,
+ * its middle `height` m up, turned to the head.
+ */
+export function placeBeside(root: Object3D, head: Vector3, feet: Vector3, out: number, side: number, height: number): void {
+  _out.set(head.x - feet.x, 0, head.z - feet.z).normalize(); // them → you
+  _right.crossVectors(UP, _out);
+  root.position.copy(feet).addScaledVector(_out, out).addScaledVector(_right, side);
+  root.position.y = feet.y + height;
+  root.lookAt(head);
+}
+
+/** A talk board: unfolds as you walk up, shows what they say, and takes your presses. */
 export class TalkBoard {
   readonly root = new Group();
   private readonly text = new Card(0.62, 0.36);
@@ -59,7 +85,10 @@ export class TalkBoard {
   /** 0 folded to 1 unfolded. */
   private unfolded = 0;
 
-  constructor() {
+  constructor(
+    /** Whose board it is, over their line: Marshal Hale's, or the vendor's it's shown for. */
+    public name = 'Marshal Hale',
+  ) {
     this.root.name = 'talk-board';
     this.root.add(this.text.mesh);
     this.text.mesh.position.y = 0.1;
@@ -71,23 +100,25 @@ export class TalkBoard {
   }
 
   /**
-   * One frame. Unfold when you're close and looking at Hale's head, showing
-   * `shows`; fold when you've walked off. Returns a button pressed this frame.
-   * `probes` keep their order from frame to frame; null for one not tracked.
+   * One frame. Unfold when you're close and looking at their head, showing
+   * `shows`, if `approach` lets it; fold when you've walked off. Returns a
+   * button pressed this frame. `probes` keep their order from frame to frame;
+   * null for one not tracked.
    */
   update(
     dt: number,
     you: { readonly head: Vector3; readonly gaze: Vector3 },
     hale: { readonly feet: Vector3; readonly head: Vector3 },
     probes: readonly (Probe | null)[],
-    shows: HaleShows,
+    shows: TalkShows,
+    approach = true,
   ): Press | null {
     const T = CONFIG.talk;
     const d = Math.hypot(you.head.x - hale.feet.x, you.head.z - hale.feet.z);
     if (d > T.close) {
       this.open = false;
       this.needLeave = false;
-    } else if (!this.open && !this.needLeave && d < T.open) {
+    } else if (approach && !this.open && !this.needLeave && d < T.open) {
       const angle = (you.gaze.angleTo(_to.subVectors(hale.head, you.head)) * 180) / Math.PI;
       if (angle < T.facing) this.unfold(you.head, hale.feet, shows);
     }
@@ -100,13 +131,13 @@ export class TalkBoard {
   }
 
   /** Put new lines and buttons on it: the talk goes on (Hale offers the next quest after a hand-in). */
-  show(shows: HaleShows): void {
-    this.text.paint(shows.line, (c, w, h) => {
+  show(shows: TalkShows): void {
+    this.text.paint(`${this.name}|${shows.line}`, (c, w, h) => {
       parchment(c, w, h);
       c.fillStyle = '#5a3212';
       c.font = `bold 44px ${FONT}`;
       c.textBaseline = 'top';
-      c.fillText('Marshal Hale', 34, 28);
+      c.fillText(this.name, 34, 28);
       c.fillStyle = '#2a1c10';
       c.font = `37px ${FONT}`;
       wrap(c, shows.line, w - 68).forEach((line, i) => c.fillText(line, 34, 90 + i * 44));
@@ -121,19 +152,15 @@ export class TalkBoard {
     this.needLeave = true;
   }
 
-  private unfold(head: Vector3, feet: Vector3, shows: HaleShows): void {
+  private unfold(head: Vector3, feet: Vector3, shows: TalkShows): void {
     const { out, side, height } = CONFIG.talk.board;
-    // Beside Hale, on your right as you face them, turned to you.
-    _out.set(head.x - feet.x, 0, head.z - feet.z).normalize(); // Hale → you
-    _right.crossVectors(UP, _out);
-    this.root.position.copy(feet).addScaledVector(_out, out).addScaledVector(_right, side);
-    this.root.position.y = feet.y + height;
-    this.root.lookAt(head);
+    // Beside them, on your right as you face them, turned to you.
+    placeBeside(this.root, head, feet, out, side, height);
     this.open = true;
     this.show(shows);
   }
 
-  private layout(buttons: readonly Button[]): void {
+  private layout(buttons: readonly TalkButton[]): void {
     for (const key of this.keys) {
       this.root.remove(key.mesh);
       key.face.dispose();
@@ -141,8 +168,10 @@ export class TalkBoard {
       key.mesh.material.dispose();
     }
     this.keys.length = 0;
+    const w = buttons.length > 2 ? NARROW.w : KEY.w;
+    const pitch = buttons.length > 2 ? NARROW.pitch : 0.3;
     buttons.forEach((button, i) => {
-      const face = new Card(KEY.w, KEY.h, { ppm: 1400 });
+      const face = new Card(w, KEY.h, { ppm: 1400 });
       face.paint(button, (c, w, h) => {
         c.fillStyle = MOVES_ON.includes(button) ? '#2f6a2a' : '#5a4632';
         c.fillRect(0, 0, w, h);
@@ -152,13 +181,13 @@ export class TalkBoard {
         c.textBaseline = 'middle';
         c.fillText(LABEL[button], w / 2, h / 2 + 2);
       });
-      const mesh = new Mesh(new BoxGeometry(KEY.w, KEY.h, KEY.d), new MeshBasicMaterial({ color: WOOD }));
+      const mesh = new Mesh(new BoxGeometry(w, KEY.h, KEY.d), new MeshBasicMaterial({ color: WOOD }));
       face.mesh.position.z = KEY.d / 2 + 0.001;
       mesh.add(face.mesh);
-      const x = buttons.length === 1 ? 0 : (i === 0 ? -1 : 1) * 0.15;
+      const x = (i - (buttons.length - 1) / 2) * pitch;
       mesh.position.set(x, -0.15, KEY.d / 2);
       this.root.add(mesh);
-      this.keys.push({ mesh, face, button, pushed: 0, blocked: new Set() });
+      this.keys.push({ mesh, face, button, w, pushed: 0, blocked: new Set() });
     });
     this.root.updateMatrixWorld(true);
   }
@@ -199,7 +228,7 @@ function inside(key: Key, at: Vector3): boolean {
   const reach = CONFIG.talk.reach;
   key.mesh.worldToLocal(_local.copy(at));
   return (
-    Math.abs(_local.x) < KEY.w / 2 + reach.side &&
+    Math.abs(_local.x) < key.w / 2 + reach.side &&
     Math.abs(_local.y) < KEY.h / 2 + reach.side &&
     _local.z < KEY.d / 2 + reach.front &&
     _local.z > -reach.back
