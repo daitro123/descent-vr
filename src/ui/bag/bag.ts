@@ -11,6 +11,8 @@ import { type Page, type Reach, sameSpot, type Spot } from './layout';
 import { type IconAtlas, modelOf } from './looks';
 import { BagPanel, nothingShown, type PanelShows } from './panel';
 import { ShoulderReach } from './reach';
+import { sameButton, type TalentActs, type TalentButton } from './talentPage';
+import { TALENT, type TalentRefusal } from '../../talents';
 
 // The bag in the Adventure: reach over either shoulder and squeeze the grip to
 // bring the panel round, then touch an item with a fist or the weapon's tip to
@@ -39,6 +41,10 @@ import { ShoulderReach } from './reach';
 // whetstone carried in one hand and rubbed along the blade in the other (the
 // ranger's bow, for the arrowheads) sharpens it
 // (.scratch/professions/issues/17-using-what-professions-make.md).
+// The Talents tab's page presses its buttons as the tabs are pressed: a
+// talent spends a point, Reset gives them all back, and two shapes one after
+// the other swap their slots (talentPage.ts;
+// .scratch/abilities/issues/25-talents-and-the-warriors-trees.md).
 
 /** A fist or the weapon's tip, where it is in the world, and whose hand. */
 export interface BagProbe {
@@ -96,6 +102,8 @@ export interface BagWorld {
   apply(effects: readonly InventoryEffect[], at: Vector3): void;
   /** Let go of away from the panel: it lies on the ground, falling from `at`. */
   drop(stack: Stack, at: Vector3, velocity: Vector3): void;
+  /** Your talents and gesture slots, for the Talents tab's page; without them it says there are none. */
+  readonly talents?: TalentActs;
   /** The hip slot of the belt at `at`, if any: a potion let go there goes onto the belt. */
   beltAt?(at: Vector3): number | null;
   /** Your mouth now, where a carried potion is drunk. */
@@ -173,9 +181,22 @@ export interface BesideShows {
   tab: number | null;
 }
 
-/** A tab: one of the bag panel's, or a page's of the panel beside it. */
-type Tab = { readonly on: 'bag'; readonly page: Page } | { readonly on: 'beside'; readonly page: number };
-const sameTab = (a: Tab | null, b: Tab | null) => (a && b ? a.on === b.on && a.page === b.page : a === b);
+/** Something pressed as a tab is: one of the bag panel's tabs, a page's of the panel beside it, or a button of the talent page. */
+type Tab = { readonly on: 'bag'; readonly page: Page } | { readonly on: 'beside'; readonly page: number } | { readonly on: 'talents'; readonly button: TalentButton };
+function sameTab(a: Tab | null, b: Tab | null): boolean {
+  if (!a || !b) return a === b;
+  if (a.on === 'talents') return b.on === 'talents' && sameButton(a.button, b.button);
+  return a.on === b.on && a.page === (b as { page: unknown }).page;
+}
+
+/** What a talent page refusal says, in the log the checks read. */
+const UNSPENT: Readonly<Record<TalentRefusal, string>> = {
+  fighting: 'in a fight',
+  points: 'no points left',
+  max: 'full',
+  tier: 'tier not open',
+  class: 'not your class',
+};
 
 /** What the refusals say, in the log the checks read. */
 const REFUSED: Readonly<Record<Refusal, string>> = {
@@ -237,7 +258,7 @@ export class Bag {
     private readonly world: BagWorld,
     atlas: IconAtlas,
   ) {
-    this.panel = new BagPanel(world.inventory, atlas);
+    this.panel = new BagPanel(world.inventory, atlas, world.talents ?? null);
     this.held.visible = false;
     this.held.name = 'carried-item';
     this.root.add(this.panel.root, this.held);
@@ -443,6 +464,7 @@ export class Bag {
       shows.cardOver = null;
     }
     shows.tab = tab?.on === 'bag' ? tab.page : null;
+    shows.button = tab?.on === 'talents' ? tab.button : null;
     this.panel.update(dt, shows);
   }
 
@@ -755,10 +777,12 @@ export class Bag {
     world.apply(effects, at);
   }
 
-  /** The tab `at` touches: the bag panel's, or a page's of the panel beside it. */
+  /** The tab `at` touches: the bag panel's, a page's of the panel beside it, or a talent page button. */
   private tabAt(at: Vector3): Tab | null {
     const page = this.panel.tabAt(at, CONFIG.bag.touch);
     if (page) return { on: 'bag', page };
+    const button = this.panel.buttonAt(at, CONFIG.bag.touch);
+    if (button) return { on: 'talents', button };
     const other = this.beside?.tabAt(at, CONFIG.bag.touch) ?? null;
     return other === null ? null : { on: 'beside', page: other };
   }
@@ -781,7 +805,8 @@ export class Bag {
     this.tabArming = CONFIG.bag.tabs.rearm;
     const B = CONFIG.bag.buzz.tab;
     this.world.buzz(hand, B.intensity, B.ms);
-    if (tab.on === 'bag') {
+    if (tab.on === 'talents') this.press(tab.button, hand);
+    else if (tab.on === 'bag') {
       if (tab.page === this.panel.page) return lit;
       this.panel.setPage(tab.page);
       this.log(`page: ${tab.page}`);
@@ -792,6 +817,51 @@ export class Bag {
     }
     this.lastHover = null;
     return lit;
+  }
+
+  /**
+   * A talent page button pressed with `hand`: a talent spends a point, Reset
+   * gives them all back, a shape is picked, and a second shape swaps with
+   * it (the same one again puts it down). Refused, a strong buzz.
+   */
+  private press(button: TalentButton, hand: Handedness): void {
+    const talents = this.world.talents;
+    if (!talents) return;
+    const B = CONFIG.bag.buzz;
+    let refused: TalentRefusal | null = null;
+    let did = '';
+    switch (button.kind) {
+      case 'talent': {
+        refused = talents.spend(button.talent);
+        const def = TALENT[button.talent];
+        did = refused ? `refused (${UNSPENT[refused]}): ${def.name}` : `spent: ${def.name} ${talents.state.spentOn(button.talent)}/${def.max}`;
+        break;
+      }
+      case 'reset': {
+        const points = talents.state.pointsSpent;
+        refused = talents.reset();
+        did = refused ? `refused (${UNSPENT[refused]}): reset` : `reset: ${points} ${points === 1 ? 'point' : 'points'} back`;
+        break;
+      }
+      case 'slot': {
+        const { picked } = this.panel;
+        if (picked === null) {
+          this.panel.picked = button.shape;
+          did = `picked: ${button.shape}`;
+        } else if (picked === button.shape) {
+          this.panel.picked = null;
+          did = `put down: ${button.shape}`;
+        } else {
+          refused = talents.swap(picked, button.shape);
+          this.panel.picked = null;
+          did = refused ? `refused (${UNSPENT[refused]}): swap` : `swapped: ${picked} and ${button.shape}`;
+        }
+        break;
+      }
+    }
+    if (refused) this.world.buzz(hand, B.refused.intensity, B.refused.ms);
+    else this.world.buzz(hand, B.place.intensity, B.place.ms);
+    this.log(did);
   }
 }
 

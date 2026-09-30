@@ -225,6 +225,7 @@ describe("Hale's old longsword", () => {
       wardenBeaten: true,
       inventory: startingInventory('warrior', { mainHand: 'hale-longsword' }),
       professions: NO_PROFESSIONS,
+      talents: {},
     });
     expect(state.stats.damage).toBeCloseTo(2.0, 9);
     expect(state.sword).toBe('hale');
@@ -250,8 +251,8 @@ describe('buffs on your damage', () => {
   });
 
   it('scale everything that makes your damage, gear and level alike', () => {
-    expect(statsAt(5, HALE, 'warrior', 0.05).damage).toBeCloseTo(statsAt(5, HALE).damage * 1.05, 9);
-    expect(statsAt(5, HALE, 'warrior', 0.05).maxHp).toBe(statsAt(5, HALE).maxHp);
+    expect(statsAt(5, HALE, 'warrior', {}, 0.05).damage).toBeCloseTo(statsAt(5, HALE).damage * 1.05, 9);
+    expect(statsAt(5, HALE, 'warrior', {}, 0.05).maxHp).toBe(statsAt(5, HALE).maxHp);
   });
 });
 

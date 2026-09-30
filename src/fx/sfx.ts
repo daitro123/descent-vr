@@ -224,6 +224,26 @@ export const sfx = {
     tone(140, 300, 0.45, 'sawtooth', 0.12);
     noise(0.4, 0.3, 800, undefined, 'bandpass', 0.05, 0.5);
   },
+  /** Mortal Strike armed: a low growl and the ring of an edge drawn. */
+  mortalStrike() {
+    tone(90, 70, 0.5, 'sawtooth', 0.12);
+    tone(1200, 900, 0.35, 'triangle', 0.06, undefined, 0.05);
+  },
+  /** Mortal Strike lands: a heavy, wet crack. */
+  mortalHit(at?: Vector3) {
+    noise(0.25, 0.4, 600, at, 'lowpass');
+    tone(110, 55, 0.35, 'square', 0.12, at);
+  },
+  /** Shield Slam armed: the shield's rim rings, tightening. */
+  shieldSlam() {
+    tone(420, 560, 0.4, 'triangle', 0.14);
+    tone(210, 210, 0.5, 'sine', 0.12);
+  },
+  /** Shield Slam lands: a booming clang. */
+  shieldSlamHit(at?: Vector3) {
+    tone(160, 90, 0.6, 'triangle', 0.22, at);
+    noise(0.3, 0.35, 2200, at, 'bandpass', 0, 0.6);
+  },
   /** Power Shot: the nocked arrow takes its glow, a bright rising ring over the string's creak. */
   powerShot(at?: Vector3) {
     tone(660, 1320, 0.25, 'triangle', 0.12, at);

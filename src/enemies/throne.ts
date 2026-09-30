@@ -105,6 +105,8 @@ export class Throne {
         if (onThrone) this.seatNew();
         break;
       case 'seated':
+        // Back on its throne still wounded (Mortal Strike), it heals once the wound ends.
+        if (this.warden && this.warden.heals && this.warden.hp < this.warden.maxHp) this.warden.recover();
         if (!onThrone) this.empty();
         else if (here && plan.through(you.feet.x, you.feet.z)) this.rise();
         break;

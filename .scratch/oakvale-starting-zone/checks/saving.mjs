@@ -198,7 +198,7 @@ await enterVR();
 {
   await board('accept');
   let r = await saved();
-  check(r?.version === 4 && r.quests.raiders.stage === 'active', `taking Raiders in the Fields writes it (${r?.quests.raiders.stage})`);
+  check(r?.version === 5 && r.quests.raiders.stage === 'active', `taking Raiders in the Fields writes it (${r?.quests.raiders.stage})`);
   await step(4); // the camps finish rising out of the ground
   await standAt(54.5, 26, Math.atan2(-(60 - 54.5), -(33 - 26)));
   const counts = [];
@@ -413,7 +413,7 @@ await open('?emulate&nodevui');
   await enterVR();
   await hidePage();
   const r = await saved();
-  check(r?.version === 4 && r.inventory.gear.mainHand === 'hale-longsword' && !('sword' in r), `the next write is version ${r?.version}, wearing ${r?.inventory.gear.mainHand}`);
+  check(r?.version === 5 && r.inventory.gear.mainHand === 'hale-longsword' && !('sword' in r), `the next write is version ${r?.version}, wearing ${r?.inventory.gear.mainHand}`);
   check(
     r && Object.keys(r.professions.learned).length === 0 && r.professions.recipes.length === 0,
     `with no professions learned (${JSON.stringify(r?.professions)})`,

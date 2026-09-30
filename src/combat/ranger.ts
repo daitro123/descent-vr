@@ -406,7 +406,7 @@ export class RangerKit {
     if (use === 'no target') return;
     const words =
       use === 'cast'
-        ? `${P.name}  -${P.cost} focus`
+        ? `${P.name}  -${this.player.costOf('powerShot')} focus`
         : use === 'poor'
           ? `${P.name}: not enough focus`
           : use === 'cooling'
