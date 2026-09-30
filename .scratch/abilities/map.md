@@ -23,6 +23,7 @@ A written **spec for character development in combat**, ready to hand off as bui
   - Each class has its own resource: the warrior keeps rage (built in a fight), the ranger gets focus (refills quickly), the mage gets mana (a pool that refills out of a fight).
   - Abilities are used mostly by gesture, with at most one button ability per hand.
   - Several saved characters, up to three, picked on the page before VR; a character's class is fixed.
+  - From 2026-09-30 Tom asked for the rest of the map to be worked without him: every open ticket takes the recommended option, marked "on Tom's behalf". Prototypes are built in their own sessions and kept in the repo behind a URL flag for him to try later.
   - How the ranger's bow and the mage's casting fight is designed here, prototyped before their abilities.
   - The War Cry, Earthshaker, the dash and the shield bash can be reworked into the new system, but the warrior's sword and shield keep their feel.
 
@@ -32,12 +33,16 @@ A written **spec for character development in combat**, ready to hand off as bui
 
 - [Bows, spells and abilities in shipped VR games](issues/01-bows-spells-and-abilities-in-shipped-vr-games.md): shipped games nock an arrow by touching the string, with no quiver reach; cast a spell from each hand by charge and throw, with merged two-hand spells at the top; call abilities with a grip and a flick, about four per hand; and keep gestures loose, poses at chest height and fights paced. Sourced from search extracts only.
 - [Recognising gestures in the browser](issues/02-recognising-gestures-in-the-browser.md): Earthshaker stays a rule check; shaped gestures use our own small Jackknife-style template matcher (not UCF's non-commercial code), armed by holding that hand's grip and classified on release, at well under 1 ms a gesture.
+- [Characters and choosing a class](issues/03-characters-and-choosing-a-class.md): up to three named characters of any class, listed on the page before VR with New, Delete and Rename; `?newgame` opens the new-character form; every class starts by Hale; one save record per character plus a roster, and today's save becomes a warrior. On Tom's behalf.
+- [The level curve to 20](issues/04-the-level-curve-to-20.md): Oakvale's 1 to 5 unchanged; five levels a zone to 20, the cap rising only with content; each level needs 100 more XP than the last; enemies five levels below pay nothing; health and damage keep the linear step; base abilities at 2, 3, 6, 8 and 10 (then 14 and 18), a talent point every level from 2. On Tom's behalf.
+- [Attributes and what they do](issues/08-attributes-and-what-they-do.md): Stamina (10 health a point) and the class's main attribute (10% of level 1's damage a point) are the only two that count; 10 of each at level 1 and 2 more a level reproduce today's numbers; gear adds about a third by level 10; no secondary numbers yet. On Tom's behalf.
+- [Talent tree rules](issues/10-talent-tree-rules.md): two trees of five tiers, a tier every 3 points; ability talents in tier 3 and a tier-5 capstone; points in both trees allowed; spent out of a fight on a page of Inventory's panel; free reset anywhere out of a fight. On Tom's behalf.
 
 ## Not yet specified
 
 - **Enemies against the new classes:** camps were tuned for a warrior in melee. A ranger shooting from range meets the 8 m notice radius and the 30 m leash, and a mage's crowd control meets "only two enemies mid-attack at once". What enemies need (ranged pressure on a kiter, leash rules for ranged pulls) waits on how the ranger and mage fight.
 - **Oakvale for every class:** the quest chain, the Warden and Hale's longsword were made for the warrior. Whether a ranger or mage can play levels 1 to 5 as they stand, and what the last quest pays a non-warrior, waits on the class kits and on Inventory.
-- **Choosing talents in VR:** where the talent tree is shown and how you pick in it, whether picks can be undone and where. Tom plans a UI overhaul after Oakvale, so how far this goes waits on the talent rules.
+- **The talent page's look:** a page of Inventory's panel with free resets (see Talent tree rules); its layout waits on Tom's UI overhaul, so the spec carries only a plain first pass.
 - **The belt for three classes:** today's belt shows health, rage and the warrior's ability pips. Each class needs its resource and its abilities' cooldowns shown.
 - **The arena with classes:** whether `?arena` lets you pick a class and at what level.
 - **Spell effects and the budget:** how many lights, particles and draw calls the mage's and ranger's effects may cost, once their kits exist.

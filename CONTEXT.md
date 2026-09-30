@@ -108,6 +108,10 @@ _Avoid_: elite, raid boss, mini-boss
 How strong a character or an enemy is. Each level adds the same step of health and damage to both, so a fight against an enemy of your own level feels the same at any level. Oakvale takes a character from level 1 to 5, its **level cap**.
 _Avoid_: rank, tier, difficulty
 
+**Character**:
+One saved hero of a class, with a name, a level and their progress. A player keeps up to three.
+_Avoid_: hero, profile, save slot (a slot is where a character shows on the page), toon
+
 **Class**:
 What kind of fighter a character is: a warrior, a ranger or a mage. It decides the character's abilities and talent trees.
 _Avoid_: role, archetype, job, spec
