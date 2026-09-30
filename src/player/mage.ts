@@ -44,6 +44,8 @@ class Caster {
   held = false;
   /** Seconds the trigger has been held this time. */
   charge = 0;
+  /** Seconds a full charge takes this time (a bolt's, or less with Incineration, or a Pyroblast's). */
+  full: number = CONFIG.mage.bolt.chargeTime;
   private tick = 0;
   private fullTicked = false;
   readonly orb: Mesh<IcosahedronGeometry, MeshBasicMaterial>;
@@ -77,11 +79,11 @@ class Caster {
   }
 
   get fraction(): number {
-    return chargeOf(this.charge);
+    return chargeOf(this.charge, this.full);
   }
 
-  /** Charging: the orb grows, the hand ticks faster, then one firmer pulse at full. */
-  grow(dt: number, mage: MageHands, colour: number): void {
+  /** Charging: the orb grows (a Pyroblast's to `size` m, huge), the hand ticks faster, then one firmer pulse at full. */
+  grow(dt: number, mage: MageHands, colour: number, size = 0.045): void {
     this.charge += dt;
     this.tick -= dt;
     const H = CONFIG.mage.haptics;
@@ -94,7 +96,7 @@ class Caster {
       mage.pulse(this.hand, H.full.intensity, H.full.ms);
     }
     this.orb.visible = conjured(this.charge);
-    this.orb.scale.setScalar(0.025 + 0.045 * this.fraction);
+    this.orb.scale.setScalar(0.025 + size * this.fraction);
     this.orb.material.color.setHex(colour);
   }
 
@@ -289,7 +291,16 @@ export class MageHands {
     this.wardMaterial.opacity = 0.22 + this.wardFlash * 2;
   }
 
-  /** The colour a hand's bolt gathers in: a Fireball's, Frostbolt's or Chain Lightning's, if one waits on it. */
+  /**
+   * Seconds a bolt takes to charge full: a Pyroblast's own while it waits,
+   * else a bolt's, less with Incineration.
+   */
+  chargeTime(): number {
+    if (this.player.abilities.primed('pyroblast')) return CONFIG.talents.trees.mage.fire.pyroblast.charge;
+    return CONFIG.mage.bolt.chargeTime - this.player.stats.talents.chargeFaster;
+  }
+
+  /** The colour a hand's bolt gathers in: a Fireball's, Frostbolt's, Chain Lightning's or Pyroblast's, if one waits on it. */
   private colourOf(hand: Handedness): number {
     const charge = this.player.abilities.waitingOn(BOLT_CHARGES);
     return charge ? ABILITY_COLOUR[charge]! : COLOUR[hand];
@@ -314,7 +325,8 @@ export class MageHands {
       }
       return;
     }
-    c.grow(dt, this, this.colourOf(c.hand));
+    c.full = this.chargeTime();
+    c.grow(dt, this, this.colourOf(c.hand), this.player.abilities.primed('pyroblast') ? 0.1 : 0.045);
     if (!released) return;
     this.release(c);
     c.reset();

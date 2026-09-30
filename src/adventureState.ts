@@ -219,6 +219,8 @@ export interface Stats {
   readonly abilities: readonly Ability[];
   /** What your talents add to your numbers, by name (talents.ts): 0 without talents. */
   readonly talents: Knobs;
+  /** Your level's step, as an enemy's: 1 at level 1, `CONFIG.levels.step` more a level (Ice Barrier grows by it). */
+  readonly step: number;
 }
 
 /** The step a level brings to an enemy's health and damage: 1 at level 1. */
@@ -250,6 +252,7 @@ export function statsAt(level: number, worn: Worn = WORN_NOTHING, klass: ClassId
     resource: resourceOf(klass, main),
     abilities: [...abilitiesAt(klass, level), ...talentAbilities(spent)],
     talents,
+    step: stepAt(level),
   };
 }
 

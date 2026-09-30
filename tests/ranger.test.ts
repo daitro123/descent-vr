@@ -1,4 +1,4 @@
-import { Group, Vector3 } from 'three';
+import { Group, PerspectiveCamera, Vector3, type WebGLRenderer } from 'three';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { statsAt } from '../src/adventureState';
 import { ABILITY, abilitiesAt, PLAYABLE, resourceOf } from '../src/classes';
@@ -7,7 +7,7 @@ import type { CombatFx } from '../src/combat/combat';
 import type { Arrow } from '../src/combat/projectiles';
 import { Mark } from '../src/combat/mark';
 import { RangerKit, scatteredBy } from '../src/combat/ranger';
-import { arrowDamage, fanOf, shotOf } from '../src/combat/shots';
+import { arrowDamage, bentOnto, fanOf, shotOf } from '../src/combat/shots';
 import { Traps } from '../src/combat/traps';
 import { Ward } from '../src/combat/ward';
 import { CONFIG } from '../src/config';
@@ -16,7 +16,8 @@ import { createEnemy } from '../src/enemies/kinds';
 import { AttackTokens } from '../src/enemies/tokens';
 import { mulberry32 } from '../src/maps/forest/noise';
 import type { EnemyKind } from '../src/models/characters';
-import type { Player } from '../src/player/player';
+import { Player } from '../src/player/player';
+import { costWith, type Spent } from '../src/talents';
 import { Arena } from '../src/world/arena';
 import type { Ground } from '../src/world/ground';
 
@@ -25,7 +26,9 @@ import type { Ground } from '../src/world/ground';
 // rule; Snare Trap's traps under real enemies' feet; Volley's fan, Scatter's
 // gust and Hunter's Mark on real enemies. The tests check what a player would
 // see: what an arrow deals, whom it hits, whether an enemy's arrow comes back,
-// whether a grunt stops, how far a gust sends it, what a mark adds.
+// whether a grunt stops, how far a gust sends it, what a mark adds. And
+// (ticket 26) what each talent of Marksmanship and Survival changes, and
+// their tier-3 abilities, Trueshot and Explosive Trap.
 
 const DT = 1 / 72;
 const A = CONFIG.ranger.arrow;
@@ -63,8 +66,8 @@ function ready(kind: EnemyKind, x: number, z: number, ctx: EnemyContext): Enemy 
   return e;
 }
 
-/** A ranger at the origin looking down −Z: the hands the kit reads, and what it lands. */
-function ranger(level = 3) {
+/** A ranger at the origin looking down −Z (with talents `spent`): the hands the kit reads, and what it lands. */
+function ranger(level = 3, spent: Spent = {}) {
   const hands = { left: { grip: new Group(), trigger: 0, squeeze: 0 }, right: { grip: new Group(), trigger: 0, squeeze: 0 } };
   const head = new Vector3(0, 1.6, 0);
   const player = {
@@ -74,7 +77,7 @@ function ranger(level = 3) {
     feetPosition: (out: Vector3) => out.set(head.x, 0, head.z),
     alive: true,
     holdingTools: false,
-    stats: statsAt(level, undefined, 'ranger'),
+    stats: statsAt(level, undefined, 'ranger', spent),
     ground: flatGround,
     abilities: new AbilityClock(),
   } as unknown as Player;
@@ -82,6 +85,7 @@ function ranger(level = 3) {
   const fx = { text: { spawn: nothing }, particles: { burst: nothing }, shockwaves: { trigger: nothing } } as unknown as CombatFx;
   const landed: { enemy: Enemy; damage: number; head: boolean }[] = [];
   const reflected: Arrow[] = [];
+  const bled: { enemy: Enemy; damage: number; seconds: number }[] = [];
   const kit = new RangerKit(
     player,
     fx,
@@ -91,6 +95,7 @@ function ranger(level = 3) {
         return enemy.takeHit(damage, push, { from: head });
       },
       evade: nothing,
+      bleed: (enemy, damage, seconds) => void bled.push({ enemy, damage, seconds }),
       reflect: (arrow) => void reflected.push(arrow),
     },
     new Group(),
@@ -98,7 +103,7 @@ function ranger(level = 3) {
   // The bow held out ahead at chest height, the fist's line upright (grip −Z turned up).
   hands.left.grip.position.set(0, 1.25, -0.5);
   hands.left.grip.quaternion.set(S, 0, 0, S);
-  return { kit, player, hands, head, landed, reflected };
+  return { kit, player, hands, head, landed, reflected, bled };
 }
 type Ranger = ReturnType<typeof ranger>;
 
@@ -608,5 +613,249 @@ describe("Hunter's Mark", () => {
     const head = new Vector3();
     warden.headSphere(head);
     expect(mark.chevron.position.y).toBeGreaterThan(head.y);
+  });
+});
+
+describe('Marksmanship', () => {
+  const T = CONFIG.talents.trees.ranger.marksmanship;
+
+  it('Steady Aim: arrows deal 5% more a point', () => {
+    for (const n of [0, 1, 3]) {
+      const r = ranger(8, { steadyAim: n });
+      shoot(r, 0.8);
+      expect(r.kit.shots.flying[0].damage).toBeCloseTo(30 * r.player.stats.damage * (1 + 0.05 * n));
+    }
+  });
+
+  it("Keen Eye: a head hit's multiplier +0.2 a point", () => {
+    const grunt = { exposed: 0, def: CONFIG.enemies.grunt };
+    const crit = CONFIG.enemies.grunt.critMultiplier;
+    expect(arrowDamage(30, true, grunt, 0.4)).toBe(Math.round(30 * (crit + 0.4)));
+    expect(arrowDamage(30, false, grunt, 0.4)).toBe(30);
+    const ctx = context(0);
+    const r = ranger(8, { keenEye: 2 });
+    const brute = ready('brute', 0, -6, ctx);
+    const head = new Vector3();
+    brute.headSphere(head);
+    // A head shot: loosed from just in front of its face.
+    r.kit.shots.loose(new Vector3(head.x, head.y, head.z + 0.4), new Vector3(0, 0, -1), 1, r.player.stats.damage);
+    fly(r, 0.3, [brute]);
+    expect(r.landed[0].head).toBe(true);
+    expect(r.landed[0].damage).toBe(Math.round(30 * r.player.stats.damage * (CONFIG.enemies.brute.critMultiplier + 0.4)));
+  });
+
+  it('Efficiency: Power Shot costs 15, then 10', () => {
+    expect([0, 1, 2].map((n) => ranger(8, { steadyAim: 3, efficiency: n }).player.stats.talents['cost:powerShot'])).toEqual([0, -5, -10]);
+    expect(costWith('powerShot', statsAt(8, undefined, 'ranger', { steadyAim: 3, efficiency: 2 }).talents)).toBe(10);
+  });
+
+  it('Swift Arrows: arrows fly 10% faster a point, and so drop less over the same way', () => {
+    expect(shotOf(1, 0.3).speed).toBeCloseTo(42 * 1.3);
+    const drop = (spent: Spent) => {
+      const r = ranger(8, spent);
+      shoot(r, 0.8);
+      const shot = r.kit.shots.flying[0];
+      const from = shot.pos.clone();
+      while (from.distanceTo(shot.pos) < 20) fly(r, DT);
+      return from.y - shot.pos.y;
+    };
+    expect(ranger(8, { steadyAim: 3, swiftArrows: 3 }).player.stats.talents.arrowSpeed).toBeCloseTo(0.3);
+    expect(drop({ steadyAim: 3, swiftArrows: 3 })).toBeLessThan(drop({}) * 0.7);
+  });
+
+  it('Improved Volley: a Volley splits into 6, then 7', () => {
+    for (const [n, arrows] of [
+      [1, 6],
+      [2, 7],
+    ]) {
+      const r = ranger(10, { steadyAim: 3, swiftArrows: 3, improvedVolley: n });
+      r.kit.volley();
+      shoot(r, 0.8);
+      expect(r.kit.shots.flying).toHaveLength(arrows);
+    }
+  });
+
+  it('Trueshot: 30 focus on a 20 s cooldown, in the triangle, lasting 8 s', () => {
+    expect(ABILITY.trueshot).toMatchObject({ byTalent: true, level: 8, use: 'triangle', cost: 30, cooldown: 20 });
+    expect(T.trueshot).toMatchObject({ time: 8, aimDeg: 8 });
+  });
+
+  it('Trueshot: an arrow loosed 6° off a grunt bends onto it; without it, the arrow misses', () => {
+    const ctx = context(0);
+    // 6° to the right of where the bow looses (down −Z), 12 m off.
+    const off = (6 * Math.PI) / 180;
+    const place = () => ready('grunt', Math.sin(off) * 12, -Math.cos(off) * 12, ctx);
+    const plain = ranger(8);
+    const a = place();
+    shoot(plain, 0.8, [a]);
+    fly(plain, 0.6, [a]);
+    expect(plain.landed).toEqual([]);
+
+    const r = ranger(8, { steadyAim: 3, swiftArrows: 3, trueshot: 1 });
+    const b = place();
+    expect(r.kit.trueshot()).toBe('cast');
+    r.player.abilities.used('trueshot', T.trueshot.time);
+    expect(r.kit.trueshooting).toBe(true);
+    shoot(r, 0.8, [b]);
+    expect(r.kit.shots.flying[0]).toMatchObject({ trueshot: true, target: b });
+    fly(r, 0.6, [b]);
+    expect(r.landed.map((l) => l.enemy)).toEqual([b]);
+    expect(r.kit.stats).toMatchObject({ trueshots: 1, bent: 1 });
+  });
+
+  it('Trueshot: bends only onto an enemy within 8° and in sight, the one nearest the line', () => {
+    const ctx = context(0);
+    const from = new Vector3(0, 1.3, 0);
+    const at = (deg: number, d: number) => ready('grunt', Math.sin((deg * Math.PI) / 180) * d, -Math.cos((deg * Math.PI) / 180) * d, ctx);
+    const near = at(3, 8);
+    const nearer = at(1, 14);
+    const wide = at(-12, 6);
+    expect(bentOnto(from, new Vector3(0, 0, -1), [near, nearer, wide], sees)).toBe(nearer);
+    expect(bentOnto(from, new Vector3(0, 0, -1), [wide], sees)).toBeNull();
+    expect(bentOnto(from, new Vector3(0, 0, -1), [near], () => false)).toBeNull();
+  });
+
+  it('Trueshot: its arrows pass a raised guard that stops a plain one', () => {
+    const ctx = context(0);
+    const guarded = (): Enemy => {
+      const g = ready('grunt', 0, -6, ctx);
+      Object.defineProperty(g, 'guarding', { get: () => true });
+      g.guardCovers = () => true;
+      return g;
+    };
+    const plain = ranger(8);
+    const a = guarded();
+    shoot(plain, 0.8, [a]);
+    fly(plain, 0.4, [a]);
+    expect(plain.landed).toEqual([]);
+    expect(a.hp).toBe(a.maxHp);
+
+    const r = ranger(8, { steadyAim: 3, swiftArrows: 3, trueshot: 1 });
+    const b = guarded();
+    r.player.abilities.used('trueshot', T.trueshot.time);
+    shoot(r, 0.8, [b]);
+    fly(r, 0.4, [b]);
+    expect(r.landed.map((l) => l.enemy)).toEqual([b]);
+    expect(r.kit.stats).toMatchObject({ trueshots: 1, pastGuard: 1 });
+    // Once it's over, arrows are plain again.
+    r.player.abilities.tick(T.trueshot.time);
+    expect(r.kit.trueshooting).toBe(false);
+    shoot(r, 0.8, [b]);
+    expect(r.kit.shots.flying.at(-1)!.trueshot).toBe(false);
+  });
+});
+
+describe('Survival', () => {
+  const T = CONFIG.talents.trees.ranger.survival;
+
+  it('Trapper: Snare Trap roots a second longer a point', () => {
+    const ctx = context(0);
+    const r = ranger(8, { trapper: 3 });
+    r.kit.snareTrap();
+    expect(r.kit.traps.laid[0].root).toBe(R.snareTrap.root + 3);
+    const grunt = ready('grunt', 0, 0, ctx);
+    frame(r, [grunt]);
+    expect(grunt.afflictedFor('rooted')).toBeCloseTo(R.snareTrap.root + 3);
+  });
+
+  it('Fleet Foot: the dash comes back 0.3 s sooner a point', () => {
+    const dashed = (spent: Spent) => {
+      const camera = new PerspectiveCamera();
+      camera.position.set(0, 1.6, 0);
+      const renderer = { xr: { getControllerGrip: () => new Group() } } as unknown as WebGLRenderer;
+      const player = new Player(camera, renderer, flatGround, 'ranger');
+      player.stats = statsAt(8, undefined, 'ranger', spent);
+      const button = () => ({ value: 0, pressed: false, touched: false });
+      const pad = { axes: [0, 0, 0, 0], buttons: Array.from({ length: 6 }, button), hapticActuators: [] };
+      player.input.hands.left.source = { gamepad: pad, handedness: 'left' } as unknown as XRInputSource;
+      pad.buttons[5] = { value: 1, pressed: true, touched: true };
+      player.update(DT);
+      return player.dashCooldown;
+    };
+    expect(dashed({})).toBeCloseTo(CONFIG.dash.cooldown);
+    expect(dashed({ fleetFoot: 2 })).toBeCloseTo(CONFIG.dash.cooldown - 0.6);
+  });
+
+  it('Serrated Tips: an arrow hit bleeds the enemy for 2 a point over 4 s', () => {
+    const ctx = context(0);
+    const r = ranger(8, { trapper: 3, serratedTips: 3 });
+    const brute = ready('brute', 0, -6, ctx);
+    shoot(r, 0.8, [brute]);
+    fly(r, 0.4, [brute]);
+    expect(r.bled).toEqual([{ enemy: brute, damage: 6 * r.player.stats.damage, seconds: T.serratedTips.time }]);
+    // Without it, no bleed.
+    const plain = ranger(8);
+    const other = ready('brute', 0, -6, ctx);
+    shoot(plain, 0.8, [other]);
+    fly(plain, 0.4, [other]);
+    expect(plain.bled).toEqual([]);
+  });
+
+  it('Steady Ward: the ward holds, and sends arrows back, 0.3 s longer a point', () => {
+    const W = CONFIG.ranger.ward;
+    const ward = new Ward();
+    ward.longer = 0.6;
+    ward.update(DT, true, true);
+    let held = 0;
+    while (ward.update(DT, true, true) === null) held += DT;
+    expect(held).toBeCloseTo(W.hold + 0.6, 1);
+    ward.clear();
+    ward.update(DT, true, true);
+    ward.update(W.reflect + 0.5, true, true);
+    expect(ward.fresh).toBe(true);
+    // The kit sets it from your talents.
+    const r = ranger(8, { trapper: 3, steadyWard: 2 });
+    frame(r);
+    expect(r.kit.ward.longer).toBeCloseTo(0.6);
+  });
+
+  it('Improved Scatter: the gust slows whom it reaches by 30% a point for 4 s', () => {
+    const ctx = context(0);
+    const r = ranger(10, { trapper: 3, serratedTips: 3, improvedScatter: 2 });
+    const grunt = ready('grunt', 0, -1.5, ctx);
+    r.kit.scatter([grunt], new Vector3(0, 0, -1));
+    expect(grunt.slowness).toBeCloseTo(0.6);
+    expect(grunt.afflictedFor('slowed')).toBeCloseTo(T.improvedScatter.time);
+    const plain = ranger(10);
+    const other = ready('grunt', 0, -1.5, ctx);
+    plain.kit.scatter([other], new Vector3(0, 0, -1));
+    expect(other.slowness).toBe(0);
+  });
+
+  it('Explosive Trap: 30 focus on a 15 s cooldown, in the triangle', () => {
+    expect(ABILITY.explosiveTrap).toMatchObject({ byTalent: true, level: 8, use: 'triangle', cost: 30, cooldown: 15 });
+  });
+
+  it('Explosive Trap: bursts under the first grunt to step on it, for 25 on each within 2.5 m, knocking them back', () => {
+    const ctx = context(0);
+    const r = ranger(1, { trapper: 3, serratedTips: 3, explosiveTrap: 1 });
+    expect(r.kit.explosiveTrap()).toBe('cast');
+    expect(r.kit.traps.laid).toEqual([expect.objectContaining({ kind: 'explosive', root: 0 })]);
+    const on = ready('grunt', 0.2, 0, ctx);
+    const near = ready('grunt', 1.8, 0.8, ctx);
+    const far = ready('grunt', 0, -4, ctx);
+    const was = [on.position.clone(), near.position.clone()];
+    frame(r, [far, on, near]);
+    expect(r.kit.traps.laid).toHaveLength(0);
+    expect(new Set(r.landed.map((l) => l.enemy))).toEqual(new Set([on, near]));
+    expect(r.landed.every((l) => l.damage === T.explosiveTrap.damage)).toBe(true);
+    expect(on.hp).toBe(CONFIG.enemies.grunt.hp - T.explosiveTrap.damage);
+    expect(on.afflictedFor('rooted')).toBe(0);
+    expect(far.hp).toBe(far.maxHp);
+    expect(r.kit.stats).toMatchObject({ explosives: 1, bursts: 1, burst: 2 });
+    for (let t = 0; t < 0.8; t += DT) frame(r, [far, on, near], ctx);
+    expect(flat(near.position, new Vector3())).toBeGreaterThan(flat(was[1], new Vector3()) + 0.8);
+  });
+
+  it('Explosive Trap: lies with the snares, at most three in all, the oldest ending', () => {
+    const r = ranger(10, { trapper: 3, serratedTips: 3, explosiveTrap: 1 });
+    r.kit.snareTrap();
+    r.kit.snareTrap();
+    r.kit.explosiveTrap();
+    r.kit.explosiveTrap();
+    expect(r.kit.traps.laid.map((t) => t.kind)).toEqual(['snare', 'explosive', 'explosive']);
+    r.kit.traps.render();
+    expect(r.kit.traps.mesh.count).toBe(3);
+    expect(r.kit.traps.mesh.instanceColor).not.toBeNull();
   });
 });

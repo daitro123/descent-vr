@@ -40,7 +40,8 @@ export interface Bolt {
   readonly target: Enemy | null;
   /**
    * What an ability made of it, if anything: a Fireball burns and bursts where
-   * it lands, a Frostbolt slows the enemy it hits, Chain Lightning arcs on.
+   * it lands, a Frostbolt slows the enemy it hits, Chain Lightning arcs on, a
+   * Pyroblast hits hard and sets it burning.
    */
   readonly charge: BoltCharge | null;
 }
@@ -49,7 +50,7 @@ export interface Bolt {
 export type BoltLands = (bolt: Bolt, enemy: Enemy | null, at: Vector3, crit: boolean) => void;
 
 /** The motes a bolt leaves behind it: a Fireball's rise as embers, Chain Lightning's crackle as sparks. */
-const TRAIL: Readonly<Record<BoltCharge | 'plain', BurstKind>> = { plain: 'magic', fireball: 'embers', frostbolt: 'magic', chainLightning: 'sparks' };
+const TRAIL: Readonly<Record<BoltCharge | 'plain', BurstKind>> = { plain: 'magic', fireball: 'embers', frostbolt: 'magic', chainLightning: 'sparks', pyroblast: 'embers' };
 
 /** At most this many in flight: a new one ends the oldest. */
 const MAX = 16;

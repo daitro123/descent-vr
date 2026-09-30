@@ -25,6 +25,10 @@ export const ABILITY_COLOUR: Readonly<Partial<Record<Ability, number>>> = {
   frostbolt: 0x4fb8ff, // a deep ice blue: the frost bolt and the frost it leaves
   chainLightning: 0xc8b0ff, // a pale violet-white: the bolt and its arcs
   blizzard: 0xe4f4ff, // snow white: the circle and the ice that falls in it
+  trueshot: 0xfff0b0, // a pale true gold: the bow's glow and the arrows' trail while it lasts
+  explosiveTrap: 0xff6a30, // a coal red: the trap's glow and its burst
+  pyroblast: 0xff4a10, // a deep flame red: the huge orb and its blast
+  iceBarrier: 0xa8e0ff, // a clear ice blue: the ring of ice round you
 };
 
 /** Why an ability can't be used now: still cooling down, or not enough of the class's resource. */
