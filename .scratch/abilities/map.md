@@ -30,6 +30,8 @@ A written **spec for character development in combat**, ready to hand off as bui
 
 <!-- one line per resolved ticket: [title](link): gist -->
 
+- [Bows, spells and abilities in shipped VR games](issues/01-bows-spells-and-abilities-in-shipped-vr-games.md): shipped games nock an arrow by touching the string, with no quiver reach; cast a spell from each hand by charge and throw, with merged two-hand spells at the top; call abilities with a grip and a flick, about four per hand; and keep gestures loose, poses at chest height and fights paced. Sourced from search extracts only.
+
 ## Not yet specified
 
 - **Enemies against the new classes:** camps were tuned for a warrior in melee. A ranger shooting from range meets the 8 m notice radius and the 30 m leash, and a mage's crowd control meets "only two enemies mid-attack at once". What enemies need (ranged pressure on a kiter, leash rules for ranged pulls) waits on how the ranger and mage fight.
