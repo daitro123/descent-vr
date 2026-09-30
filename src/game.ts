@@ -47,8 +47,8 @@ export class Game {
   readonly player: Player;
   readonly enemies: Enemy[] = [];
   readonly combat: Combat;
-  private readonly text: FloatingText;
-  private readonly particles: Particles;
+  readonly text: FloatingText;
+  readonly particles: Particles;
   private readonly shockwaves: Shockwaves;
   private readonly trail: SwordTrail;
   private readonly shadows = new BlobShadows();

@@ -90,7 +90,7 @@ export class Combat implements ArrowResolver {
 
   constructor(
     private readonly player: Player,
-    private readonly fx: CombatFx,
+    readonly fx: CombatFx,
     private readonly events: CombatEvents,
     parent: Object3D,
   ) {
@@ -242,6 +242,13 @@ export class Combat implements ArrowResolver {
     else if (enemy.kind === 'brute') this.fx.particles.burst('blood', at, 10, _vel);
     else this.fx.particles.burst('bone', at, 6, _vel);
     if (bright) this.fx.particles.burst('sparks', at, 14, _vel);
+  }
+
+  /** A blow dealt outside Combat (a class prototype's spell) landed: the kill's count and effects, drops and hit-stop. */
+  landed(enemy: Enemy, killed: boolean, hitStop = 0): void {
+    if (hitStop > 0) this.events.hitStop(hitStop);
+    this.events.onEnemyHit(enemy, killed);
+    if (killed) this.onKill(enemy);
   }
 
   private onKill(enemy: Enemy): void {
