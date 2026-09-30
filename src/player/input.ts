@@ -5,6 +5,7 @@ export type Handedness = 'left' | 'right';
 // xr-standard gamepad mapping indices.
 const BTN_TRIGGER = 0;
 const BTN_SQUEEZE = 1;
+const BTN_STICK = 3; // clicking the thumbstick down
 const BTN_PRIMARY = 4; // A / X
 const BTN_SECONDARY = 5; // B / Y
 const AXIS_STICK_X = 2;
@@ -21,6 +22,9 @@ export interface HandState {
   primaryPressed: boolean; // edge: went down this frame
   secondary: boolean;
   secondaryPressed: boolean;
+  /** The thumbstick clicked down. */
+  stick: boolean;
+  stickPressed: boolean; // edge: went down this frame
 }
 
 /**
@@ -44,6 +48,8 @@ export class XRInput {
       primaryPressed: false,
       secondary: false,
       secondaryPressed: false,
+      stick: false,
+      stickPressed: false,
     });
 
     for (let i = 0; i < 2; i++) {
@@ -88,9 +94,10 @@ export class XRInput {
       const gp = hand.source?.gamepad;
       const wasPrimary = hand.primary;
       const wasSecondary = hand.secondary;
+      const wasStick = hand.stick;
       if (!gp) {
         hand.stickX = hand.stickY = hand.trigger = hand.squeeze = 0;
-        hand.primary = hand.secondary = false;
+        hand.primary = hand.secondary = hand.stick = false;
       } else {
         hand.stickX = gp.axes[AXIS_STICK_X] ?? 0;
         hand.stickY = gp.axes[AXIS_STICK_Y] ?? 0;
@@ -98,9 +105,11 @@ export class XRInput {
         hand.squeeze = gp.buttons[BTN_SQUEEZE]?.value ?? 0;
         hand.primary = gp.buttons[BTN_PRIMARY]?.pressed ?? false;
         hand.secondary = gp.buttons[BTN_SECONDARY]?.pressed ?? false;
+        hand.stick = gp.buttons[BTN_STICK]?.pressed ?? false;
       }
       hand.primaryPressed = hand.primary && !wasPrimary;
       hand.secondaryPressed = hand.secondary && !wasSecondary;
+      hand.stickPressed = hand.stick && !wasStick;
     }
   }
 

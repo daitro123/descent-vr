@@ -4,6 +4,7 @@ import { CONFIG } from '../config';
 import { sfx } from '../fx/sfx';
 import type { Ground } from '../world/ground';
 import { XRInput } from './input';
+import type { Run } from './run';
 import { Shield, Sword } from './weapons';
 
 const UP = new Vector3(0, 1, 0);
@@ -37,6 +38,12 @@ export class Player {
   private snapLatched = false;
   /** Called when a dash starts (the HUD dims the edges for comfort). */
   onDash?: () => void;
+  /** The left stick's click to run: the Adventure's; the arena, always in a fight, has none. */
+  run: Run | null = null;
+  /** Is anything fighting you? Set by the game before each update; a fight stops the run. */
+  fighting = false;
+  /** Running this frame (the run's vignette shows). */
+  running = false;
 
   constructor(
     readonly camera: PerspectiveCamera,
@@ -106,7 +113,7 @@ export class Player {
       this.locomote(dt);
       this.snapTurn();
       this.dash(dt);
-    }
+    } else this.stopRunning();
     this.collide(dt);
     this.rig.updateMatrixWorld(true);
     this.sword.update(this.rig, dt);
@@ -147,9 +154,9 @@ export class Player {
   }
 
   private locomote(dt: number): void {
-    const { stickX, stickY } = this.input.hands.left;
-    const { moveSpeed, stickDeadzone } = CONFIG.player;
-    if (Math.hypot(stickX, stickY) < stickDeadzone) return;
+    const { stickX, stickY, stickPressed } = this.input.hands.left;
+    const speed = this.runSpeed(stickPressed, stickX, stickY);
+    if (Math.hypot(stickX, stickY) < CONFIG.player.stickDeadzone) return;
 
     // Head-relative: forward is where you look, flattened to the floor.
     this.camera.getWorldDirection(_fwd);
@@ -158,8 +165,17 @@ export class Player {
     _fwd.normalize();
     _right.crossVectors(_fwd, UP);
     this.rig.position
-      .addScaledVector(_fwd, -stickY * moveSpeed * dt)
-      .addScaledVector(_right, stickX * moveSpeed * dt);
+      .addScaledVector(_fwd, -stickY * speed * dt)
+      .addScaledVector(_right, stickX * speed * dt);
+  }
+
+  /** The walk's speed, or the run's while it's latched and the stick points ahead; a pull ends it with a buzz. */
+  private runSpeed(click: boolean, stickX: number, stickY: number): number {
+    if (!this.run) return CONFIG.player.moveSpeed;
+    const step = this.run.step({ click, stickX, stickY, fighting: this.fighting });
+    this.running = step.running;
+    if (step.caught) this.input.pulse('left', CONFIG.run.buzz.intensity, CONFIG.run.buzz.ms);
+    return step.speed;
   }
 
   private snapTurn(): void {
@@ -221,9 +237,16 @@ export class Player {
     this.place(x, z, yaw);
   }
 
-  /** Stand with your head over (x, z), facing `yaw` (0 looks down −Z), and stop any dash. */
+  /** Back to walking. */
+  private stopRunning(): void {
+    this.run?.stop();
+    this.running = false;
+  }
+
+  /** Stand with your head over (x, z), facing `yaw` (0 looks down −Z), and stop any dash or run. */
   place(x: number, z: number, yaw: number): void {
     this.dashTime = 0;
+    this.stopRunning();
     this.rig.rotation.set(0, yaw, 0);
     // In the headset you may stand off the play space's centre; put the head, not the centre, there.
     _head.copy(this.camera.position).setY(0).applyAxisAngle(UP, yaw);

@@ -169,6 +169,22 @@ export const CONFIG = {
     },
   },
 
+  run: {
+    // The Adventure's run: click the left stick and you jog while it points ahead
+    // and nothing fights you; let go of the stick and it ends.
+    speed: 3.5, // m/s (the walk is player.moveSpeed)
+    aheadDeg: 45, // the stick must point within this of straight ahead, either side
+    buzz: { intensity: 0.7, ms: 120 }, // the left hand's one buzz when a pull ends your run
+    // The edges of your view darken a little while you run: a ring, clear in the middle.
+    vignette: {
+      strength: 0.55, // how dark the very edge gets (0 turns the vignette off, 1 black)
+      fade: 0.2, // s to fade in, and out
+      clearDeg: 30, // clear out to this far off the middle of your view
+      fullDeg: 65, // at its strongest from this far off
+      reachDeg: 80, // the ring's outer edge, past the Quest's field of view
+    },
+  },
+
   dash: {
     // B / Y: a quick step in the left-stick direction (backwards if neutral).
     distance: 1.7,

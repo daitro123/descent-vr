@@ -15,6 +15,7 @@ import type { Respawn, Zone } from './maps/types';
 import { Hale } from './people/hale';
 import { Villagers } from './people/villagers';
 import { Player } from './player/player';
+import { Run } from './player/run';
 import { SaveController } from './save/controller';
 import { type Interior, saveRecord } from './save/record';
 import type { Save } from './save/store';
@@ -22,6 +23,7 @@ import { BeltHud } from './ui/beltHud';
 import { Fade } from './ui/fade';
 import { arrowHides, arrowPoint, arrowTurn, type ArrowSpots } from './ui/questArrow';
 import { type ArrowShown, QuestTracker } from './ui/questTracker';
+import { RunVignette } from './ui/runVignette';
 import { type Probe, TalkBoard } from './ui/talkBoard';
 import { Orbs } from './world/orbs';
 import { Pickups } from './world/pickups';
@@ -57,7 +59,9 @@ const UNLOCKED: Record<Ability, string> = {
 /**
  * The game at the plain URL: Oakvale, loaded into the World, with the
  * warrior's sword, shield, walk, snap turn and dash on its hills, and its
- * camps waiting to be pulled. It owns and steps everything in it, one
+ * camps waiting to be pulled. Out of a fight a click of the left stick runs,
+ * the edges of your view darkening a little, until you let the stick go or
+ * a pull catches you. It owns and steps everything in it, one
  * `update(dt)` per XR frame, as the arena's `Game` does for the waves.
  * Marshal Hale stands at the crossroads with the quest chain: walk up and
  * their board unfolds, and the tracker shows the quest you're on. The
@@ -109,6 +113,8 @@ export class Adventure {
   private readonly shadows = new BlobShadows();
   private readonly orbs = new Orbs();
   private readonly fade: Fade;
+  /** The edges of your view darkening while you run. */
+  private readonly runVignette: RunVignette;
   private readonly you: You = { feet: new Vector3(), head: new Vector3(), sword: null, alive: true, interior: null };
   private readonly sword = { base: new Vector3(), tip: new Vector3(), speed: 0, swing: 0 };
   /** Every enemy there is to fight this frame: the camps', the Warden and what it raised. */
@@ -152,6 +158,7 @@ export class Adventure {
     this.respawns = zone.respawns;
     this.respawn = zone.respawns.village;
     this.player = new Player(camera, renderer, this.world);
+    this.player.run = new Run();
     scene.add(this.player.rig, this.orbs.root, this.shadows.mesh);
     this.trail = new SwordTrail(scene);
     this.text = new FloatingText(scene);
@@ -161,6 +168,8 @@ export class Adventure {
     scene.add(this.hud.root);
     this.hud.warm(renderer, scene);
     this.fade = new Fade(camera);
+    this.runVignette = new RunVignette(camera);
+    this.runVignette.warm(renderer, camera, scene);
 
     this.combat = new Combat(
       this.player,
@@ -248,7 +257,9 @@ export class Adventure {
     const outdoors = this.world.outdoorsShown;
     this.pickups.root.visible = this.hale.root.visible = this.villagers.root.visible = outdoors;
     this.showCamps(outdoors);
+    player.fighting = this.fighting;
     player.update(dt);
+    this.runVignette.update(dt, player.running);
     updateListener(player.camera);
     const { hands } = player.input;
     const foes = this.gatherFoes();
@@ -273,7 +284,7 @@ export class Adventure {
     this.camps.update(enemyDt, you);
     this.throne?.update(enemyDt, you, this.state.wardenSeated);
     // The ambience's mix follows the light's cues, and dips while anything fights you.
-    this.ambience.update(dt, you.head, this.world.cues, this.camps.fighting || this.throne?.state === 'fighting');
+    this.ambience.update(dt, you.head, this.world.cues, this.fighting);
     this.combat.projectiles.render();
     this.heal(dt);
     this.updateDeath(dt);
@@ -309,6 +320,11 @@ export class Adventure {
     if (!arrow || arrowHides(arrow.target, { x: head.x, z: head.z, interior: this.world.interior }, this.arrowSpots)) return null;
     const yaw = _turn.setFromQuaternion(this.player.camera.getWorldQuaternion(_look), 'YXZ').y;
     return { line: arrow.line, turn: arrowTurn({ x: head.x, z: head.z, yaw }, arrowPoint(arrow.target, this.arrowSpots)) };
+  }
+
+  /** Is anything fighting you: a camp's (not walking home), or the Warden and what it raised? */
+  private get fighting(): boolean {
+    return this.camps.fighting || this.throne?.state === 'fighting';
   }
 
   /** Every enemy there is to fight: the camps', then the Warden's hall's. */
