@@ -1,8 +1,9 @@
 import { Vector3 } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
-import { buildLayout, FOREST, type ForestLayout, HALE, localToWorld, MAP_BOARD, SIGNPOSTS, type StructureKind, TENT, worldToLocal } from '../src/maps/forest/layout';
-import type { CampPlan } from '../src/maps/types';
+import { buildLayout, CHESTS, FOREST, type ForestLayout, HALE, localToWorld, MAP_BOARD, SIGNPOSTS, type StructureKind, TENT, worldToLocal } from '../src/maps/forest/layout';
+import { MINE, minePiece } from '../src/maps/forest/mine';
+import type { CampPlan, ChestPlan } from '../src/maps/types';
 import { nearestOnPolyline } from '../src/maps/forest/noise';
 import { MAPS } from '../src/maps/registry';
 import { INN } from '../src/maps/forest/inn';
@@ -464,6 +465,107 @@ describe("the leader's orders", () => {
     expect(Math.hypot(o.x - sx, o.z - sz)).toBeLessThan(0.55);
   });
 });
+
+describe("Oakvale's chests", () => {
+  const chest = (id: string) => layout.chests.find((c) => c.id === id)!;
+  const size = (c: ChestPlan) => CONFIG.chests.looks[c.look];
+  /** Where you stand to lift its lid: before its front, a body's width off it, facing it. */
+  const standBefore = (c: ChestPlan): [number, number] => localToWorld(c, 0, size(c).d / 2 + CONFIG.player.bodyRadius + 0.05);
+  /** The distance over the floor plane from (x, z) to the chest's footprint. */
+  const offFoot = (c: ChestPlan, x: number, z: number) => {
+    const [lx, lz] = worldToLocal(c, x, z);
+    const { w, d } = size(c);
+    return Math.hypot(Math.max(0, Math.abs(lx) - w / 2), Math.max(0, Math.abs(lz) - d / 2));
+  };
+
+  it('stand at the top of the watchtower and in the leader\'s tent (level 2), and the bandits\' strongbox in the dig (level 4)', () => {
+    expect(layout.chests.map((c) => `${c.id}: ${c.look}, level ${c.level}, ${c.interior ?? 'outdoors'}`)).toEqual([
+      'oakvale-watchtower: chest, level 2, outdoors',
+      'oakvale-leaders-tent: chest, level 2, outdoors',
+      'oakvale-strongbox: strongbox, level 4, mine',
+    ]);
+    // On the tower's hilltop, its back to the tower's wall and facing away from it.
+    const tower = layout.structures.find((s) => s.kind === 'tower')!;
+    const top = chest(CHESTS.watchtower.id);
+    const [lx, lz] = worldToLocal(tower, top.x, top.z);
+    expect(Math.hypot(lx, lz)).toBeLessThan(4.5);
+    expect(Math.abs(top.y - tower.y)).toBeLessThan(0.05);
+    const [fx, fz] = localToWorld(top, 0, 1);
+    expect(Math.hypot(fx - tower.x, fz - tower.z)).toBeGreaterThan(Math.hypot(top.x - tower.x, top.z - tower.z) + 0.9);
+    // In the tent, beside the crates, its front on the door's line.
+    const tent = layout.structures.find((s) => s.kind === 'tent')!;
+    const inTent = chest(CHESTS.tent.id);
+    const [tx, tz] = worldToLocal(tent, inTent.x, inTent.z);
+    expect(Math.abs(tx)).toBeGreaterThan(TENT.crates.half + size(inTent).w / 2);
+    expect(Math.abs(tx) + size(inTent).w / 2).toBeLessThan(TENT.hw - 0.4);
+    expect(tz + size(inTent).d / 2).toBeLessThan(TENT.hd);
+    expect(tz + size(inTent).d / 2).toBeGreaterThan(TENT.hd - 0.05);
+    expect(Math.cos(inTent.yaw - tent.yaw)).toBeCloseTo(1);
+    // The bandits' strongbox, on the dig's floor.
+    const box = chest('oakvale-strongbox');
+    const [mx, mz] = worldToLocal(layout.mine.mouth, box.x, box.z);
+    const { strongbox } = MINE.dig;
+    expect(mx).toBeCloseTo((strongbox.x0 + strongbox.x1) / 2);
+    expect(mz).toBeCloseTo((strongbox.z0 + strongbox.z1) / 2);
+    expect(box.y).toBeCloseTo(layout.mine.mouth.y + minePiece('dig').floor);
+    expect(size(box).w).toBeCloseTo(strongbox.x1 - strongbox.x0);
+    expect(size(box).d).toBeCloseTo(strongbox.z1 - strongbox.z0);
+  });
+
+  it("stay clear of every camp's posts and of the leader's orders", () => {
+    for (const c of layout.chests) {
+      for (const camp of layout.camps) {
+        for (const p of camp.posts) expect(offFoot(c, p.x, p.z), `${c.id} and ${camp.id}'s ${p.behaviour} at (${p.x}, ${p.z})`).toBeGreaterThan(1);
+      }
+    }
+    const orders = layout.pickups.find((p) => p.item === 'orders')!;
+    const inTent = chest(CHESTS.tent.id);
+    // Reaching for the orders doesn't lift the lid, nor the lid the orders.
+    expect(offFoot(inTent, orders.x, orders.z)).toBeGreaterThan(CONFIG.chests.reach + CONFIG.orb.pickupRadius);
+    expect(orders.y - inTent.y).toBeGreaterThan(size(inTent).h + size(inTent).lid + CONFIG.chests.reach);
+  });
+
+  it('stand where you can walk up to them, their lids in reach of a hand from where you stand', () => {
+    const r = CONFIG.player.bodyRadius;
+    for (const c of layout.chests) {
+      const [sx, sz] = standBefore(c);
+      if (c.interior === 'mine') {
+        expect(layout.mine.groundAt(sx, sz), c.id).not.toBeNull();
+        expect(layout.mine.resolve(new Vector3(sx, 0, sz), r), `${c.id}: standing before it`).toBe(false);
+      } else {
+        expect(layout.colliders.resolve(new Vector3(sx, 0, sz), r), `${c.id}: standing before it`).toBe(false);
+        expect(onFoot(sx, sz, 0.5), c.id).toBe(true);
+      }
+      // A hand's reach from your head, which is over your feet, to the lid's front.
+      expect(offFoot(c, sx, sz), c.id).toBeLessThan(0.55);
+      // You can't walk into it: its footprint's middle is blocked.
+      const blocked = c.interior === 'mine' ? layout.mine.resolve(new Vector3(c.x, 0, c.z), 0.05) : layout.colliders.blocked(c.x, c.z, 0);
+      expect(blocked, `${c.id} is solid`).toBe(true);
+    }
+  });
+
+  it("let what's inside come out beside them, on open ground but out of your feet's way as you stand to open them", () => {
+    const { ring, size: item } = CONFIG.loot;
+    for (const c of layout.chests) {
+      const { drop } = c;
+      const [sx, sz] = standBefore(c);
+      expect(Math.hypot(drop.x - sx, drop.z - sz) - ring - item / 2, `${c.id}: out of your feet's way`).toBeGreaterThan(CONFIG.orb.walkRadius);
+      expect(offFoot(c, drop.x, drop.z), `${c.id}: at the chest`).toBeLessThan(2.5);
+      expect(offFoot(c, drop.x, drop.z), `${c.id}: clear of it`).toBeGreaterThan(ring);
+      if (c.interior === 'mine') {
+        expect(drop.y).toBeCloseTo(c.y);
+        expect(layout.mine.resolve(new Vector3(drop.x, 0, drop.z), r0), `${c.id}: its drop on open floor`).toBe(false);
+      } else {
+        expect(drop.y).toBeCloseTo(layout.heightAt(drop.x, drop.z));
+        expect(layout.colliders.resolve(new Vector3(drop.x, 0, drop.z), r0), `${c.id}: its drop on open ground`).toBe(false);
+        expect(onFoot(drop.x, drop.z, 0.5), c.id).toBe(true);
+      }
+    }
+  });
+});
+
+/** Room round a drop's pouch for you to walk up to it. */
+const r0 = CONFIG.player.bodyRadius;
 
 describe('the village respawn point', () => {
   it("is by the inn's hearth, inside with the door shut, standing clear and facing the door", () => {

@@ -449,8 +449,8 @@ export class Inventory {
     this.dim = Math.max(0, this.dim - dt);
   }
 
-  /** Open chest `id` once, taking what's in it. */
-  openChest(id: string, stacks: readonly Stack[], coins: number): InventoryEffect[] {
+  /** Open chest `id` once, taking what's in it (nothing, for a chest whose contents come out on the ground). */
+  openChest(id: string, stacks: readonly Stack[] = [], coins = 0): InventoryEffect[] {
     if (this.opened.includes(id)) return [];
     this.opened.push(id);
     return [{ kind: 'chest', chest: id }, ...this.take(stacks, coins)];

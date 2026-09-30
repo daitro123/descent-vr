@@ -24,8 +24,8 @@ Built on 2026-09-30 by Claude **on Tom's behalf**: he asked for the build ticket
 - `src/professions/stationHands.ts`: the spec's one rule for hands at a station, `stationHands(were, atStation(...))`, so the alchemy bench (16) can use it too. Stepping within 1.3 m of the anvil, facing it (within 60°) and out of a fight, swaps both hands. Past 2 m, or when a fight starts, they swap back (a fight does it at once, with a strong buzz). Turning away (to the forge, the bucket) keeps them.
 - `Player.holdTools(tools | null)` puts the hammer and tongs in the grips in place of the sword and shield. With no sword in the grip, nothing hits and the sword's tip is no probe.
 - `Villager.stepAside(to | null)`: the smith walks to `SMITHY.aside`, by the back wall and clear of the way to the forge, and stands watching while you work. They go back to the anvil 2 s after you leave. Their body moves with them.
-- `Adventure`: builds the anvil from the smith's spot, drawn with the outdoors, and steps it each frame. What a make does goes through `applyThings` (saved, bag refreshed), and each `made` effect also goes to `state.apply({ kind: 'made', recipe })` so quests count it (ticket 12). Any `proficiency` effect floats "+N Smithing" small and white where the thing was made.
-- Every number is in `CONFIG.professions.station`, `.anvil` and `.float`, and in `CONFIG.villagers.smith.aside`.
+- `Adventure`: builds the anvil from the smith's spot, drawn with the outdoors, and steps it each frame. What a make does goes through `applyThings` (saved, bag refreshed), and each `made` effect also goes to `state.apply({ kind: 'made', recipe })` so quests count it (ticket 12). The bench build's `proficiency` float shows "+1 Smithing" where the thing was made.
+- Every number is in `CONFIG.professions.station` and `.anvil`, and in `CONFIG.villagers.smith.aside`.
 
 **Checks**
 
@@ -44,8 +44,8 @@ Built on 2026-09-30 by Claude **on Tom's behalf**: he asked for the build ticket
 
 **For later tickets**
 
-- **16 (the bench):** use `stationHands` and `atStation` for its hands. For bare fists, call `player.holdTools` with two empty groups: the fists stay and the weapons go. Pass its effects through `Adventure.applyMade`, which also counts `made` for quests. The `proficiency` float is shared.
-- **13, 14 (gathering):** the "+1 Mining" float is already there: pass `gather`'s effects through `applyThings`.
+- **16 (the bench)** landed alongside this with its own copy of the hands rule (`CONFIG.professions.bench`). The two can share `stationHands` later. Both pass their makes through `Adventure.applyMade` and float proficiency the same way.
+- **13, 14 (gathering):** the "+1 Mining" float is already there. Pass `gather`'s effects through `applyThings`.
 - **17 (using what's made):** the whetstone and gauntlets arrive in the bag as ordinary items.
 
 **On the headset:** check the hammer's face angle in the grip, the anvil's face height (74 cm), the strike speeds (1.2 and 2.2 m/s), and whether 1.3 m and 60° feel right for stepping up.

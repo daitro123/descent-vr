@@ -19,6 +19,8 @@ import { findMap } from './maps/registry';
 import type { Respawn, StartingZone, Zone } from './maps/types';
 import { Hale } from './people/hale';
 import { Villagers } from './people/villagers';
+import { type AlchemyBench, type Herbalist, standInHouse } from './professions/bench';
+import { PROFESSION_NAMES } from './professions/professions';
 import { Player } from './player/player';
 import { Run } from './player/run';
 import { Anvil } from './professions/anvil/anvil';
@@ -36,6 +38,7 @@ import { IconAtlas, lookOf } from './ui/bag/looks';
 import { type Probe, TalkBoard } from './ui/talkBoard';
 import { Drops, type Touch } from './world/drops';
 import { Orbs } from './world/orbs';
+import { Chests } from './world/chests';
 import { Pickups } from './world/pickups';
 import { BlobShadows } from './world/shadows';
 import { Dropped } from './world/dropped';
@@ -53,8 +56,6 @@ const _turn = new Euler();
 type FloatStyle = Parameters<FloatingText['spawn']>[2];
 /** "+N XP" where an enemy fell. */
 const KILL_XP_FLOAT: FloatStyle = { color: '#ffd23a', scale: 0.24, life: CONFIG.levels.xpFloat.time, rise: 0.5 };
-/** "+1 Smithing" where the thing was made. */
-const PROFICIENCY_FLOAT: FloatStyle = { color: '#ffffff', ...CONFIG.professions.float };
 /** A hand-in's reward over Hale. */
 const HAND_IN_FLOAT: FloatStyle = { scale: 0.2, life: CONFIG.handIn.time, rise: 0.3 };
 /** The coins a pouch held, over it as it's taken. */
@@ -112,6 +113,9 @@ export class Adventure {
   readonly hale: Hale;
   /** The innkeeper, the smith and the farmer, at work. */
   readonly villagers: Villagers;
+  /** The alchemy bench in the house by the well, and the herbalist at its end; null in a zone without the house. */
+  readonly bench: AlchemyBench | null = null;
+  readonly herbalist: Herbalist | null = null;
   /** The wind, the birds in the trees and each place's sound where it is. */
   readonly ambience: Ambience;
   /** Hale's board, which unfolds as you walk up to them. */
@@ -124,6 +128,8 @@ export class Adventure {
   private named = false;
   /** What lies about for a quest, to pick up by hand: the leader's orders. */
   readonly pickups: Pickups;
+  /** The zone's chests, shut until you touch a lid, and open for good after. */
+  readonly chests: Chests;
   /** The bag: reach over a shoulder for it, and move your things about on its panel. */
   readonly bag: Bag;
   /** What you've let go of off the bag's panel, lying on the ground. */
@@ -275,6 +281,11 @@ export class Adventure {
 
     this.pickups = new Pickups(zone.pickups);
     scene.add(this.pickups.root);
+    // The chests out of doors with the chunks round you; the mine's strongbox with the mine's meshes.
+    this.chests = new Chests(zone.chests, (id) => this.state.inventory.isOpened(id));
+    scene.add(this.chests.outdoors, this.chests.mine);
+    this.world.stageWith(null, this.chests.outdoors);
+    if (zone.mine) this.world.stageWith('mine', this.chests.mine);
 
     this.hale = new Hale(zone.hale, this.world, this.state.hale.marker, this.state.haleSwordAtHip);
     this.arrowSpots = { places: zone.places, givers: { hale: zone.hale } };
@@ -314,6 +325,28 @@ export class Adventure {
       : null;
     if (this.anvil) this.world.stageWith(null, this.anvil.frame);
 
+    // The alchemy bench and its herbalist hang from the house's room, drawn while it is.
+    const house = zone.interiors.find((i) => i.id === 'house');
+    if (house) {
+      const stood = standInHouse(
+        house,
+        {
+          player: this.player,
+          professions: this.state.professions,
+          inventory: this.state.inventory,
+          particles: this.particles,
+          apply: (effects, at) => this.applyMade(effects, at),
+          dress: () => this.dressHands(),
+        },
+        CONFIG.villagers.radius,
+      );
+      this.bench = stood.bench;
+      this.herbalist = stood.herbalist;
+      this.world.addBody(stood.body);
+      this.world.stageWith('house', stood.bench.root);
+      this.world.stageWith('house', stood.herbalist.root);
+    }
+
     // A new character at the zone's start, facing Hale; or where the save stood,
     // facing the same way, at full health and with no rage. A save made inside
     // the inn loads inside it, with the door shut and the room lit; one made in
@@ -342,7 +375,7 @@ export class Adventure {
     this.world.update(dt, player.camera);
     // With a door shut behind you, what stands outside isn't drawn either.
     const outdoors = this.world.outdoorsShown;
-    this.pickups.root.visible = this.hale.root.visible = this.villagers.root.visible = outdoors;
+    this.pickups.root.visible = this.hale.root.visible = this.villagers.root.visible = this.chests.outdoors.visible = outdoors;
     if (this.anvil) this.anvil.frame.visible = outdoors;
     this.showCamps(outdoors);
     player.fighting = this.fighting;
@@ -389,7 +422,10 @@ export class Adventure {
     this.updateAnvil(dt);
     this.updateBag(dt);
     this.villagers.update(dt, you.head, this.state);
+    this.herbalist?.update(dt, you.head);
+    this.bench?.update(dt, this.fighting);
     this.pickUp();
+    this.openChests(dt);
     this.updateHandIn(dt);
     this.tracker.update(dt, player.camera, this.state.tracker, this.questArrow());
     // The zone you're in floats up as you load in.
@@ -444,6 +480,7 @@ export class Adventure {
    */
   private showCamps(outdoors: boolean): void {
     const mine = this.world.mine;
+    if (mine) showInMine(mine, this.chests.mine);
     for (const camp of this.camps.camps) {
       if (camp.plan.interior !== 'mine' || !mine) camp.root.visible = outdoors;
       else showInMine(mine, camp.root);
@@ -600,16 +637,16 @@ export class Adventure {
     });
   }
 
-  /** What a make did (materials taken, the thing made, proficiency): saved and shown at `at`, and each thing made counts for your quests. */
-  private applyMade(effects: readonly Effect[], at: Vector3): void {
-    this.applyThings(effects, at);
-    for (const e of effects) if (e.kind === 'made') this.apply({ kind: 'made', recipe: e.recipe }, at);
-  }
-
   /** What an operation on your things did: saved, and shown at `at`. */
   private applyThings(effects: readonly Effect[], at: Vector3): void {
     this.saves.onEffects(effects);
     this.show(effects, at, false);
+  }
+
+  /** What a make at a station did: saved and shown at `at`, and what it made counted for your quests. */
+  private applyMade(effects: readonly Effect[], at: Vector3): void {
+    this.applyThings(effects, at);
+    for (const e of effects) if (e.kind === 'made') this.apply({ kind: 'made', recipe: e.recipe }, at);
   }
 
   /**
@@ -639,6 +676,21 @@ export class Adventure {
     this.player.input.pulse(taken.hand, intensity, ms);
     sfx.parchment(taken.at);
     this.apply({ kind: 'pickup', item: taken.item }, taken.at);
+  }
+
+  /**
+   * A fist or the sword's tip touches a shut chest's lid: it swings open for
+   * good with a creak and a buzz in that hand, and what's inside comes out on
+   * the ground beside it, to take as a kill's loot is taken.
+   */
+  private openChests(dt: number): void {
+    const lifted = this.chests.update(dt, this.touching(), (id) => this.state.inventory.isOpened(id));
+    if (!lifted) return;
+    const { chest, hand } = lifted;
+    const { intensity, ms } = CONFIG.chests.buzz;
+    this.player.input.pulse(hand, intensity, ms);
+    sfx.chest(_a.set(chest.x, chest.y + CONFIG.chests.looks[chest.look].h, chest.z));
+    this.apply({ kind: 'chest', chest: chest.id, level: chest.level }, _a.set(chest.drop.x, chest.drop.y, chest.drop.z));
   }
 
   /** Where each fist and the sword's tip are, while tracked and you're standing. */
@@ -702,7 +754,8 @@ export class Adventure {
           this.bag.changed();
           break;
         case 'proficiency':
-          this.floatOver(at, CONFIG.professions.float.height, `+${e.gained} ${e.profession[0].toUpperCase()}${e.profession.slice(1)}`, PROFICIENCY_FLOAT);
+          // "+1 Alchemy", small and white where it was made, in the XP float's style.
+          this.floatOver(at, 0, `+${e.gained} ${PROFESSION_NAMES[e.profession]}`, { ...KILL_XP_FLOAT, color: '#ffffff', scale: 0.08, rise: 0.25 });
           break;
       }
     }

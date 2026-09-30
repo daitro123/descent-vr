@@ -105,6 +105,32 @@ export interface Pickup extends Spot {
   readonly y: number;
 }
 
+/** How a chest looks: a wooden chest, or the bandits' iron-bound strongbox. Each look's size is in CONFIG.chests.looks. */
+export type ChestLook = 'chest' | 'strongbox';
+
+/**
+ * A chest standing in a zone, opened once per character by touching its lid
+ * (.scratch/inventory/spec.md, "Chests"). It holds coins and a piece of gear
+ * by its area's level, and what's inside comes out on the ground beside it.
+ */
+export interface ChestPlan {
+  /** Its id, as the save keeps it among the chests opened. */
+  readonly id: string;
+  /** Its area's level. */
+  readonly level: number;
+  readonly look: ChestLook;
+  /** The middle of its foot, on the floor it stands on. */
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  /** As a model turns about +Y: its front faces (sin yaw, cos yaw), so 0 faces +Z. */
+  readonly yaw: number;
+  /** The building or mine it's in, if any. */
+  readonly interior: InteriorId | null;
+  /** Where what's inside comes out: on the ground beside it, out of your feet's way as you stand to open it. */
+  readonly drop: { readonly x: number; readonly y: number; readonly z: number };
+}
+
 /**
  * Where a quest sends you, for the quest arrow: the spot it points at, and
  * the clearing where you've arrived and it hides.
@@ -163,6 +189,8 @@ export interface Zone extends MapBase {
   readonly villagers: readonly VillagerSpot[];
   /** What lies about to be picked up by hand, shown while the adventure state says it lies there. */
   readonly pickups: readonly Pickup[];
+  /** Its chests, each opened once per character. */
+  readonly chests: readonly ChestPlan[];
   /** The places that sound where they are. */
   readonly sounds: readonly PlaceSound[];
   /** Its trees, which its birds call from. */
