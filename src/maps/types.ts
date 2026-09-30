@@ -6,6 +6,7 @@ import type { EnemyKind, Family } from '../models/characters';
 import type { PlaceSound, TreeCover, ZoneAmbience } from '../world/ambience';
 import type { Atmosphere } from '../world/atmosphere';
 import type { Interior as InteriorId } from '../save/record';
+import type { SpotKind } from '../professions/professions';
 import type { ChunkSource } from '../world/chunks';
 import type { Interior } from '../world/interiors';
 import type { Mine } from '../world/mine';
@@ -141,6 +142,26 @@ export interface ChestPlan {
 }
 
 /**
+ * A gathering spot in a zone (.scratch/professions/spec.md, "Gathering spots
+ * and the tool loop"): a copper vein today, and the herbs' clumps later. What
+ * state it's in (full, being worked, taken, refilling) is the world's, not
+ * the save's.
+ */
+export interface SpotPlan {
+  /** Its name, for the checks and the log: 'smithy-east'. */
+  readonly id: string;
+  readonly kind: SpotKind;
+  /** The middle of its foot, on the ground or floor it stands on. */
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  /** As a model turns about +Y: the way its face (a vein's ore) looks, (sin yaw, cos yaw). */
+  readonly yaw: number;
+  /** The mine it's in, if any: it loads and shows with the mine. */
+  readonly interior: InteriorId | null;
+}
+
+/**
  * Where a quest sends you, for the quest arrow: the spot it points at, and
  * the clearing where you've arrived and it hides.
  */
@@ -200,6 +221,8 @@ export interface Zone extends MapBase {
   readonly pickups: readonly Pickup[];
   /** Its chests, each opened once per character. */
   readonly chests: readonly ChestPlan[];
+  /** Its gathering spots: the copper veins. */
+  readonly spots: readonly SpotPlan[];
   /** The places that sound where they are. */
   readonly sounds: readonly PlaceSound[];
   /** Its trees, which its birds call from. */

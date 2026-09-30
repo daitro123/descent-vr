@@ -224,6 +224,10 @@ _Avoid_: resource (a class's rage, focus or mana), reagent, component, mat
 A fixed place in a zone where a material can be taken by hand, such as a vein of ore or a clump of herbs. It refills some time after it's taken.
 _Avoid_: node, resource node, spawn
 
+**Tool loop**:
+The third place on the belt, behind the main hand's hip, where a gathering profession's tool hangs (the pick, the herb knife). A grip there near a gathering spot draws the tool for it; tools are not items.
+_Avoid_: tool slot, holster, tool belt
+
 **Station**:
 The place in the world where a making profession is done: the smithy's forge and anvil, the alchemy table.
 _Avoid_: crafting bench, workbench

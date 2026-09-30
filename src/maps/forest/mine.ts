@@ -2,7 +2,7 @@ import { Vector3 } from 'three';
 import type { Atmosphere } from '../../world/atmosphere';
 import { type Flame, type Frame, toFrame } from '../../world/interiors';
 import type { MinePlan, MineStanding, ThronePlan } from '../../world/mine';
-import type { CampPlan, ChestPlan, PostPlan, Respawn } from '../types';
+import type { CampPlan, ChestPlan, PostPlan, Respawn, SpotPlan } from '../types';
 import { CONFIG } from '../../config';
 import { BRAZIER_FIRE, torchLight } from '../../world/hall';
 import { Colliders, UNBOUNDED } from './colliders';
@@ -158,6 +158,15 @@ export const MINE = {
     lantern: { x: 3.6, z: -50.2, light: 0.6 },
     vein: 9,
   },
+  /**
+   * The copper veins the old miners left in the gallery (.scratch/professions/issues/10-…):
+   * two boulders against its west wall, their ore facing across it (east), among the undead
+   * at its far end. Each is x, z and the way its ore faces (a yaw).
+   */
+  veins: [
+    [-18.3, -21.5, Math.PI / 2],
+    [-18.3, -27.5, Math.PI / 2],
+  ] as readonly (readonly [number, number, number])[],
   /** The crypt's outer wall, laid bare round the breach on the dig's side: along the dig's east wall, and how high. */
   masonry: { z0: -56.5, z1: -50.5, height: 3.2, thick: 0.25 },
   /** The antechamber's two braziers, flush with its north wall either side of the gate. */
@@ -257,7 +266,7 @@ export function mineFlames(): readonly { x: number; y: number; z: number; part: 
 
 /** What stands in the mine that you bump into, in the mouth's frame. Every prop is flush with a wall, or a body's width clear. */
 export function mineColliders(): Shapes {
-  const { carts, winch, brazier, crates, props, propRadius, scaffold, dig, braziers, braziersRadius, hall } = MINE;
+  const { carts, winch, brazier, crates, props, propRadius, scaffold, dig, braziers, braziersRadius, hall, veins } = MINE;
   const box = (r: { x0: number; x1: number; z0: number; z1: number }) => [(r.x0 + r.x1) / 2, (r.z0 + r.z1) / 2, (r.x1 - r.x0) / 2, (r.z1 - r.z0) / 2] as const;
   const { halfSize, gate, choked, pillars, obstacles } = CONFIG.arena;
   return {
@@ -274,6 +283,7 @@ export function mineColliders(): Shapes {
       [brazier.x, brazier.z, brazier.r],
       ...props.map(([x, z]) => [x, z, propRadius] as const),
       ...braziers.map(([x, z]) => [x, z, braziersRadius] as const),
+      ...veins.map(([x, z]) => [x, z, CONFIG.professions.vein.body] as const),
       // The hall's pillars, throne, braziers and crates, as in the arena.
       ...[...pillars, ...obstacles].map((o) => [hall.x + o.x, hall.z + o.z, o.r] as const),
     ],
@@ -336,6 +346,15 @@ export function mineChest(mouth: Frame): ChestPlan {
   const [x, z] = toWorld(mouth, (x0 + x1) / 2, (z0 + z1) / 2);
   const [dx, dz] = toWorld(mouth, drop.x, drop.z);
   return { id, level, look: 'strongbox', x, y, z, yaw: mouth.yaw, interior: 'mine', drop: { x: dx, y, z: dz } };
+}
+
+/** The copper veins in the gallery (MINE.veins), in the world, on its floor. */
+export function mineVeins(mouth: Frame): SpotPlan[] {
+  const y = mouth.y + minePiece('gallery').floor;
+  return MINE.veins.map(([lx, lz, face], i) => {
+    const [x, z] = toWorld(mouth, lx, lz);
+    return { id: `mine-gallery-${i + 1}`, kind: 'copperVein', x, y, z, yaw: face + mouth.yaw, interior: 'mine' };
+  });
 }
 
 /** The mine opening at `mouth`. */

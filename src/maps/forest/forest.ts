@@ -94,6 +94,7 @@ export function buildForest(given?: ForestLayout): StartingZone {
     villagers: plan.villagers,
     pickups: plan.pickups,
     chests: plan.chests,
+    spots: plan.spots,
     sounds: plan.sounds,
     trees: new TreeCover(plan.trees),
     ambience: 'woods',

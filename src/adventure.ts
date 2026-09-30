@@ -22,7 +22,8 @@ import type { Respawn, StartingZone, Zone } from './maps/types';
 import { Hale } from './people/hale';
 import { Villagers } from './people/villagers';
 import { type AlchemyBench, type Herbalist, standInHouse } from './professions/bench';
-import { PROFESSION_NAMES } from './professions/professions';
+import { PROFESSION_NAMES, type ProfessionsEffects } from './professions/professions';
+import { Gathering } from './professions/gathering/gathering';
 import { Belt } from './player/belt';
 import { Gestures } from './player/gestures/gestures';
 import { MageHands } from './player/mage';
@@ -176,6 +177,8 @@ export class Adventure {
   };
   /** The smith's anvil: step up to it with Smithing learned, and make things with the hammer and tongs. Null in a zone without a smith. */
   readonly anvil: Anvil | null;
+  /** The tool loop behind your sword hip, the pick it gives near a copper vein, and the zone's veins. */
+  readonly gathering: Gathering;
   /** The stash's chest by the inn's hearth: touch its lid and the stash panel opens beside the bag's. */
   readonly stashChest: StashChest;
   readonly stash: StashPanel;
@@ -286,7 +289,30 @@ export class Adventure {
       inventory: this.state.inventory,
       buzz: (hand, intensity, ms) => this.player.input.pulse(hand, intensity, ms),
       apply: (effects, at) => this.applyThings(effects, at),
+      // A hand holding a tool from the loop takes no flask.
+      busy: (hand) => hand === 'right' && this.gathering.drawn !== null,
     });
+    // The tool loop hangs from the belt's frame; the veins out of doors load with the chunks round you, the mine's with the mine.
+    this.gathering = new Gathering(zone.spots, {
+      player: this.player,
+      professions: this.state.professions,
+      frame: this.belt.frame,
+      particles: this.particles,
+      buzz: (hand, intensity, ms) => this.player.input.pulse(hand, intensity, ms),
+      apply: (effects, at) => this.applyGathered(effects, at),
+      handBusy: () => this.belt.holding('right') >= 0,
+    });
+    this.gathering.addTo(scene);
+    const { veins } = this.gathering;
+    if (veins.outdoors) {
+      scene.add(veins.outdoors);
+      this.world.stageWith(null, veins.outdoors);
+    }
+    if (veins.mine) {
+      scene.add(veins.mine);
+      this.world.stageWith('mine', veins.mine);
+    }
+    this.gathering.warm(renderer, camera, scene);
     // The wares open beside the bag's panel, hung from it as the stash's is.
     this.wares = new WaresBoard(this.state.inventory, atlas);
     this.bag.panel.root.add(this.wares.root);
@@ -329,8 +355,10 @@ export class Adventure {
       unlearned: () => this.state.unlearned,
       drawn: (shape) => this.apply({ kind: 'drawn', shape }, this.you.head),
       use: (ability, aim) => this.combat.use(ability, aim),
-      // Your hands are the bag's while it's open, the bench's while you work at it, and a flask's while you hold one.
+      // Your hands are the bag's while it's open, the bench's while you work at it, and a flask's or the pick's while you hold one.
       held: () => this.handsHeld,
+      // A grip in the tool loop is the loop's, wherever the belt's frame has it hanging.
+      taken: () => (this.gathering.inLoop ? 'the tool loop' : null),
       busy: () => this.combat.busy || (this.mage?.charging('right') ?? false),
     });
     if (this.combat.ranger) this.combat.ranger.held = () => this.handsHeld;
@@ -470,6 +498,7 @@ export class Adventure {
     // With a door shut behind you, what stands outside isn't drawn either.
     const outdoors = this.world.outdoorsShown;
     this.pickups.root.visible = this.hale.root.visible = this.villagers.root.visible = this.chests.outdoors.visible = outdoors;
+    if (this.gathering.veins.outdoors) this.gathering.veins.outdoors.visible = outdoors;
     if (this.anvil) this.anvil.frame.visible = outdoors;
     this.showCamps(outdoors);
     player.fighting = this.fighting;
@@ -477,6 +506,18 @@ export class Adventure {
     // The belt's cooldown runs down, and a hand at a hip may take a flask (and its weapon fades).
     this.state.inventory.tick(dt);
     this.belt.update(dt, this.bag.beltTarget);
+    // The tool loop, and the pick at a vein: after the belt, so the sword's away before anything swings it.
+    this.gathering.update({
+      dt,
+      fighting: this.fighting,
+      station: player.holdingTools || this.bench?.bare === true,
+      interior: this.world.interior,
+      outdoors,
+      mineDrawn: (x, z) => {
+        const mine = this.world.mine;
+        return !!mine && mine.drawn[mine.partAt(x, z)];
+      },
+    });
     this.mage?.update(dt, this.handsHeld);
     this.runVignette.update(dt, player.running);
     updateListener(player.camera);
@@ -559,9 +600,15 @@ export class Adventure {
     return { line: arrow.line, turn: arrowTurn({ x: head.x, z: head.z, yaw }, to) };
   }
 
-  /** Are your hands the bag's (it's open), the bench's (you work at it) or a flask's (off the belt) now, not your weapons'? */
+  /** Are your hands the bag's (it's open), the bench's (you work at it), a flask's (off the belt) or the pick's now, not your weapons'? */
   private get handsHeld(): boolean {
-    return this.bag.isOpen || this.bench?.bare === true || this.belt.holding('left') >= 0 || this.belt.holding('right') >= 0;
+    return (
+      this.bag.isOpen ||
+      this.bench?.bare === true ||
+      this.belt.holding('left') >= 0 ||
+      this.belt.holding('right') >= 0 ||
+      this.gathering.drawn !== null
+    );
   }
 
   /** Is anything fighting you: a camp's (not walking home), or the Warden and what it raised? */
@@ -586,6 +633,8 @@ export class Adventure {
   private showCamps(outdoors: boolean): void {
     const mine = this.world.mine;
     if (mine) showInMine(mine, this.chests.mine);
+    const veins = this.gathering.veins;
+    if (veins.mine) veins.mine.visible = !!mine && veins.veins.some((v) => v.plan.interior === 'mine' && mine.drawn[mine.partAt(v.plan.x, v.plan.z)]);
     for (const camp of this.camps.camps) {
       if (camp.plan.interior !== 'mine' || !mine) camp.root.visible = outdoors;
       else showInMine(mine, camp.root);
@@ -880,6 +929,17 @@ export class Adventure {
   private applyThings(effects: readonly Effect[], at: Vector3): void {
     this.saves.onEffects(effects);
     this.show(effects, at, false);
+  }
+
+  /**
+   * What emptying a gathering spot did: saved and shown at `at` ("+1 Mining"),
+   * and the spot counted for your quests. What a full bag can't take lies on
+   * the ground there, to take back as anything dropped is.
+   */
+  private applyGathered(effects: ProfessionsEffects, at: Vector3): void {
+    for (const e of effects) if (e.kind === 'left') this.dropped.drop(e.stack, _a.copy(at).setY(at.y + 0.1));
+    this.applyThings(effects, at);
+    for (const e of effects) if (e.kind === 'gathered') this.apply({ kind: 'gathered', spot: e.spot }, at);
   }
 
   /** What a make at a station did: saved and shown at `at`, and what it made counted for your quests. */

@@ -522,7 +522,7 @@ export const CONFIG = {
       { name: 'the bag', at: [-0.2, -0.14, -0.12], radius: 0.18 },
       { name: 'a potion', at: [0.19, -0.7, 0.04], radius: 0.12 },
       { name: 'a potion', at: [-0.19, -0.7, 0.04], radius: 0.12 },
-      { name: 'the tool loop', at: [0.19, -0.66, -0.16], radius: 0.12 },
+      { name: 'the tool loop', at: [0.19, -0.7, -0.16], radius: 0.12 }, // as the belt's frame hangs it (professions.toolLoop)
     ],
     // In the right hand: a tick as the grip arms, a strong buzz on a read, two ticks `gap` ms apart on a miss,
     // and a dull buzz when it can't be paid for or isn't ready.
@@ -774,6 +774,50 @@ export const CONFIG = {
       elixirOfTheKeenEye: { price: 4, damage: 0.1, seconds: 5 * 60 }, // added to your damage multiplier
       whetstone: { price: 2, damage: 0.05, seconds: 10 * 60 }, // rubbed along a blade or arrowheads; never on the belt
       copperGauntlets: { level: 5, rarity: 'green' }, // as good as a green drop at level 5, each version with Stamina
+    },
+    // The tool loop behind the main-hand hip (professions/gathering/; spec, "Gathering spots and the
+    // tool loop"): a sphere `radius` m round a point `behind` m behind the right hip's potion slot, hung
+    // from the belt's frame. A grip in it, the hand under `maxSpeed` m/s, draws the tool for the nearest
+    // spot within `draw` m, or puts the tool back; walking `putAway` m from every spot puts it back too.
+    // It does nothing while anything fights you, and a pull puts the tool away at once with `pulled`.
+    toolLoop: {
+      behind: 0.2,
+      radius: 0.12,
+      maxSpeed: 1.5,
+      draw: 3,
+      putAway: 5,
+      buzz: {
+        tick: { intensity: 0.25, ms: 15 }, // the hand arrives where the loop would give or take
+        draw: { intensity: 0.5, ms: 30 },
+        putAway: { intensity: 0.3, ms: 30 },
+        nothing: { intensity: 0.15, ms: 20 }, // a grip there with nothing near to gather
+        pulled: { intensity: 1, ms: 120 }, // a pull put the tool away
+      },
+    },
+    // The pick (professions/gathering/pick.ts), promoted from ?proto=pick variant C. The head's two
+    // points are `reach` m down the handle and `spike` m either side of it. A strike counts on the
+    // sword's committed swing: `travel` m of hand travel one way at `handSpeed` m/s, with the head's
+    // point over `minSpeed` m/s (the sword's tip wants 2.8 a metre out; the pick's head is half as far),
+    // and full power at `fullSpeed`. Slower is a tap.
+    pick: { reach: 0.5, spike: 0.17, travel: 0.2, handSpeed: 1, minSpeed: 2.5, fullSpeed: 4.5 },
+    // A copper vein (professions/gathering/veins.ts): a strike in the glint is worth `glint`, one
+    // elsewhere on the ore `plain`, and it breaks at `need` (2 glints or 5 plain), cracking at a third
+    // and two thirds. The rock is struck as a sphere of `rockRadius` round a centre `centreHeight` over
+    // its foot (a little inside the drawn `drawnRadius`, so the head seems to bite); the ore faces its
+    // yaw, `oreLift` up, and reaches `oreRadius` from its middle, the glint `glintRadius`. You bump into
+    // it as a circle of `body`. What it gives comes loose for `flight` s, then flies to the bag.
+    vein: {
+      need: 4.5,
+      glint: 2.25,
+      plain: 1,
+      glintRadius: 0.1,
+      oreRadius: 0.28,
+      rockRadius: 0.74,
+      drawnRadius: 0.8,
+      centreHeight: 0.62,
+      oreLift: 0.55,
+      body: 0.85,
+      flight: 0.35,
     },
     // One rule for hands at a station: step within `near` m of it, looking within `facing` rad of
     // it and out of a fight, and both hands become the station's; past `far` m they're yours again.

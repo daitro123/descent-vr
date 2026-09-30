@@ -5,13 +5,13 @@ import type { Atmosphere } from '../../world/atmosphere';
 import type { InteriorPlan } from '../../world/interiors';
 import type { MinePlan } from '../../world/mine';
 import type { Place } from '../../quests';
-import type { CampId, CampPlan, ChestPlan, Pickup, PostPlan, QuestPlace, Respawn, Seam, Spot, StashSpot, VillagerSpot } from '../types';
+import type { CampId, CampPlan, ChestPlan, Pickup, PostPlan, QuestPlace, Respawn, Seam, Spot, SpotPlan, StashSpot, VillagerSpot } from '../types';
 import { HeightGrid } from '../heightGrid';
 import { Walkable } from '../walkable';
 import { Colliders } from './colliders';
 import { HOUSE, planHouse } from './house';
 import { INN, planInn } from './inn';
-import { mineCamp, mineChest, mineRespawn, mouthColliders, mouthOf, planMine } from './mine';
+import { mineCamp, mineChest, mineRespawn, mineVeins, mouthColliders, mouthOf, planMine } from './mine';
 import { SMITHY, smithyColliders } from './smithy';
 import { fbm, lerp, mulberry32, nearestOnPolyline, type P2, sampleCurve, smoothstep, valueNoise } from './noise';
 import { LIGHT, SKY } from './palette';
@@ -208,6 +208,27 @@ export const CHESTS = {
    * on the ground outside the door, on the crates' other side.
    */
   tent: { id: 'oakvale-leaders-tent', level: 2, x: -0.8, drop: { x: 1.9, z: 1.0 } },
+} as const;
+
+/**
+ * Oakvale's copper veins out of doors (.scratch/professions/issues/10-…; the
+ * mine's two are in its gallery: mine.ts): boulders streaked green and copper,
+ * each at (x, z) with its ore facing `face`, where you'd come at it from. Two
+ * in the rocks at the village's east edge behind the smithy, two in the ridge
+ * either side of the old mine's front, one on the watchtower's hilltop among
+ * its gang, and one in the rocks round the standing stones. Nothing grows
+ * within `clear` m of one (a tree `clear.tree`), and you bump into each.
+ */
+export const VEINS = {
+  outdoors: [
+    { id: 'smithy-east', x: 22, z: 19, face: [13, 12] },
+    { id: 'smithy-south', x: 24.5, z: 14.5, face: [13, 12] },
+    { id: 'mine-ridge-west', x: -21, z: -74, face: [-14, -72] },
+    { id: 'mine-ridge-east', x: -7, z: -74, face: [-14, -72] },
+    { id: 'watchtower', x: 45.5, z: -53.5, face: [40, -58] },
+    { id: 'standing-stones', x: -23, z: 58, face: [-30, 52] },
+  ] as readonly { readonly id: string; readonly x: number; readonly z: number; readonly face: P2 }[],
+  clear: { plant: 1.6, tree: 3 },
 } as const;
 
 /** A board on a signpost: the name painted on it, the way it points (as a yaw: towards (sin a, cos a)) and its middle's height. */
@@ -526,6 +547,8 @@ export interface ForestLayout {
   pickups: Pickup[];
   /** The chests: on the watchtower's hilltop, in the leader's tent and the bandits' strongbox in the mine. */
   chests: ChestPlan[];
+  /** The gathering spots: the copper veins out of doors (VEINS), then the mine's. */
+  spots: SpotPlan[];
   /** The places that sound where they are: the stream under the bridge, the dock, the windmill, the smithy, the inn's hearth, the lumber camp's fire and the mine's mouth. */
   sounds: PlaceSound[];
   /** The trees in the play area, for birds to call from. */
@@ -726,8 +749,21 @@ export function buildLayout(): ForestLayout {
 
   const roadDistance = new DistanceField(half);
   for (const p of paths) roadDistance.stamp(p.line, p.width / 2 + 6, p.width / 2);
-  const plants = placePlants(ground, roadDistance, streamField, structures, colliders);
+  // The veins out of doors: what grows there is thinned away after it's placed (so nothing else moves), and they're solid.
+  const veins: SpotPlan[] = VEINS.outdoors.map((v) => ({
+    id: v.id,
+    kind: 'copperVein',
+    x: v.x,
+    y: heightAt(v.x, v.z),
+    z: v.z,
+    yaw: facing(v.x, v.z, v.face[0], v.face[1]),
+    interior: null,
+  }));
+  const plants = placePlants(ground, roadDistance, streamField, structures, colliders).filter(
+    (p) => !veins.some((v) => Math.hypot(p.x - v.x, p.z - v.z) < (TREE_HEIGHT[p.kind] ? VEINS.clear.tree : VEINS.clear.plant)),
+  );
   plants.push(...passEdges(ground, main.line));
+  for (const v of veins) colliders.addCircle({ x: v.x, z: v.z, r: CONFIG.professions.vein.body });
   for (const p of plants) {
     if (walkable.distance(p.x, p.z) > 2) continue;
     const r = TRUNK_RADIUS[p.kind];
@@ -840,6 +876,7 @@ export function buildLayout(): ForestLayout {
     camps,
     pickups,
     chests,
+    spots: [...veins, ...mineVeins(mouth)],
     sounds,
     trees,
     landmarks,
