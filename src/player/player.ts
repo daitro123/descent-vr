@@ -1,6 +1,7 @@
 import { Group, type Object3D, type PerspectiveCamera, Vector3, type WebGLRenderer } from 'three';
 import { type Ability, type Stats, statsAt } from '../adventureState';
 import { abilitiesOf } from '../classes';
+import { AbilityClock } from '../combat/abilities';
 import { CONFIG } from '../config';
 import { sfx } from '../fx/sfx';
 import type { Ground } from '../world/ground';
@@ -37,6 +38,8 @@ export class Player {
   rage = 0;
   /** Seconds of War Cry frenzy left (bonus damage, burning blade). */
   frenzy = 0;
+  /** Each gesture ability's cooldown, and how long Shield Wall and Sweeping Strikes have left. */
+  readonly abilities = new AbilityClock();
   dashCooldown = 0;
   /** B / Y dash; a class prototype (src/prototype/) may take the buttons for its own move. */
   dashes = true;
@@ -163,6 +166,8 @@ export class Player {
     this.rage = Math.max(0, this.rage - CONFIG.player.rageDecayPerSec * dt);
     this.frenzy = Math.max(0, this.frenzy - dt);
     this.sword.frenzy = this.frenzy > 0;
+    this.abilities.tick(dt);
+    this.shield.walled = this.abilities.left('shieldWall');
   }
 
   /** B / Y: a quick step in the stick's direction, backwards if the stick is neutral. */
@@ -274,6 +279,8 @@ export class Player {
     this.hp = this.maxHp;
     this.rage = 0;
     this.frenzy = 0;
+    this.abilities.clear();
+    this.shield.walled = 0;
     this.dashCooldown = this.dashTime = this.dodgeTime = 0;
     this.shield.numb = 0;
     this.place(x, z, yaw);

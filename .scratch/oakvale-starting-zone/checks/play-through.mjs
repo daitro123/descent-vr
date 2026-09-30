@@ -360,6 +360,11 @@ function install() {
 /** Load the Adventure (`query` added), enter VR and pause it, with the script's hands on. */
 async function enter(query = '') {
   await page.goto(`${base}/?emulate&nodevui${query}`);
+  // `?newgame` opens the new-character form (abilities ticket 18): make the suggested warrior.
+  if (query.includes('newgame')) {
+    await page.waitForSelector('#new-character[open]', { timeout: 60000 });
+    await page.click('#new-character button[value=make]');
+  }
   await page.waitForFunction(() => window.__descent?.adventure, null, { timeout: 120000 });
   await page.click('#VRButton');
   await page.waitForFunction(() => window.__descent.renderer.xr.isPresenting, null, { timeout: 60000 });

@@ -207,6 +207,31 @@ export const sfx = {
   dash() {
     noise(0.16, 0.2, 1200, undefined, 'bandpass', 0, 0.6);
   },
+  /** Heroic Throw leaves the hand: a spectral shimmer rising over a whoosh. */
+  heroicThrow(at?: Vector3) {
+    noise(0.22, 0.3, 1400, at, 'bandpass', 0, 0.8);
+    tone(520, 1250, 0.3, 'sine', 0.14, at);
+    tone(780, 1600, 0.25, 'triangle', 0.05, at, 0.04);
+  },
+  /** Shield Wall goes up: a deep ring of steel, held. */
+  shieldWall() {
+    tone(260, 330, 0.7, 'triangle', 0.18);
+    tone(130, 130, 1.0, 'sine', 0.2);
+    noise(0.1, 0.25, 4000, undefined, 'highpass');
+  },
+  /** Sweeping Strikes: a low snarl rising into a wide swish. */
+  sweepingStrikes() {
+    tone(140, 300, 0.45, 'sawtooth', 0.12);
+    noise(0.4, 0.3, 800, undefined, 'bandpass', 0.05, 0.5);
+  },
+  /** A gesture read but not cast (not enough rage, not ready, nothing to throw at): a dull, short hum. */
+  gestureDull() {
+    tone(150, 120, 0.18, 'sine', 0.12);
+  },
+  /** A gesture not read: a soft, grey puff. */
+  gestureMiss(at?: Vector3) {
+    noise(0.14, 0.12, 700, at, 'lowpass');
+  },
   summon(at: Vector3) {
     tone(80, 160, 1.2, 'sawtooth', 0.12, at);
     tone(120, 240, 1.2, 'sine', 0.12, at);
