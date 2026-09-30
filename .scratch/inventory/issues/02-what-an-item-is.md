@@ -25,7 +25,7 @@ Settled by Claude **on Tom's behalf** on 2026-09-30, taking the recommended opti
   - **Grey (junk):** no numbers, only a sell price.
   - **White:** the plain number of its slot (a weapon's damage, a piece's armour), and no attributes. Vendor gear and starting kits are white.
   - **Green:** the plain number plus attributes. It's the common upgrade from drops and quests.
-  - **Blue:** 30% more of everything than a green of the same item level. It comes from bosses, leaders, chests and quest ends.
+  - **Blue:** about 1.5 times a green's numbers at the same item level (matching the Abilities map's budget). It comes from bosses, leaders, chests and quest ends.
   How often each drops belongs to [Loot](05-loot.md).
 - **Item level and wearing it:** an item's level is the level of what dropped it or of the quest that paid it. You can carry anything, but gear with an item level above yours can't go into a gear slot until you reach it. The card shows the level in red until then.
 - **Numbers gear carries:**
@@ -35,3 +35,7 @@ Settled by Claude **on Tom's behalf** on 2026-09-30, taking the recommended opti
   - What each attribute does belongs to the Abilities map. The target this map hands it: a full set of greens of your level gives about a third of your total attributes, and blues about 40%.
 - **The class lock:** weapons and off hands are locked to the class that fights with them. Armour anyone can wear. The card names the class, in red if it isn't yours, and a locked item held over a gear slot turns the slot red with a short buzz, refusing it. A main attribute that isn't your class's shows greyed on the card.
 - **Sell price as a rule:** item level × 2 coins for grey, × 3 for white, × 8 for green and × 20 for blue. Consumables and materials have their own prices. Vendors sell at 4 times what they buy for. [Vendors and the stash](06-vendors-and-the-stash.md) checks the rule against what a coin buys.
+
+## Comments
+
+**2026-09-30:** The Abilities map settled its side (its ticket on attributes): only Stamina and your class's main attribute count; 1 Stamina is 10 health and 1 main attribute is +10% of level-1 damage; a character has 10 of each at level 1 and 2 more a level. Its budget for gear: a full green set of your level adds about a third to the level's attributes by level 10, about 8 Stamina and 8 main over seven slots, and a blue piece carries about 1.5 times a green. Weapons carry their own damage and may carry attributes; Hale's longsword's +20% today equals 2 Strength. The blue step above was changed from 30% to 1.5 times to match.

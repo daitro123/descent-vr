@@ -30,6 +30,16 @@ describe('reading the page from its URL', () => {
     expect(readPage('?showcase').route).toMatchObject({ kind: 'arena', showcase: true });
   });
 
+  it('opens the belt prototype at ?belt, variant a unless b or c is named', () => {
+    expect(readPage('?belt').route).toEqual({ kind: 'belt', variant: 'a', calm: false });
+    expect(readPage('?belt=b').route).toEqual({ kind: 'belt', variant: 'b', calm: false });
+    expect(readPage('?belt=c&calm').route).toEqual({ kind: 'belt', variant: 'c', calm: true });
+    expect(readPage('?belt=z').route).toMatchObject({ variant: 'a' });
+    // Ahead of the arena's flags, behind the tools'.
+    expect(readPage('?belt&duel').route).toMatchObject({ kind: 'belt' });
+    expect(readPage('?inspect&belt').route).toEqual({ kind: 'inspect' });
+  });
+
   it('keeps the first wave within the waves there are', () => {
     const last = CONFIG.waves.list.length;
     expect(readPage('?wave=0').route).toMatchObject({ firstWave: 1 });
