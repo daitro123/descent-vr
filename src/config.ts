@@ -809,8 +809,8 @@ export const CONFIG = {
       'copper-gauntlets-of-agility': { profession: 'smithing', station: 'anvil', grade: 'apprentice', takes: { 'copper-bar': 4 }, makes: 'copper-gauntlets-of-agility', needs: 15, gain: 3, price: 25, lesson: 'copper-gauntlets' },
       'copper-gauntlets-of-intellect': { profession: 'smithing', station: 'anvil', grade: 'apprentice', takes: { 'copper-bar': 4 }, makes: 'copper-gauntlets-of-intellect', needs: 15, gain: 3, price: 25, lesson: 'copper-gauntlets' },
       'minor-healing-potion': { profession: 'alchemy', station: 'bench', grade: 'apprentice', takes: { hearthleaf: 2 }, makes: 'minor-healing-potion', needs: 0, gain: 1, price: null },
-      'rage-draught': { profession: 'alchemy', station: 'bench', grade: 'apprentice', takes: { duskcap: 2 }, makes: 'rage-draught', needs: 5, gain: 1, price: 10 },
-      'minor-mana-potion': { profession: 'alchemy', station: 'bench', grade: 'apprentice', takes: { hearthleaf: 1, duskcap: 1 }, makes: 'minor-mana-potion', needs: 5, gain: 1, price: 10 },
+      'rage-draught': { profession: 'alchemy', station: 'bench', grade: 'apprentice', takes: { duskcap: 2 }, makes: 'rage-draught', needs: 3, gain: 1, price: 10 },
+      'minor-mana-potion': { profession: 'alchemy', station: 'bench', grade: 'apprentice', takes: { hearthleaf: 1, duskcap: 1 }, makes: 'minor-mana-potion', needs: 3, gain: 1, price: 10 },
       'elixir-of-the-keen-eye': { profession: 'alchemy', station: 'bench', grade: 'apprentice', takes: { hearthleaf: 2, duskcap: 1 }, makes: 'elixir-of-the-keen-eye', needs: 10, gain: 1, price: 10 },
     } satisfies Record<string, RecipeRow>,
     // Oakvale's materials and what the recipes make (items.ts). Materials and
