@@ -2,7 +2,7 @@ import { CONFIG } from '../config';
 import type { AudioKit } from './sfx';
 
 // The sounds that go on: the arena's drone (which the mine's crypt plays
-// too), Oakvale's wind, its places' water, fires and draught, and the mine's
+// too), Oakvale's wind and Brackenmoor's, Oakvale's places' water, fires and draught, and the mine's
 // hollow air. Each is played by its name (as the one-shots in
 // sfx.ts are), made of filtered noise and slow wobbles, no audio files. Each
 // comes out about as loud as the arena's drone (RMS about 0.05); whoever
@@ -53,6 +53,26 @@ function band(kit: AudioKit, into: AudioNode, type: BiquadFilterType, freq: numb
   return rate ? [src, wobble(kit, rate, depth, g.gain)] : [src];
 }
 
+/** A wind: a band of noise to each side at `band` Hz, gusting at `gust` Hz by `depth`, out of step. */
+function gusts(
+  kit: AudioKit,
+  into: AudioNode,
+  { band: mids, gust, depth }: { readonly band: readonly number[]; readonly gust: readonly number[]; readonly depth: number },
+): AudioScheduledSourceNode[] {
+  const out: AudioScheduledSourceNode[] = [];
+  [-0.6, 0.6].forEach((pan, i) => {
+    const side = kit.ctx.createStereoPanner();
+    side.pan.value = pan;
+    side.connect(into);
+    const f = filter(kit, 'bandpass', mids[i], 0.7);
+    const g = gain(kit, 0.32);
+    const src = noise(kit);
+    src.connect(f).connect(g).connect(side);
+    out.push(src, wobble(kit, gust[i], 0.32 * depth, g.gain), wobble(kit, gust[i] * 0.63, mids[i] * 0.35, f.frequency));
+  });
+  return out;
+}
+
 const LOOPS = {
   /** The arena's drone: three low saws beating slowly, faded in over 4 s. */
   drone(kit, into) {
@@ -69,21 +89,15 @@ const LOOPS = {
       return o;
     });
   },
-  /** A light wind in the trees: a band of noise to each side, gusting slowly and out of step. */
+  /** Oakvale's light wind in the trees: a band of noise to each side, gusting slowly and out of step. */
   wind(kit, into) {
-    const { band: mids, gust, depth } = CONFIG.sound.wind;
-    const out: AudioScheduledSourceNode[] = [];
-    [-0.6, 0.6].forEach((pan, i) => {
-      const side = kit.ctx.createStereoPanner();
-      side.pan.value = pan;
-      side.connect(into);
-      const f = filter(kit, 'bandpass', mids[i], 0.7);
-      const g = gain(kit, 0.32);
-      const src = noise(kit);
-      src.connect(f).connect(g).connect(side);
-      out.push(src, wobble(kit, gust[i], 0.32 * depth, g.gain), wobble(kit, gust[i] * 0.63, mids[i] * 0.35, f.frequency));
-    });
-    return out;
+    return gusts(kit, into, CONFIG.sound.wind);
+  },
+  /** Brackenmoor's wind over the open moor: lower, stronger and gustier than Oakvale's, over a low rumble. */
+  moorWind(kit, into) {
+    const rules = CONFIG.sound.moor.wind;
+    const { cutoff, level, gust, depth } = rules.rumble;
+    return [...gusts(kit, into, rules), ...band(kit, into, 'lowpass', cutoff, 0.8, 0.32 * level, gust, 0.32 * level * depth)];
   },
   /** The stream running under the bridge: a broad rush, a low burble and a glinting top. */
   stream(kit, into) {

@@ -321,6 +321,14 @@ export const sfx = {
       tone(f, f * 0.62, 0.05, 'triangle', 0.05, at, i * (0.11 + Math.random() * 0.05));
     }
   },
+  /** The moor's curlew, alone: two long whistles sliding up, cour-lee, cour-lee, then a bubbling run. */
+  curlew(at?: Where) {
+    const f = 1350 + Math.random() * 200;
+    tone(f, f * 1.45, 0.5, 'sine', 0.08, at);
+    tone(f * 1.02, f * 1.5, 0.5, 'sine', 0.08, at, 0.7);
+    const n = 5 + Math.floor(Math.random() * 4);
+    for (let i = 0; i < n; i++) tone(f * 1.55, f * 1.35, 0.09, 'sine', 0.06 * (1 - i / (n + 2)), at, 1.35 + i * 0.1);
+  },
   /** A wood pigeon: coo, COO-coo, coo-coo. */
   coo(at?: Where) {
     const f = 430 + Math.random() * 60;

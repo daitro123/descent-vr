@@ -11,6 +11,7 @@ import { Particles } from './fx/particles';
 import { sfx, updateListener } from './fx/sfx';
 import { Shockwaves } from './fx/shockwave';
 import { SwordTrail } from './fx/trail';
+import { findMap } from './maps/registry';
 import type { Respawn, StartingZone, Zone } from './maps/types';
 import { Hale } from './people/hale';
 import { Villagers } from './people/villagers';
@@ -23,6 +24,7 @@ import { BeltHud } from './ui/beltHud';
 import { Fade } from './ui/fade';
 import { arrowHides, arrowPoint, arrowTurn, type ArrowSpots } from './ui/questArrow';
 import { type ArrowShown, QuestTracker } from './ui/questTracker';
+import { ZoneName } from './ui/zoneName';
 import { RunVignette } from './ui/runVignette';
 import { type Probe, TalkBoard } from './ui/talkBoard';
 import { Orbs } from './world/orbs';
@@ -76,12 +78,16 @@ const UNLOCKED: Record<Ability, string> = {
  * Lies Below, and Hale's old longsword comes into your hand when you hand it in.
  * Out of a fight your health comes back; a death fades to black and wakes you
  * by the inn's hearth, inside with the door shut; which building you're in is
- * the World's to say. It saves itself as you go, and loads where you stood
- * with your level, XP, sword and quests, at full health with every camp full
+ * the World's to say. South over the pass lies Brackenmoor: walk over the
+ * crest and the light and the sound blend into the moor's, its name floats
+ * up and the game saves, all without a loading screen. It saves itself as
+ * you go, and loads where you stood (in either zone) with your level, XP,
+ * sword and quests, at full health with every camp full
  * (.scratch/oakvale-starting-zone/).
  */
 export class Adventure {
-  readonly world = new World();
+  /** Oakvale and the zones over its seams, fetching each zone's neighbours as it becomes current. */
+  readonly world = new World(findMap);
   /** Your progress: level, XP, the sword and the quests. */
   readonly state: AdventureState;
   /** When your progress and where you stand are written to the save. */
@@ -101,6 +107,10 @@ export class Adventure {
   readonly board = new TalkBoard();
   /** The quest you're on, top left of your view. */
   readonly tracker = new QuestTracker();
+  /** The zone's name, floating up as you cross into it and when you load in. */
+  readonly zoneName = new ZoneName();
+  /** Has the zone's name floated up since you loaded in? */
+  private named = false;
   /** What lies about for a quest, to pick up by hand: the leader's orders. */
   readonly pickups: Pickups;
   /** Where the quest arrow's targets are: each quest's place, and Hale. */
@@ -170,6 +180,8 @@ export class Adventure {
     this.fade = new Fade(camera);
     this.runVignette = new RunVignette(camera);
     this.runVignette.warm(renderer, camera, scene);
+    scene.add(this.zoneName.mesh);
+    this.zoneName.warm(renderer, camera, scene);
 
     this.combat = new Combat(
       this.player,
@@ -237,7 +249,7 @@ export class Adventure {
     this.world.stageWith(null, this.villagers.root);
     this.villagers.warm(renderer, camera, scene);
     // The smith's hammer rings on the anvil with each blow of their work.
-    this.ambience = new Ambience(zone.sounds, zone.trees);
+    this.ambience = new Ambience([zone, ...neighbours]);
     this.villagers.onStrike = () => this.ambience.strike('anvil');
 
     // A new character at the zone's start, facing Hale; or where the save stood,
@@ -252,8 +264,13 @@ export class Adventure {
     this.player.reset(x, z, yaw);
     this.lastHp = this.player.hp;
     // Oakvale round where you stand, all at once behind the page, and compiled now rather than when
-    // it first comes into view (the World does that with the first fill).
+    // it first comes into view (the World does that with the first fill). A save made over the pass
+    // loads there, in Brackenmoor's air, with Oakvale streaming in behind you.
     this.world.fill(x, z);
+    // From here on, crossing a seam is a moment: the zone's name floats up (and the game saves, in
+    // `update`, once it knows where you stand); its sound follows the World's cues.
+    this.world.onZone = (zone) => this.zoneName.show(zone.label);
+    this.world.onAdd = (zone) => this.ambience.add(zone);
   }
 
   update(dt: number): void {
@@ -308,6 +325,12 @@ export class Adventure {
     this.pickUp();
     this.updateHandIn(dt);
     this.tracker.update(dt, player.camera, this.state.tracker, this.questArrow());
+    // The zone you're in floats up as you load in.
+    if (!this.named) {
+      this.named = true;
+      this.zoneName.show(this.world.zone!.label);
+    }
+    this.zoneName.update(dt, player.camera);
     this.text.update(dt);
     this.particles.update(dt);
     this.shockwaves.update(dt);
@@ -315,6 +338,8 @@ export class Adventure {
     this.hud.status.progress = this.state.progress;
     this.hud.update(dt);
     this.updateStanding();
+    // A change of current zone writes where you stand now, over the line.
+    this.saves.onZone(this.world.zone!.id);
     this.saves.update(dt);
   }
 

@@ -32,14 +32,35 @@ function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
+/** An atmosphere to write into: its values, not its lists of flames. */
+type Writable<T> = { -readonly [K in keyof T]: T[K] extends readonly unknown[] ? T[K] : T[K] extends object ? Writable<T[K]> : T[K] };
+
 /**
  * `a` blended towards `b` by `t` (0 is all `a`, 1 all `b`): across a seam by
  * where you stand, or over a moment at an interior's door. Flames can't be
- * half there, so they come from whichever side weighs more.
+ * half there, so they come from whichever side weighs more. Written into
+ * `into` if given (reused frame after frame, so walking over a seam makes no
+ * garbage), else a new one.
  */
-export function blendAtmospheres(a: Atmosphere, b: Atmosphere, t: number): Atmosphere {
+export function blendAtmospheres(a: Atmosphere, b: Atmosphere, t: number, into?: Atmosphere): Atmosphere {
   if (t <= 0) return a;
   if (t >= 1) return b;
+  if (into) {
+    const o = into as Writable<Atmosphere>;
+    o.background = mix(a.background, b.background, t);
+    o.fog.color = mix(a.fog.color, b.fog.color, t);
+    o.fog.near = lerp(a.fog.near, b.fog.near, t);
+    o.fog.far = lerp(a.fog.far, b.fog.far, t);
+    for (const k of ['zenith', 'horizon', 'haze', 'sun'] as const) o.sky[k] = mix(a.sky[k], b.sky[k], t);
+    o.sun.color = mix(a.sun.color, b.sun.color, t);
+    o.sun.intensity = lerp(a.sun.intensity, b.sun.intensity, t);
+    o.hemisphere.sky = mix(a.hemisphere.sky, b.hemisphere.sky, t);
+    o.hemisphere.ground = mix(a.hemisphere.ground, b.hemisphere.ground, t);
+    o.hemisphere.intensity = lerp(a.hemisphere.intensity, b.hemisphere.intensity, t);
+    o.farPlane = lerp(a.farPlane, b.farPlane, t);
+    o.flames = t < 0.5 ? a.flames : b.flames;
+    return into;
+  }
   return {
     background: mix(a.background, b.background, t),
     fog: { color: mix(a.fog.color, b.fog.color, t), near: lerp(a.fog.near, b.fog.near, t), far: lerp(a.fog.far, b.fog.far, t) },

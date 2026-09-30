@@ -1,14 +1,16 @@
 import type { Vector3 } from 'three';
 import { CONFIG } from '../config';
+import type { Zone } from '../maps/types';
 import type { Interior } from '../save/record';
-import { type AmbientSource, type Birdcall, BirdSong, chooseAmbient, type PlaceId, type PlaceSound, type TreeCover, type Voicing } from '../world/ambience';
+import { type AmbientSource, type Birdcall, BirdSong, chooseAmbient, LoneCall, type PlaceId, type PlaceSound, type Voicing, type ZoneAmbience } from '../world/ambience';
 import { blankMix, type Cues, type Mix, mix } from '../world/mix';
 import { type Loop, type LoopName, startLoop } from './loops';
 import { audio, type AudioKit, sfx } from './sfx';
 
-// Oakvale's ambience, played (spec, "Sound"): a light wind that isn't placed
-// anywhere, birds calling now and then from the trees round you, each
-// place's sound where it is, and the mine's own air past its bend. Which
+// The zones' ambience, played (spec, "Sound"): Oakvale's light wind that
+// isn't placed anywhere and its birds calling now and then from the trees
+// round you, Brackenmoor's stronger, lower wind and its lone curlew, crossfading
+// over the seam, each place's sound where it is, and the mine's own air past its bend. Which
 // ambient sounds play, and which are placed by HRTF, is world/ambience.ts's
 // pure rule, and how loud and muffled each part is follows the light's cues
 // by world/mix.ts's; this keeps the Web Audio graph in step with both. No
@@ -67,6 +69,34 @@ interface Voice {
   dying: number | null;
 }
 
+interface AirKind {
+  readonly wind: LoopName;
+  readonly level: number;
+  calls(zone: ZoneSounds): BirdSong | LoneCall;
+  readonly bird: { readonly level: number; readonly ref: number; readonly last: number };
+}
+
+/** Each zone's own air, by kind: the wind that blows in it, how loud, who calls in it and how their calls carry. */
+const AIRS: Record<ZoneAmbience, AirKind> = {
+  woods: { wind: 'wind', level: CONFIG.sound.wind.level, calls: (zone) => new BirdSong(zone.trees), bird: CONFIG.sound.birds },
+  moor: { wind: 'moorWind', level: CONFIG.sound.moor.wind.level, calls: () => new LoneCall(), bird: CONFIG.sound.moor.call },
+};
+
+/** A zone as the ambience plays it: its own ambience, its places and its trees. */
+export type ZoneSounds = Pick<Zone, 'id' | 'ambience' | 'sounds' | 'trees'>;
+
+/** A zone's own air within the outdoors: its wind and its birds, at its share of the air where you stand (its places sound where they are). */
+interface ZoneAir {
+  readonly id: string;
+  readonly kind: ZoneAmbience;
+  /** Who calls in it: birds in the trees, or the lone curlew. */
+  readonly calls: BirdSong | LoneCall;
+  /** Into the outdoors, at its share; null until audio is unlocked. */
+  gain: GainNode | null;
+  /** Its share this frame, as the mix has it. */
+  level: number;
+}
+
 /** A bird's call and the voice it plays in, for as long as it holds its slot. */
 interface Bird {
   readonly source: AmbientSource;
@@ -80,7 +110,7 @@ const between = ([lo, hi]: readonly [number, number]) => lo + (hi - lo) * Math.r
 const ease = (param: AudioParam, v: number, kit: AudioKit) => param.setTargetAtTime(v, kit.ctx.currentTime, CONFIG.sound.mix.ease);
 
 /**
- * Oakvale's ambience, stepped once a frame with your head, the light's cues
+ * The zones' ambience, stepped once a frame with your head, the light's cues
  * and whether anything fights you. Silent until audio is unlocked. At most
  * `CONFIG.sound.ambient.most` places' sounds and bird calls play at once,
  * counting those still fading out.
@@ -91,6 +121,8 @@ export class Ambience {
   private bus: GainNode | null = null;
   /** The outdoors: the wind, the birds and the places outside. */
   private outdoors: Part | null = null;
+  /** Each zone's own air within it, in the order they were added. */
+  private readonly airs: ZoneAir[] = [];
   /** Each building's own sounds (the inn's hearth), by building. */
   private readonly rooms = new Map<Interior, Part>();
   private under: Underground | null = null;
@@ -98,24 +130,34 @@ export class Ambience {
   private readonly mixed = blankMix();
   /** How far the fight's dip has come: 1 none. */
   private dip = 1;
-  private readonly song: BirdSong;
+  /** Every zone's places that sound where they are. */
+  private readonly places: PlaceSound[] = [];
   /** Each place's voice while it plays, by its index in `places`. */
-  private readonly voices: (Voice | null)[];
+  private readonly voices: (Voice | null)[] = [];
   private readonly birds: Bird[] = [];
   /** The places, as candidates to play. */
-  private readonly placed: readonly AmbientSource[];
+  private readonly placed: AmbientSource[] = [];
   /** This frame's candidates: the places, the birds calling, and one about to. */
   private readonly list: AmbientSource[] = [];
   private readonly voicings: Voicing[] = [];
   private readonly starts: number[] = [];
 
-  constructor(
-    private readonly places: readonly PlaceSound[],
-    trees: TreeCover,
-  ) {
-    this.song = new BirdSong(trees);
-    this.voices = places.map(() => null);
-    this.placed = places.map(({ x, z }) => ({ x, z, place: true }));
+  constructor(zones: readonly ZoneSounds[]) {
+    for (const zone of zones) this.add(zone);
+  }
+
+  /** Play `zone`'s ambience too (once): a neighbour loaded as you went. */
+  add(zone: ZoneSounds): void {
+    if (this.airs.some((a) => a.id === zone.id)) return;
+    const air: ZoneAir = { id: zone.id, kind: zone.ambience, calls: AIRS[zone.ambience].calls(zone), gain: null, level: 0 };
+    this.airs.push(air);
+    for (const p of zone.sounds) {
+      this.places.push(p);
+      this.voices.push(null);
+      this.placed.push({ x: p.x, z: p.z, place: true });
+      if (this.kit && p.interior && !this.rooms.has(p.interior)) this.rooms.set(p.interior, this.part());
+    }
+    if (this.kit) this.startAir(air);
   }
 
   /** How many ambient sounds are playing (or fading out): never more than `CONFIG.sound.ambient.most`. */
@@ -139,8 +181,9 @@ export class Ambience {
 
   /**
    * The graph's gains and cutoffs as they are now, for checks: the whole
-   * ambience's, the outdoors', each room's, and the mine's air, timbers and
-   * drone (null while the mine's ambience isn't playing).
+   * ambience's, the outdoors', each zone's air within it, each room's, and
+   * the mine's air, timbers and drone (null while the mine's ambience isn't
+   * playing).
    */
   get gains() {
     if (!this.bus || !this.outdoors) return null;
@@ -149,6 +192,7 @@ export class Ambience {
     return {
       all: this.bus.gain.value,
       outdoors: part(this.outdoors),
+      zones: Object.fromEntries(this.airs.map((a) => [a.id, a.gain?.gain.value ?? 0])),
       rooms: Object.fromEntries([...this.rooms].map(([id, p]) => [id, part(p)])),
       mine: u && { air: u.air.gain.value, timbers: u.timbers.gain.value, drone: u.drone.gain.value },
     };
@@ -163,7 +207,13 @@ export class Ambience {
 
   /** One frame with your head at `head`, the light's `cues` and whether anything's `fighting` you. */
   update(dt: number, head: Vector3, cues: Cues, fighting: boolean): void {
-    const call = this.song.update(dt, head.x, head.z);
+    // Each zone's birds keep their own time; one call a frame at most is heard.
+    let call: Birdcall | null = null;
+    let callAir = -1;
+    for (let k = 0; k < this.airs.length; k++) {
+      const c = this.airs[k].calls.update(dt, head.x, head.z, head.y);
+      if (c && !call) [call, callAir] = [c, k];
+    }
     if (!this.ready()) return;
     const m = mix(cues, fighting, this.mixed);
     this.follow(dt, cues, m);
@@ -171,8 +221,8 @@ export class Ambience {
     list.length = 0;
     for (const p of this.placed) list.push(p);
     for (const b of birds) list.push(b.source);
-    // Deep in the mine nothing outside can be heard: none of it plays.
-    const fresh = call && m.outdoors > 0 ? { x: call.x, z: call.z, place: false } : null;
+    // Deep in the mine nothing outside can be heard, nor a zone's birds well away from it: none of it plays.
+    const fresh = call && m.outdoors > 0 && this.airs[callAir].level > 0 ? { x: call.x, z: call.z, place: false } : null;
     if (fresh) list.push(fresh);
     const want = chooseAmbient(head.x, head.z, list, this.voicings);
     if (m.outdoors === 0 && m.rooms.every((r) => r.level === 0)) want.fill('off');
@@ -193,30 +243,38 @@ export class Ambience {
     for (const i of starts) {
       if (playing >= most) break;
       playing++;
-      if (i < places.length) voices[i] = this.startPlace(places[i], want[i]);
-      else this.startBird(call!, fresh!);
+      if (i < places.length) voices[i] = this.startPlace(i, want[i]);
+      else this.startBird(call!, fresh!, this.airs[callAir]);
     }
 
     this.tick(dt, head);
   }
 
-  /** Audio is unlocked: the bus and the wind are made the first time. */
+  /** Audio is unlocked: the bus and each zone's air and wind are made the first time. */
   private ready(): boolean {
     if (this.kit) return true;
     const kit = audio();
     if (!kit) return false;
-    const { ambient, wind } = CONFIG.sound;
     this.kit = kit;
     this.bus = kit.ctx.createGain();
-    this.bus.gain.value = ambient.level;
+    this.bus.gain.value = CONFIG.sound.ambient.level;
     this.bus.connect(kit.master);
     this.outdoors = this.part();
     for (const p of this.places) if (p.interior && !this.rooms.has(p.interior)) this.rooms.set(p.interior, this.part());
-    const w = kit.ctx.createGain();
-    w.gain.value = wind.level;
-    w.connect(this.outdoors.gain);
-    startLoop('wind', kit, w);
+    for (const a of this.airs) this.startAir(a);
     return true;
+  }
+
+  /** A zone's air into the outdoors, silent until the mix gives it its share, with its wind blowing in it. */
+  private startAir(a: ZoneAir): void {
+    const kit = this.kit!;
+    a.gain = kit.ctx.createGain();
+    a.gain.gain.value = 0;
+    a.gain.connect(this.outdoors!.gain);
+    const w = kit.ctx.createGain();
+    w.gain.value = AIRS[a.kind].level;
+    w.connect(a.gain);
+    startLoop(AIRS[a.kind].wind, kit, w);
   }
 
   /** A part of the mix, into the bus. */
@@ -245,6 +303,12 @@ export class Ambience {
     set(this.bus!.gain, CONFIG.sound.ambient.level * this.dip);
     set(this.outdoors!.gain.gain, m.outdoors);
     set(this.outdoors!.filter.frequency, m.outdoorsCutoff);
+    // Each zone's air at its share of where you stand: over a seam they crossfade.
+    for (const a of this.airs) {
+      const i = cues.zones.findIndex((z) => z.id === a.id);
+      a.level = i < 0 ? 0 : m.zones[i];
+      set(a.gain!.gain, a.level);
+    }
     cues.rooms.forEach((r, i) => {
       const p = this.rooms.get(r.id);
       if (!p) return;
@@ -331,19 +395,21 @@ export class Ambience {
     if (v.panner.panningModel !== model) v.panner.panningModel = model;
   }
 
-  private startPlace(p: PlaceSound, voicing: Voicing): Voice {
+  private startPlace(i: number, voicing: Voicing): Voice {
+    const p = this.places[i];
     const { level, ref, ...rest } = CONFIG.sound.places[p.id];
     const every = 'every' in rest ? rest.every : null;
     const loop = PLACES[p.id].loop;
-    const part = p.interior ? this.rooms.get(p.interior)! : this.outdoors!;
-    const v = this.voice(p.x, p.y, p.z, voicing, level, ref, loop ?? null, part.gain);
+    // A place sounds where it is, whichever zone's air you're in: it fades with distance alone.
+    const into = (p.interior ? this.rooms.get(p.interior)! : this.outdoors!).gain;
+    const v = this.voice(p.x, p.y, p.z, voicing, level, ref, loop ?? null, into);
     if (every) v.next = between(every) * Math.random();
     return v;
   }
 
-  private startBird(call: Birdcall, source: AmbientSource): void {
-    const { level, ref, last } = CONFIG.sound.birds;
-    const voice = this.voice(call.x, call.y, call.z, 'cheap', level, ref, null, this.outdoors!.gain);
+  private startBird(call: Birdcall, source: AmbientSource, air: ZoneAir): void {
+    const { level, ref, last } = AIRS[air.kind].bird;
+    const voice = this.voice(call.x, call.y, call.z, 'cheap', level, ref, null, air.gain!);
     sfx[call.call](voice.input);
     this.birds.push({ source, voice, left: last });
   }

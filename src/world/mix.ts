@@ -4,8 +4,9 @@ import type { Interior } from '../save/record';
 // The ambience's mix follows the light's cues (spec, "Sound"): behind a shut
 // door the outdoors is muffled and quiet and the room's fires come up; past
 // the adit's bend the outdoors fades out and the mine's air comes in; at the
-// breach into the crypt the drone rises; and while anything fights you the
-// whole ambience dips. A pure function of those states: fx/ambience.ts plays it.
+// breach into the crypt the drone rises; across a seam the zones' own airs
+// (their wind, their birds) crossfade by where you stand; and while anything
+// fights you the whole ambience dips. A pure function of those states: fx/ambience.ts plays it.
 
 /** A building's room, as the Interiors switch has it: how far its door stands open and how far its light has come up, 0 to 1. */
 export interface RoomCue {
@@ -22,6 +23,8 @@ export interface Cues {
   readonly mine: number;
   /** Metres on past the breach into the crypt along the mine's route: negative short of it, -Infinity out of the mine. */
   readonly crypt: number;
+  /** Each loaded zone's share of the air where you stand, 0 to 1, summing to 1: a seam's blend. */
+  readonly zones: readonly { readonly id: string; readonly share: number }[];
 }
 
 /** How loud each part of the ambience is, 0 to 1, and how muffled (a lowpass's cutoff, Hz). */
@@ -29,6 +32,8 @@ export interface Mix {
   /** The outdoors: the wind, the birds and the places outside. */
   outdoors: number;
   outdoorsCutoff: number;
+  /** Each zone's own air within the outdoors (its wind, its birds, its places), by the cues' `zones`' order. */
+  readonly zones: number[];
   /** Each room's own sounds, by the cues' `rooms`' order. */
   readonly rooms: { level: number; cutoff: number }[];
   /** The mine's hollow air and drips. */
@@ -44,7 +49,7 @@ export interface Mix {
 type Rules = typeof CONFIG.sound.mix;
 
 export function blankMix(): Mix {
-  return { outdoors: 1, outdoorsCutoff: CONFIG.sound.mix.open, rooms: [], air: 0, timbers: 0, drone: 0, all: 1 };
+  return { outdoors: 1, outdoorsCutoff: CONFIG.sound.mix.open, zones: [], rooms: [], air: 0, timbers: 0, drone: 0, all: 1 };
 }
 
 const clamp01 = (t: number) => Math.min(1, Math.max(0, t));
@@ -61,6 +66,10 @@ export function mix(cues: Cues, fight: boolean, out: Mix = blankMix(), rules: Ru
   const below = clamp01(cues.mine);
   out.outdoors = lerp(1, inside.level, room) * (1 - below);
   out.outdoorsCutoff = sweep(open, inside.cutoff, Math.max(room, below));
+  // Across a seam the zones' airs crossfade at equal power: their winds are
+  // unrelated noise, so the air is as loud on the line as either side of it.
+  out.zones.length = cues.zones.length;
+  cues.zones.forEach((z, i) => (out.zones[i] = Math.sqrt(clamp01(z.share))));
   // A room's sounds come up as its light does, or partly as its door opens.
   out.rooms.length = cues.rooms.length;
   cues.rooms.forEach((r, i) => {

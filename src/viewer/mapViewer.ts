@@ -1,6 +1,6 @@
 import { Color, Fog, Group, type PerspectiveCamera, type Scene, Vector3, type WebGLRenderer } from 'three';
 import { CONFIG } from '../config';
-import { loadNeighbours, MAPS } from '../maps/registry';
+import { findMap, loadNeighbours, MAPS } from '../maps/registry';
 import type { GameMap, MapInfo } from '../maps/types';
 import { XRInput } from '../player/input';
 import { TextPanel } from '../ui/panel';
@@ -87,7 +87,7 @@ export class MapViewer {
   /** Moved and turned by the controls; the camera (the head, in VR) and hands ride in it. */
   readonly rig = new Group();
   /** Lights, sky and ground for every zone shown. */
-  readonly world = new World();
+  readonly world = new World(findMap);
   private readonly loaded = new Map<string, Promise<GameMap>>();
   private readonly input: XRInput;
   /** Readout floating over the left controller, for the headset. */

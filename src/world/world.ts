@@ -13,7 +13,7 @@ import {
   type WebGLRenderer,
 } from 'three';
 import { CONFIG } from '../config';
-import type { Zone } from '../maps/types';
+import type { MapInfo, Zone } from '../maps/types';
 import { Walkable } from '../maps/walkable';
 import { sharedModelMaterial } from '../models/materials';
 import type { Interior as InteriorId } from '../save/record';
@@ -23,6 +23,7 @@ import { type Flame, type Interior, InteriorSwitch, toFrame } from './interiors'
 import { type Mine, type MineStanding, MineSwitch } from './mine';
 import { MineGround } from './mineGround';
 import type { Cues, RoomCue } from './mix';
+import { type Air, airAt, type Crossing, crossings, currentZone, landGap, shares, zoneUnder } from './seams';
 import { buildSky, type Sky } from './sky';
 import { Stager } from './staging';
 import { type ChunkCounts, Streamer } from './streamer';
@@ -36,7 +37,7 @@ const _standing = { x: 0, z: 0, within: false };
 const _underground: MineStanding = { ahead: 0, inMouth: false, past: 0, crypt: 0, fromMouth: 0 };
 
 /** What compiles shader programs ahead of the render that needs them: the renderer. */
-export type Compiler = Pick<WebGLRenderer, 'compile'>;
+export type Compiler = Pick<WebGLRenderer, 'compile'> & Partial<Pick<WebGLRenderer, 'compileAsync'>>;
 
 /** One of the pool's point lights: the flame it sits on, if any, and how far it has faded up on it. */
 interface PoolLight {
@@ -95,6 +96,11 @@ interface HeldMine {
  * underfoot, from an interior inside its footprint, or from the mine once
  * you've come in by its mouth, so enemies, arrows and the player never learn
  * which zone or building they're in.
+ *
+ * Over a seam, the zones' light, haze, sky and ambience blend by where you
+ * stand, and the current zone changes once you're a couple of metres over
+ * its line (world/seams.ts), telling `onZone`, and fetching the new zone's
+ * neighbours if they aren't loaded yet.
  */
 export class World implements Ground {
   /** The light rig, the sky and every loaded zone. */
@@ -108,6 +114,24 @@ export class World implements Ground {
   private readonly lights: readonly PoolLight[];
   private readonly sky: Sky;
   private readonly zones: Zone[] = [];
+  /** Where the loaded zones meet. */
+  private meets: Crossing[] = [];
+  /** The zone you're in, as its name, the save and the sound have it; null until one is loaded. */
+  private current: Zone | null = null;
+  /** The zones' air where you stand, as last applied: whose, and how far over a seam it had blended. */
+  private readonly air: Air = { from: null!, to: null!, t: 0 };
+  /** Where you stand this frame, worked out into here. */
+  private readonly here: Air = { from: null!, to: null!, t: 0 };
+  /** The atmosphere blended over a seam, written into afresh as you walk (no garbage). */
+  private blended: Atmosphere | null = null;
+  /** Each loaded zone's share of the air where you stand, in load order. */
+  private readonly airShares: number[] = [];
+  /** Zones being fetched as neighbours, by id. */
+  private readonly fetching = new Set<string>();
+  /** Told when the current zone changes: its name floats up, the game saves. */
+  onZone: ((zone: Zone) => void) | null = null;
+  /** Told when a zone is added in play (a neighbour fetched as you went): its sound joins in. */
+  onAdd: ((zone: Zone) => void) | null = null;
   /** Where you can walk in every zone loaded, as one shape: over a seam from one into the other. */
   private walkable: Walkable | null = null;
   private readonly stager = new Stager();
@@ -120,7 +144,12 @@ export class World implements Ground {
   private readonly outdoorExtras: Object3D[] = [];
   private readonly interiors: Held[] = [];
   private underground: HeldMine | null = null;
-  private readonly heard: { rooms: RoomCue[]; mine: number; crypt: number } = { rooms: [], mine: 0, crypt: -Infinity };
+  private readonly heard: { rooms: RoomCue[]; mine: number; crypt: number; zones: { id: string; share: number }[] } = {
+    rooms: [],
+    mine: 0,
+    crypt: -Infinity,
+    zones: [],
+  };
   /** People standing about, whom nothing walks through: circles on the floor plane. */
   private readonly bodies: { readonly x: number; readonly z: number; readonly r: number }[] = [];
   private readonly resolveFn = (p: Vector3, radius: number) => this.resolve(p, radius);
@@ -129,7 +158,7 @@ export class World implements Ground {
   private compiler: Compiler | null = null;
   /** The zones whose shader programs are compiled. */
   private readonly warmed = new Set<Zone>();
-  /** The zone's own atmosphere, which an interior's blends from. */
+  /** The outdoors' atmosphere where you stand (the zone's, or blended over a seam), which an interior's blends from. */
   private atmosphere: Atmosphere | null = null;
   /** The atmosphere as shown: the zone's, or blended towards an interior's. */
   private shown: Atmosphere | null = null;
@@ -144,7 +173,12 @@ export class World implements Ground {
   /** While the fog is lifted, how far you see; null under the atmosphere's own fog. */
   private liftedTo: number | null = null;
 
-  constructor() {
+  /**
+   * With `maps` (the registry's `findMap`), a zone's neighbours are fetched
+   * as it becomes current, if they aren't loaded; without, they're only
+   * what's added.
+   */
+  constructor(private readonly maps: ((id: string) => MapInfo | undefined) | null = null) {
     this.root.name = 'world';
     const toSun = new Vector3(...CONFIG.world.sunDirection).normalize();
     // A directional light shines from its position towards its target (the origin).
@@ -190,21 +224,43 @@ export class World implements Ground {
     this.bodies.push(body);
   }
 
-  /** Add a zone (once), with its interiors, and make its atmosphere the World's. */
+  /**
+   * Add a zone (once), with its interiors, and make it the current zone, its
+   * atmosphere the World's, until you stand somewhere else. Its neighbours
+   * are fetched if they aren't loaded.
+   */
   load(zone: Zone): void {
     this.add(zone);
-    this.apply(zone.atmosphere);
+    // The one already loaded by its id, if it was fetched as a neighbour.
+    const held = this.zones.find((z) => z.id === zone.id)!;
+    this.current = held;
+    this.here.from = this.here.to = held;
+    this.here.t = 0;
+    this.breathe(this.here);
+    this.fetchNeighbours(held);
+  }
+
+  /** Is a zone with this id loaded? */
+  holds(id: string): boolean {
+    return this.zones.some((z) => z.id === id);
+  }
+
+  /** The zone you're in (as its name, the save and the sound have it), once one is loaded. */
+  get zone(): Zone | null {
+    return this.current;
   }
 
   /**
-   * Add a zone (once), with its interiors, keeping the atmosphere as it is: a
-   * neighbour, streamed in beside the zone you're in and walked into over
-   * their seam.
+   * Add a zone (once, by its id), with its interiors, keeping the atmosphere
+   * as it is: a neighbour, streamed in beside the zone you're in and walked
+   * into over their seam.
    */
   add(zone: Zone): void {
-    if (!this.zones.includes(zone)) {
+    if (!this.holds(zone.id)) {
       this.zones.push(zone);
       this.walkable = Walkable.union(this.zones.map((z) => z.walkable));
+      this.meets = crossings(this.zones);
+      this.heard.zones.push({ id: zone.id, share: 0 });
       // Its chunks are the World's to stream, in a group of their own beside the zone's extras.
       const chunks = new Group();
       chunks.name = `${zone.id}-chunks`;
@@ -221,7 +277,40 @@ export class World implements Ground {
         this.underground = { mine: zone.mine, switch: new MineSwitch(), ground: new MineGround(zone.mine, this), staged: false, extras: [] };
         this.root.add(zone.mine.root);
       }
+      // Loaded in play (a neighbour fetched as you crossed): its extras uploaded and compiled before they show.
+      if (!this.filling) {
+        this.stager.stage(zone.root);
+        this.warm(zone);
+      }
+      this.onAdd?.(zone);
     }
+  }
+
+  /**
+   * Fetch the zones over `zone`'s seams that aren't loaded, and add each as
+   * it comes: its plan loads and its stand-ins stream in while you're still
+   * a zone's width away from any of it.
+   */
+  private fetchNeighbours(zone: Zone): void {
+    const info = this.maps?.(zone.id);
+    if (info?.kind !== 'zone') return;
+    for (const id of info.neighbours) {
+      const next = this.maps!(id);
+      if (next?.kind !== 'zone' || this.holds(id) || this.fetching.has(id)) continue;
+      this.fetching.add(id);
+      next
+        .load()
+        .then((n) => {
+          if (!this.holds(n.id)) this.add(n);
+        })
+        .catch((e) => console.warn(`Loading ${next.label} failed:`, e))
+        .finally(() => this.fetching.delete(id));
+    }
+  }
+
+  /** Zones still being fetched as neighbours, by id. */
+  get neighboursPending(): number {
+    return this.fetching.size;
   }
 
   /**
@@ -245,8 +334,9 @@ export class World implements Ground {
 
   /**
    * The light's cues, which the sound's mix follows (world/mix.ts): every
-   * building's door and light, the mine's light, and how far on past the
-   * breach into the crypt you are, as of the last update or settle.
+   * building's door and light, the mine's light, how far on past the breach
+   * into the crypt you are, and each zone's share of the air where you
+   * stand, as of the last update, settle or fill.
    */
   get cues(): Cues {
     return this.heard;
@@ -287,6 +377,10 @@ export class World implements Ground {
    */
   fill(x: number, z: number): void {
     this.filling = false;
+    // Arriving is no crossing: the zone underfoot is current at once, its air as it is here.
+    const under = zoneUnder(this.zones, x, z);
+    if (under) this.become(under);
+    this.breathe(airAt(this.zones, this.meets, x, z, undefined, this.here));
     this.streamer.fill(x, z, this.reach);
     // All of it uploaded at the next render, in view or not, so turning round uploads nothing.
     for (const zone of this.zones) {
@@ -307,8 +401,10 @@ export class World implements Ground {
     const { compiler, camera, scene } = this;
     if (!compiler || !camera || !scene || this.warmed.has(zone)) return;
     this.warmed.add(zone);
-    compiler.compile(zone.root, camera, scene);
-    compiler.compile(this.chunkRoots.get(zone)!, camera, scene);
+    // In play (a neighbour fetched as you went), off the frame: the Quest budget compiles nothing mid-frame.
+    const compile = !this.filling && compiler.compileAsync ? compiler.compileAsync.bind(compiler) : compiler.compile.bind(compiler);
+    void compile(zone.root, camera, scene);
+    void compile(this.chunkRoots.get(zone)!, camera, scene);
   }
 
   /**
@@ -400,14 +496,7 @@ export class World implements Ground {
    * whose walkable area is nearest.
    */
   zoneAt(x: number, z: number): Zone | undefined {
-    let best: Zone | undefined;
-    let bestGap = Infinity;
-    for (const zone of this.zones) {
-      if (landGap(zone, x, z) === 0) return zone;
-      const gap = zone.walkable.distance(x, z);
-      if (gap < bestGap) [best, bestGap] = [zone, gap];
-    }
-    return best;
+    return zoneUnder(this.zones, x, z);
   }
 
   update(dt: number, camera: Camera): void {
@@ -416,6 +505,7 @@ export class World implements Ground {
     this.time += dt;
     camera.getWorldPosition(_eye);
     if (this.filling) this.fill(_eye.x, _eye.z);
+    this.cross(_eye.x, _eye.z);
     for (const h of this.interiors) {
       const { frame, footprint, floor, height, door } = h.interior;
       toFrame(frame, _eye.x, _eye.z, _standing);
@@ -443,6 +533,31 @@ export class World implements Ground {
     // With the outdoors hidden, chunks wait until you're back out; staging goes last, after all that's shown is settled.
     this.streamer.update(_eye, this.reach, this.outdoors);
     this.stageNear(_eye);
+  }
+
+  /** Where you stand at (x, z): the current zone, once you're far enough over a seam, and the air blended by where you are. */
+  private cross(x: number, z: number): void {
+    if (this.current) this.become(currentZone(this.current, this.zones, x, z));
+    this.breathe(airAt(this.zones, this.meets, x, z, undefined, this.here));
+  }
+
+  /** `zone` is current now: if that's a change, say so, and fetch its neighbours early. */
+  private become(zone: Zone): void {
+    if (zone === this.current) return;
+    this.current = zone;
+    this.fetchNeighbours(zone);
+    this.onZone?.(zone);
+  }
+
+  /** The outdoors' air as `air` has it, applied if it changed (values only), and each zone's share of it for the sound. */
+  private breathe(air: Air | null): void {
+    shares(this.zones, air, this.airShares);
+    this.heard.zones.forEach((z, i) => (z.share = this.airShares[i]));
+    const was = this.air;
+    if (!air || (was.from === air.from && was.to === air.to && was.t === air.t)) return;
+    Object.assign(was, air);
+    this.blended ??= structuredClone(air.from.atmosphere);
+    this.apply(blendAtmospheres(air.from.atmosphere, air.to.atmosphere, air.t, this.blended));
   }
 
   /** Upload a building's room, or the mine, unseen, the first time you come within CONFIG.interiors.stage of its door or mouth. */
@@ -589,7 +704,7 @@ export class World implements Ground {
   private outside(p: Vector3, radius: number): boolean {
     let moved = false;
     const near = CONFIG.world.ground.seam;
-    for (const zone of this.zones) if (landGap(zone, p.x, p.z) <= near && zone.collide(p, radius)) moved = true;
+    for (const zone of this.zones) if (landGap(zone.land, p.x, p.z) <= near && zone.collide(p, radius)) moved = true;
     return (this.walkable?.keepInside(p, radius) ?? false) || moved;
   }
 
@@ -634,12 +749,6 @@ export class World implements Ground {
     if (p.y <= floor + arrowWidth) return true;
     return p.y < floor + propHeight && this.blocked(p.x, p.z, arrowWidth);
   }
-}
-
-/** How far (x, z) is from `zone`'s land over the floor plane: 0 on it. */
-function landGap(zone: Zone, x: number, z: number): number {
-  const b = zone.land;
-  return Math.hypot(Math.max(b.minX - x, 0, x - b.maxX), Math.max(b.minZ - z, 0, z - b.maxZ));
 }
 
 /**

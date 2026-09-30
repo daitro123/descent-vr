@@ -1,9 +1,17 @@
 import { CONFIG } from '../config';
 import type { Interior } from '../save/record';
 
-// Oakvale's ambience, as a plan and two pure rules (spec, "Sound"): which of
-// the ambient sounds near you play and which are placed by HRTF, and where
-// the next bird calls from. No Web Audio here; fx/ambience.ts plays it.
+// The zones' ambience, as a plan and pure rules (spec, "Sound"): which of
+// the ambient sounds near you play and which are placed by HRTF, where the
+// next of Oakvale's birds calls from, and when and where Brackenmoor's lone
+// bird does. No Web Audio here; fx/ambience.ts plays it.
+
+/**
+ * A zone's own ambience, placed nowhere in particular: Oakvale's light wind
+ * with birds calling from its trees, or Brackenmoor's stronger, lower wind
+ * and a lone call now and then.
+ */
+export type ZoneAmbience = 'woods' | 'moor';
 
 /** A place that sounds where it is. */
 export type PlaceId = 'stream' | 'dock' | 'windmill' | 'forge' | 'anvil' | 'hearth' | 'campfire' | 'mineMouth';
@@ -117,12 +125,15 @@ export class TreeCover {
 export const BIRD_CALLS = ['trill', 'whistle', 'chirps', 'coo'] as const;
 export type BirdCall = (typeof BIRD_CALLS)[number];
 
+/** Every call a bird makes, each a sound by that name: the woods' birds', and the moor's lone curlew. */
+export type Call = BirdCall | 'curlew';
+
 /** A bird calling: from where, and which call. */
 export interface Birdcall {
   readonly x: number;
   readonly y: number;
   readonly z: number;
-  readonly call: BirdCall;
+  readonly call: Call;
 }
 
 type BirdRules = {
@@ -165,6 +176,44 @@ export class BirdSong {
     if (d < near || d > far) return null;
     const call = BIRD_CALLS[Math.min(BIRD_CALLS.length - 1, Math.floor(this.rand() * BIRD_CALLS.length))];
     return { x: t.x, y: t.y + t.height * this.between(perch), z: t.z, call };
+  }
+
+  private between([lo, hi]: readonly [number, number]): number {
+    return lo + (hi - lo) * this.rand();
+  }
+}
+
+type LoneRules = {
+  readonly every: readonly [number, number];
+  readonly near: number;
+  readonly far: number;
+  readonly height: readonly [number, number];
+};
+
+/**
+ * The moor's lone bird: every so often a curlew calls from a spot at random
+ * `near` to `far` m off, on the wing `height` m over you. With no trees to call
+ * from, nothing else on the moor calls at all.
+ */
+export class LoneCall {
+  private wait: number;
+
+  constructor(
+    private readonly rand: () => number = Math.random,
+    private readonly rules: LoneRules = CONFIG.sound.moor.call,
+  ) {
+    this.wait = this.between(rules.every);
+  }
+
+  /** One frame with your head at (x, y, z): the call, if it comes now. */
+  update(dt: number, x: number, z: number, y = 0): Birdcall | null {
+    this.wait -= dt;
+    if (this.wait > 0) return null;
+    const { near, far, height } = this.rules;
+    this.wait += this.between(this.rules.every);
+    const a = this.rand() * Math.PI * 2;
+    const r = near + (far - near) * this.rand();
+    return { x: x + Math.sin(a) * r, y: y + this.between(height), z: z + Math.cos(a) * r, call: 'curlew' };
   }
 
   private between([lo, hi]: readonly [number, number]): number {

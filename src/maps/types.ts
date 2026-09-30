@@ -3,7 +3,7 @@ import type { Role } from '../adventureState';
 import type { RoadPoint } from '../enemies/patrol';
 import type { Item, Place, VillagerId } from '../quests';
 import type { EnemyKind, Family } from '../models/characters';
-import type { PlaceSound, TreeCover } from '../world/ambience';
+import type { PlaceSound, TreeCover, ZoneAmbience } from '../world/ambience';
 import type { Atmosphere } from '../world/atmosphere';
 import type { Interior as InteriorId } from '../save/record';
 import type { ChunkSource } from '../world/chunks';
@@ -167,6 +167,8 @@ export interface Zone extends MapBase {
   readonly sounds: readonly PlaceSound[];
   /** Its trees, which its birds call from. */
   readonly trees: TreeCover;
+  /** Its own ambience, placed nowhere: Oakvale's woods, Brackenmoor's moor. */
+  readonly ambience: ZoneAmbience;
 }
 
 /**
