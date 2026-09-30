@@ -9,8 +9,14 @@ import { GEAR_SLOTS, type GearSlot } from '../../items';
 // slots under the figure, and the page tabs along the top. From the bag
 // prototype's panel (ui/bag-prototype/panel.ts).
 
-/** A slot on the panel: one of the page's sixteen (the bag's, or the quest page's), a gear slot, or one of the belt's. */
-export type Spot =
+/**
+ * A slot on the panel: one of the page's sixteen (the bag's, or the quest
+ * page's), a gear slot or one of the belt's; or one of the page's slots on the
+ * panel open beside it (the stash's).
+ */
+export type Spot = BagSpot | { readonly in: 'beside'; readonly i: number };
+/** A slot on the bag's own panel. */
+export type BagSpot =
   | { readonly in: 'grid'; readonly i: number }
   | { readonly in: 'gear'; readonly slot: GearSlot }
   | { readonly in: 'belt'; readonly slot: number };
@@ -55,28 +61,28 @@ export const COINS = { x: GRID_MIDDLE, y: -0.19 };
 export const CARD = { w: 0.28, h: 0.2, y: BOARD.top + 0.11 };
 
 /** Every slot, in the order the panel draws them: the gear slots, the belt's, then the page's sixteen. */
-export const SPOTS: readonly Spot[] = [
+export const SPOTS: readonly BagSpot[] = [
   ...GEAR_SLOTS.map((slot) => ({ in: 'gear', slot }) as const),
   ...Array.from({ length: CONFIG.belt.slots }, (_, slot) => ({ in: 'belt', slot }) as const),
   ...Array.from({ length: CONFIG.bag.slots }, (_, i) => ({ in: 'grid', i }) as const),
 ];
 
-export function spotXY(spot: Spot): readonly [number, number] {
+export function spotXY(spot: BagSpot): readonly [number, number] {
   if (spot.in === 'grid') return [GRID_X[spot.i % 4], ROWS[Math.floor(spot.i / 4)]];
   return spot.in === 'belt' ? BELT_AT[spot.slot] : GEAR_AT[spot.slot];
 }
 
 export function sameSpot(a: Spot | null, b: Spot | null): boolean {
   if (!a || !b) return a === b;
-  if (a.in === 'grid') return b.in === 'grid' && a.i === b.i;
-  return a.in === b.in && a.slot === (b as typeof a).slot;
+  if (a.in === 'gear' || a.in === 'belt') return b.in === a.in && a.slot === (b as typeof a).slot;
+  return b.in === a.in && a.i === b.i;
 }
 
 /** Is `l` near the face, within `reach`? */
-const nearFace = (l: Vector3, reach: Reach) => l.z < FACE + reach.front && l.z > -reach.back;
+export const nearFace = (l: Vector3, reach: Reach) => l.z < FACE + reach.front && l.z > -reach.back;
 
 /** The slot `l` touches, if any; the page's sixteen only if `grid` (the talent page has none). */
-export function spotAt(l: Vector3, reach: Reach, grid: boolean): Spot | null {
+export function spotAt(l: Vector3, reach: Reach, grid: boolean): BagSpot | null {
   if (!nearFace(l, reach)) return null;
   for (const spot of SPOTS) {
     if (spot.in === 'grid' && !grid) continue;
@@ -92,9 +98,9 @@ export function figureAt(l: Vector3, reach: Reach): boolean {
 }
 
 /** The slot whose centre is nearest `l`, within `near` of it: a carried item is aimed by eye, not by the hand. */
-export function nearestSpot(l: Vector3, reach: Reach, grid: boolean, near: number): Spot | null {
+export function nearestSpot(l: Vector3, reach: Reach, grid: boolean, near: number): BagSpot | null {
   if (!nearFace(l, reach)) return null;
-  let best: Spot | null = null;
+  let best: BagSpot | null = null;
   let bestD = near;
   for (const spot of SPOTS) {
     if (spot.in === 'grid' && !grid) continue;

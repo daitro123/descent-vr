@@ -24,6 +24,7 @@ import { PROFESSION_NAMES } from './professions/professions';
 import { Belt } from './player/belt';
 import { Player } from './player/player';
 import { Run } from './player/run';
+import { Anvil } from './professions/anvil/anvil';
 import { SaveController } from './save/controller';
 import { type Interior, saveRecord } from './save/record';
 import type { Save } from './save/store';
@@ -35,6 +36,7 @@ import { ZoneName } from './ui/zoneName';
 import { RunVignette } from './ui/runVignette';
 import { Bag, type BagHand } from './ui/bag/bag';
 import { IconAtlas, lookOf } from './ui/bag/looks';
+import { StashPanel } from './ui/bag/stashPanel';
 import { type Probe, TalkBoard } from './ui/talkBoard';
 import { Drops, type Touch } from './world/drops';
 import { Orbs } from './world/orbs';
@@ -42,6 +44,7 @@ import { Chests } from './world/chests';
 import { Pickups } from './world/pickups';
 import { BlobShadows } from './world/shadows';
 import { Dropped } from './world/dropped';
+import { StashChest } from './world/stashChest';
 import type { Mine } from './world/mine';
 import { World } from './world/world';
 
@@ -136,6 +139,11 @@ export class Adventure {
   readonly dropped: Dropped;
   /** The potions at your hips: reach down for one and drink it at your mouth. */
   readonly belt: Belt;
+  /** The smith's anvil: step up to it with Smithing learned, and make things with the hammer and tongs. Null in a zone without a smith. */
+  readonly anvil: Anvil | null;
+  /** The stash's chest by the inn's hearth: touch its lid and the stash panel opens beside the bag's. */
+  readonly stashChest: StashChest;
+  readonly stash: StashPanel;
   /** Each hand's controller, for the bag. */
   private readonly bagHands: Record<'left' | 'right', { -readonly [K in keyof BagHand]: BagHand[K] }>;
   /** Where the quest arrow's targets are: each quest's place, and Hale. */
@@ -216,6 +224,7 @@ export class Adventure {
     // Your hands, closed on what they hold, the bag over your shoulder and the potions at your hips.
     this.player.showFists();
     this.dropped = new Dropped(this.world);
+    const atlas = new IconAtlas();
     this.bag = new Bag(
       {
         inventory: this.state.inventory,
@@ -224,7 +233,7 @@ export class Adventure {
         drop: (stack, at, velocity) => this.dropped.drop(stack, at, velocity),
         beltAt: (at) => this.belt.slotNear(at),
       },
-      new IconAtlas(),
+      atlas,
     );
     this.belt = new Belt(this.player, {
       inventory: this.state.inventory,
@@ -237,6 +246,14 @@ export class Adventure {
     this.bag.warm(renderer, camera, scene);
     this.belt.warm(renderer, camera, scene);
     this.dropped.warm(renderer, camera, scene);
+    // The stash's chest stands in the inn's room, drawn while it is; its panel opens beside the bag's.
+    this.stash = new StashPanel(this.state.inventory, atlas);
+    this.stashChest = new StashChest(zone.stash);
+    const stashRoom = zone.interiors.find((i) => i.id === zone.stash.interior)?.room;
+    if (!stashRoom) throw new Error(`No room for the stash in the ${zone.stash.interior}`);
+    stashRoom.add(this.stashChest.root);
+    this.bag.panel.root.add(this.stash.root);
+    this.stash.warm(renderer, camera, scene);
 
     this.combat = new Combat(
       this.player,
@@ -312,6 +329,26 @@ export class Adventure {
     // The smith's hammer rings on the anvil with each blow of their work.
     this.ambience = new Ambience([zone, ...neighbours]);
     this.villagers.onStrike = () => this.ambience.strike('anvil');
+    // The smith's anvil, drawn with the outdoors.
+    const smith = zone.villagers.find((v) => v.id === 'smith');
+    this.anvil = smith
+      ? new Anvil(
+          scene,
+          this.world,
+          smith,
+          {
+            professions: this.state.professions,
+            inventory: this.state.inventory,
+            hands: (tools) => this.player.holdTools(tools),
+            buzz: (hand, intensity, ms) => this.player.input.pulse(hand, intensity, ms),
+            apply: (effects, at) => this.applyMade(effects, at),
+            smithAside: (to) => this.villagers.get('smith')?.stepAside(to),
+          },
+          { particles: this.particles, text: this.text },
+        )
+      : null;
+    if (this.anvil) this.world.stageWith(null, this.anvil.frame);
+
     // The alchemy bench and its herbalist hang from the house's room, drawn while it is.
     const house = zone.interiors.find((i) => i.id === 'house');
     if (house) {
@@ -363,6 +400,7 @@ export class Adventure {
     // With a door shut behind you, what stands outside isn't drawn either.
     const outdoors = this.world.outdoorsShown;
     this.pickups.root.visible = this.hale.root.visible = this.villagers.root.visible = this.chests.outdoors.visible = outdoors;
+    if (this.anvil) this.anvil.frame.visible = outdoors;
     this.showCamps(outdoors);
     player.fighting = this.fighting;
     player.update(dt);
@@ -408,6 +446,7 @@ export class Adventure {
     this.orbs.update(dt, player);
     this.loot(dt, outdoors);
     this.talk(dt);
+    this.updateAnvil(dt);
     this.updateBag(dt);
     this.villagers.update(dt, you.head, this.state);
     this.herbalist?.update(dt, you.head);
@@ -592,6 +631,14 @@ export class Adventure {
       Object.assign(bagHands[side], { grip: hand.grip, tracked: hand.grip.visible, squeeze: hand.squeeze });
     }
     player.camera.getWorldDirection(_gaze);
+    // Touching the stash chest's lid opens the stash beside the bag.
+    const lid = this.stashChest.update(dt, this.stash.isOpen, this.touching());
+    if (lid) {
+      const { intensity, ms } = CONFIG.bag.stashChest.buzz;
+      player.input.pulse(lid.hand, intensity, ms);
+      sfx.chest(lid.at);
+      bag.openBeside(this.stash, you.head, _gaze, this.touching(), `the stash, ${lid.hand} hand on its lid`);
+    }
     bag.update({ dt, head: you.head, gaze: _gaze, rig: player.rig, hands: bagHands, probes: this.touching(), alive: player.alive });
     const [left, right] = this.touching();
     const taken = this.dropped.update(dt, [left?.at ?? null, right?.at ?? null], (stack) => {
@@ -605,6 +652,24 @@ export class Adventure {
     const { intensity, ms } = CONFIG.bag.buzz.takeBack;
     player.input.pulse(taken.hand === 0 ? 'left' : 'right', intensity, ms);
     sfx.pickup();
+  }
+
+  /** The anvil: your hands on it while you stand at it, and the work under way. */
+  private updateAnvil(dt: number): void {
+    const { anvil, player, you } = this;
+    if (!anvil) return;
+    const [left, right, tip] = this.touching();
+    player.camera.getWorldDirection(_gaze);
+    anvil.update({
+      dt,
+      head: you.head,
+      gaze: _gaze,
+      fighting: this.fighting,
+      alive: player.alive,
+      squeeze: player.input.hands.left.squeeze,
+      fists: [left?.at ?? null, right?.at ?? null],
+      tip: tip?.at ?? null,
+    });
   }
 
   /** What an operation on your things did: saved, and shown at `at`. */

@@ -5,7 +5,7 @@ import type { Inventory, InventoryEffect, Refusal, Stack, Where } from '../../in
 import { itemOf } from '../../items';
 import { sharedModelMaterial } from '../../models/materials';
 import type { Handedness } from '../../player/input';
-import { type Page, sameSpot, type Spot } from './layout';
+import { type Page, type Reach, sameSpot, type Spot } from './layout';
 import { type IconAtlas, modelOf } from './looks';
 import { BagPanel, nothingShown, type PanelShows } from './panel';
 import { ShoulderReach } from './reach';
@@ -21,6 +21,10 @@ import { ShoulderReach } from './reach';
 // are. Every move goes through the inventory, whose effects the Adventure
 // shows and saves. Promoted from the bag prototype's variant A
 // (ui/bag-prototype/, .scratch/inventory/issues/09-the-bag-in-the-adventure.md).
+// A panel can open beside the bag's (the stash's, by touching its chest's
+// lid): the bag's opens with it, with no reach, and things are carried
+// between the two as within the bag's; both close together
+// (.scratch/inventory/issues/15-the-stash.md).
 
 /** A fist or the weapon's tip, where it is in the world, and whose hand. */
 export interface BagProbe {
@@ -61,6 +65,50 @@ export interface BagWorld {
   beltAt?(at: Vector3): number | null;
 }
 
+/**
+ * A panel open beside the bag's, whose page of slots is touched and carried
+ * to and from as the bag's are: the stash's. Its slots are places in your
+ * things, so every move is the inventory's.
+ */
+export interface BesidePanel {
+  readonly root: Object3D;
+  readonly isOpen: boolean;
+  /** The page showing, and how many there are (its tabs). */
+  readonly page: number;
+  readonly pages: number;
+  setPage(page: number): void;
+  /** Open on its first page, and close. */
+  show(): void;
+  close(): void;
+  /** Your things changed: fill its slots again. */
+  changed(): void;
+  /** The place in your things its slot `i` on the page showing is. */
+  where(i: number): Where;
+  /** Its slot `world` touches, if any. */
+  spotAt(world: Vector3, reach: Reach): number | null;
+  /** Where letting a carried item go at `world` puts it, if on this panel. */
+  targetAt(world: Vector3, reach: Reach & { near: number }): number | null;
+  /** Its page tab `world` touches, if any. */
+  tabAt(world: Vector3, reach: Reach): number | null;
+  /** Is `world` over it? */
+  over(world: Vector3, reach: Reach): boolean;
+  update(dt: number, shows: BesideShows): void;
+}
+
+/** What a panel beside the bag's shows this frame, as `PanelShows` does for the bag's, by its slots on the page showing. */
+export interface BesideShows {
+  hover: number | null;
+  lifted: number | null;
+  target: { i: number; fits: boolean } | null;
+  card: Stack | null;
+  cardOver: number | null;
+  tab: number | null;
+}
+
+/** A tab: one of the bag panel's, or a page's of the panel beside it. */
+type Tab = { readonly on: 'bag'; readonly page: Page } | { readonly on: 'beside'; readonly page: number };
+const sameTab = (a: Tab | null, b: Tab | null) => (a && b ? a.on === b.on && a.page === b.page : a === b);
+
 /** What the refusals say, in the log the checks read. */
 const REFUSED: Readonly<Record<Refusal, string>> = {
   class: 'not your class',
@@ -98,12 +146,15 @@ export class Bag {
   /** What happened, newest last, for the checks. */
   readonly lines: string[] = [];
   private readonly track: Record<Handedness, HandTrack> = { left: newTrack(), right: newTrack() };
-  private carry: { from: Where; page: Page; spot: Spot; stack: Stack; probe: number; hand: Handedness } | null = null;
-  /** The hip slot a carried item is over, off the panel, and whether it may go there: for the belt to light. */
+  /** What's carried, from where: `page` is the page it was on, of the panel it was on. */
+  private carry: { from: Where; page: Page | number; spot: Spot; stack: Stack; probe: number; hand: Handedness } | null = null;
+  /** The hip slot a carried item is over, off the panels, and whether it may go there: for the belt to light. */
   beltTarget: { slot: number; fits: boolean } | null = null;
   private lastHover: Spot | null = null;
   /** The tab each probe rested on last frame: it must leave before it can press again. */
-  private readonly onTab: (Page | null)[] = [];
+  private readonly onTab: (Tab | null)[] = [];
+  /** The panel open beside the bag's, if any. */
+  private beside: BesidePanel | null = null;
   private tabArming = 0;
 
   constructor(
@@ -135,17 +186,47 @@ export class Bag {
     this.held.visible = false;
   }
 
-  /** Your things changed: the panel fills its slots again. */
-  changed(): void {
-    this.panel.changed();
+  /** The panel open beside the bag's, if any. */
+  get besideOpen(): BesidePanel | null {
+    return this.beside;
   }
 
-  /** Put back whatever's carried, and shut the bag. */
+  /** Your things changed: the panels fill their slots again. */
+  changed(): void {
+    this.panel.changed();
+    this.beside?.changed();
+  }
+
+  /**
+   * Open `beside` next to the bag's panel, which comes round in front of a
+   * head at `head` looking along `gaze`, with no reach: the stash's, when its
+   * chest's lid is touched.
+   */
+  openBeside(beside: BesidePanel, head: Vector3, gaze: Vector3, probes: readonly (BagProbe | null)[], why: string): void {
+    this.cancel();
+    if (this.beside !== beside) this.beside?.close();
+    this.beside = beside;
+    if (beside.root.parent !== this.panel.root) this.panel.root.add(beside.root);
+    this.panel.place(head, gaze);
+    this.panel.setPage('bag');
+    beside.show();
+    this.armTabs(probes);
+    sfx.parchment();
+    this.log(`opened: ${why}`);
+  }
+
+  /** Put back whatever's carried, and shut the bag and what's open beside it. */
   close(why: string): void {
     if (!this.isOpen) return;
     this.cancel();
     this.panel.close();
+    this.shutBeside();
     this.log(`closed: ${why}`);
+  }
+
+  private shutBeside(): void {
+    this.beside?.close();
+    this.beside = null;
   }
 
   private log(line: string): void {
@@ -207,43 +288,104 @@ export class Bag {
 
     if (this.isOpen && this.panel.follow(head, gaze) === 'walkedAway') {
       this.cancel();
+      this.shutBeside();
       this.log('closed: walked away');
     }
     if (!this.isOpen) return;
     const shows = this.carry ? this.carrying(input) : this.touching(input);
-    this.pressTabs(input, shows);
+    const tab = this.pressTabs(input);
+    this.show(dt, shows, tab);
+  }
+
+  /** Each panel draws what it's shown: the card on the panel whose slot it's over. */
+  private show(dt: number, shows: PanelShows, tab: Tab | null): void {
+    const { beside } = this;
+    const onBeside = (spot: Spot | null) => (spot?.in === 'beside' ? spot.i : null);
+    const cardBeside = shows.cardOver?.in === 'beside';
+    if (beside) {
+      beside.update(dt, {
+        hover: onBeside(shows.hover),
+        lifted: onBeside(shows.lifted),
+        target: shows.target?.spot.in === 'beside' ? { i: shows.target.spot.i, fits: shows.target.fits } : null,
+        card: cardBeside ? shows.card : null,
+        cardOver: onBeside(shows.cardOver),
+        tab: tab?.on === 'beside' ? tab.page : null,
+      });
+    }
+    if (cardBeside) {
+      shows.card = null;
+      shows.cardOver = null;
+    }
+    shows.tab = tab?.on === 'bag' ? tab.page : null;
     this.panel.update(dt, shows);
+  }
+
+  /** The slot `at` touches: the bag panel's, or the one's beside it. */
+  private spotAt(at: Vector3, reach: Reach): Spot | null {
+    const spot = this.panel.spotAt(at, reach);
+    if (spot) return spot;
+    const i = this.beside?.spotAt(at, reach) ?? null;
+    return i === null ? null : { in: 'beside', i };
+  }
+
+  /** Where letting a carried `id` go at `at` puts it. */
+  private targetAt(at: Vector3, id: string): Spot | null {
+    const R = CONFIG.bag.release;
+    const spot = this.panel.targetAt(at, id, R);
+    if (spot) return spot;
+    const i = this.beside?.targetAt(at, R) ?? null;
+    return i === null ? null : { in: 'beside', i };
+  }
+
+  /** The place in your things a slot is. */
+  private where(spot: Spot): Where | null {
+    if (spot.in !== 'beside') return this.panel.where(spot);
+    return this.beside?.where(spot.i) ?? null;
+  }
+
+  private stackAt(spot: Spot): Stack | null {
+    const where = this.where(spot);
+    return where ? this.world.inventory.at(where) : null;
+  }
+
+  /** The page showing on the panel `spot` is on. */
+  private pageOf(spot: Spot): Page | number {
+    return spot.in === 'beside' ? (this.beside?.page ?? -1) : this.panel.page;
   }
 
   private open(hand: Handedness, speed: number, input: BagInput): void {
     const R = CONFIG.bag.reach;
     this.panel.place(input.head, input.gaze);
-    this.lastHover = null;
-    // A fist or tip already resting on a tab as it opens must leave it first.
-    input.probes.forEach((p, i) => (this.onTab[i] = p && this.panel.tabAt(p.at, CONFIG.bag.touch)));
-    this.tabArming = CONFIG.bag.tabs.arming;
+    this.armTabs(input.probes);
     this.world.buzz(hand, R.openPulse.intensity, R.openPulse.ms);
     sfx.parchment();
     this.log(`opened: ${hand} hand at ${speed.toFixed(2)} m/s`);
   }
 
+  /** A fist or tip already resting on a tab as the panels open must leave it first. */
+  private armTabs(probes: readonly (BagProbe | null)[]): void {
+    this.lastHover = null;
+    probes.forEach((p, i) => (this.onTab[i] = p && this.tabAt(p.at)));
+    this.tabArming = CONFIG.bag.tabs.arming;
+  }
+
   /** Nothing carried: a fist or the tip on an item shows its card, and the grip picks it up. */
   private touching(input: BagInput): PanelShows {
-    const { panel, world } = this;
+    const { world } = this;
     const B = CONFIG.bag.buzz;
     const shows = nothingShown();
     for (let i = 0; i < input.probes.length; i++) {
       const probe = input.probes[i];
-      const spot = probe && panel.spotAt(probe.at, CONFIG.bag.touch);
-      const stack = spot && panel.stackAt(spot);
+      const spot = probe && this.spotAt(probe.at, CONFIG.bag.touch);
+      const stack = spot && this.stackAt(spot);
       if (!probe || !spot || !stack) continue;
       if (this.track[probe.hand].gripDown) {
-        const from = panel.where(spot)!;
+        const from = this.where(spot)!;
         if (from.in === 'quest') {
           world.buzz(probe.hand, B.refused.intensity, B.refused.ms);
           this.log(`refused (${REFUSED.quest}): ${itemOf(stack.id)?.name}`);
         } else {
-          this.carry = { from, page: panel.page, spot, stack, probe: i, hand: probe.hand };
+          this.carry = { from, page: this.pageOf(spot), spot, stack, probe: i, hand: probe.hand };
           world.buzz(probe.hand, B.pick.intensity, B.pick.ms);
           this.log(`picked up: ${itemOf(stack.id)?.name} from ${label(from)}`);
           return this.carrying(input);
@@ -255,7 +397,7 @@ export class Bag {
       }
     }
     this.lastHover = shows.hover;
-    const card = shows.hover && panel.stackAt(shows.hover);
+    const card = shows.hover && this.stackAt(shows.hover);
     shows.card = card;
     shows.cardOver = card ? shows.hover : null;
     return shows;
@@ -264,7 +406,7 @@ export class Bag {
   /** Something carried: it sticks to what touched it, and letting the grip go puts it where it's over. */
   private carrying(input: BagInput): PanelShows {
     const carry = this.carry!;
-    const { panel, world } = this;
+    const { world } = this;
     const { inventory } = world;
     const B = CONFIG.bag.buzz;
     const shows = nothingShown();
@@ -278,12 +420,13 @@ export class Bag {
     this.held.position.copy(probe.at);
     this.held.scale.setScalar(0.12);
     this.held.visible = true;
-    const target = panel.targetAt(probe.at, carry.stack.id, CONFIG.bag.release);
-    // Off the panel, over a hip: onto the belt.
-    const hip = !target && !panel.over(probe.at, CONFIG.bag.release) ? (world.beltAt?.(probe.at) ?? null) : null;
-    const to: Where | null = target ? panel.where(target) : hip !== null ? { in: 'belt', slot: hip } : null;
+    const target = this.targetAt(probe.at, carry.stack.id);
+    // Off the panels, over a hip: onto the belt.
+    const R = CONFIG.bag.release;
+    const hip = !target && !this.panel.over(probe.at, R) && !this.beside?.over(probe.at, R) ? (world.beltAt?.(probe.at) ?? null) : null;
+    const to: Where | null = target ? this.where(target) : hip !== null ? { in: 'belt', slot: hip } : null;
     this.beltTarget = hip !== null ? { slot: hip, fits: inventory.check(carry.from, to!) === null } : null;
-    const lifted = carry.spot.in !== 'grid' || carry.page === panel.page ? carry.spot : null;
+    const lifted = carry.spot.in === 'gear' || carry.spot.in === 'belt' || carry.page === this.pageOf(carry.spot) ? carry.spot : null;
     shows.lifted = lifted;
     shows.card = carry.stack;
     shows.cardOver = target ?? lifted;
@@ -307,7 +450,7 @@ export class Bag {
         this.log(`${to.in === 'gear' ? 'wore' : 'moved'}: ${name} to ${label(to)}`);
       }
       world.apply(effects, probe.at);
-    } else if (panel.over(probe.at, CONFIG.bag.release)) {
+    } else if (this.panel.over(probe.at, CONFIG.bag.release) || this.beside?.over(probe.at, CONFIG.bag.release)) {
       this.log(`back: ${name} to ${label(carry.from)}`);
     } else {
       const effects = inventory.move(carry.from, { in: 'ground' });
@@ -325,27 +468,43 @@ export class Bag {
     return shows;
   }
 
-  /** A fist or the tip arriving on a tab switches the page. */
-  private pressTabs(input: BagInput, shows: PanelShows): void {
+  /** The tab `at` touches: the bag panel's, or a page's of the panel beside it. */
+  private tabAt(at: Vector3): Tab | null {
+    const page = this.panel.tabAt(at, CONFIG.bag.touch);
+    if (page) return { on: 'bag', page };
+    const other = this.beside?.tabAt(at, CONFIG.bag.touch) ?? null;
+    return other === null ? null : { on: 'beside', page: other };
+  }
+
+  /** A fist or the tip arriving on a tab switches the page. Returns the tab one rests on, to light. */
+  private pressTabs(input: BagInput): Tab | null {
     this.tabArming = Math.max(0, this.tabArming - input.dt);
-    let press: { page: Page; hand: Handedness } | null = null;
+    let press: { tab: Tab; hand: Handedness } | null = null;
+    let lit: Tab | null = null;
     input.probes.forEach((probe, i) => {
-      const tab = probe && this.panel.tabAt(probe.at, CONFIG.bag.touch);
+      const tab = probe && this.tabAt(probe.at);
       const was = this.onTab[i] ?? null;
       this.onTab[i] = tab;
       if (!probe || !tab) return;
-      shows.tab ??= tab;
-      if (tab !== was && this.tabArming <= 0 && !press) press = { page: tab, hand: probe.hand };
+      lit ??= tab;
+      if (!sameTab(tab, was) && this.tabArming <= 0 && !press) press = { tab, hand: probe.hand };
     });
-    if (!press) return;
-    const { page, hand } = press as { page: Page; hand: Handedness };
+    if (!press) return lit;
+    const { tab, hand } = press as { tab: Tab; hand: Handedness };
     this.tabArming = CONFIG.bag.tabs.rearm;
     const B = CONFIG.bag.buzz.tab;
     this.world.buzz(hand, B.intensity, B.ms);
-    if (page === this.panel.page) return;
-    this.panel.setPage(page);
+    if (tab.on === 'bag') {
+      if (tab.page === this.panel.page) return lit;
+      this.panel.setPage(tab.page);
+      this.log(`page: ${tab.page}`);
+    } else if (this.beside) {
+      if (tab.page === this.beside.page) return lit;
+      this.beside.setPage(tab.page);
+      this.log(`beside page: ${tab.page + 1}`);
+    }
     this.lastHover = null;
-    this.log(`page: ${page}`);
+    return lit;
   }
 }
 

@@ -49,6 +49,15 @@ export interface VillagerSpot extends Spot {
   readonly turn: number;
 }
 
+/**
+ * The stash's chest: where it stands (yaw as a model turns: 0 faces +Z, its
+ * front), the floor's height under it, and the building it's in.
+ */
+export interface StashSpot extends Spot {
+  readonly y: number;
+  readonly interior: InteriorId;
+}
+
 /** Where you wake after a death, and the building it's in, if any. */
 export interface Respawn extends Spot {
   readonly interior: InteriorId | null;
@@ -207,6 +216,8 @@ export interface Zone extends MapBase {
 export interface StartingZone extends Zone {
   /** Where you wake after a death: the village's is by the inn's hearth, the mine's outside its mouth. */
   readonly respawns: { readonly village: Respawn; readonly mine: Respawn };
+  /** The stash's chest, by the inn's hearth: touch its lid for the stash. */
+  readonly stash: StashSpot;
   /** Where Marshal Hale, the quest giver, stands (yaw as a model turns: 0 faces +Z). */
   readonly hale: Spot;
   /** Where each quest sends you, for the quest arrow. */
