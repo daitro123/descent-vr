@@ -24,16 +24,51 @@ export function arrowGeometry(): BufferGeometry {
   return b.build();
 }
 
+/**
+ * How a bow is drawn, by its item's model: every bow is the one recurve,
+ * its limbs `scale` times as long, in its own woods, so a new bow costs no
+ * new draw (one mesh, its geometry swapped). Hale's Old Hunting Bow is the
+ * long dark one bound in gold.
+ */
+export interface BowLook {
+  /** The limbs' length, times `CONFIG.ranger.bow.limb`. */
+  readonly scale: number;
+  /** The limbs' two woods, in alternate lengths. */
+  readonly wood: number;
+  readonly dark: number;
+  readonly grip: number;
+  /** Caps on the limbs' tips, if any. */
+  readonly tips?: number;
+  /** Bands round the limbs, if any. */
+  readonly bands?: number;
+}
+
+export const BOW_LOOKS: Readonly<Record<string, BowLook>> = {
+  // The ranger's starting bow: the recurve as the ranger prototype had it.
+  'short-bow': { scale: 1, wood: PAL.wood, dark: PAL.woodDark, grip: PAL.leather },
+  // Loot's, white, green and blue: pale ash, yew's red heart and cream sapwood, dark horn tipped in silver.
+  'ash-bow': { scale: 1.06, wood: 0xc8a878, dark: 0xa88a5a, grip: PAL.leather },
+  'yew-bow': { scale: 1.1, wood: 0x9a4a2a, dark: 0xd8b888, grip: 0x3a2a20 },
+  'horn-bow': { scale: 1.04, wood: 0x3a3440, dark: 0x241e2a, grip: 0x2a3a5a, tips: 0xd8d8e0 },
+  // Hale's: long, near black, bound and tipped in gold.
+  'hunting-bow': { scale: 1.14, wood: 0x4a2a18, dark: 0x2e1a10, grip: PAL.leather, tips: PAL.gold, bands: PAL.gold },
+};
+
+/** The look of a bow of `model`: a model this table doesn't know draws as the short bow. */
+export const bowLookOf = (model: string | null | undefined): BowLook => BOW_LOOKS[model ?? ''] ?? BOW_LOOKS['short-bow'];
+
 /** A recurve in its own frame: +Y up the limb, −Z the way the arrow flies, the string at +Z. */
-function bowGeometry(): BufferGeometry {
-  const { limb: L, brace: B } = CONFIG.ranger.bow;
+function bowGeometry(look: BowLook): BufferGeometry {
+  const { limb, brace: B } = CONFIG.ranger.bow;
+  const L = limb * look.scale;
+  const k = look.scale;
   const b = new ModelBuilder(5);
   // The limbs bow forward of the grip and sweep back to the tips, where the string ties on.
   const pts: [number, number][] = [
     [0, -0.03],
-    [0.18, -0.045],
-    [0.38, -0.02],
-    [0.56, 0.06],
+    [0.18 * k, -0.045],
+    [0.38 * k, -0.02],
+    [0.56 * k, 0.06],
     [L, B],
   ];
   for (const s of [1, -1]) {
@@ -41,12 +76,22 @@ function bowGeometry(): BufferGeometry {
       const [y0, z0] = pts[i];
       const [y1, z1] = pts[i + 1];
       const w = 0.034 - i * 0.005;
-      b.bar([0, s * y0, z0], [0, s * y1, z1], w, 0.02, { color: i % 2 ? PAL.woodDark : PAL.wood });
+      b.bar([0, s * y0, z0], [0, s * y1, z1], w, 0.02, { color: i % 2 ? look.dark : look.wood });
     }
+    if (look.tips !== undefined) b.box(0.022, 0.05, 0.03, { at: [0, s * (L - 0.02), B - 0.01], color: look.tips });
+    if (look.bands !== undefined) for (const y of [0.1, 0.3]) b.box(0.04, 0.018, 0.028, { at: [0, s * y * k, -0.04], color: look.bands });
   }
-  b.box(0.04, 0.12, 0.045, { at: [0, 0, -0.03], color: PAL.leather });
+  b.box(0.04, 0.12, 0.045, { at: [0, 0, -0.03], color: look.grip });
   return b.build();
 }
+
+/** Each look's geometry, built once. */
+const geometries = new Map<BowLook, BufferGeometry>();
+const geometryOf = (look: BowLook): BufferGeometry => {
+  let g = geometries.get(look);
+  if (!g) geometries.set(look, (g = bowGeometry(look)));
+  return g;
+};
 
 /**
  * The bow and its string, placed each frame from the bow hand: the limb runs
@@ -78,9 +123,13 @@ export class Bow {
   nocked = false;
   /** The bow is in the hand and the hand is tracked. */
   tracked = false;
+  /** How it's drawn: the worn bow's look. */
+  look: BowLook = bowLookOf(null);
+  private readonly body: Mesh;
 
   constructor(parent: Object3D, arrow: BufferGeometry) {
-    this.root.add(new Mesh(bowGeometry(), sharedModelMaterial()));
+    this.body = new Mesh(geometryOf(this.look), sharedModelMaterial());
+    this.root.add(this.body);
     const g = new BufferGeometry();
     this.stringPos = new Float32BufferAttribute(new Float32Array(9), 3);
     g.setAttribute('position', this.stringPos);
@@ -89,6 +138,17 @@ export class Bow {
     this.nockedArrow = new Mesh(arrow, this.arrowMaterial);
     this.nockedArrow.visible = false;
     parent.add(this.root, this.string, this.nockedArrow);
+  }
+
+  /** Draw the bow of item model `model` (the worn main hand's). Its limbs' length moves the string's tips. */
+  dress(model: string | null | undefined): void {
+    this.look = bowLookOf(model);
+    this.body.geometry = geometryOf(this.look);
+  }
+
+  /** From the grip to each limb's tip, m. */
+  get limb(): number {
+    return CONFIG.ranger.bow.limb * this.look.scale;
   }
 
   /** The nocked arrow glows in `colour` (Power Shot), or not (null). */
@@ -128,8 +188,9 @@ export class Bow {
 
     this.rest.copy(this.grip).addScaledVector(this.up, B.rest);
     this.stringRest.copy(this.rest).addScaledVector(this.forward, -B.brace);
-    this.topTip.copy(this.grip).addScaledVector(this.up, B.limb).addScaledVector(this.forward, -B.brace);
-    this.bottomTip.copy(this.grip).addScaledVector(this.up, -B.limb).addScaledVector(this.forward, -B.brace);
+    const limb = this.limb;
+    this.topTip.copy(this.grip).addScaledVector(this.up, limb).addScaledVector(this.forward, -B.brace);
+    this.bottomTip.copy(this.grip).addScaledVector(this.up, -limb).addScaledVector(this.forward, -B.brace);
 
     if (this.nocked) {
       // The string follows the hand back, no further than full draw.

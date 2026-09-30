@@ -24,9 +24,7 @@ const CLASSES: readonly ClassId[] = ['warrior', 'ranger', 'mage'];
 /**
  * The smith's white stock from the catalogue: the loot table's white weapons
  * and off hands of every class at `hands`' item levels, and its white armour
- * at `armour`'s, each slot's in the gear panel's order. Only the warrior's
- * weapons exist until the ranger's and mage's join the loot table (ticket 16),
- * and they come in here with no change.
+ * at `armour`'s, each slot's in the gear panel's order.
  */
 function smithStock(): ItemId[] {
   const { hands, armour } = CONFIG.vendors.smith;

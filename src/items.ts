@@ -34,7 +34,7 @@ interface Common {
   readonly name: string;
   readonly level: number;
   readonly rarity: Rarity;
-  /** How it's drawn: its model, and its cell in the icon atlas. For a warrior's sword, which blade (weapons.ts). */
+  /** How it's drawn: its model, and its cell in the icon atlas. For a warrior's sword, which blade (weapons.ts); a bow's or wand's look in the hand (player/bow.ts, player/mage.ts). */
   readonly model: string;
 }
 
@@ -134,15 +134,8 @@ const junk = (): JunkItem[] =>
     kinds.flatMap(([base, name, model]) => LOOT_LEVELS.map((level): JunkItem => ({ id: levelled(base, level), name, kind: 'junk', level, rarity: 'grey', model }))),
   );
 
-/**
- * The gear loot drops, at every loot level: for each slot a white, a green and
- * a blue (placeholder names). Weapons and off hands are the warrior's, the only
- * class that wears gear yet; ticket 16 adds the ranger's and mage's. Green and
- * blue armour comes once for each main attribute, so a drop can carry yours.
- */
-const LOOT_GEAR: Readonly<Record<GearSlot, readonly [white: string, green: string, blue: string]>> = {
-  mainHand: ['Iron Longsword', 'Tempered Longsword', 'Moonsteel Longsword'],
-  offHand: ['Oak Heater Shield', 'Banded Heater Shield', 'Moonsteel Kite Shield'],
+/** Loot's armour, for each slot a white, a green and a blue, anyone's to wear. Green and blue armour comes once for each main attribute, so a drop can carry yours. */
+const LOOT_ARMOUR: Readonly<Record<Exclude<GearSlot, Hand>, readonly [white: string, green: string, blue: string]>> = {
   head: ['Leather Cap', 'Studded Coif', 'Chain Coif'],
   chest: ['Padded Jerkin', 'Studded Jerkin', 'Chain Hauberk'],
   hands: ['Leather Gloves', 'Studded Gloves', 'Chain Gauntlets'],
@@ -150,34 +143,88 @@ const LOOT_GEAR: Readonly<Record<GearSlot, readonly [white: string, green: strin
   feet: ['Leather Boots', 'Studded Boots', 'Chain Boots'],
 };
 
+/** The hands' slots: what they hold is locked to a class. */
+type Hand = 'mainHand' | 'offHand';
+
+/** A loot piece for the hands: its name and its model. */
+type HandPiece = readonly [name: string, model: string];
+
+/**
+ * Loot's weapons and off hands, by class and slot: a white, a green and a
+ * blue, named in the warrior's way (a plain material, a better one, and
+ * moon-something for the blue). The ranger's main hand is a bow, its off hand
+ * a quiver; the mage's a wand or staff, and a focus. The model is the look:
+ * a warrior's blade is the plain sword's and its shield the round shield's;
+ * each bow and wand or staff has its own (player/bow.ts, player/mage.ts), and
+ * quivers and focuses are only ever drawn in the bag and on the ground.
+ */
+const LOOT_HANDS: Readonly<Record<ClassId, Readonly<Record<Hand, readonly [white: HandPiece, green: HandPiece, blue: HandPiece]>>>> = {
+  warrior: {
+    mainHand: [
+      ['Iron Longsword', 'plain'],
+      ['Tempered Longsword', 'plain'],
+      ['Moonsteel Longsword', 'plain'],
+    ],
+    offHand: [
+      ['Oak Heater Shield', 'round-shield'],
+      ['Banded Heater Shield', 'round-shield'],
+      ['Moonsteel Kite Shield', 'round-shield'],
+    ],
+  },
+  ranger: {
+    mainHand: [
+      ['Ash Longbow', 'ash-bow'],
+      ['Yew Longbow', 'yew-bow'],
+      ['Moonhorn Recurve', 'horn-bow'],
+    ],
+    offHand: [
+      ['Hide Quiver', 'hide-quiver'],
+      ['Tooled Quiver', 'tooled-quiver'],
+      ['Moonhide Quiver', 'moonhide-quiver'],
+    ],
+  },
+  mage: {
+    mainHand: [
+      ['Birch Wand', 'birch-wand'],
+      ['Rowan Staff', 'rowan-staff'],
+      ['Moonwood Staff', 'moonwood-staff'],
+    ],
+    offHand: [
+      ['Quartz Focus', 'quartz-focus'],
+      ['Amethyst Focus', 'amethyst-focus'],
+      ['Moonstone Focus', 'moonstone-focus'],
+    ],
+  },
+};
+
 /** A green or blue armour piece's name ends in its main attribute's. */
 const OF_THE: Readonly<Record<MainAttribute, string>> = { strength: 'Bear', agility: 'Fox', intellect: 'Owl' };
 
-/** How a loot piece is drawn: the warrior's blade is the plain sword's, the shield the round shield's; armour by its slot. */
-const LOOT_MODEL: Readonly<Record<GearSlot, string>> = {
-  mainHand: 'plain',
-  offHand: 'round-shield',
-  head: 'helm',
-  chest: 'chest',
-  hands: 'gloves',
-  legs: 'legs',
-  feet: 'boots',
-};
+/** How a loot armour piece is drawn: by its slot. */
+const ARMOUR_MODEL: Readonly<Record<Exclude<GearSlot, Hand>, string>> = { head: 'helm', chest: 'chest', hands: 'gloves', legs: 'legs', feet: 'boots' };
 
 const slug = (name: string) => name.toLowerCase().replace(/[^a-z]+/g, '-');
 
+const RARITIES = ['white', 'green', 'blue'] as const;
+
 function lootGear(): GearItem[] {
   const out: GearItem[] = [];
+  for (const klass of ['warrior', 'ranger', 'mage'] as const)
+    for (const slot of ['mainHand', 'offHand'] as const)
+      RARITIES.forEach((rarity, r) => {
+        const [name, model] = LOOT_HANDS[klass][slot][r];
+        const noArmour = slot === 'offHand' && klass !== 'warrior' ? { noArmour: true as const } : {};
+        for (const level of LOOT_LEVELS) out.push(gear(levelled(slug(name), level), name, slot, level, rarity, model, { loot: true, class: klass, ...noArmour }));
+      });
   for (const slot of GEAR_SLOTS) {
-    const hand = slot === 'mainHand' || slot === 'offHand';
-    (['white', 'green', 'blue'] as const).forEach((rarity, r) => {
-      const name = LOOT_GEAR[slot][r];
-      const mains: (MainAttribute | null)[] = hand || rarity === 'white' ? [null] : ['strength', 'agility', 'intellect'];
+    if (slot === 'mainHand' || slot === 'offHand') continue;
+    RARITIES.forEach((rarity, r) => {
+      const name = LOOT_ARMOUR[slot][r];
+      const mains: (MainAttribute | null)[] = rarity === 'white' ? [null] : ['strength', 'agility', 'intellect'];
       for (const main of mains)
         for (const level of LOOT_LEVELS) {
           const full = main ? `${name} of the ${OF_THE[main]}` : name;
-          const more: Partial<GearItem> = { loot: true, ...(hand ? { class: 'warrior' } : main ? { main } : {}) };
-          out.push(gear(levelled(slug(full), level), full, slot, level, rarity, LOOT_MODEL[slot], more));
+          out.push(gear(levelled(slug(full), level), full, slot, level, rarity, ARMOUR_MODEL[slot], { loot: true, ...(main ? { main } : {}) }));
         }
     });
   }
@@ -219,7 +266,7 @@ export const CATALOGUE: Readonly<Record<ItemId, ItemDef>> = Object.fromEntries(
     // The warrior's starting kit, as today: the plain sword and the round shield.
     gear('plain-sword', 'Plain Longsword', 'mainHand', 1, 'white', 'plain', { class: 'warrior' }),
     gear('round-shield', 'Round Shield', 'offHand', 1, 'white', 'round-shield', { class: 'warrior' }),
-    // The ranger's and mage's (placeholders until the Abilities map settles how they fight).
+    // The ranger's and mage's.
     gear('short-bow', 'Short Bow', 'mainHand', 1, 'white', 'short-bow', { class: 'ranger' }),
     gear('quiver', 'Quiver', 'offHand', 1, 'white', 'quiver', { class: 'ranger', noArmour: true }),
     gear('apprentice-wand', "Apprentice's Wand", 'mainHand', 1, 'white', 'wand', { class: 'mage' }),
@@ -234,7 +281,7 @@ export const CATALOGUE: Readonly<Record<ItemId, ItemDef>> = Object.fromEntries(
     ...forEveryClass('timberline-leggings', 'Timberline Leggings', 'legs', 3, 'green', 'timberline-leggings'),
     ...forEveryClass('marshals-cap', "Marshal's Cap", 'head', 3, 'green', 'marshals-cap'),
     ...forEveryClass('wardens-mantle', "Warden's Mantle", 'chest', 5, 'blue', 'wardens-mantle'),
-    // The warrior's: darker-bladed, with a gilded guard. The ranger's and mage's are placeholders.
+    // The warrior's: darker-bladed, with a gilded guard. The ranger's a long hunting bow bound in gold, the mage's a bone-pale staff with a warded stone.
     gear('hale-longsword', "Hale's Old Longsword", 'mainHand', 5, 'blue', 'hale', { class: 'warrior' }),
     gear('hale-hunting-bow', "Hale's Old Hunting Bow", 'mainHand', 5, 'blue', 'hunting-bow', { class: 'ranger' }),
     gear('crypt-warded-staff', 'Crypt-Warded Staff', 'mainHand', 5, 'blue', 'crypt-staff', { class: 'mage' }),

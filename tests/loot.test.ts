@@ -119,10 +119,9 @@ describe('what drops', () => {
     }
   });
 
-  it("comes in every slot for a warrior, and only armour for a class with no loot weapons yet", () => {
+  it('comes in every slot for every class', () => {
     const slots = (klass: ClassId) => new Set((itemsOf(many(kill('leader', 3), klass), 'gear') as GearItem[]).map((i) => i.slot));
-    expect(slots('warrior')).toEqual(new Set(GEAR_SLOTS));
-    expect(slots('mage')).toEqual(new Set(['head', 'chest', 'hands', 'legs', 'feet']));
+    for (const klass of ['warrior', 'ranger', 'mage'] as const) expect(slots(klass), klass).toEqual(new Set(GEAR_SLOTS));
   });
 });
 
