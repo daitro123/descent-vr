@@ -1,6 +1,8 @@
 import { CONFIG, type EnemyConfig } from './config';
+import { Inventory, type InventoryEffect, type InventorySave } from './inventory';
+import { type ClassId, itemOf, type Worn, WORN_NOTHING } from './items';
 import type { CampId } from './maps/types';
-import { BARKS, CHAIN, CHAIN_DONE, type Item, type Objective, type Place, type QuestId, RETURN_TO_HALE, type Sword, type VillagerId } from './quests';
+import { BARKS, CHAIN, CHAIN_DONE, type Item, type Objective, type Place, type QuestId, RETURN_TO_HALE, type Sword, SWORDS, type VillagerId } from './quests';
 
 // The rules of progress in the Adventure, with no three.js in it: events in,
 // effects and answers out. The Adventure feeds it what happens in the world
@@ -35,10 +37,11 @@ export interface Progress {
   readonly level: number;
   /** XP in all, since level 1. */
   readonly xp: number;
-  readonly sword: Sword;
   /** Each quest of the chain, by id. */
   readonly quests: Readonly<Record<QuestId, QuestProgress>>;
   readonly wardenBeaten: boolean;
+  /** The bag, gear, belt, coins, stash and chests opened. */
+  readonly inventory: InventorySave;
 }
 
 /** Something that happened in the world that progress may care about. */
@@ -67,8 +70,8 @@ export type Effect =
   | { readonly kind: 'quest'; readonly quest: QuestId; readonly stage: Stage }
   /** One of a quest's objectives counted one more: `count` of its need. */
   | { readonly kind: 'progress'; readonly quest: QuestId; readonly objective: number; readonly count: number }
-  /** A new sword in your hand. */
-  | { readonly kind: 'sword'; readonly sword: Sword };
+  /** What happened to your things: a reward put straight into your hand, say. */
+  | InventoryEffect;
 
 /** A button on Hale's board: Accept, Not now, Hand in, Goodbye. */
 export type Button = 'accept' | 'notNow' | 'handIn' | 'goodbye';
@@ -118,18 +121,27 @@ export interface Stats {
   readonly maxHp: number;
   /** Every blow you deal is multiplied by this. */
   readonly damage: number;
+  /** Cuts the blows you take (items.ts, armourCut). */
+  readonly armour: number;
   readonly abilities: readonly Ability[];
 }
 
 /** The step a level brings, to your damage and to an enemy's health and damage: 1 at level 1. */
 const stepAt = (level: number) => 1 + CONFIG.levels.step * (level - 1);
 
-/** Your numbers at `level`, with `sword` in your hand: Hale's old longsword adds one level's step to your damage. */
-export function statsAt(level: number, sword: Sword = 'plain'): Stats {
+/**
+ * Your numbers at `level`, wearing gear that adds up to `worn`: its Stamina
+ * adds health, its main attribute and your weapon's damage rating add to your
+ * damage (Hale's old longsword adds one level's step), and its armour cuts
+ * what you take.
+ */
+export function statsAt(level: number, worn: Worn = WORN_NOTHING): Stats {
   const L = CONFIG.levels;
+  const A = CONFIG.items.attribute;
   return {
-    maxHp: CONFIG.player.maxHp + L.health * (level - 1),
-    damage: stepAt(level) + L.swords[sword],
+    maxHp: CONFIG.player.maxHp + L.health * (level - 1) + A.health * worn.stamina,
+    damage: stepAt(level) + worn.damage + A.damage * worn.main,
+    armour: worn.armour,
     abilities: ABILITIES.filter((a) => L.unlocks[a] <= level),
   };
 }
@@ -159,11 +171,15 @@ export class AdventureState {
   private readonly stages: Stage[] = CHAIN.map((_, i) => (i === 0 ? 'offered' : 'locked'));
   /** Each quest's objectives' counts. */
   private readonly counts: number[][] = CHAIN.map((q) => q.objectives.map(() => 0));
-  private held: Sword = 'plain';
   private beaten = false;
+  /** Your things. Every character is a warrior until the Abilities map's roster brings classes. */
+  readonly inventory: Inventory;
 
   /** A new character, or one restored from a snapshot. */
   constructor(saved?: Progress) {
+    const you = this;
+    const wearer = { class: 'warrior' as ClassId, get level() { return you.level; } };
+    this.inventory = new Inventory(wearer, saved?.inventory);
     if (saved) this.restore(saved);
   }
 
@@ -171,7 +187,7 @@ export class AdventureState {
   snapshot(): Progress {
     const quests = {} as Record<QuestId, QuestProgress>;
     CHAIN.forEach((q, i) => (quests[q.id] = { stage: this.stages[i], counts: [...this.counts[i]] }));
-    return { level: this.level, xp: this.total, sword: this.held, quests, wardenBeaten: this.beaten };
+    return { level: this.level, xp: this.total, quests, wardenBeaten: this.beaten, inventory: this.inventory.snapshot() };
   }
 
   /**
@@ -188,7 +204,6 @@ export class AdventureState {
     // The XP its recorded level needs: L.xp[0] is level 2's.
     const levelNeeds = L.xp[Math.min(saved.level, L.xp.length + 1) - 2] ?? 0;
     this.total = Math.min(Math.max(saved.xp, levelNeeds, 0), cap);
-    this.held = saved.sword;
     this.beaten = saved.wardenBeaten;
     CHAIN.forEach((quest, i) => {
       const kept = saved.quests[quest.id] as QuestProgress | undefined;
@@ -238,12 +253,14 @@ export class AdventureState {
   }
 
   get stats(): Stats {
-    return statsAt(this.level, this.held);
+    return statsAt(this.level, this.inventory.numbers);
   }
 
-  /** The sword in your hand. */
-  get sword(): Sword {
-    return this.held;
+  /** The sword in your hand, as the main hand's item draws it: null for none. */
+  get sword(): Sword | null {
+    const id = this.inventory.gear.mainHand;
+    const model = id ? itemOf(id)?.model : undefined;
+    return SWORDS.find((s) => s === model) ?? null;
   }
 
   /** Has the Warden fallen? It stays beaten for good. */
@@ -256,9 +273,9 @@ export class AdventureState {
     return !this.beaten && this.stages[WARDEN_QUEST] === 'active';
   }
 
-  /** Does Hale's old longsword still hang at their hip? Until they hand it to you. */
+  /** Does Hale's old longsword still hang at their hip? Until they hand it to you, with the quest that pays it. */
   get haleSwordAtHip(): boolean {
-    return this.held !== 'hale';
+    return CHAIN.every((q, i) => q.reward !== 'hale-longsword' || this.stages[i] !== 'handedIn');
   }
 
   /** The chain's quest Hale has for you (on offer, under way or ready), or -1 once it's all handed in. */
@@ -344,17 +361,14 @@ export class AdventureState {
     return [{ kind: 'quest', quest: CHAIN[i].id, stage: 'active' }];
   }
 
-  /** Give back the quest that's ready: its XP, any sword, and the next quest on offer. */
+  /** Give back the quest that's ready: its XP, any reward (straight into your hand), and the next quest on offer. */
   private handIn(): Effect[] {
     const i = this.current;
     if (this.stages[i] !== 'ready') return [];
     const quest = CHAIN[i];
     this.stages[i] = 'handedIn';
     const effects: Effect[] = [{ kind: 'quest', quest: quest.id, stage: 'handedIn' }, ...this.earn(quest.xp)];
-    if (quest.sword) {
-      this.held = quest.sword;
-      effects.push({ kind: 'sword', sword: quest.sword });
-    }
+    if (quest.reward) effects.push(...this.inventory.wear(quest.reward));
     const next = CHAIN[i + 1];
     if (next) {
       this.stages[i + 1] = 'offered';

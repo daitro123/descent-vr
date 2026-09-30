@@ -293,9 +293,12 @@ describe('What Lies Below', () => {
     expect(state.sword).toBe('plain');
     const effects = state.apply(HAND_IN);
     expect(effects[0]).toEqual({ kind: 'quest', quest: 'below', stage: 'handedIn' });
-    expect(effects).toContainEqual({ kind: 'sword', sword: 'hale' });
+    // Straight into your hand, as the main hand's item, with the plain sword going into the bag.
+    expect(effects).toContainEqual({ kind: 'slot', where: { in: 'gear', slot: 'mainHand' }, stack: { id: 'hale-longsword', count: 1 } });
     expect(effects.some((e) => e.kind === 'quest' && e.stage === 'offered')).toBe(false);
     expect(state.sword).toBe('hale');
+    expect(state.inventory.gear.mainHand).toBe('hale-longsword');
+    expect(state.inventory.bag[0]).toEqual({ id: 'plain-sword', count: 1 });
   });
 });
 

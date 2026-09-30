@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { type AdventureEvent, AdventureState, type Effect, enemyNumbers, type Role, statsAt } from '../src/adventureState';
 import { CONFIG } from '../src/config';
+import { startingInventory } from '../src/inventory';
+import { CATALOGUE, type GearItem, wornBy } from '../src/items';
 import type { CampId } from '../src/maps/types';
 
 // The adventure state is the rules of progress with no three.js in it: the
@@ -26,6 +28,10 @@ function earn(state: AdventureState, xp: number): Effect[] {
 
 const levelUps = (effects: Effect[]) => effects.filter((e) => e.kind === 'level');
 
+/** What the warrior's starting kit adds up to, and with Hale's old longsword in hand instead. */
+const KIT = wornBy('warrior', ['plain-sword', 'round-shield', 'worn-tunic', 'worn-boots'].map((id) => CATALOGUE[id] as GearItem));
+const HALE = wornBy('warrior', ['hale-longsword', 'round-shield', 'worn-tunic', 'worn-boots'].map((id) => CATALOGUE[id] as GearItem));
+
 describe('a new character', () => {
   it('is level 1 with no XP, 100 to go, 100 health, plain damage and no abilities', () => {
     const state = new AdventureState();
@@ -33,8 +39,15 @@ describe('a new character', () => {
     expect(state.xp).toBe(0);
     expect(state.xpToNext).toBe(100);
     expect(state.stats.maxHp).toBe(100);
-    expect(state.stats.damage).toBe(1);
     expect(state.stats.abilities).toEqual([]);
+  });
+
+  it('reads its numbers from the starting kit: the plain sword adds a little damage, and the rest armour', () => {
+    const { stats } = new AdventureState();
+    expect(stats.damage).toBeGreaterThan(1);
+    expect(stats.damage).toBeLessThan(1.05);
+    expect(stats.armour).toBe(17);
+    expect(new AdventureState().sword).toBe('plain');
   });
 });
 
@@ -76,7 +89,9 @@ describe('levels', () => {
     const seen: [number, number, number][] = [];
     for (const at of [0, 100, 300, 600, 1000]) {
       earn(state, at - state.xp);
-      seen.push([state.level, state.stats.maxHp, state.stats.damage]);
+      seen.push([state.level, statsAt(state.level).maxHp, statsAt(state.level).damage]);
+      // What you wear adds the same on top at every level.
+      expect(state.stats).toEqual(statsAt(state.level, KIT));
     }
     expect(seen.map(([level, hp]) => [level, hp])).toEqual([[1, 100], [2, 120], [3, 140], [4, 160], [5, 180]]);
     [1, 1.2, 1.4, 1.6, 1.8].forEach((damage, i) => expect(seen[i][2]).toBeCloseTo(damage));
@@ -156,24 +171,24 @@ describe('the level cap', () => {
 describe("Hale's old longsword", () => {
   it('adds 0.2 to your damage multiplier, one level\'s step, and nothing to your health', () => {
     const plain = statsAt(5);
-    const hale = statsAt(5, 'hale');
+    const hale = statsAt(5, wornBy('warrior', [CATALOGUE['hale-longsword'] as GearItem]));
     expect(plain.damage).toBeCloseTo(1.8, 9);
     expect(hale.damage).toBeCloseTo(2.0, 9);
     expect(hale.maxHp).toBe(plain.maxHp);
     expect(hale.abilities).toEqual(plain.abilities);
-    expect(statsAt(1, 'hale').damage).toBeCloseTo(statsAt(2).damage, 9);
+    expect(statsAt(1, HALE).damage).toBeCloseTo(statsAt(2).damage, 9);
   });
 
   it('is in your numbers once it is in your hand', () => {
     const state = new AdventureState({
       level: 5,
       xp: 1000,
-      sword: 'hale',
       quests: { raiders: { stage: 'handedIn', counts: [3] }, lumber: { stage: 'handedIn', counts: [5, 1] }, below: { stage: 'handedIn', counts: [1] } },
       wardenBeaten: true,
+      inventory: startingInventory('warrior', { mainHand: 'hale-longsword' }),
     });
     expect(state.stats.damage).toBeCloseTo(2.0, 9);
-    expect(new AdventureState().stats.damage).toBe(1);
+    expect(state.sword).toBe('hale');
   });
 });
 

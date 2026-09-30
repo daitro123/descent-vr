@@ -259,7 +259,7 @@ export class Adventure {
     Object.assign(this.standing, record ? { ...record.position, yaw: record.facing, interior: record.interior } : { ...zone.spawn, interior: null });
     const { x, z, yaw, interior } = this.standing;
     this.player.stats = this.state.stats;
-    this.player.sword.sword = this.state.sword;
+    this.player.sword.sword = this.state.sword ?? 'plain';
     this.world.settle(interior);
     this.player.reset(x, z, yaw);
     this.lastHp = this.player.hp;
@@ -507,9 +507,11 @@ export class Adventure {
           if (e.stage === 'active' || e.stage === 'ready') this.tracker.flash();
           if (e.stage === 'handedIn') sfx.fanfare();
           break;
-        case 'sword':
-          // Hale's old longsword, straight into your hand, off their hip; it hits one level harder.
-          this.player.sword.sword = e.sword;
+        case 'slot':
+          // A reward worn at once (Hale's old longsword, straight into your hand, off their hip):
+          // the main hand's item is the sword you hold, and your numbers read what you wear.
+          if (e.where.in !== 'gear') break;
+          this.player.sword.sword = this.state.sword ?? 'plain';
           this.player.stats = this.state.stats;
           this.hale.swordAtHip = this.state.haleSwordAtHip;
           break;

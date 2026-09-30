@@ -57,7 +57,7 @@ Nothing: the destination is reached. The last patches of fog went into [the spec
 - [08: The inventory and its save](issues/08-the-inventory-and-its-save.md): the pure module, the catalogue and the rule, the save and migration. No new view. Blocked by nothing.
 - [09: The bag in the Adventure](issues/09-the-bag-in-the-adventure.md): prototype A promoted. Blocked by 08.
 - [10: The belt in the Adventure](issues/10-the-belt-in-the-adventure.md): prototype (a) promoted, the cooldown, bag to belt. Blocked by 09.
-- [11: Loot from kills](issues/11-loot-from-kills.md). Blocked by 09.
+- [11: Loot from kills](issues/11-loot-from-kills.md). Blocked by 08 (loosened from 09 so it runs beside the bag).
 - [12: Quest items and hand-in picks](issues/12-quest-items-and-hand-in-picks.md). Blocked by 09.
 - [13: Oakvale's chests](issues/13-oakvales-chests.md). Blocked by 11.
 - [14: Vendors](issues/14-vendors.md). Blocked by 11.
@@ -65,7 +65,7 @@ Nothing: the destination is reached. The last patches of fog went into [the spec
 - [16: The ranger and mage in the inventory](issues/16-the-ranger-and-mage-in-the-inventory.md). Blocked by 12, 14 and the Abilities map's ranger and mage builds.
 - [17: Oakvale with the inventory, in one sitting](issues/17-oakvale-with-the-inventory-in-one-sitting.md). Blocked by 10, 13, 14 and 15.
 
-After 09, tickets 10, 11, 12 and 15 can run in parallel; each merges `main` before its PR.
+After 08, tickets 09 and 11 run side by side; after 09, tickets 10, 12 and 15 can run in parallel; each merges `main` before its PR.
 
 ## Out of scope
 
