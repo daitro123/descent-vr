@@ -3,6 +3,7 @@ import { ABILITY, type Ability } from '../classes';
 import { CONFIG } from '../config';
 import type { Enemy } from '../enemies/enemy';
 import { sfx } from '../fx/sfx';
+import type { ItemDef } from '../items';
 import { arrowGeometry, Bow } from '../player/bow';
 import type { Player } from '../player/player';
 import { ABILITY_COLOUR, type Target, throwTarget } from './abilities';
@@ -121,6 +122,12 @@ export class RangerKit {
     );
     this.disc.visible = false;
     parent.add(this.disc);
+  }
+
+  /** Dress from the worn main hand: its bow, by the item's model; an empty main hand puts the bow away. */
+  wear(mainHand: ItemDef | undefined): void {
+    this.worn = mainHand !== undefined;
+    this.bow.dress(mainHand?.model);
   }
 
   /** The arrow on the string (or the next one) is a Power Shot: it waits on the ability clock until loosed. */

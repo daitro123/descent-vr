@@ -876,7 +876,7 @@ export class Adventure {
     player.sword.sword = state.sword ?? 'plain';
     player.sword.model.visible = gear.mainHand !== null;
     player.shield.model.visible = gear.offHand !== null;
-    if (this.combat.ranger) this.combat.ranger.worn = gear.mainHand !== null;
+    this.combat.ranger?.wear(itemOf(gear.mainHand ?? ''));
     this.mage?.wear(itemOf(gear.mainHand ?? ''), itemOf(gear.offHand ?? ''));
     const gloves = itemOf(gear.hands ?? '');
     const tint = gloves ? lookOf(gloves).tint : null;

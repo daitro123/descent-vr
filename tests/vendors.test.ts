@@ -13,15 +13,9 @@ describe("the smith's stock", () => {
     const stock = STOCK.smith.map(gear);
     expect(stock.every((i) => i.kind === 'gear' && i.rarity === 'white')).toBe(true);
     const hands = stock.filter((i) => i.slot === 'mainHand' || i.slot === 'offHand');
-    // Only the warrior's weapons exist until ticket 16.
-    expect(hands.map((i) => `${i.slot} ${i.level} ${i.class}`)).toEqual([
-      'mainHand 1 warrior',
-      'mainHand 3 warrior',
-      'mainHand 5 warrior',
-      'offHand 1 warrior',
-      'offHand 3 warrior',
-      'offHand 5 warrior',
-    ]);
+    expect(hands.map((i) => `${i.class} ${i.slot} ${i.level}`)).toEqual(
+      ['warrior', 'ranger', 'mage'].flatMap((klass) => ['mainHand', 'offHand'].flatMap((slot) => [1, 3, 5].map((level) => `${klass} ${slot} ${level}`))),
+    );
     const armour = stock.filter((i) => !hands.includes(i));
     expect(armour.map((i) => `${i.slot} ${i.level}`)).toEqual(['head 2', 'head 4', 'chest 2', 'chest 4', 'hands 2', 'hands 4', 'legs 2', 'legs 4', 'feet 2', 'feet 4']);
     expect(armour.every((i) => !i.class)).toBe(true);
@@ -29,7 +23,8 @@ describe("the smith's stock", () => {
 
   it('fits a class on one board of sixteen, at 4 times what the smith would pay', () => {
     expect(waresFor('smith', 'warrior')).toHaveLength(16);
-    expect(waresFor('smith', 'ranger')).toHaveLength(10);
+    expect(waresFor('smith', 'ranger')).toHaveLength(16);
+    expect(waresFor('smith', 'mage')).toHaveLength(16);
     expect(buyPrice(gear('iron-longsword-5'))).toBe(5 * 3 * 4);
     expect(buyPrice(gear('padded-jerkin-2'))).toBe(2 * 3 * 4);
   });
