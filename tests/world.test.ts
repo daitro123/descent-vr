@@ -189,6 +189,34 @@ describe('the World as Ground in Oakvale', () => {
   });
 });
 
+describe("compiling Oakvale's shader programs", () => {
+  it('compiles its extras and its chunks at the first fill, before a chunk has shown, and only once', () => {
+    const w = new World();
+    const scene = new Scene();
+    const eye = new PerspectiveCamera();
+    const compiled: { object: Object3D; meshes: number; target: Scene | null | undefined }[] = [];
+    w.attach(scene, eye, {
+      compile: (object, _camera, target) => {
+        compiled.push({ object, meshes: object.children.length, target });
+        return new Set();
+      },
+    });
+    w.load(oakvale);
+    expect(compiled).toEqual([]);
+    const chunks = w.chunksOf(oakvale)!;
+    w.fill(0, 0);
+    // Compiled under the scene's lights and fog, the chunks already built; they show at the next render.
+    expect(compiled.map((c) => [c.object, c.target])).toEqual([
+      [oakvale.root, scene],
+      [chunks, scene],
+    ]);
+    expect(compiled[1].meshes).toBe(chunks.children.length);
+    expect(chunks.children.length).toBeGreaterThan(0);
+    w.fill(40, 0);
+    expect(compiled.length).toBe(2);
+  });
+});
+
 describe("the lumber camp's tent", () => {
   it('is no trap: the leader before its door comes round it and swings at you standing square behind it', () => {
     const lumber = oakvale.camps.find((c) => c.id === 'lumberCamp')!;

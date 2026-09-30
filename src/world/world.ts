@@ -10,6 +10,7 @@ import {
   PointLight,
   type Scene,
   Vector3,
+  type WebGLRenderer,
 } from 'three';
 import { CONFIG } from '../config';
 import type { Zone } from '../maps/types';
@@ -32,6 +33,9 @@ const _eye = new Vector3();
 const _standing = { x: 0, z: 0, within: false };
 /** Where you stand with respect to the mine, reused each frame. */
 const _underground: MineStanding = { ahead: 0, inMouth: false, past: 0, crypt: 0, fromMouth: 0 };
+
+/** What compiles shader programs ahead of the render that needs them: the renderer. */
+export type Compiler = Pick<WebGLRenderer, 'compile'>;
 
 /** One of the pool's point lights: the flame it sits on, if any, and how far it has faded up on it. */
 interface PoolLight {
@@ -118,6 +122,10 @@ export class World implements Ground {
   private readonly bodies: { readonly x: number; readonly z: number; readonly r: number }[] = [];
   private readonly resolveFn = (p: Vector3, radius: number) => this.resolve(p, radius);
   private camera: PerspectiveCamera | null = null;
+  private scene: Scene | null = null;
+  private compiler: Compiler | null = null;
+  /** The zones whose shader programs are compiled. */
+  private readonly warmed = new Set<Zone>();
   /** The zone's own atmosphere, which an interior's blends from. */
   private atmosphere: Atmosphere | null = null;
   /** The atmosphere as shown: the zone's, or blended towards an interior's. */
@@ -145,8 +153,12 @@ export class World implements Ground {
     this.root.add(this.hemisphere, this.sun, ...this.pool, this.sky.root);
   }
 
-  /** Light and fog `scene` with the World, seen through `camera` (whose far plane it sets). */
-  attach(scene: Scene, camera: PerspectiveCamera): void {
+  /**
+   * Light and fog `scene` with the World, seen through `camera` (whose far
+   * plane it sets). With `compiler`, each zone's shader programs are compiled
+   * when its chunks are first filled in, before any of them shows.
+   */
+  attach(scene: Scene, camera: PerspectiveCamera, compiler: Compiler | null = null): void {
     scene.fog = this.fog;
     scene.background = this.background;
     scene.add(this.root);
@@ -154,6 +166,8 @@ export class World implements Ground {
     scene.onBeforeRender = () => this.stager.apply();
     scene.onAfterRender = () => this.stager.restore();
     this.camera = camera;
+    this.scene = scene;
+    this.compiler = compiler;
     this.applyView();
   }
 
@@ -164,6 +178,8 @@ export class World implements Ground {
     if (scene.background === this.background) scene.background = null;
     scene.onBeforeRender = scene.onAfterRender = () => {};
     this.camera = null;
+    this.scene = null;
+    this.compiler = null;
   }
 
   /** Stand someone at (x, z) whom nothing walks through, `r` metres round (a friendly character). */
@@ -263,8 +279,23 @@ export class World implements Ground {
     for (const zone of this.zones) {
       this.stager.stage(zone.root);
       this.stager.stage(this.chunkRoots.get(zone)!);
+      this.warm(zone);
     }
     for (const extra of this.outdoorExtras) this.stager.stage(extra);
+  }
+
+  /**
+   * Compile `zone`'s shader programs now, once, under the World's lights and
+   * fog: its extras (the smoke over the village behind you at the start, the
+   * signposts' names and the map board after a load elsewhere) and its
+   * chunks, before the render that first shows them.
+   */
+  private warm(zone: Zone): void {
+    const { compiler, camera, scene } = this;
+    if (!compiler || !camera || !scene || this.warmed.has(zone)) return;
+    this.warmed.add(zone);
+    compiler.compile(zone.root, camera, scene);
+    compiler.compile(this.chunkRoots.get(zone)!, camera, scene);
   }
 
   /**

@@ -29,7 +29,8 @@ const INTERIOR_MODELS: Partial<Record<InteriorId, (plan: InteriorPlan) => Interi
  * board. Its interiors and the mine are built with it, hidden. The World
  * lights it, gives it its sky, and streams its chunks in round you.
  */
-export function buildForest(plan: ForestLayout = buildLayout()): Zone {
+export function buildForest(given?: ForestLayout): Zone {
+  const plan = given ?? buildLayout();
   const root = new Group();
   root.name = 'forest';
 
@@ -68,7 +69,12 @@ export function buildForest(plan: ForestLayout = buildLayout()): Zone {
     id: 'forest',
     label: 'Oakvale',
     root,
-    chunks: { keys: oakvaleChunks(), build: (key, detail) => buildOakvaleChunk(plan, key, detail) },
+    chunks: {
+      keys: oakvaleChunks(),
+      build: (key, detail) => buildOakvaleChunk(plan, key, detail),
+      // The worker plans Oakvale afresh, so it's only the same Oakvale when this one was too.
+      worker: given ? undefined : () => new Worker(new URL('./chunkWorker.ts', import.meta.url), { type: 'module', name: 'oakvale-chunks' }),
+    },
     walkable: plan.walkable,
     seams: plan.seams,
     atmosphere: plan.atmosphere,

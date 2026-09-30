@@ -450,7 +450,8 @@ export const CONFIG = {
     chunk: 40, // m: one grid of square chunks over every zone, centred on multiples of this
     full: 120, // m: chunks this near are at full detail
     hysteresis: 40, // m (a chunk): a chunk is fetched this much early and dropped this much late, at each radius
-    perFrame: 1, // chunks built and uploaded a frame while you walk
+    perFrame: 1, // chunks uploaded a frame while you walk (and built, where there's no worker)
+    inFlight: 2, // chunks a zone's worker is asked for at once, nearest first: enough to keep it busy, few enough to follow you
     // A stand-in's ground: one height every `cell` m, and a skirt hung round its
     // edge `skirt` m below where its coarse edge strays from the full ground beside it.
     standIn: { cell: 4, skirt: 0.4 },

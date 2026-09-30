@@ -2,13 +2,13 @@ import { type BufferGeometry, Matrix4, Quaternion, Vector3 } from 'three';
 import { ModelBuilder } from '../../models/kit';
 import { type ChunkData, type ChunkKey, chunkBounds, chunkCoord, chunkIndex, chunkKey, type Detail, sphereAround } from '../../world/chunks';
 import { buildFence, buildField, buildStructure } from './buildings';
-import { FOREST, type ForestLayout, type PlantKind } from './layout';
+import { buildLayout, FOREST, type ForestLayout, type PlantKind } from './layout';
 import { plantPrototypes, type Prototypes } from './nature';
 import { addGround, addPaths, addPatches, MeshBuffer, type Region } from './terrain';
 
 // Oakvale's chunk builder: one 40 m chunk of its plan at full detail or as a
-// stand-in, as plain arrays. Free of the DOM, so it runs in tests (and, in
-// ticket 35, a worker). Everything in the plan goes in the chunk its origin is
+// stand-in, as plain arrays. Free of the DOM, so it runs in tests and in its
+// worker (chunkWorker.ts). Everything in the plan goes in the chunk its origin is
 // in: a tree, a building, a field, a fence's first post, a road's stretch.
 //
 // A stand-in is for far off, past CONFIG.streaming.full: coarse ground with
@@ -52,6 +52,12 @@ function once(plan: ForestLayout, thing: object, build: () => BufferGeometry): B
   let g = built.get(thing);
   if (!g) built.set(thing, (g = build()));
   return g;
+}
+
+/** Oakvale's builder over a plan of its own, made now: what its worker runs. */
+export function oakvaleBuilder(): (key: ChunkKey, detail: Detail) => ChunkData {
+  const plan = buildLayout();
+  return (key, detail) => buildOakvaleChunk(plan, key, detail);
 }
 
 /** Chunk `key` of Oakvale's `plan`, at `detail`. The same arrays every time, whatever was built before. */
