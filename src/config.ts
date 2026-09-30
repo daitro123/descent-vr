@@ -440,6 +440,20 @@ export const CONFIG = {
     fadeOut: 0.2, // s for the sun to come back as you walk to the door, before it opens
     swing: 0.35, // s for a door to swing from shut to open, or back
     angle: 1.6, // rad a door swings in to when open
+    stage: 40, // m from a door (or the mine's mouth): its meshes are uploaded, unseen, ahead of the door opening
+  },
+
+  // The streamer (world/streamer.ts): zones are built a 40 m chunk at a time,
+  // at full detail near you and as cheap stand-ins (far trees, coarse ground)
+  // out to the fog's far edge. Distances are from you to a chunk's nearest point.
+  streaming: {
+    chunk: 40, // m: one grid of square chunks over every zone, centred on multiples of this
+    full: 120, // m: chunks this near are at full detail
+    hysteresis: 40, // m (a chunk): a chunk is fetched this much early and dropped this much late, at each radius
+    perFrame: 1, // chunks built and uploaded a frame while you walk
+    // A stand-in's ground: one height every `cell` m, and a skirt hung round its
+    // edge `skirt` m below where its coarse edge strays from the full ground beside it.
+    standIn: { cell: 4, skirt: 0.4 },
   },
 
   // The old mine (world/mine.ts): you're in it once you walk in through its

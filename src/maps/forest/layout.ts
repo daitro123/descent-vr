@@ -1,15 +1,18 @@
 import { PatrolWalk } from '../../enemies/patrol';
 import type { PlaceSound, Tree } from '../../world/ambience';
+import type { Atmosphere } from '../../world/atmosphere';
 import type { InteriorPlan } from '../../world/interiors';
 import type { MinePlan } from '../../world/mine';
 import type { Place } from '../../quests';
-import type { CampId, CampPlan, Pickup, PostPlan, QuestPlace, Respawn, Spot, VillagerSpot } from '../types';
+import type { CampId, CampPlan, Pickup, PostPlan, QuestPlace, Respawn, Seam, Spot, VillagerSpot } from '../types';
+import { Walkable } from '../walkable';
 import { Colliders } from './colliders';
 import { HOUSE, planHouse } from './house';
 import { INN, planInn } from './inn';
 import { mineCamp, mineRespawn, mouthColliders, mouthOf, planMine } from './mine';
 import { SMITHY, smithyColliders } from './smithy';
 import { fbm, lerp, mulberry32, nearestOnPolyline, type P2, sampleCurve, smoothstep, valueNoise } from './noise';
+import { LIGHT, SKY } from './palette';
 
 // Oakvale: a gentle forest valley. A dirt road runs north from the southern
 // pass through a crossroads village, over a stone bridge and up to an old mine
@@ -31,6 +34,24 @@ export const FOREST = {
   /** Height of every water surface (the stream and the pond). */
   water: -0.35,
 } as const;
+
+/**
+ * Oakvale's air and light under the World's late-afternoon sun: a pale blue
+ * haze, closing in from 45 m. No flames for the light pool: outdoors, glows
+ * fake every lantern and fire.
+ */
+export const OAKVALE_ATMOSPHERE: Atmosphere = {
+  background: SKY.haze,
+  fog: { color: SKY.haze, near: 45, far: 200 },
+  sky: { zenith: SKY.zenith, horizon: SKY.horizon, haze: SKY.haze, sun: SKY.sun },
+  sun: { color: LIGHT.sun, intensity: 2.3 },
+  hemisphere: { sky: LIGHT.sky, ground: LIGHT.ground, intensity: 1.5 },
+  farPlane: 240,
+  flames: [],
+};
+
+/** The southern pass's crest, where Brackenmoor will take over: the terrain's south edge, across the pass's valley. */
+const CREST = { z: 140, minX: -100, maxX: 100 } as const;
 
 // ------------------------------------------------------------------ plan
 
@@ -460,6 +481,12 @@ export class DistanceField {
 // ------------------------------------------------------------------ the layout
 
 export interface ForestLayout {
+  /** Where you can walk: the play square. */
+  walkable: Walkable;
+  /** Its fog, sky colours and light, which the World applies. */
+  atmosphere: Atmosphere;
+  /** Its heights along each seam with a neighbour, which the neighbour's land meets. */
+  seams: Seam[];
   ground: HeightField;
   paths: Path[];
   stream: { line: P2[]; half: number };
@@ -637,7 +664,8 @@ export function buildLayout(): ForestLayout {
   };
 
   const fences = buildFences(structures);
-  const colliders = new Colliders({ minX: -play, maxX: play, minZ: -play, maxZ: play });
+  const walkable = Walkable.rect(-play, play, -play, play);
+  const colliders = new Colliders(walkable);
   for (const s of structures) {
     if (!s.solid) continue;
     if (['well', 'windmill', 'tower', 'campfire', 'signpost', 'lamp', 'scarecrow'].includes(s.kind)) {
@@ -749,7 +777,16 @@ export function buildLayout(): ForestLayout {
     { label: 'Old mine', x: -14, z: -74 },
   ];
 
+  const crest: Seam = {
+    ...CREST,
+    step: cell,
+    heights: Array.from({ length: Math.round((CREST.maxX - CREST.minX) / cell) + 1 }, (_, k) => ground.at(CREST.minX + k * cell, CREST.z)),
+  };
+
   return {
+    walkable,
+    atmosphere: OAKVALE_ATMOSPHERE,
+    seams: [crest],
     ground,
     paths,
     stream: { line: streamLine, half: STREAM_HALF },

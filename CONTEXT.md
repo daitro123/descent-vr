@@ -16,6 +16,10 @@ _Avoid_: practice mode, wave mode, the crypt (the crypt hall is the arena's room
 A hand-built outdoor region of the world, joined to its neighbours so the player walks from one into the next.
 _Avoid_: map, level (in the code, a zone is a `Zone` under `src/maps/`, loaded into the `World`)
 
+**Chunk**:
+A 40 m square of the world on one grid shared by every zone, built and loaded on its own as you walk. Near you a chunk is at **full detail**; farther out it's a **stand-in** (coarse ground, cheaper trees, no undergrowth); past the fog it isn't loaded at all.
+_Avoid_: tile, cell (the ground's 2 m squares are cells), sector, LOD
+
 **Starting zone**:
 The zone a new character begins in and levels up through first. Oakvale is the starting zone.
 _Avoid_: tutorial, hub

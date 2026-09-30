@@ -2,7 +2,7 @@ import type { Vector3 } from 'three';
 import type { Interior as InteriorId } from '../../save/record';
 import type { Atmosphere } from '../../world/atmosphere';
 import { type Flame, type Frame, type InteriorPlan, toFrame } from '../../world/interiors';
-import { Colliders } from './colliders';
+import { Colliders, UNBOUNDED } from './colliders';
 
 // What the buildings you walk into share, as plans: a room on a building's
 // footprint, its floor at the top of the foundation with steps down from its
@@ -82,7 +82,7 @@ export function planInterior(spec: InteriorSpec): InteriorPlan {
   const { hw, hd } = spec.footprint;
   if (Math.abs(site.hw - hw) > 1e-9 || Math.abs(site.hd - hd) > 1e-9) throw new Error(`The ${spec.id}'s footprint must be its plan's`);
   const frame = { x: site.x, z: site.z, yaw: site.yaw, y: site.y };
-  const colliders = new Colliders({ minX: -Infinity, maxX: Infinity, minZ: -Infinity, maxZ: Infinity });
+  const colliders = new Colliders(UNBOUNDED);
   for (const [lx, lz, bw, bd] of spec.shapes.boxes) {
     const [x, z] = toWorld(frame, lx, lz);
     colliders.addBox({ x, z, hw: bw, hd: bd, yaw: frame.yaw });

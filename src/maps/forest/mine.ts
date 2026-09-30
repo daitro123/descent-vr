@@ -5,7 +5,7 @@ import type { MinePlan, MineStanding, ThronePlan } from '../../world/mine';
 import type { CampPlan, PostPlan, Respawn } from '../types';
 import { CONFIG } from '../../config';
 import { BRAZIER_FIRE, torchLight } from '../../world/hall';
-import { Colliders } from './colliders';
+import { Colliders, UNBOUNDED } from './colliders';
 import { floorOf, Hollow, type Piece } from './hollow';
 import { type Shapes, toWorld } from './interiorPlan';
 import { SKY } from './palette';
@@ -339,7 +339,7 @@ export function planMine(mouth: Frame): MinePlan {
     p.z = mouth.z - local.x * sin + local.z * cos;
   };
 
-  const props = new Colliders({ minX: -Infinity, maxX: Infinity, minZ: -Infinity, maxZ: Infinity });
+  const props = new Colliders(UNBOUNDED);
   const shapes = mineColliders();
   for (const [lx, lz, hw, hd] of shapes.boxes) {
     const [x, z] = toWorld(mouth, lx, lz);

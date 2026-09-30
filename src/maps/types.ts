@@ -6,20 +6,23 @@ import type { EnemyKind, Family } from '../models/characters';
 import type { PlaceSound, TreeCover } from '../world/ambience';
 import type { Atmosphere } from '../world/atmosphere';
 import type { Interior as InteriorId } from '../save/record';
+import type { ChunkSource } from '../world/chunks';
 import type { Interior } from '../world/interiors';
 import type { Mine } from '../world/mine';
+import type { Walkable } from './walkable';
 
-// A map is a place the game can put you. A zone (Oakvale) is loaded into the
-// World, which lights it, gives it the sky and fog, and answers its ground; a
-// whole-build map (the crypt hall) brings its own lights. Gameplay, the map
-// viewer and tests all go through these, so a map never needs to know who is
-// looking at it.
+// A map is a place the game can put you. A zone (Oakvale) is a pure plan and
+// a chunk builder: loaded into the World, it's lit, given the sky and fog, its
+// ground answered, and its chunks streamed in round you. A whole-build map
+// (the crypt hall) brings its own lights and is built at once. Gameplay, the
+// map viewer and tests all go through these, so a map never needs to know who
+// is looking at it.
 
 interface MapBase {
   readonly id: string;
   /** Where a player starts on the floor plane, and which way they face (radians about +Y, 0 looks down −Z). */
   readonly spawn: { x: number; z: number; yaw: number };
-  /** The walkable extent on the floor plane. */
+  /** The box round where you can walk, on the floor plane. */
   readonly bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
   /** Named spots worth a look, for the viewer's jump list. */
   readonly landmarks: readonly { label: string; x: number; z: number }[];
@@ -112,11 +115,36 @@ export interface QuestPlace {
   readonly clearing: { readonly x: number; readonly z: number; readonly r: number };
 }
 
+/**
+ * A zone's edge where a neighbour takes over, along z = `z` from x = `minX`
+ * to `maxX`: its heights there, every `step` m from `minX`, which the
+ * neighbour's land meets exactly.
+ */
+export interface Seam {
+  readonly z: number;
+  readonly minX: number;
+  readonly maxX: number;
+  readonly step: number;
+  readonly heights: readonly number[];
+}
+
 /** An outdoor region of the world, loaded into the World. */
 export interface Zone extends MapBase {
   readonly kind: 'zone';
-  /** The zone's meshes. No lights and no sky: those are the World's. */
+  /** Its name, as you'd say it: "Oakvale". */
+  readonly label: string;
+  /**
+   * The zone's extras: glows, water, the windmill's sails, smoke, signposts'
+   * names and the map board. Its chunks are streamed in by the World beside
+   * it. No lights and no sky: those are the World's too.
+   */
   readonly root: Object3D;
+  /** Its chunks on the world's grid, and how to build each at full or stand-in detail. */
+  readonly chunks: ChunkSource;
+  /** Where you can walk, as a shape. */
+  readonly walkable: Walkable;
+  /** Its heights along each seam with a neighbour. */
+  readonly seams: readonly Seam[];
   /** Its fog, sky colours and light, which the World applies. */
   readonly atmosphere: Atmosphere;
   /** Its enemies, camp by camp. */
@@ -154,9 +182,26 @@ export interface WholeMap extends MapBase {
 
 export type GameMap = Zone | WholeMap;
 
-export interface MapInfo {
-  id: string;
-  label: string;
-  /** Builds the map. Heavy, so each map's code is split out and loaded on demand. */
-  load(): Promise<GameMap>;
+/** A zone as the registry lists it, before it's loaded. */
+export interface ZoneInfo {
+  readonly kind: 'zone';
+  readonly id: string;
+  readonly label: string;
+  /** Where the zone sits on the world's chunk grid: its plan's (0, 0), in world metres. */
+  readonly origin: { readonly x: number; readonly z: number };
+  /** The zones across its seams, by id. */
+  readonly neighbours: readonly string[];
+  /** Plans the zone and builds its extras; its chunks are built as the World streams them. Split out and loaded on demand. */
+  load(): Promise<Zone>;
 }
+
+/** A whole-build map as the registry lists it. */
+export interface WholeInfo {
+  readonly kind: 'whole';
+  readonly id: string;
+  readonly label: string;
+  /** Builds the map. Heavy, so each map's code is split out and loaded on demand. */
+  load(): Promise<WholeMap>;
+}
+
+export type MapInfo = ZoneInfo | WholeInfo;

@@ -1,24 +1,19 @@
-import { type Camera, Group, Matrix4, Mesh, Quaternion, Vector3 } from 'three';
-import { ModelBuilder } from '../../models/kit';
+import { type Camera, Group, Matrix4, Mesh, Vector3 } from 'three';
 import { sharedModelMaterial } from '../../models/materials';
 import type { Interior as InteriorId } from '../../save/record';
 import { TreeCover } from '../../world/ambience';
-import type { Atmosphere } from '../../world/atmosphere';
 import type { Interior, InteriorPlan } from '../../world/interiors';
 import { Glows } from '../../world/glows';
 import { Smoke } from '../../world/smoke';
 import type { Zone } from '../types';
-import { buildFence, buildField, buildStructure } from './buildings';
+import { buildStructure } from './buildings';
+import { buildOakvaleChunk, oakvaleChunks } from './chunks';
 import { buildHouseInterior } from './houseModel';
 import { buildInnInterior } from './innModel';
 import { buildMine } from './mineModel';
 import { buildMapFace, buildSignNames } from './wayfinding';
-import { buildLayout, FOREST } from './layout';
-import { plantPrototypes } from './nature';
-import { LIGHT, SKY } from './palette';
-import { addPaths, addPatches, addTerrain, buildWater, Chunks } from './terrain';
-
-const UP = new Vector3(0, 1, 0);
+import { buildLayout, type ForestLayout } from './layout';
+import { buildWater } from './water';
 
 /** Each interior's meshes, by its id. */
 const INTERIOR_MODELS: Partial<Record<InteriorId, (plan: InteriorPlan) => Interior>> = {
@@ -27,66 +22,24 @@ const INTERIOR_MODELS: Partial<Record<InteriorId, (plan: InteriorPlan) => Interi
 };
 
 /**
- * Oakvale's air and light under the World's late-afternoon sun: a pale blue
- * haze, closing in from 45 m. No flames for the light pool: outdoors, glows
- * fake every lantern and fire.
+ * Oakvale, the starting zone (see layout.ts for what's where): its plan, its
+ * chunk builder (chunks.ts), and the extras built once on the main thread from
+ * positions in the plan: the glows that fake every lantern and fire, the
+ * windmill's sails, the water, the smoke, the signposts' names and the map
+ * board. Its interiors and the mine are built with it, hidden. The World
+ * lights it, gives it its sky, and streams its chunks in round you.
  */
-export const OAKVALE_ATMOSPHERE: Atmosphere = {
-  background: SKY.haze,
-  fog: { color: SKY.haze, near: 45, far: 200 },
-  sky: { zenith: SKY.zenith, horizon: SKY.horizon, haze: SKY.haze, sun: SKY.sun },
-  sun: { color: LIGHT.sun, intensity: 2.3 },
-  hemisphere: { sky: LIGHT.sky, ground: LIGHT.ground, intensity: 1.5 },
-  farPlane: 240,
-  flames: [],
-};
-
-/**
- * Oakvale, the starting zone (see layout.ts for what's where). Static
- * geometry is merged into 40 m chunks with the shared model material, so the
- * frustum culls whole chunks and each visible one is a single draw call. The
- * World lights it and gives it its sky; lanterns and fires fake their light
- * with glow billboards.
- */
-export function buildForest(): Zone {
-  const layout = buildLayout();
+export function buildForest(plan: ForestLayout = buildLayout()): Zone {
   const root = new Group();
   root.name = 'forest';
 
-  const chunks = new Chunks(FOREST.half, 40);
-  addTerrain(chunks, layout);
-  addPaths(chunks, layout);
-  addPatches(chunks, layout);
-
-  // Plants are stamped from prototypes; the mountains past the play area get cheaper trees.
-  const near = plantPrototypes();
-  const far = plantPrototypes(true);
-  const m = new Matrix4();
-  const q = new Quaternion();
-  for (const p of layout.plants) {
-    const outside = Math.abs(p.x) > FOREST.play + 6 || Math.abs(p.z) > FOREST.play + 6;
-    const variants = (outside ? far : near)[p.kind];
-    m.compose(new Vector3(p.x, p.y, p.z), q.setFromAxisAngle(UP, p.yaw), new Vector3(p.scale, p.scale, p.scale));
-    chunks.at(p.x, p.z).stamp(variants[p.seed % variants.length], m.clone(), 0.92 + ((p.seed >> 4) % 17) / 100);
-  }
-  const identity = new Matrix4();
-  for (const f of layout.fields) {
-    const b = new ModelBuilder(3);
-    buildField(b, f, layout.heightAt);
-    chunks.at(f.x, f.z).stamp(b.build(), identity);
-  }
-  for (const fence of layout.fences) {
-    const b = new ModelBuilder(4);
-    buildFence(b, fence, layout.heightAt);
-    chunks.at(fence[0][0], fence[0][1]).stamp(b.build(), identity);
-  }
-
   const glows = new Glows();
   const spinners: Mesh[] = [];
-  for (const s of layout.structures) {
+  for (const s of plan.structures) {
     const place = new Matrix4().makeRotationY(s.yaw).setPosition(s.x, s.y, s.z);
-    const geometry = buildStructure(s, {
-      layout,
+    // Its shape is the chunk's; only its lights and sails are kept here.
+    buildStructure(s, {
+      layout: plan,
       glow: (at, size, color) => {
         const p = new Vector3(...at).applyMatrix4(place);
         glows.add(p.x, p.y, p.z, size, color);
@@ -97,47 +50,47 @@ export function buildForest(): Zone {
         mesh.rotation.y = s.yaw;
         spinners.push(mesh);
       },
-    });
-    chunks.at(s.x, s.z).stamp(geometry, place);
+    }).dispose();
   }
 
   // The signposts' names and the map board's painted face, each one texture; the smoke over them all.
   const wayfinding = [
-    ...layout.structures.filter((s) => s.kind === 'signpost').map(buildSignNames),
-    ...layout.structures.filter((s) => s.kind === 'mapboard').map((s) => buildMapFace(s, layout)),
+    ...plan.structures.filter((s) => s.kind === 'signpost').map(buildSignNames),
+    ...plan.structures.filter((s) => s.kind === 'mapboard').map((s) => buildMapFace(s, plan)),
   ];
-  const smoke = new Smoke(layout.smoke);
-
-  root.add(...chunks.meshes(sharedModelMaterial()), ...spinners, glows.mesh, ...wayfinding, smoke.mesh);
-  const water = buildWater(layout);
-  root.add(water.mesh);
+  const smoke = new Smoke(plan.smoke);
+  const water = buildWater(plan);
+  root.add(...spinners, glows.mesh, ...wayfinding, smoke.mesh, water.mesh);
 
   let time = 0;
-  const { play } = FOREST;
   return {
     kind: 'zone',
     id: 'forest',
+    label: 'Oakvale',
     root,
-    atmosphere: OAKVALE_ATMOSPHERE,
-    spawn: layout.spawn,
-    camps: layout.camps,
-    respawns: layout.respawns,
-    interiors: layout.interiors.map((plan) => {
-      const build = INTERIOR_MODELS[plan.id];
-      if (!build) throw new Error(`No model for the ${plan.id}`);
-      return build(plan);
+    chunks: { keys: oakvaleChunks(), build: (key, detail) => buildOakvaleChunk(plan, key, detail) },
+    walkable: plan.walkable,
+    seams: plan.seams,
+    atmosphere: plan.atmosphere,
+    spawn: plan.spawn,
+    camps: plan.camps,
+    respawns: plan.respawns,
+    interiors: plan.interiors.map((interior) => {
+      const build = INTERIOR_MODELS[interior.id];
+      if (!build) throw new Error(`No model for the ${interior.id}`);
+      return build(interior);
     }),
-    mine: buildMine(layout.mine),
-    hale: layout.hale,
-    places: layout.places,
-    villagers: layout.villagers,
-    pickups: layout.pickups,
-    sounds: layout.sounds,
-    trees: new TreeCover(layout.trees),
-    bounds: { minX: -play, maxX: play, minZ: -play, maxZ: play },
-    landmarks: layout.landmarks,
-    heightAt: layout.heightAt,
-    resolve: (p, radius) => layout.colliders.resolve(p, radius),
+    mine: buildMine(plan.mine),
+    hale: plan.hale,
+    places: plan.places,
+    villagers: plan.villagers,
+    pickups: plan.pickups,
+    sounds: plan.sounds,
+    trees: new TreeCover(plan.trees),
+    bounds: plan.walkable.bounds,
+    landmarks: plan.landmarks,
+    heightAt: plan.heightAt,
+    resolve: (p, radius) => plan.colliders.resolve(p, radius),
     update(dt: number, camera: Camera) {
       time += dt;
       glows.update(time, camera);
