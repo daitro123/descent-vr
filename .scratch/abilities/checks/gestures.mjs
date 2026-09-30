@@ -24,7 +24,9 @@
 // 5. DRILL counts a gesture read right, and RECORD keeps a drawn stroke as a template.
 // 6. The bench's numbers: each vocabulary over 200 strokes a gesture and 200 of
 //    each move of normal play, per class; and how the shapes hold up from 3 to 8.
-// 7. Without `&gestures`, the arena and the class prototypes are as before.
+// 7. Without `&gestures`, the arena and the class prototypes are as before:
+//    the prototypes at `&class=ranger-prototype` and `&class=mage-prototype`,
+//    the built classes at `&class=ranger` and `&class=mage`.
 //
 import { readFileSync } from 'node:fs';
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
@@ -171,8 +173,8 @@ const FILL = {
 const tables = [];
 for (const cls of ['warrior', 'ranger', 'mage']) {
   console.log(`\n== ${cls}`);
-  // The ranger's gestures lie over its prototype, kept at ranger-prototype since the class was built (ticket 21).
-  await enter(`arena&class=${cls === 'ranger' ? 'ranger-prototype' : cls}&gestures`);
+  // The ranger's and mage's gestures lie over their prototypes, kept at ranger-prototype and mage-prototype since the classes were built (tickets 21, 23 and 27).
+  await enter(`arena&class=${cls === 'warrior' ? cls : `${cls}-prototype`}&gestures`);
   await step(1 / 72);
   const kit = await page.evaluate(() => {
     const { classKit, game } = window.__descent;
@@ -282,6 +284,15 @@ check(ranger.bow && !ranger.recorder, `?arena&class=ranger-prototype alone is th
 await enter('arena&class=ranger');
 const built = await page.evaluate(() => ({ kit: window.__descent.classKit, bow: !!window.__descent.game.combat.ranger }));
 check(built.kit === null && built.bow, `?arena&class=ranger alone is the built ranger (${JSON.stringify(built)})`);
+await enter('arena&class=mage-prototype');
+const magePrototype = await page.evaluate(() => {
+  const { classKit, game } = window.__descent;
+  return { kit: !!classKit && 'mana' in classKit, recorder: !!classKit?.recorder, abilities: game.player.stats.abilities.length, sword: game.player.sword.model.parent !== null, built: !!game.mage };
+});
+check(magePrototype.kit && !magePrototype.recorder && magePrototype.abilities === 0 && !magePrototype.sword && !magePrototype.built, `?arena&class=mage-prototype alone is the mage prototype, with none of the warrior's kit or abilities under it (${JSON.stringify(magePrototype)})`);
+await enter('arena&class=mage');
+const builtMage = await page.evaluate(() => ({ kit: window.__descent.classKit, mage: !!window.__descent.game.mage }));
+check(builtMage.kit === null && builtMage.mage, `?arena&class=mage alone is the built mage (${JSON.stringify(builtMage)})`);
 await enter('arena');
 const warrior = await page.evaluate(() => ({ kit: window.__descent.classKit, sword: window.__descent.game.player.sword.model.parent !== null }));
 check(warrior.kit === null && warrior.sword, `?arena alone is the warrior's (${JSON.stringify(warrior)})`);

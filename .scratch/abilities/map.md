@@ -61,14 +61,16 @@ Written on 2026-09-30 from [spec.md](spec.md), **by Claude on Tom's behalf**, nu
 1. [17: Classes, attributes and the level curve](issues/17-classes-attributes-and-the-level-curve.md): no blockers. Done.
 2. [18: Characters: the roster and the page before VR](issues/18-characters-the-roster-and-the-page-before-vr.md): after 17. Done.
 3. [19: Gestures and the warrior's new abilities](issues/19-gestures-and-the-warriors-new-abilities.md): after 17. Done.
-4. [20: Rooted, frozen and slowed](issues/20-rooted-frozen-and-slowed.md): no blockers.
-5. [21: The ranger](issues/21-the-ranger.md): after 17 to 20.
-6. [22: The ranger's abilities at 6, 8 and 10](issues/22-the-rangers-abilities-at-6-8-and-10.md): after 21.
+4. [20: Rooted, frozen and slowed](issues/20-rooted-frozen-and-slowed.md): no blockers. Done.
+5. [21: The ranger](issues/21-the-ranger.md): after 17 to 20. Done.
+6. [22: The ranger's abilities at 6, 8 and 10](issues/22-the-rangers-abilities-at-6-8-and-10.md): after 21. Done.
 7. [23: The mage](issues/23-the-mage.md): after 17 to 20. Done.
-8. [24: The mage's abilities at 6, 8 and 10](issues/24-the-mages-abilities-at-6-8-and-10.md): after 23.
-9. [25: Talents and the warrior's trees](issues/25-talents-and-the-warriors-trees.md): after 18 and 19.
-10. [26: The ranger's and mage's trees](issues/26-the-rangers-and-mages-trees.md): after 22, 24 and 25.
-11. [27: Every class through Oakvale](issues/27-every-class-through-oakvale.md): after 26.
+8. [24: The mage's abilities at 6, 8 and 10](issues/24-the-mages-abilities-at-6-8-and-10.md): after 23. Done.
+9. [25: Talents and the warrior's trees](issues/25-talents-and-the-warriors-trees.md): after 18 and 19. Done.
+10. [26: The ranger's and mage's trees](issues/26-the-rangers-and-mages-trees.md): after 22, 24 and 25. Done.
+11. [27: Every class through Oakvale](issues/27-every-class-through-oakvale.md): after 26. Done.
+
+Every build ticket is done (27, the last, on 2026-09-30): each class plays Oakvale from a new character to What Lies Below's reward in `.scratch/abilities/checks/whole-zone.mjs`, and the abilities' worst moments are within the budget.
 
 `/to-tickets` would have asked Tom about the granularity and the edges; answered on his behalf: each class splits into its plain kit with its level-2 and level-3 abilities (so Oakvale is playable as that class) and its abilities at 6 to 10 (arena-only until the cap rises); the enemy states stand alone so both classes can build on them; talents come after the warrior's gestures so the page has slots to show.
 

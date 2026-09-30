@@ -1,5 +1,5 @@
 // PROTOTYPE (abilities ticket 06, "How the mage fights"): throwaway code kept
-// in the repo so Tom can try it on the headset at `?arena&class=mage`.
+// in the repo so Tom can try it on the headset at `?arena&class=mage-prototype`.
 //
 // Question: how does the mage fight before any ability? The plain attack, what
 // each hand holds, how the mage survives a blow, and whether mana limits the

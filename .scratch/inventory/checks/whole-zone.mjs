@@ -1,38 +1,63 @@
-// Oakvale with the inventory, in one sitting (issues/17-oakvale-with-the-inventory-in-one-sitting.md):
-// a new warrior played from `?newgame` through every camp, the three chests and
-// Hale's three hand-ins, then to the smith, the innkeeper and the stash, in
-// headless Chromium with the IWER emulator, recording coins, drops and draw
-// calls as it goes. Start `npx vite --port 5173`, then:
+// Oakvale with the inventory, in one sitting (issues/17-oakvale-with-the-inventory-in-one-sitting.md),
+// and every class through Oakvale (the abilities map's issues/27-every-class-through-oakvale.md):
+// a new character of a class played from `?newgame` through every camp, the
+// three chests and Hale's three hand-ins, then to the smith, the innkeeper and
+// the stash, in headless Chromium with the IWER emulator, recording coins,
+// drops and draw calls as it goes. Start `npx vite --port 5173`, then:
 //
-//   node .scratch/inventory/checks/whole-zone.mjs [http://localhost:5173] [out/]
+//   node .scratch/inventory/checks/whole-zone.mjs [http://localhost:5173] [out/] [warrior|ranger|mage]
 //
-// With `out/`, it writes screenshots and `whole-zone.json` (the coins by stage,
-// every drop, and the budget's views) there.
+// The warrior by default; `.scratch/abilities/checks/whole-zone.mjs` runs all
+// three one after another. With `out/`, it writes screenshots and
+// `whole-zone.json` (the coins by stage, every drop, the budget's views, the
+// levels by stage and the fights' tallies) there.
 //
 // How it plays. As the Oakvale play-through does (oakvale-starting-zone/checks/
 // play-through.mjs, whose fighter this copies): the game paused and stepped
 // 1/72 s at a time from inside the page, with teleports between places, and
 // every fight fought through the real combat, the script holding the grips
-// where a player's hands would be, the sword swung across the nearest enemy
-// and the shield held towards the blow that's coming. Nobody is healed by the
-// script; a death is played through (you wake and walk back). Loot is taken
-// by walking over it, as a player walks over a camp's drops; chests' lids,
-// the orders, the boards' buttons and the stash's lid are touched with a
-// fist; the belt's flask, the vendors' wares and the stash's slots are
-// carried with the grip squeezed (the emulated controller's squeeze). The
-// hand-ins' picks go into the bag as the play-through takes them (the fist's
-// carry off Hale's board is hand-in-picks.mjs's), and are worn from it, as is
-// any loot that beats what you wear.
+// where a player's hands would be. Each class fights its own way:
+// - the warrior swings the sword across the nearest enemy, the shield held
+//   towards the blow that's coming (the play-through's fighter);
+// - the ranger stands off, nocks, draws full and looses at the nearest enemy's
+//   chest (a little ahead of it and over it, for its walk and the drop), about
+//   one arrow a second; Power Shot on A from level 2 with focus to spare; a
+//   Snare Trap drawn as a ring from level 3 when a grunt reaches it; the ward
+//   squeezed up while an arrow flies at you; and it backs off from a blow at
+//   your walking pace;
+// - the mage stands off, charges a bolt at the wand's tip for 0.6 s and throws
+//   it at the nearest enemy; the ward held up against a blow that's coming;
+//   Frost Nova on X from level 2 when something reaches you, then a blink back
+//   on B; a Fireball drawn as a ring from level 3 on a pack; and it backs off
+//   at your walking pace.
+// The ranger and the mage walk up closer when four shots in a row haven't hurt
+// their mark (a lip of ground in the way, as at the watchtower), and in the
+// Warden's hall neither backs or blinks out through its gate (the Warden would
+// walk back to its throne whole). When nobody is left to fight near you, the
+// script waits for any enemy walking home to get there, then goes to it.
+// Steps are no faster than your walk: the script keeps a tally of the metres
+// you could have walked since you last moved. A talent point is spent as each
+// level brings one, out of the fight: the warrior's in Protection (Toughness,
+// then Iron Arm), the ranger's in Marksmanship (Steady Aim, then Swift
+// Arrows), the mage's in Fire (Ignite, then Critical Mass). Nobody is healed
+// by the script; a death is played through (you wake and walk back). Loot is
+// taken by walking over it, as a player walks over a camp's drops; chests'
+// lids, the orders, the boards' buttons and the stash's lid are touched with a
+// fist; the belt's flask, the vendors' wares and the stash's slots are carried
+// with the grip squeezed (the emulated controller's squeeze). The hand-ins'
+// picks go into the bag as the play-through takes them (the fist's carry off
+// Hale's board is hand-in-picks.mjs's), and are worn from it, as is any loot
+// that beats what you wear.
 //
 // What it checks, in order:
-//  1. A new warrior: the starting kit worn, three potions on the right hip,
-//     0 coins, an empty bag.
+//  1. A new character of the class: its starting kit worn, three potions on
+//     the right hip, 0 coins, an empty bag.
 //  2. Raiders in the Fields: the farm's four bandits fought, their loot taken;
-//     the hand-in's pick worn.
+//     the hand-in's pick worn; level 2, where the curve puts the XP.
 //  3. The Lumber Camp: its five fought, and a potion drunk from the belt mid
 //     fight (health up 40% of the maximum while the camp still fights you);
 //     the patrol's two fought; the orders taken; the leader's tent's chest
-//     opened and emptied; the hand-in's pick worn.
+//     opened and emptied; the hand-in's pick worn; level 3.
 //  4. The watchtower's three fought, and its chest on the hilltop opened and
 //     emptied.
 //  5. What Lies Below: the cart hall and gallery fought and looted; the dig's
@@ -40,25 +65,38 @@
 //     drops left lying; then at the dig, with the bag panel open, the budget:
 //     draw calls, triangles and point lights, both eyes, the worst of several
 //     headings. Then every drop in the mine taken.
-//  6. The last hand-in: Hale's longsword picked and worn at level 5.
-//  7. The coins before spending: every coin that dropped was taken, and the
+//  6. The coins before spending: every coin that dropped was taken, and the
 //     route's expected coins (the role table's average for every kill, and
 //     the chests') land in the spec's 300 to 400. The run's own total is
 //     recorded beside it.
-//  8. The smith: their wares board and the bag panel open; the budget again;
+//  7. The smith: their wares board and the bag panel open; the budget again;
 //     "Sell junk" sells every grey; a white piece for an empty slot bought
 //     off the board and worn.
-//  9. The innkeeper: a minor healing potion bought.
-// 10. The stash: the plain sword carried into it; a reload; the stash still
-//     holds it, and it's carried back into the bag.
+//  8. The innkeeper: a minor healing potion bought.
+//  9. The last hand-in: the class's own reward from Hale (the warrior's Old
+//     Longsword, the ranger's Old Hunting Bow, the mage's Crypt-Warded Staff)
+//     picked and worn at level 5, drawn in the hand.
+// 10. The stash: the starting weapon carried into it; a reload; the stash
+//     still holds it, and it's carried back into the bag.
+// At each hand-in the level is where the curve (CONFIG.levels) puts the XP
+// earned, and the talent points spent are the level's.
 //
 // Playwright is the global install; Chromium is the pre-installed one.
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 
-const base = process.argv[2] ?? 'http://localhost:5173';
-const out = process.argv[3];
+const CLASSES = ['warrior', 'ranger', 'mage'];
+const args = process.argv.slice(2);
+const klass = args.find((a) => CLASSES.includes(a)) ?? 'warrior';
+const [base = 'http://localhost:5173', out] = args.filter((a) => !CLASSES.includes(a));
+/** Each class's reward at What Lies Below, its look in the hand, and the talents its points go to, in order. */
+const CLASS = {
+  warrior: { reward: 'hale-longsword', look: 'hale', talents: ['toughness', 'toughness', 'toughness', 'ironArm', 'ironArm'] },
+  ranger: { reward: 'hale-hunting-bow', look: 'hunting-bow', talents: ['steadyAim', 'steadyAim', 'steadyAim', 'swiftArrows', 'swiftArrows'] },
+  mage: { reward: 'crypt-warded-staff', look: 'crypt-staff', talents: ['ignite', 'ignite', 'ignite', 'criticalMass', 'criticalMass'] },
+}[klass];
+console.log(`== a ${klass} through Oakvale`);
 if (out) mkdirSync(out, { recursive: true });
 const browser = await chromium.launch({
   executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
@@ -135,15 +173,23 @@ function install() {
   };
   /** Squeeze (1) or let go of (0) a grip: the emulated controller's squeeze, read at the next step. */
   const squeeze = (hand, v) => d.device.controllers[hand].setButtonValueImmediate('squeeze', v);
+  /** Seconds of game time stepped, and the metres you could have walked since you last stepped (a stop's worth at most). */
+  let clock = 0;
+  let legs = 0;
   const tick = (dt = 1 / 72) => {
     player.rig.updateMatrixWorld(true);
-    adventure.update(dt);
+    // The Adventure takes at most 1/30 s a frame: a longer step is several.
+    for (let left = dt; left > 1e-9; left -= 1 / 30) adventure.update(Math.min(left, 1 / 30));
+    clock += dt;
+    legs = Math.min(legs + d.CONFIG.player.moveSpeed * dt, 4);
   };
   const flat = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
   const head = () => d.camera.getWorldPosition(new V());
   const down = () => {
     hold('left', DOWN.left);
     hold('right', DOWN.right);
+    squeeze('left', 0);
+    d.device.controllers.right.setButtonValueImmediate('trigger', 0);
   };
   /**
    * What a player does with the shield: put it between you and the blow that's
@@ -151,7 +197,7 @@ function install() {
    * Otherwise it's held up in front of your chest.
    */
   const dodged = new WeakMap();
-  const defend = () => {
+  const shieldUp = () => {
     const me = head();
     let threat = null;
     let best = Infinity;
@@ -164,7 +210,10 @@ function install() {
         threat = e;
       }
     }
-    if (!threat) return hold('left', GUARD, UPRIGHT);
+    if (!threat) {
+      hold('left', GUARD, UPRIGHT);
+      return false;
+    }
     const { attack } = threat;
     if (!attack.blockable && attack.kind === 'slam') {
       if (threat.phase === 'windup' && dodged.get(threat) !== attack && best < (attack.radius ?? 1.5) + 1.2) {
@@ -174,7 +223,8 @@ function install() {
         const z = threat.position.z + (me.z - threat.position.z) * k;
         d.teleport(x, z, Math.atan2(-(threat.position.x - x), -(threat.position.z - z)));
       }
-      return hold('left', GUARD, UPRIGHT);
+      hold('left', GUARD, UPRIGHT);
+      return true;
     }
     if (attack.kind === 'shot') _a.copy(threat.position).setY(threat.position.y + 1.3);
     else {
@@ -190,6 +240,31 @@ function install() {
     const face = dir.applyQuaternion(player.rig.quaternion.clone().invert());
     const look = new Q().setFromRotationMatrix(M.lookAt(new V(), face, new V(0, 1, 0))).multiply(tilt);
     hold('left', local.toArray(), look.toArray());
+    return true;
+  };
+  const klass = d.state.class;
+  const { combat } = adventure;
+  /** An enemy's arrow flying at you, within `r` m. */
+  const arrowComing = (r = 8) => {
+    const me = head();
+    return (combat.projectiles.arrows ?? []).some((a) => a.stuck <= 0 && !a.reflected && a.pos.distanceTo(me) < r && a.vel.dot(_b.copy(me).sub(a.pos)) > 0);
+  };
+  /**
+   * The off hand against what's coming: the warrior's shield towards the blow
+   * (the play-through's); the mage's ward the same, the grip squeezed only
+   * while a blow comes (each block costs mana); the ranger's bow hand held
+   * up, its grip squeezed while an arrow flies at you.
+   */
+  let warded = false;
+  const defend = () => {
+    const threat = shieldUp();
+    if (klass === 'warrior') return threat;
+    // The mage's ward against a blow, the ranger's against an arrow: the left grip squeezed.
+    const up = klass === 'mage' ? threat : arrowComing();
+    squeeze('left', up ? 1 : 0);
+    if (up && !warded) tally2.wardUps++;
+    warded = up;
+    return threat;
   };
   /** Stand `seconds`, hands down (or the shield up), stopping if you fall. */
   const wait = (seconds, { guard = false } = {}) => {
@@ -269,7 +344,8 @@ function install() {
    * across it, forehand then backhand, the shield up. Stops when `done()`,
    * when `thirsty()` (a drink is due), or when you fall.
    */
-  const fight = ({ seconds = 5, near = 30, reach = 0.95, pick = () => true, done = () => false, thirsty = () => false } = {}) => {
+  const swordFight = ({ seconds = 5, near = 30, reach = 0.95, pick = () => true, done = () => false, thirsty = () => false } = {}) => {
+    let idle = 0;
     for (let t = 0; t < seconds; ) {
       if (!player.alive) return { dead: true };
       if (done()) return { done: true };
@@ -288,8 +364,11 @@ function install() {
         down();
         tick(0.1);
         t += 0.1;
+        // Nobody to fight within reach for a while (one walked home past it): go and find them.
+        if ((idle += 0.1) >= 4) return { lost: true };
         continue;
       }
+      idle = 0;
       foes.sort((a, b) => flat(a.position, me) - flat(b.position, me));
       const e = foes[0];
       const dist = flat(e.position, me);
@@ -323,6 +402,311 @@ function install() {
       if (e.hp < was) tally.landed++;
     }
     return {};
+  };
+  // ---------------------------------------------------------------- the ranger's and the mage's fighting
+  const trigger = (v) => d.device.controllers.right.setButtonValueImmediate('trigger', v);
+  /** A button pressed and let go: A or B on the right controller, X or Y on the left. */
+  const button = (hand, name) => {
+    d.device.controllers[hand].setButtonValueImmediate(name, 1);
+    tick();
+    d.device.controllers[hand].setButtonValueImmediate(name, 0);
+    tick();
+  };
+  /** Turn on the spot to face `e`. */
+  const faceFoe = (e) => {
+    const me = head();
+    turn(Math.atan2(-(e.position.x - me.x), -(e.position.z - me.z)));
+  };
+  /** Where you may step or blink to, while a fight asks it (the Warden's hall: out through its gate, it walks back to its throne whole); null for anywhere. */
+  let fence = null;
+  /** Walk towards (x, z), as far as your legs have had time for, short of any wall and inside the `fence`: the metres walked. */
+  const stepTo = (x, z) => {
+    const me = head();
+    const want = flat(me, { x, z });
+    const go = Math.min(want, legs);
+    if (go < 0.05) return 0;
+    const way = new V((x - me.x) / want, 0, (z - me.z) / want);
+    const to = new V();
+    const went = window.__rules.blinkTo(player.feetPosition(new V()), way, player.ground, to, { distance: go, step: Math.min(0.25, go) });
+    if (went <= 0) return 0;
+    if (fence && !fence(me.x + way.x * went, me.z + way.z * went)) return 0;
+    legs -= went;
+    d.teleport(me.x + way.x * went, me.z + way.z * went, player.rig.rotation.y);
+    return went;
+  };
+  /** Would a blink (straight back from where you face) land inside the `fence`? */
+  const blinkLands = () => {
+    if (!fence) return true;
+    const back = d.camera.getWorldDirection(new V()).setY(0).normalize().negate();
+    const to = new V();
+    window.__rules.blinkTo(player.feetPosition(new V()), back, player.ground, to);
+    return fence(to.x, to.z);
+  };
+  /** Back away from `e` at your walking pace: straight back, else to either side. */
+  const backOff = (e) => {
+    const me = head();
+    const a = Math.atan2(me.x - e.position.x, me.z - e.position.z);
+    for (const turnBy of [0, 0.7, -0.7, 1.4, -1.4]) {
+      if (stepTo(me.x + Math.sin(a + turnBy) * 3, me.z + Math.cos(a + turnBy) * 3) > 0) return true;
+    }
+    return false;
+  };
+  const _bot = new V();
+  const _top = new V();
+  /** Where an arrow loosed from `from` at `speed` meets `e`'s chest, moving at `vel`, dropping as it flies. */
+  const aimPoint = (e, vel, speed, from) => {
+    e.capsule(_bot, _top);
+    const at = _top.clone().lerp(_bot, 0.35);
+    const t = at.distanceTo(from) / speed;
+    at.x += vel.x * t;
+    at.z += vel.z * t;
+    at.y += 0.5 * d.CONFIG.ranger.arrow.gravity * t * t;
+    return at;
+  };
+  const BOW = [Math.SQRT1_2, 0, 0, Math.SQRT1_2]; // the fist's line upright: the bow's limb stands up
+  /** The bow held out at `at`, arm's length before your eyes. */
+  const bowAt = (at) => {
+    player.rig.updateMatrixWorld(true);
+    const eye = player.rig.worldToLocal(head());
+    const aim = player.rig.worldToLocal(at.clone());
+    hold('left', eye.clone().addScaledVector(aim.sub(eye).normalize(), 0.55).add(new V(0, -0.12, 0)).toArray(), BOW);
+  };
+  const tally2 = { shots: 0, bolts: 0, powerShots: 0, traps: 0, novas: 0, blinks: 0, fireballs: 0, shapes: 0, misread: 0, wardUps: 0 };
+  /** Draw `shape` with the right hand in front of you (the grip held), as the recogniser's sloppy seeded strokes: what it read. */
+  let seed = 11;
+  const drawShape = (shape) => {
+    const S = window.__strokes;
+    const stroke = S.performShape(shape, S.rng(seed++));
+    player.rig.updateMatrixWorld(true);
+    const h = player.rig.worldToLocal(head());
+    const gaze = player.camera.getWorldDirection(new V()).applyQuaternion(player.rig.quaternion.clone().invert());
+    const f = new V(gaze.x, 0, gaze.z).normalize();
+    const right = new V(-f.z, 0, f.x);
+    const points = stroke.points.map(([x, y, z]) => h.clone().addScaledVector(right, x).add(new V(0, y, 0)).addScaledVector(f, z).toArray());
+    hold('right', points[0]);
+    squeeze('right', 1);
+    for (const p of points) {
+      hold('right', p);
+      defend();
+      tick();
+    }
+    squeeze('right', 0);
+    tick();
+    hold('right', DOWN.right);
+    tallyShape(shape);
+    const l = adventure.gestures.last;
+    return { ability: l?.ability ?? null, use: l?.use ?? null };
+  };
+  const tallyShape = (shape) => {
+    tally2.shapes++;
+    const l = adventure.gestures.last;
+    if (l?.event !== 'stroke' || l.verdict.id !== shape) tally2.misread++;
+  };
+  /** Could you use `ability` now: your level has brought it, it's off cooldown and paid for, keeping `spare` of the bar. */
+  const ready = (ability, spare = 0) => player.can(ability) && !player.abilities.refuses(ability, player.resource - spare, player.costOf(ability));
+  /** Nock, draw full and loose at `e` (with Power Shot if `power`), about a second: the shot's arrow count. */
+  const shoot = (e, power) => {
+    const kit = combat.ranger;
+    const speed = d.CONFIG.ranger.arrow.maxSpeed * (1 + player.stats.talents.arrowSpeed);
+    faceFoe(e);
+    const vel = new V();
+    let at = aimPoint(e, vel, speed, head());
+    bowAt(at);
+    hold('right', DOWN.right);
+    tick();
+    holdAt('right', kit.bow.stringRest);
+    trigger(1);
+    for (let i = 0; i < 8; i++) {
+      bowAt(at);
+      holdAt('right', kit.bow.stringRest);
+      squeeze('left', arrowComing() ? 1 : 0);
+      tick();
+    }
+    if (!kit.bow.nocked) {
+      trigger(0);
+      tick();
+      return false;
+    }
+    if (power) {
+      d.device.controllers.right.setButtonValueImmediate('a-button', 1);
+      tick();
+      d.device.controllers.right.setButtonValueImmediate('a-button', 0);
+      if (kit.powered) tally2.powerShots++;
+    }
+    // Pull back over 0.45 s, hold 0.25 s on the mark, following it.
+    const was = e.position.clone();
+    for (let i = 0; i < 50; i++) {
+      if (!player.alive) return false;
+      if (e.alive) {
+        vel.lerp(new V().subVectors(e.position, was).multiplyScalar(72).setY(0), 0.3);
+        was.copy(e.position);
+        at = aimPoint(e, vel, speed, kit.bow.rest);
+      }
+      faceFoe(e);
+      bowAt(at);
+      const dir = at.clone().sub(kit.bow.rest).normalize();
+      holdAt('right', kit.bow.rest.clone().addScaledVector(dir, -(0.16 + 0.6 * Math.min(1, i / 32))));
+      squeeze('left', arrowComing() ? 1 : 0);
+      tick();
+    }
+    trigger(0);
+    tick();
+    tally2.shots++;
+    for (let i = 0; i < 12; i++) {
+      hold('right', DOWN.right);
+      squeeze('left', arrowComing() ? 1 : 0);
+      tick();
+    }
+    return true;
+  };
+  /** Charge a bolt at the wand's tip and throw it at `e`, about 0.9 s. */
+  const throwBolt = (e) => {
+    const P = [0.25, 1.5, 0.15];
+    faceFoe(e);
+    hold('right', P);
+    trigger(1);
+    tick();
+    const charge = adventure.mage.chargeTime() + 0.02;
+    for (let t = 0; t < charge; t += 1 / 72) {
+      if (!player.alive) return false;
+      if (e.alive) faceFoe(e);
+      defend();
+      hold('right', P);
+      tick();
+    }
+    for (let i = 1; i <= 3; i++) {
+      hold('right', [P[0], P[1] - i * 0.004, P[2] - (i * 4.5) / 72]);
+      defend();
+      tick();
+    }
+    trigger(0);
+    hold('right', [P[0], P[1] - 4 * 0.004, P[2] - (4 * 4.5) / 72]);
+    tick();
+    tally2.bolts++;
+    for (let i = 0; i < 8; i++) {
+      hold('right', DOWN.right);
+      defend();
+      tick();
+    }
+    return true;
+  };
+  /**
+   * Fight as the ranger or the mage for up to `seconds` of game time: the
+   * nearest enemy that's up (within `near` m, and `pick`ed) shot at, backing
+   * off from whatever reaches you. Stops when `done()`, when `thirsty()`, or
+   * when you fall.
+   */
+  const rangedFight = ({ seconds = 5, near = 30, pick = () => true, done = () => false, thirsty = () => false, inside = null } = {}) => {
+    fence = inside;
+    let idle = 0;
+    let misses = 0;
+    let aimedAt = null;
+    let lastHp = 0;
+    let hidden = 0;
+    for (let t = 0; t < seconds; ) {
+      if (!player.alive) return { dead: true };
+      if (done()) return { done: true };
+      if (thirsty()) return { thirsty: true };
+      const began = clock;
+      const me = head();
+      const orb = adventure.orbs.root.children.find((o) => flat(o.position, me) < 10);
+      if (orb && player.hp < player.maxHp * 0.8 && !adventure.gatherFoes().some((f) => f.alive && f.hittable && flat(f.position, me) < 4)) {
+        d.teleport(orb.position.x, orb.position.z, player.rig.rotation.y);
+        tick();
+        t += 1 / 72;
+        continue;
+      }
+      const foes = adventure.gatherFoes().filter((e) => e.alive && e.hittable && pick(e) && flat(e.position, me) < near);
+      if (!foes.length) {
+        down();
+        squeeze('left', 0);
+        tick(0.1);
+        t += 0.1;
+        if ((idle += 0.1) >= 4) return { lost: true };
+        continue;
+      }
+      idle = 0;
+      foes.sort((a, b) => flat(a.position, me) - flat(b.position, me));
+      const e = foes[0];
+      const dist = flat(e.position, me);
+      const reachOf = (f) => flat(f.position, me) - f.def.radius;
+      const pressing = foes.filter((f) => f.kind !== 'archer' && reachOf(f) < 2.2 && !(f.afflictedFor('rooted') > 0) && !(f.afflictedFor('frozen') > 0));
+      if (pressing.length) {
+        faceFoe(pressing[0]);
+        if (klass === 'ranger' && ready('snareTrap')) {
+          if (drawShape('ring').use === 'cast') tally2.traps++;
+        } else if (klass === 'mage' && ready('frostNova') && pressing.some((f) => reachOf(f) < 2.6)) {
+          button('left', 'x-button');
+          tally2.novas++;
+        }
+        if (klass === 'mage' && adventure.mage.blinkCooldown <= 0 && blinkLands()) {
+          faceFoe(pressing[0]);
+          button('right', 'b-button');
+          tally2.blinks++;
+        } else backOff(pressing[0]);
+      }
+      // Out of sight (round a corner, behind a prop): walk towards it; a while, and step up to it.
+      e.capsule(_bot, _top);
+      if (!player.ground.lineOfSight(head(), _top.clone().lerp(_bot, 0.35)) || dist > 20) {
+        stepTo(e.position.x, e.position.z);
+        defend();
+        tick();
+        if ((hidden += 1 / 72) > 1.5 || dist > 20) {
+          hidden = 0;
+          const k = Math.min(6, dist) / Math.max(dist, 1e-3);
+          d.teleport(e.position.x + (me.x - e.position.x) * k, e.position.z + (me.z - e.position.z) * k, player.rig.rotation.y);
+          tick();
+        }
+        t += clock - began;
+        continue;
+      }
+      hidden = 0;
+      // Four shots at it and none has hurt it yet (a lip of ground or a rail in the way): walk up closer, as a player would.
+      if (misses >= 4) {
+        misses = 0;
+        let went = 0;
+        for (let i = 0; i < 108 && flat(e.position, head()) > 3; i++) {
+          went += stepTo(e.position.x, e.position.z);
+          defend();
+          tick();
+        }
+        if (went < 0.5) {
+          const k = Math.min(3, dist) / Math.max(dist, 1e-3);
+          d.teleport(e.position.x + (me.x - e.position.x) * k, e.position.z + (me.z - e.position.z) * k, player.rig.rotation.y);
+          tick();
+        }
+        t += clock - began;
+        continue;
+      }
+      if (klass === 'ranger') {
+        // Power Shot on anything one arrow won't kill, keeping focus for a snare.
+        const spare = player.can('snareTrap') ? player.costOf('snareTrap') : 0;
+        shoot(e, ready('powerShot', spare) && e.hp > 30 * player.stats.damage);
+      } else {
+        // A Fireball on a pack, keeping mana for a Frost Nova and a block.
+        const pack = foes.filter((f) => f.position.distanceTo(e.position) < 2.5).length;
+        if (pack >= 2 && ready('fireball', player.costOf('frostNova') + 10) && !player.abilities.waitingOn()) {
+          if (drawShape('ring').use === 'cast') tally2.fireballs++;
+        }
+        throwBolt(e);
+      }
+      // Shots still flying land later: count those since it was last hurt.
+      if (e !== aimedAt || e.hp < lastHp) misses = 0;
+      else misses++;
+      aimedAt = e;
+      lastHp = e.hp;
+      t += clock - began;
+    }
+    return {};
+  };
+  const fight = klass === 'warrior' ? swordFight : rangedFight;
+  /** Spend every talent point you have, in `plan`'s order (out of a fight): the talents now. */
+  const spendPoints = (plan) => {
+    for (const talent of plan) {
+      if (d.state.pointsLeft <= 0) break;
+      adventure.onTalents({ kind: 'spend', talent, fighting: adventure.fighting });
+    }
+    return { left: d.state.pointsLeft, spent: d.state.pointsSpent, talents: { ...d.state.talents } };
   };
   /** A fist onto a button of Hale's board (or `on`, another talk board): in front of it, then onto its face, then back down. */
   const press = (button, hand = 'right', on = 'board') => {
@@ -403,15 +787,16 @@ function install() {
     loot.push({ stage: window.__stage ?? '', coins: l.coins, items: [...l.items], interior });
     dropLoot(at, l, interior);
   };
-  window.__play = { hold, holdAt, squeeze, tick, wait, face, fight, press, pick, touch, turn, down, head, drink, collect, lyingHere, tally, loot };
+  window.__play = { hold, holdAt, squeeze, tick, wait, face, fight, press, pick, touch, turn, down, head, drink, collect, lyingHere, tally, tally2, loot, spendPoints, klass };
 }
 
 /** Load the Adventure (`query` added), enter VR and pause it, with the script's hands on. */
 async function enter(query = '') {
   await page.goto(`${base}/?emulate&nodevui${query}`);
-  // `?newgame` opens the new-character form: make the suggested warrior.
+  // `?newgame` opens the new-character form: the class's card, and the suggested name.
   if (query.includes('newgame')) {
     await page.waitForSelector('#new-character[open]', { timeout: 60000 });
+    await page.check(`#new-character input[name=class][value=${klass}]`);
     await page.click('#new-character button[value=make]');
   }
   await page.waitForFunction(() => window.__descent?.adventure, null, { timeout: 120000 });
@@ -419,6 +804,11 @@ async function enter(query = '') {
   await page.waitForFunction(() => window.__descent.renderer.xr.isPresenting, null, { timeout: 60000 });
   await xrFrames(3);
   await page.evaluate(() => (window.__descent.paused = true));
+  // The recogniser's stroke maker (for drawing a shape) and the blink's wall rule (for a step that stops at a wall).
+  await page.evaluate(async () => {
+    window.__strokes = await import('/tests/support/gestureStrokes.ts');
+    window.__rules = await import('/src/combat/mage.ts');
+  });
   await page.evaluate(install);
   await page.evaluate(() => window.__play.down());
   await xrFrames(2);
@@ -434,7 +824,15 @@ async function reload() {
   await enter();
 }
 const allLoot = async () => [...lootLog, ...(await page.evaluate(() => window.__play.loot))];
-const stage = (name) => page.evaluate((name) => (window.__stage = name), name);
+let currentStage = '';
+const stage = (name) => {
+  currentStage = name;
+  return page.evaluate((name) => (window.__stage = name), name);
+};
+/** The fights' tallies and every death, by the stage it came in. */
+const fights = { deaths: [], tally: null };
+/** The ranger's or mage's tally, without the warrior's swings. */
+const tally2Of = ({ swings, landed, ...rest }) => rest;
 
 /** What a player would notice about themselves and their things. */
 const look = () =>
@@ -575,16 +973,17 @@ async function walkIn() {
   await page.evaluate(() => window.__play.wait(2.5));
   await stick(0, 0);
 }
-/** Fight in rounds until `done` (a function body run in the page), a drink is due, a death, or `rounds` run out. */
+/** Fight in rounds until `done` (a function body run in the page), a drink is due, a death, nobody near to fight ('lost'), or `rounds` run out. */
 async function fightUntil(opts, rounds = 40) {
   for (let i = 0; i < rounds; i++) {
     const r = await page.evaluate((o) => {
       const fn = (src) => (src ? new Function(`return (${src})`)() : undefined);
-      return window.__play.fight({ seconds: 5, near: o.near ?? 30, done: fn(o.done), pick: fn(o.pick), thirsty: fn(o.thirsty) });
+      return window.__play.fight({ seconds: 5, near: o.near ?? 30, done: fn(o.done), pick: fn(o.pick), thirsty: fn(o.thirsty), inside: fn(o.inside) });
     }, opts);
     if (r.dead) return 'dead';
     if (r.done) return 'done';
     if (r.thirsty) return 'thirsty';
+    if (r.lost) return 'lost';
   }
   return 'timeout';
 }
@@ -593,12 +992,26 @@ async function throughDeath() {
   await page.evaluate(() => window.__play.wait(4.7));
   await settled();
 }
-/** Fight until `done`, and if you fall, wake, go `back` and carry on: what a player would do. */
+/**
+ * Fight until `done`, and if you fall, wake, go `back` and carry on: what a
+ * player would do. With nobody near to fight (one walked home past where you
+ * stand), go `back` to find them.
+ */
 async function battle(opts, back, rounds = 40, lives = 4) {
   let deaths = 0;
+  let strays = 0;
   for (;;) {
     const r = await fightUntil(opts, rounds);
+    if (r === 'lost' && strays++ < 6) {
+      // One walking home can't be fought on the way: let it get there first.
+      await page.evaluate(() => {
+        for (let i = 0; i < 30 && window.__descent.adventure.gatherFoes().some((e) => e.alive && e.post?.evading); i++) window.__play.wait(1);
+      });
+      await back();
+      continue;
+    }
     if (r !== 'dead') return { r, deaths };
+    fights.deaths.push(currentStage);
     if (++deaths > lives) return { r, deaths };
     await throughDeath();
     await page.evaluate(() => window.__play.wait(12));
@@ -878,12 +1291,37 @@ async function openChest(id) {
 /** Hands down at your sides. */
 const handsDown = () => page.evaluate(() => window.__play.down());
 
-// ================================================================ 1. a new warrior
+// ---------------------------------------------------------------- levels and talents
+const levels = [];
+/** Where you stand on the curve, noted for `stage`: your level, XP, the XP the level and the next need, and your talent points. */
+async function onCurve(stage) {
+  const c = await page.evaluate(async () => {
+    const { xpToReach } = await import('/src/adventureState.ts');
+    const { state } = window.__descent;
+    const next = state.level < state.cap ? xpToReach(state.level + 1) : null;
+    return { level: state.level, xp: state.xp, from: xpToReach(state.level), next, cap: state.cap, points: state.pointsLeft + state.pointsSpent };
+  });
+  levels.push({ stage, ...c });
+  return c;
+}
+/** At a hand-in: the level is where the curve puts the XP, with a point a level from 2; the points spent as the class spends them. */
+async function levelled(stage, level) {
+  const c = await onCurve(stage);
+  check(
+    c.level === level && c.xp >= c.from && (c.next === null || c.xp < c.next) && c.points === Math.max(0, level - 1),
+    `level ${c.level} where the curve puts ${c.xp} XP (${c.from} to reach it${c.next === null ? ', the cap' : `, ${c.next} the next`}), with ${c.points} talent points`,
+  );
+  const t = await page.evaluate((plan) => window.__play.spendPoints(plan), CLASS.talents);
+  note(`talents: ${Object.entries(t.talents).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'} (${t.left} left)`);
+}
+
+// ================================================================ 1. a new character of the class
+const KIT = await page.evaluate(async (klass) => (await import('/src/inventory.ts')).STARTING_KIT[klass], klass);
 let s = await look();
 {
   check(
-    s.level === 1 && s.gear.mainHand === 'plain-sword' && s.gear.offHand === 'round-shield' && s.gear.chest === 'worn-tunic' && s.gear.feet,
-    `a new warrior in the starting kit: ${Object.entries(s.gear).filter(([, v]) => v).map(([k, v]) => `${k} ${v}`).join(', ')}`,
+    s.level === 1 && Object.entries(KIT).every(([slot, id]) => s.gear[slot] === id) && (await page.evaluate(() => window.__descent.state.class)) === klass,
+    `a new ${klass} in the starting kit: ${Object.entries(s.gear).filter(([, v]) => v).map(([k, v]) => `${k} ${v}`).join(', ')}`,
   );
   check(s.belt[1] === 'minor-healing-potion×3' && s.coins === 0 && s.bag.every((b) => !b), `three potions on the right hip, 0 coins, an empty bag (${s.belt.join(', ')})`);
   ledger.push({ stage: 'start', gained: 0, coins: 0 });
@@ -907,6 +1345,7 @@ let s = await look();
   const picked = await handIn(0);
   s = await look();
   check(picked && s.level === 2, `Raiders handed in with the first pick of ${await named(picked?.offered ?? [])}: level ${s.level}`);
+  await levelled('Raiders in the Fields', 2);
   const worn = await wearUpgrades();
   note(`worn from the bag: ${worn.join(', ') || 'nothing'}`);
 }
@@ -930,7 +1369,7 @@ let s = await look();
   );
   check(sip?.belt === 2 && sip.cooldown > 55, `two left on the hip, the belt dimmed for ${sip?.cooldown.toFixed(0)} s`);
   fought = await clearCamp('lumberCamp');
-  check(fought.r === 'done' && (await alive('lumberCamp')) === 0, `the lumber camp's five fought, its leader too (${fought.deaths} deaths)`);
+  check(fought.r === 'done' && (await alive('lumberCamp')) === 0, `the lumber camp's five fought, its leader too (${fought.deaths} deaths${fought.r === 'done' ? '' : `, ${fought.r} with ${await alive('lumberCamp')} standing`})`);
   await lootUp('the lumber camp');
   await stage('patrol');
   fought = await clearCamp('patrol');
@@ -957,6 +1396,7 @@ let s = await look();
   const picked = await handIn(0);
   s = await look();
   check(picked && s.level === 3 && !s.quest.includes('leaders-orders'), `The Lumber Camp handed in with the first pick of ${await named(picked?.offered ?? [])}, the orders gone: level ${s.level}`);
+  await levelled('The Lumber Camp', 3);
   note(`worn from the bag: ${(await wearUpgrades()).join(', ') || 'nothing'}`);
   await page.evaluate(() => window.__play.wait(1));
   check(await page.evaluate(() => window.__play.press('accept')), '"Accept" What Lies Below');
@@ -968,7 +1408,7 @@ let s = await look();
   await page.evaluate(() => window.__descent.teleport(28, -57, -Math.PI / 2));
   await page.evaluate(() => window.__play.wait(0.3));
   const fought = await clearCamp('watchtower');
-  check(fought.r === 'done' && (await alive('watchtower')) === 0, `the watchtower's three fought (${fought.deaths} deaths)`);
+  check(fought.r === 'done' && (await alive('watchtower')) === 0, `the watchtower's three fought (${fought.deaths} deaths${fought.r === 'done' ? '' : `, ${fought.r} with ${await alive('watchtower')} standing`})`);
   await lootUp('the watchtower');
   await stage('watchtower chest');
   const hill = await openChest('oakvale-watchtower');
@@ -1035,16 +1475,21 @@ let s = await look();
     await page.evaluate(() => window.__play.wait(8));
     await walkIn();
     await inMine(22, -40, 22, -52);
-    const r = await fightUntil({ done: '() => window.__descent.state.wardenBeaten', near: 16 }, 60);
+    // Fought inside the hall: backing out through its gate sends the Warden back to its throne whole.
+    const r = await fightUntil({ done: '() => window.__descent.state.wardenBeaten', near: 16, inside: '(x, z) => !window.__descent.adventure.throne.plan.outside(x, z)' }, 60);
+    if (r !== 'done') note(`the Warden, try ${tries + 1}: ${r}, ${await page.evaluate(() => { const { throne } = window.__descent.adventure; const w = throne.body; const me = window.__play.head(); return `the throne ${throne.state}${w ? `, the Warden ${Math.round(w.hp)}/${w.maxHp} ${w.state} ${Math.round(Math.hypot(w.position.x - me.x, w.position.z - me.z))} m off` : ''}, you ${Math.round(window.__descent.player.hp)} hp${throne.plan.outside(me.x, me.z) ? ', out through the gate' : ''}`; })}`);
     if (r === 'dead') {
       wardenDeaths++;
+      fights.deaths.push('warden');
       await throughDeath();
     }
   }
   s = await look();
   check(s.beaten && s.tracker?.join(' | ') === 'What Lies Below | Return to Marshal Hale', `the Warden beaten through the real combat (${wardenDeaths} deaths to it; ${fell} in the rest of the mine)`);
-  const tally = await page.evaluate(() => ({ ...window.__play.tally }));
-  note(`all fights: ${tally.landed} of ${tally.swings} swings landed`);
+  const tally = await page.evaluate(() => ({ ...window.__play.tally, ...window.__play.tally2 }));
+  if (klass === 'warrior') note(`all fights: ${tally.landed} of ${tally.swings} swings landed`);
+  else note(`all fights: ${JSON.stringify(tally2Of(tally))}`);
+  fights.tally = tally;
 
   // At the dig, looking round with the bag open and the mine's drops lying.
   await page.evaluate(() => window.__play.wait(2));
@@ -1068,6 +1513,13 @@ let s = await look();
   got = await lootUp("the Warden's hall");
   check(got.left === 0 && (await page.evaluate(() => window.__play.lyingHere().length)) === 0, `every drop in the mine taken (${got.full} flashing "Bag full")`);
   note(`worn from the bag: ${(await wearUpgrades()).join(', ') || 'nothing'}`);
+}
+
+// Level 4 came in the mine: its point spent now, out of the fight.
+{
+  const c = await onCurve('the mine');
+  check(c.xp >= c.from && (c.next === null || c.xp < c.next) && c.points === c.level - 1, `after the mine, level ${c.level} where the curve puts ${c.xp} XP, with ${c.points} talent points`);
+  await page.evaluate((plan) => window.__play.spendPoints(plan), CLASS.talents);
 }
 
 // ================================================================ 6. the coins before spending
@@ -1141,11 +1593,11 @@ const junkValue = await page.evaluate(async () => {
   check(greys.length > 0 && junkLeft === 0 && s.coins > was.coins, `"Sell junk" sells every grey (${greys.join(', ')}) for ${s.coins - was.coins} coins${junkValue ? ` (their worth ${junkValue})` : ''}: ${s.coins} in the purse`);
   ledger.push({ stage: 'sold the junk', gained: s.coins - was.coins, coins: s.coins });
 
-  // What you've grown out of, carried onto the board and sold: all but the plain sword, kept for the stash.
-  const old = await page.evaluate(async () => {
+  // What you've grown out of, carried onto the board and sold: all but the starting weapon, kept for the stash.
+  const old = await page.evaluate(async (keep) => {
     const { itemOf } = await import('/src/items.ts');
-    return window.__descent.state.inventory.bag.flatMap((s, i) => (s && s.id !== 'plain-sword' && itemOf(s.id)?.kind === 'gear' ? [i] : []));
-  });
+    return window.__descent.state.inventory.bag.flatMap((s, i) => (s && s.id !== keep && itemOf(s.id)?.kind === 'gear' ? [i] : []));
+  }, KIT.mainHand);
   const beforeOld = (await look()).coins;
   const sold = [];
   for (const i of old) sold.push(await carry(await bagAt(i), 'bag', await wareAt(5), 'wares'));
@@ -1210,15 +1662,32 @@ const junkValue = await page.evaluate(async () => {
   await stage('hand-ins');
   const picked = await handIn(0);
   s = await look();
-  check(picked?.offered[0] === 'hale-longsword' && s.level === 5 && s.bag.includes('hale-longsword×1'), `What Lies Below handed in with Hale's longsword (offered ${await named(picked?.offered ?? [])}): level ${s.level}`);
-  await page.evaluate(() => {
+  const reward = (await named([CLASS.reward]));
+  check(picked?.offered[0] === CLASS.reward && s.level === 5 && s.bag.includes(`${CLASS.reward}×1`), `What Lies Below handed in with the ${klass}'s ${reward} (offered ${await named(picked?.offered ?? [])}): level ${s.level}`);
+  await levelled('What Lies Below', 5);
+  await page.evaluate((id) => {
     const { adventure, state } = window.__descent;
-    const slot = state.inventory.bag.findIndex((b) => b?.id === 'hale-longsword');
+    const slot = state.inventory.bag.findIndex((b) => b?.id === id);
     adventure.applyThings(state.inventory.move({ in: 'bag', slot }, { in: 'gear', slot: 'mainHand' }), adventure.hale.position);
     window.__play.wait(0.2);
-  });
+  }, CLASS.reward);
   s = await look();
-  check(s.inHand === 'hale' && !s.atHip && s.bag.includes('plain-sword×1'), `worn: Hale's longsword in your hand (${s.damage.toFixed(2)} damage), the plain sword in the bag`);
+  // What the hand draws: the warrior's sword, the ranger's bow, the mage's staff; Hale keeps his own sword unless it went to a warrior.
+  const drawn = await page.evaluate(async (klass) => {
+    const { adventure } = window.__descent;
+    if (klass === 'ranger') {
+      const { BOW_LOOKS } = await import('/src/player/bow.ts');
+      const { bow } = adventure.combat.ranger;
+      // By its colours, not identity: the page's import can be another copy of the module than the game's.
+      return Object.entries(BOW_LOOKS).find(([, l]) => l.scale === bow.look.scale && l.wood === bow.look.wood)?.[0] ?? null;
+    }
+    if (klass === 'mage') return adventure.mage.wandLook;
+    return adventure.player.sword.sword;
+  }, klass);
+  check(
+    drawn === CLASS.look && s.atHip === (klass !== 'warrior') && s.bag.includes(`${KIT.mainHand}×1`),
+    `worn: the ${reward} in your hand, drawn as ${drawn} (${s.damage.toFixed(2)} damage), the ${KIT.mainHand} in the bag, Hale's sword ${s.atHip ? 'still at his hip' : 'gone from his hip'}`,
+  );
   note(`worn from the bag: ${(await wearUpgrades()).join(', ') || 'nothing'}`);
 }
 
@@ -1230,10 +1699,10 @@ const junkValue = await page.evaluate(async () => {
   let st = await page.evaluate(() => ({ stash: window.__descent.adventure.stash.isOpen, bag: window.__descent.bag.isOpen }));
   check(st.stash && st.bag, 'a fist on the stash chest\'s lid opens the stash beside the bag');
   s = await look();
-  const sword = s.bag.indexOf('plain-sword×1');
+  const sword = s.bag.indexOf(`${KIT.mainHand}×1`);
   const held = await carry(await bagAt(sword), 'bag', await stashAt(0), 'stash');
   s = await look();
-  check(held === 'plain-sword' && s.stash[0] === 'plain-sword×1' && s.bag[sword] === null, `the plain sword carried into the stash (${lastCarry})`);
+  check(held === KIT.mainHand && s.stash[0] === `${KIT.mainHand}×1` && s.bag[sword] === null, `the ${KIT.mainHand} carried into the stash (${lastCarry})`);
   await shot('06-the-stash');
   await standAtStash();
   await page.evaluate(() => {
@@ -1247,15 +1716,15 @@ const junkValue = await page.evaluate(async () => {
   await reload();
   s = await look();
   check(
-    s.stash[0] === 'plain-sword×1' && s.coins === before.coins && JSON.stringify(s.bag) === JSON.stringify(before.bag) && JSON.stringify(s.gear) === JSON.stringify(before.gear),
-    `after a reload, the stash still holds the plain sword, and the coins (${s.coins}), bag and gear are as left`,
+    s.stash[0] === `${KIT.mainHand}×1` && s.coins === before.coins && JSON.stringify(s.bag) === JSON.stringify(before.bag) && JSON.stringify(s.gear) === JSON.stringify(before.gear),
+    `after a reload, the stash still holds the ${KIT.mainHand}, and the coins (${s.coins}), bag and gear are as left`,
   );
   await standAtStash();
   await touchStashLid();
   const free = s.bag.findIndex((b) => !b);
   const back = await carry(await stashAt(0), 'stash', await bagAt(free), 'bag');
   s = await look();
-  check(back === 'plain-sword' && s.bag[free] === 'plain-sword×1' && s.stash.every((x) => !x), 'and carried back out into the bag');
+  check(back === KIT.mainHand && s.bag[free] === `${KIT.mainHand}×1` && s.stash.every((x) => !x), 'and carried back out into the bag');
   await page.evaluate(() => window.__descent.saved());
 }
 
@@ -1266,7 +1735,9 @@ for (const m of measured) {
 }
 note(`coins by stage: ${ledger.map((l) => `${l.stage} ${l.gained >= 0 ? '+' : ''}${l.gained}`).join('; ')}`);
 note(`coins before spending ${beforeSpending}; after the smith and the innkeeper ${s.coins}`);
-if (out) writeFileSync(`${out}/whole-zone.json`, JSON.stringify({ route, beforeSpending, ledger, drops: await allLoot(), measured }, null, 1));
+note(`levels: ${levels.map((l) => `${l.stage} ${l.level} (${l.xp} XP)`).join('; ')}`);
+note(`deaths: ${fights.deaths.length}${fights.deaths.length ? ` (${fights.deaths.join(', ')})` : ''}`);
+if (out) writeFileSync(`${out}/whole-zone.json`, JSON.stringify({ klass, route, beforeSpending, ledger, drops: await allLoot(), measured, levels, fights }, null, 1));
 
 check(errors.length === 0, `no page errors${errors.length ? `: ${errors.slice(0, 3).join(' | ')}` : ''}`);
 await browser.close();
