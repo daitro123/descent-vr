@@ -697,7 +697,8 @@ describe('Marksmanship', () => {
     r.player.abilities.used('trueshot', T.trueshot.time);
     expect(r.kit.trueshooting).toBe(true);
     shoot(r, 0.8, [b]);
-    expect(r.kit.shots.flying[0]).toMatchObject({ trueshot: true, target: b });
+    expect(r.kit.shots.flying[0].trueshot).toBe(true);
+    expect(r.kit.shots.flying[0].target).toBe(b); // toBe: a deep match of a whole enemy crawls
     fly(r, 0.6, [b]);
     expect(r.landed.map((l) => l.enemy)).toEqual([b]);
     expect(r.kit.stats).toMatchObject({ trueshots: 1, bent: 1 });
