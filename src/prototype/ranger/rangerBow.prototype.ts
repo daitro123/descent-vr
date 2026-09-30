@@ -4,7 +4,7 @@ import { sharedModelMaterial } from '../../models/materials';
 import { PAL } from '../../models/palette';
 
 // PROTOTYPE (abilities ticket 05, "How the ranger fights"): throwaway code
-// behind `?arena&class=ranger`. The ranger's bow in the left hand, drawn with
+// behind `?arena&class=ranger-prototype`. The ranger's bow in the left hand, drawn with
 // the right: touch the string and hold the trigger to nock, pull back, let go.
 
 /** The bow's numbers, in metres. */
