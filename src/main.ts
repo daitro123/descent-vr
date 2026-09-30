@@ -69,6 +69,8 @@ async function start(): Promise<void> {
       return startMapViewer(renderer, scene, camera, device, r.map);
     case 'walk':
       return (await import('./maps/walk')).startWalk(renderer, scene, camera, r.map);
+    case 'proto':
+      return startPrototype(renderer, scene, camera, device, r.name);
     case 'arena':
       return startArena(renderer, scene, camera, device, perf, r);
     case 'adventure':
@@ -219,6 +221,27 @@ function startArena(
     renderer.render(scene, camera);
     perf?.update(dt);
   });
+}
+
+/** Each prototype's folder, loaded only when its `?proto=<name>` is asked for. */
+type Prototype = { start(renderer: WebGLRenderer, scene: Scene, camera: PerspectiveCamera, device: unknown): Promise<void> };
+const PROTOTYPES = import.meta.glob<Prototype>('./professions/prototypes/*/index.ts');
+
+/** `?proto=<name>`: a throwaway prototype, or the list of them if there's no such one. */
+async function startPrototype(
+  renderer: WebGLRenderer,
+  scene: Scene,
+  camera: PerspectiveCamera,
+  device: unknown,
+  name: string,
+): Promise<void> {
+  const load = PROTOTYPES[`./professions/prototypes/${name}/index.ts`];
+  if (load) return (await load()).start(renderer, scene, camera, device);
+  const names = Object.keys(PROTOTYPES).map((k) => k.split('/')[3]);
+  const intro = document.getElementById('intro');
+  if (!intro) return;
+  intro.replaceChildren(Object.assign(document.createElement('h1'), { textContent: `No prototype "${name}"` }), 'Try:');
+  for (const n of names) intro.append(' ', Object.assign(document.createElement('a'), { href: `?proto=${n}`, textContent: n }));
 }
 
 async function startInspector(renderer: WebGLRenderer, scene: Scene, camera: PerspectiveCamera): Promise<void> {

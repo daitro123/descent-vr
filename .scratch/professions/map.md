@@ -36,6 +36,7 @@ A written **spec for professions**, ready to hand off as build tickets: **Mining
 - [Oakvale's first tier](issues/03-oakvales-first-tier.md): copper ore, rough stone and copper bars; Hearthleaf and Duskcap. Alchemy makes a healing potion for everyone, a rage draught, a mana potion and a ranger's elixir; Smithing makes whetstones and copper gauntlets at par in three versions. Potions share a 60 s cooldown.
 - [How a profession grows](issues/04-how-a-profession-grows.md): **proficiency** climbs by practice (1 per spot emptied or thing made) through **grades** (Apprentice to Artisan); Apprentice is Oakvale's, 0 to 25, and a trainer teaches each next grade. No character level needed.
 - [Trainers and first lessons](issues/09-trainers-and-first-lessons.md): the smith teaches Mining and Smithing; a new herbalist in the house by the well, with the alchemy table, teaches Herbalism and Alchemy. One intro quest per pair after Raiders in the Fields; up to three quests active at once; recipes bought from a "Train" button on the talk board.
+- [Swinging the pick and cutting herbs](issues/05-swinging-the-pick-and-cutting-herbs.md): strike a moving glint on the vein (2 glint strikes or 5 plain ones, on the sword's committed-swing gate), the ore flies to the bag, and the knife takes Hearthleaf with one slice low through the stems. Prototype at `?proto=pick`, variant C.
 
 ## Not yet specified
 

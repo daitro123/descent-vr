@@ -49,6 +49,13 @@ describe('reading the page from its URL', () => {
     expect(readPage('?map=forest&arena').route).toEqual({ kind: 'walk', map: 'forest' });
   });
 
+  it('opens a prototype by its name at ?proto=<name>', () => {
+    expect(readPage('?proto=pick').route).toEqual({ kind: 'proto', name: 'pick' });
+    expect(readPage('?proto=pick&variant=B&emulate').route).toEqual({ kind: 'proto', name: 'pick' });
+    // No name is no prototype.
+    expect(readPage('?proto').route).toEqual({ kind: 'adventure', newGame: false });
+  });
+
   it('forgets ?newgame once answered, keeping every other flag as it was written', () => {
     expect(forgetNewGame('?newgame')).toBe('');
     expect(forgetNewGame('?newgame&emulate&nodevui')).toBe('?emulate&nodevui');
