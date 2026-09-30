@@ -4,6 +4,9 @@
 //   npx vite --port 5173
 //   node .scratch/inventory/checks/chests.mjs [http://localhost:5173] [shots/]
 //
+// Start the dev server fresh: the chest's sound is counted by wrapping
+// `sfx.chest` in the page, which misses if a file changed since it started.
+//
 // A new character in a fresh browser profile, at the plain URL (so it saves).
 // Game time is stepped through the debug handle (`paused`, `step`,
 // `teleport`), not XR frames. The watchtower's gang is felled with a blow big
