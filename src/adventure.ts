@@ -11,6 +11,7 @@ import { Particles } from './fx/particles';
 import { sfx, updateListener } from './fx/sfx';
 import { Shockwaves } from './fx/shockwave';
 import { SwordTrail } from './fx/trail';
+import { itemOf } from './items';
 import { findMap } from './maps/registry';
 import type { Respawn, StartingZone, Zone } from './maps/types';
 import { Hale } from './people/hale';
@@ -26,10 +27,13 @@ import { arrowHides, arrowPoint, arrowTurn, type ArrowSpots } from './ui/questAr
 import { type ArrowShown, QuestTracker } from './ui/questTracker';
 import { ZoneName } from './ui/zoneName';
 import { RunVignette } from './ui/runVignette';
+import { Bag, type BagHand } from './ui/bag/bag';
+import { IconAtlas, lookOf } from './ui/bag/looks';
 import { type Probe, TalkBoard } from './ui/talkBoard';
 import { Orbs } from './world/orbs';
 import { Pickups } from './world/pickups';
 import { BlobShadows } from './world/shadows';
+import { Dropped } from './world/dropped';
 import type { Mine } from './world/mine';
 import { World } from './world/world';
 
@@ -113,6 +117,12 @@ export class Adventure {
   private named = false;
   /** What lies about for a quest, to pick up by hand: the leader's orders. */
   readonly pickups: Pickups;
+  /** The bag: reach over a shoulder for it, and move your things about on its panel. */
+  readonly bag: Bag;
+  /** What you've let go of off the bag's panel, lying on the ground. */
+  readonly dropped: Dropped;
+  /** Each hand's controller, for the bag. */
+  private readonly bagHands: Record<'left' | 'right', { -readonly [K in keyof BagHand]: BagHand[K] }>;
   /** Where the quest arrow's targets are: each quest's place, and Hale. */
   private readonly arrowSpots: ArrowSpots;
   private readonly hud: BeltHud;
@@ -182,6 +192,23 @@ export class Adventure {
     this.runVignette.warm(renderer, camera, scene);
     scene.add(this.zoneName.mesh);
     this.zoneName.warm(renderer, camera, scene);
+    // Your hands, closed on what they hold, and the bag over your shoulder.
+    this.player.showFists();
+    this.dropped = new Dropped(this.world);
+    this.bag = new Bag(
+      {
+        inventory: this.state.inventory,
+        buzz: (hand, intensity, ms) => this.player.input.pulse(hand, intensity, ms),
+        apply: (effects, at) => this.applyThings(effects, at),
+        drop: (stack, at, velocity) => this.dropped.drop(stack, at, velocity),
+      },
+      new IconAtlas(),
+    );
+    const { left, right } = this.player.input.hands;
+    this.bagHands = { left: { grip: left.grip, tracked: false, squeeze: 0 }, right: { grip: right.grip, tracked: false, squeeze: 0 } };
+    scene.add(this.bag.root, this.dropped.root);
+    this.bag.warm(renderer, camera, scene);
+    this.dropped.warm(renderer, camera, scene);
 
     this.combat = new Combat(
       this.player,
@@ -258,8 +285,7 @@ export class Adventure {
     // the mine loads in it, standing on its floor (so it settles first).
     Object.assign(this.standing, record ? { ...record.position, yaw: record.facing, interior: record.interior } : { ...zone.spawn, interior: null });
     const { x, z, yaw, interior } = this.standing;
-    this.player.stats = this.state.stats;
-    this.player.sword.sword = this.state.sword ?? 'plain';
+    this.dressHands();
     this.world.settle(interior);
     this.player.reset(x, z, yaw);
     this.lastHp = this.player.hp;
@@ -321,6 +347,7 @@ export class Adventure {
     }
     this.orbs.update(dt, player);
     this.talk(dt);
+    this.updateBag(dt);
     this.villagers.update(dt, you.head, this.state);
     this.pickUp();
     this.updateHandIn(dt);
@@ -452,6 +479,57 @@ export class Adventure {
     }
   }
 
+  /**
+   * The bag: the reach over a shoulder, and the panel's slots and tabs under
+   * your fists and the sword's tip. What you dropped lies on the ground, and
+   * a fist touching it takes it back into the bag.
+   */
+  private updateBag(dt: number): void {
+    const { player, bag, bagHands, you } = this;
+    for (const side of ['left', 'right'] as const) {
+      const hand = player.input.hands[side];
+      Object.assign(bagHands[side], { grip: hand.grip, tracked: hand.grip.visible, squeeze: hand.squeeze });
+    }
+    player.camera.getWorldDirection(_gaze);
+    bag.update({ dt, head: you.head, gaze: _gaze, rig: player.rig, hands: bagHands, probes: this.touching(), alive: player.alive });
+    const [left, right] = this.touching();
+    const taken = this.dropped.update(dt, [left?.at ?? null, right?.at ?? null], (stack) => {
+      const effects = this.state.inventory.take([stack]);
+      const kept = effects.filter((e) => e.kind !== 'left');
+      if (kept.length) this.applyThings(kept, you.head);
+      const left = effects.find((e) => e.kind === 'left');
+      return left?.kind === 'left' ? left.stack : null;
+    });
+    if (!taken) return;
+    const { intensity, ms } = CONFIG.bag.buzz.takeBack;
+    player.input.pulse(taken.hand === 0 ? 'left' : 'right', intensity, ms);
+    sfx.pickup();
+  }
+
+  /** What an operation on your things did: saved, and shown at `at`. */
+  private applyThings(effects: readonly Effect[], at: Vector3): void {
+    this.saves.onEffects(effects);
+    this.show(effects, at, false);
+  }
+
+  /**
+   * Your hands show what you wear: the main hand's item is the sword you hold
+   * (none, with it empty), the off hand's the shield on your arm, and gloves
+   * tint your fists. Your numbers read what you wear.
+   */
+  private dressHands(): void {
+    const { player, state } = this;
+    const { gear } = state.inventory;
+    player.sword.sword = state.sword ?? 'plain';
+    player.sword.model.visible = gear.mainHand !== null;
+    player.shield.model.visible = gear.offHand !== null;
+    const gloves = itemOf(gear.hands ?? '');
+    const tint = gloves ? lookOf(gloves).tint : null;
+    for (const fist of Object.values(player.fists ?? {})) fist.tint(tint);
+    player.stats = state.stats;
+    player.hp = Math.min(player.hp, player.maxHp);
+  }
+
   /** A fist touches what lies there for your quest: it's yours, with a buzz in that hand. */
   private pickUp(): void {
     const [left, right] = this.touching();
@@ -509,12 +587,15 @@ export class Adventure {
           if (e.stage === 'handedIn') sfx.fanfare();
           break;
         case 'slot':
-          // A reward worn at once (Hale's old longsword, straight into your hand, off their hip):
-          // the main hand's item is the sword you hold, and your numbers read what you wear.
+          this.bag.changed();
+          // Something worn or taken off (Hale's old longsword, straight into your hand, off their hip):
+          // your hands show what you wear, and your numbers read it.
           if (e.where.in !== 'gear') break;
-          this.player.sword.sword = this.state.sword ?? 'plain';
-          this.player.stats = this.state.stats;
+          this.dressHands();
           this.hale.swordAtHip = this.state.haleSwordAtHip;
+          break;
+        case 'coins':
+          this.bag.changed();
           break;
       }
     }
