@@ -14,15 +14,22 @@ export const ABILITY_COLOUR: Readonly<Partial<Record<Ability, number>>> = {
   sweepingStrikes: 0xff5a40, // red: the second blow's embers
   powerShot: 0xffe07a, // a hot gold-white: the nocked arrow's glow
   snareTrap: 0x8fd060, // a leaf green: the trap set down and the root it springs
+  frostNova: 0xbfe8ff, // a pale ice blue: the frost that bursts from you
+  fireball: 0xff7a20, // orange: the burning bolt and its burst
 };
 
 /** Why an ability can't be used now: still cooling down, or not enough of the class's resource. */
 export type Refusal = 'cooling' | 'poor';
 
-/** Each ability's cooldown, and how long the ones that last (Shield Wall, Sweeping Strikes) have left. */
+/**
+ * Each ability's cooldown, how long the ones that last (Shield Wall, Sweeping
+ * Strikes) have left, and which of those that change your next attack
+ * (Fireball's next bolt) are waiting on it.
+ */
 export class AbilityClock {
   private readonly cooling = new Map<Ability, number>();
   private readonly lasting = new Map<Ability, number>();
+  private readonly waiting = new Set<Ability>();
 
   tick(dt: number): void {
     for (const [a, s] of this.cooling) s - dt > 0 ? this.cooling.set(a, s - dt) : this.cooling.delete(a);
@@ -52,10 +59,26 @@ export class AbilityClock {
     if (lasts > 0) this.lasting.set(ability, lasts);
   }
 
-  /** Everything ready again, nothing lasting: after death, or a new run. */
+  /** `ability` changes your next attack: it waits on it until spent. */
+  prime(ability: Ability): void {
+    this.waiting.add(ability);
+  }
+
+  /** Is `ability` waiting on your next attack? */
+  primed(ability: Ability): boolean {
+    return this.waiting.has(ability);
+  }
+
+  /** Your next attack spends `ability`, if it was waiting on it: true if it was. */
+  spend(ability: Ability): boolean {
+    return this.waiting.delete(ability);
+  }
+
+  /** Everything ready again, nothing lasting or waiting: after death, or a new run. */
   clear(): void {
     this.cooling.clear();
     this.lasting.clear();
+    this.waiting.clear();
   }
 }
 

@@ -25,7 +25,7 @@ npm run dev          # http://localhost:5173
   - `npm run dev:quest`, then open `https://<your-LAN-IP>:5173` in the Quest browser and accept the self-signed certificate.
   - Or connect over USB with `adb reverse tcp:5173 tcp:5173` and open `http://localhost:5173` on the headset.
 - URL flags ([`src/route.ts`](src/route.ts) reads them):
-  - The plain URL is Oakvale. Before VR the page lists your characters (up to three) and shows Oakvale from where the picked one stands, slowly turning behind the intro; **Enter VR** plays the picked one (see [Characters](#characters)). A first visit, with no characters yet, opens the new-character form.
+  - The plain URL is Oakvale. Before VR the page lists your characters (up to three) and shows Oakvale from where the picked one stands, slowly turning behind the intro; **Enter VR** plays the picked one (see [Characters](#characters)). A first visit, with no characters yet, shows the new-character form on the page.
   - `?newgame` opens the new-character form on the page (with three characters already, it says so and points at Delete); nothing is deleted. **Cancel** plays the picked character as usual. Either way the flag drops from the address, so a reload doesn't ask again.
   - `?arena` is the wave game in the crypt hall. Its flags work alone too, so older links still open it:
     - `?wave=N` starts the run at wave N (`?wave=7` goes straight to the boss).
@@ -33,9 +33,9 @@ npm run dev          # http://localhost:5173
     - `?showcase` pins the title-screen camera on the bestiary lineup, for reviewing models without a headset.
     - `&class=ranger` is the ranger at level 1 with every base ability to level 10: the bow, the ward, Power Shot and Snare Trap (see [Controls (ranger)](#controls-ranger)); Volley, Scatter and Hunter's Mark say "not built yet" until ticket 22. `&variant=` no longer loads the prototype's variants here.
     - `&class=ranger-prototype` is the throwaway prototype of the ranger the class was built from (`src/prototype/ranger/`, [How the ranger fights](.scratch/abilities/issues/05-how-the-ranger-fights.md)), kept to compare: a bow in the left hand over the warrior's arena. `&variant=` picks what the ranger does up close, and clicking the right stick cycles them: `ward` (the default and the one built: the left grip raises a short ward that stops arrows and, raised just in time, sends them back), `knife` (a knife in the draw hand, and swinging the bow parries a blow or swats an arrow back) or `kite` (two dashes and a longer step, but only 12 arrows, one back every 1.5 s).
-    - `?class=mage` fights the waves as the mage, a prototype (`src/prototype/mage/`, [ticket](.scratch/abilities/issues/06-how-the-mage-fights.md)): hold a trigger to charge a bolt in that hand and let go mid-throw to cast it (a hard throw makes a small fast bolt, a gentle toss a big slow one); hold the left grip to raise a ward that blocks like the shield, spending mana; B/Y blinks 3.5 m. The right stick's click steps through three kits (`?kit=A`, the pick, `B` a wand, `C` a palm push with two casting hands), named on a panel over your left hand; `?cast=throw|wand|push`, `?focus=ward|wardOnly|caster`, `?move=blink|dash` and `?mana=free|spend` change one thing at a time.
+    - `&class=mage` is the mage at level 1 with every base ability to level 10: Frost Nova on A/X and Fireball on the ring (see [Controls (mage)](#controls-mage)); Frostbolt, Chain Lightning and Blizzard are in its slots and say "not built yet" until abilities ticket 24. The mage prototype's kits are gone from the flags (`&kit=`, `&cast=`, `&focus=`, `&move=`, `&mana=` do nothing now); its code stays in `src/prototype/mage/` to read.
     - `&class=warrior` (or no `&class=`) is the warrior at level 1 with every base ability to level 10: the War Cry, Earthshaker and the three gesture abilities, Heroic Throw, Shield Wall and Sweeping Strikes (see [Abilities by gesture](#abilities-by-gesture)). The arena keeps no save, so the first shape hangs in the air again on every visit until you draw it.
-    - `&gestures` swaps the game's gestures for the throwaway prototype of them (`src/prototype/gestures/`, [ticket](.scratch/abilities/issues/07-using-abilities-by-gesture.md)) over the class, the warrior's too (`?arena&gestures`), and over the ranger's and the mage's prototypes (`&class=ranger&gestures` still runs it over the ranger's prototype): it stays until ticket 27, and for recording templates. Hold the **right** grip, draw a shape in the air in front of you, let go: a ring (from the top, clockwise), a Z, a V, a triangle (from the top, down to the right first) and, for the ranger and the mage, an S each cast a placeholder ability, a coloured burst paid for in rage, focus or mana; the ranger and the mage also have one on A/X. A grip squeezed at a shoulder, a hip or the tool loop never arms. A panel low on your left counts what was read. Clicking the right stick steps through its modes: FIGHT, DRILL (the fight holds still and the panel asks for each gesture in turn, counting how many were read right), JUNK (it asks for sword swings, bow draws or bolt throws with the grip held, and counts how many fired a gesture by mistake) and RECORD (what you draw becomes that gesture's template, kept in this browser and logged to the console, for pasting into `src/player/gestures/recorded.ts`; the left stick's click skips, A/X forgets). Clicking the left stick steps the gesture set (`&vocab=C`, shapes, is the pick; `A` mixes two flicks in, `B` is all flicks).
+    - `&gestures` swaps the game's gestures for the throwaway prototype of them (`src/prototype/gestures/`, [ticket](.scratch/abilities/issues/07-using-abilities-by-gesture.md)) over the class, the warrior's too (`?arena&gestures`), over the built ranger and mage (the mage's paid from its mana), and over the ranger's prototype (`&class=ranger-prototype&gestures`): it stays until ticket 27, and for recording templates. Hold the **right** grip, draw a shape in the air in front of you, let go: a ring (from the top, clockwise), a Z, a V, a triangle (from the top, down to the right first) and, for the ranger and the mage, an S each cast a placeholder ability, a coloured burst paid for in rage, focus or mana; the ranger and the mage also have one on A/X. A grip squeezed at a shoulder, a hip or the tool loop never arms. A panel low on your left counts what was read. Clicking the right stick steps through its modes: FIGHT, DRILL (the fight holds still and the panel asks for each gesture in turn, counting how many were read right), JUNK (it asks for sword swings, bow draws or bolt throws with the grip held, and counts how many fired a gesture by mistake) and RECORD (what you draw becomes that gesture's template, kept in this browser and logged to the console, for pasting into `src/player/gestures/recorded.ts`; the left stick's click skips, A/X forgets). Clicking the left stick steps the gesture set (`&vocab=C`, shapes, is the pick; `A` mixes two flicks in, `B` is all flicks).
   - `?bag` is a **prototype** of the bag and the gear panel (inventory ticket 03), in a quiet yard with a training dummy: reach over either shoulder and squeeze the grip to bring the bag round. `?bag=a` (touch an item with a fist or the sword's tip and hold the grip to carry it, the pick), `?bag=b` (press an item, then press where it goes) and `?bag=c` (grab it with your hand) are the three ways to move items; in the headset a click of the left stick switches between them, and the right stick swaps the slots' icons for small 3D models (`&models` starts with them). Nothing in it reaches the Adventure or the save.
   - `?perf` adds a readout of the frame rate, draw calls, triangles (both eyes), shader programs, the most bytes uploaded to the GPU in a frame and, in Oakvale, the chunks loaded at full detail and as far stand-ins, low on the left of your view, over Oakvale or the arena.
   - `?emulate` forces the emulator even when a real headset is present, and `?noemulate` rules it out (the page's desktop camera, for screenshots). `?emulate&nodevui` runs it without the DevUI, so controller poses are driven only by code (for scripted tests). `window.__descent` is the debug handle; in Oakvale it has `adventure`, `characters` (the roster: `slots`, `picked`, `play()`), `world`, `player`, `camps`, `state` (your level and XP, and what Hale, the tracker and the quest arrow show), `device` (the emulator's), `saved()` (resolves once no save write is in flight), `paused` (stops VR frames stepping the game), `teleport(x, z, yaw)` and `step(seconds)`, which runs the game without waiting for frames. The scripted checks in `.scratch/oakvale-starting-zone/checks/` drive it, `play-through.mjs` from `?newgame` to Brackenmoor.
@@ -49,6 +49,8 @@ npm run dev          # http://localhost:5173
 Other commands: `npm test` runs the unit tests, `npm run typecheck`, `npm run build`.
 
 ## Controls (warrior)
+
+The warrior is the class a character starts as unless you pick another on the page before VR; the mage's are [below](#controls-mage).
 
 | Input | Action |
 |---|---|
@@ -90,6 +92,19 @@ The level cap is 5 today, so in Oakvale these wait for a zone past it; the arena
 
 The belt's right orb is **focus** in gold: 100, full from the start, refilling 10 a second, in a fight or out. Plain arrows never spend it.
 
+## Controls (mage)
+
+| Input | Action |
+|---|---|
+| Either trigger, held, then let go mid-throw | A **bolt**: it gathers as you hold (full in 0.6 s) at the tip of your wand (right hand) or in your palm (left hand), and leaves along the throw. A gentle toss makes a big slow orb, a hard throw a small fast bolt; a light aim assist bends it onto an enemy within 15°. A full bolt deals 20 (7 a tap), a head 1.6×. Let go with the hand still and it fizzles. Bolts are free. |
+| Left grip, held | The focus's **ward**, a hex of light that blocks, parries and bashes as the warrior's shield does. Each block costs 10 mana, a parry nothing; it won't rise under 10 mana. |
+| B / Y | **Blink** 3.5 m in the stick's direction, or back if it's neutral, stopping short of a wall; every 2.2 s, shown on the belt's dash bar. |
+| A / X | **Frost Nova** (level 2): 30 mana, 20 s. Every enemy within 3 m takes 5 and is frozen for 4 s, or until a hit breaks it (a brute for half as long; the Warden shrugs it off). |
+| Right grip held, a ring drawn, let go | **Fireball** (level 3): 15 mana. The next bolt you throw burns: 1.5× damage, and it bursts for 10 on every other enemy within 2 m of where it lands. |
+| Left stick, right stick | Move, snap turn, as the warrior |
+
+Mana is the belt's right orb, in blue: 100, plus 2 for each point of Intellect over 10, refilling 2 a second while anything fights you and 30 once nothing does. No gesture arms while the right hand charges a bolt.
+
 ## Playing Oakvale
 
 You start at the crossroads a few steps from **Marshal Hale**, the village's guard captain, facing them, with a gold "!" over their head and "Oakvale" floating up in front of you. Walk up looking at them and a parchment board unfolds on your right with what they say; press its buttons (**Accept**, **Not now**, **Hand in**, **Goodbye**) with either fist or your sword's tip, and that hand buzzes. Over Hale, a gold "!" means a quest to take, a grey "?" one under way and a gold "?" one ready to hand in. The quest you're on floats at the top left of your view with its counts, and a small gold arrow beside the line you're working on points the way (up is straight ahead). Signposts name the roads, and a painted map by the crossroads shows the whole zone.
@@ -102,7 +117,7 @@ You start at the crossroads a few steps from **Marshal Hale**, the village's gua
 | The Lumber Camp | Defeat the 5 bandits of the lumber camp across the bridge, their leader included, and take the leader's orders from the tent by touching them | 120 XP (level 3) |
 | What Lies Below | Go down the old mine at the end of the north road and defeat what woke the dead: the Bone Warden, who rises from its throne as you step into its hall | 300 XP and Hale's old longsword (level 5) |
 
-Only kills of the quest's own camp, made while it's active, count. Every kill pays 10 XP per enemy level (triple for the bandit leader, the mine's brutes and the Warden) and floats what it paid. Each level adds 2 Stamina and 2 of your class's main attribute (Strength for the warrior, Agility for the ranger), which make 20 health and 20% damage; enemies five or more levels below you pay no XP; the War Cry arrives at level 2 (with rage and its orb) and Earthshaker at 3 (for a ranger, Power Shot and Snare Trap), and level 5 is the cap. The longsword swaps into your hand at the last hand-in, a darker blade with a gilded guard that handles like yours and hits one level harder. Afterwards Hale points you south, to Brackenmoor.
+Only kills of the quest's own camp, made while it's active, count. Every kill pays 10 XP per enemy level (triple for the bandit leader, the mine's brutes and the Warden) and floats what it paid. Each level adds 2 Stamina and 2 of your class's main attribute (Strength for the warrior, Agility for the ranger, Intellect for the mage), which make 20 health and 20% damage; enemies five or more levels below you pay no XP; the War Cry arrives at level 2 (with rage and its orb) and Earthshaker at 3 (for a ranger, Power Shot and Snare Trap; for a mage, Frost Nova and Fireball), and level 5 is the cap. The longsword swaps into your hand at the last hand-in, a darker blade with a gilded guard that handles like yours and hits one level harder. Afterwards Hale points you south, to Brackenmoor.
 
 **Enemies** wait in camps at the farm, the lumber camp, on the lumber camp's road (a patrol) and at the watchtower, and the undead fill the mine. Come within 8 m of one, or hurt it, and it fights, bringing whoever of its camp stands near it; lead it 30 m from where it waited and it walks home untouchable ("Evade") and heals. A cleared camp fills again three minutes later, once you're well away. The village, the bridge, the pond, the standing stones and Brackenmoor are safe. Out of a fight for 5 s, your health comes back over about 10 s, and a click of the left stick runs while nothing fights you (the edges of your view darken a little).
 
@@ -114,7 +129,7 @@ Only kills of the quest's own camp, made while it's active, count. Every kill pa
 
 ### Characters
 
-You keep up to three characters, of any classes (two warriors are fine), each with a name. The page before VR lists them in three slots, each showing the name, class, level and zone; the one you played last is picked (marked ▶), and **Enter VR** plays it. Press another slot to pick it (the page loads again, showing Oakvale from where that one stands). **New character** in an empty slot opens the form: a card for each class that's built (the warrior and the ranger so far) and a name, up to 16 letters, with a suggestion filled in; **Make** makes them at level 1 by Marshal Hale, in the class's starting kit (the ranger with a short bow and a quiver), and picks them. Each character has **Rename** and **Delete**, which asks first, naming them. A first visit, with no characters yet, opens the form; **Cancel** leaves the first slot a new warrior with a suggested name, saved (and added to the roster) as soon as it earns anything. (The scripted checks, at `?emulate&nodevui`, skip the form and play that warrior.)
+You keep up to three characters, of any classes (two warriors are fine), each with a name. The page before VR lists them in three slots, each showing the name, class, level and zone; the one you played last is picked (marked ▶), and **Enter VR** plays it. Press another slot to pick it (the page loads again, showing Oakvale from where that one stands). **New character** in an empty slot opens the form: a card for each class that's built (the warrior, the ranger and the mage) and a name, up to 16 letters, with a suggestion filled in; **Make** makes them at level 1 by Marshal Hale, in the class's starting kit (the ranger with a short bow and a quiver), and picks them. Each character has **Rename** and **Delete**, which asks first, naming them. With no characters yet, the first slot is a new warrior with a suggested name, and the form is open under it: choose a class, type a name and press **Make** to play that one, or press **Enter VR** to play the warrior (under the name in the form). A new character is saved (and added to the roster) as soon as it earns anything, as a new character always was.
 
 ### Saving
 
@@ -157,7 +172,7 @@ src/
   game.ts            the arena (?arena): owns its systems; wave director, spawning, summons, death/victory
   showcase.ts        the arena's title-screen bestiary (?showcase)
   prototype/         throwaway prototypes kept for trying on the headset, each behind its URL flag
-    mage/            ?arena&class=mage: the mage's bolts, ward, blink and mana, in three kits
+    mage/            the mage's prototype (its bolts, ward, blink and mana, in three kits): no flag loads it since the mage was built
     ranger/          ?arena&class=ranger-prototype: the ranger's bow, with a ward, a knife or kiting
     gestures/        ?arena&gestures: abilities by gesture over any class, with its drill, junk and record modes
   viewer/
@@ -172,8 +187,9 @@ src/
     palette.ts       the limited palette
   player/
     input.ts         XR controllers → left/right hands, sticks, buttons, haptics
-    player.ts        rig, locomotion, snap turn, dash, collision, HP, your class's bar (rage, focus, mana), frenzy, body volumes
+    player.ts        rig, locomotion, snap turn, dash, collision, HP, the class's bar (rage, focus, mana), frenzy, body volumes
     weapons.ts       sword + shield; velocity tracking in rig space
+    mage.ts          the mage's hands: the bolt charged and thrown, the wand and the focus, the ward, the blink
     bow.ts           the ranger's bow and string on the bow hand: nocking at the string, the draw, the aim
     gestures/        abilities by gesture: the recogniser (matcher.ts, recorder.ts; unit tested), the five shapes and
                      their templates, and gestures.ts, which arms it on the right grip, shows the trail, the read and
@@ -181,13 +197,15 @@ src/
   combat/
     geometry.ts      segment–segment, segment–box, circle push-out (unit tested)
     strike.ts        an enemy weapon's swing swept against shield, sword and body (unit tested)
-    combat.ts        sword hits and crits, blocks and parries, bash, Earthshaker, War Cry, the gesture abilities, arrow outcomes
+    combat.ts        sword hits and crits, blocks and parries, bash, Earthshaker, War Cry, the gesture abilities, the mage's bolts, Frost Nova and Fireball, arrow outcomes
     abilities.ts     the gesture abilities' rules: cooldowns, Heroic Throw's aim, Shield Wall's blocks, Sweeping Strikes' reach (unit tested)
     thrownAxes.ts    Heroic Throw's axes in flight (instanced)
     ranger.ts        the ranger's kit: the draw and loose, the ward, Power Shot and Snare Trap, landed through Combat
     shots.ts         the ranger's arrows in flight: damage and speed by the draw, gravity, a Power Shot's pierce (instanced, unit tested)
     ward.ts          the ranger's ward: its hold, cooldown, and what it stops and sends back (unit tested)
     traps.ts         Snare Trap's traps: laid, sprung by the first enemy over one, rooting it (instanced, unit tested)
+    mage.ts          the mage's rules: a throw's bolt, its damage, the ward's mana, the blink's way, who a burst reaches (unit tested)
+    bolts.ts         the mage's bolts in flight, the aim assist and homing (instanced)
     projectiles.ts   arrows: flight, sticking, reflecting (instanced)
   enemies/
     enemy.ts         shared machinery: rising, steering, attack timeline, stagger/expose/kneel, deaths

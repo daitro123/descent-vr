@@ -276,7 +276,7 @@ await enter('arena&class=ranger');
   const k = await page.evaluate(() => {
     const { player, combat } = window.__R;
     return {
-      class: player.class,
+      class: player.klass,
       bow: combat.ranger?.bow.root.parent !== null && combat.ranger?.bow.root.visible,
       sword: player.sword.model.parent !== null,
       shield: player.shield.model.parent !== null,

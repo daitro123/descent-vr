@@ -66,7 +66,7 @@ function ranger(level = 3) {
   const hands = { left: { grip: new Group(), trigger: 0, squeeze: 0 }, right: { grip: new Group(), trigger: 0, squeeze: 0 } };
   const head = new Vector3(0, 1.6, 0);
   const player = {
-    class: 'ranger',
+    klass: 'ranger',
     input: { hands, pulse: () => {} },
     headPosition: (out: Vector3) => out.copy(head),
     feetPosition: (out: Vector3) => out.set(head.x, 0, head.z),

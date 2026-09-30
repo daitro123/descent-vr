@@ -1,6 +1,6 @@
 import { Group, type Object3D, type PerspectiveCamera, Vector3, type WebGLRenderer } from 'three';
 import { type Ability, type Stats, statsAt } from '../adventureState';
-import { abilitiesOf, type ClassId } from '../classes';
+import { abilitiesOf, type ClassId, type Resource } from '../classes';
 import { AbilityClock } from '../combat/abilities';
 import { CONFIG } from '../config';
 import { sfx } from '../fx/sfx';
@@ -16,13 +16,20 @@ const _fwd = new Vector3();
 const _right = new Vector3();
 const _resolved = new Vector3();
 
-/** The arena's numbers: level 1 of `klass`, with every base ability of the class. */
-const arenaStats = (klass: ClassId): Stats => ({ ...statsAt(1, undefined, klass), abilities: abilitiesOf(klass) });
+/** The arena's numbers: level 1 of the class, with every base ability of it. */
+const arena = (klass: ClassId): Stats => ({ ...statsAt(1, undefined, klass), abilities: abilitiesOf(klass) });
+
+/** What the class's bar holds after `dt` more seconds, fighting or not, kept within it. */
+export function refill(bar: Resource, now: number, fighting: boolean, dt: number): number {
+  return Math.min(bar.size, Math.max(0, now + (fighting ? bar.refill.fighting : bar.refill.calm) * dt));
+}
 
 /**
- * You: XR rig (camera + controllers), locomotion, collision and your class's
- * bar. The warrior holds the sword (right hand) and shield (left hand); the
- * ranger's hands are empty here, for the bow is Combat's (combat/ranger.ts).
+ * You: XR rig (camera + controllers), locomotion, collision, your class's
+ * bar, and the warrior's sword (right hand) and shield (left hand). The mage
+ * holds neither: its hands are player/mage.ts's, and its ward is the shield
+ * to Combat, on the left grip only while raised. The ranger's hands are empty
+ * here too, for the bow is Combat's (combat/ranger.ts).
  */
 export class Player {
   readonly rig = new Group();
@@ -33,20 +40,18 @@ export class Player {
   fists: Readonly<Record<Handedness, Fist>> | null = null;
   /** A station's tools in your hands in place of the sword and shield (the smith's hammer and tongs), or null. */
   private tools: { readonly right: Object3D; readonly left: Object3D } | null = null;
-  /** What kind of fighter you are: it decides what's in your hands and which bar you fill. */
-  readonly class: ClassId;
   /** Your level's health, damage and abilities: the arena's, unless the Adventure sets them from your level. */
   stats: Stats;
   hp: number;
-  /** What your class's bar holds: rage, focus or mana (`stats.resource` says which, and its size). */
-  resource: number;
+  /** Your class's bar, as much as it holds now: rage, focus or mana (`stats.resource` says which, and how it fills). */
+  resource = 0;
   /** Seconds of War Cry frenzy left (bonus damage, burning blade). */
   frenzy = 0;
   /** Each gesture ability's cooldown, and how long Shield Wall and Sweeping Strikes have left. */
   readonly abilities = new AbilityClock();
   dashCooldown = 0;
-  /** B / Y dash; a class prototype (src/prototype/) may take the buttons for its own move. */
-  dashes = true;
+  /** B / Y dash: not the mage's, whose blink takes the buttons, nor a class prototype's (src/prototype/) that takes them. */
+  dashes: boolean;
   private dashTime = 0;
   private dodgeTime = 0;
   private readonly dashVel = new Vector3();
@@ -65,12 +70,13 @@ export class Player {
     renderer: WebGLRenderer,
     /** What you stand on and bump into: the arena, or a zone. */
     readonly ground: Ground,
-    klass: ClassId = 'warrior',
+    /** Your class: the warrior's sword and shield, the mage's hands, or the ranger's (the bow is Combat's). */
+    readonly klass: ClassId = 'warrior',
   ) {
-    this.class = klass;
-    this.stats = arenaStats(klass);
+    this.stats = arena(klass);
     this.hp = this.maxHp;
     this.resource = this.stats.resource.start;
+    this.dashes = klass !== 'mage';
     this.rig.name = 'player-rig';
     this.rig.add(camera);
     this.input = new XRInput(renderer, this.rig);
@@ -81,12 +87,20 @@ export class Player {
   private attachWeapons(): void {
     const { left, right } = this.input.hands;
     // A station's tools replace the weapons: with no sword or shield in a grip, neither hits nor blocks.
-    if (this.tools) {
+    // The mage holds neither: its hands take what they hold themselves (player/mage.ts).
+    if (this.klass === 'mage') {
+      this.sword.model.removeFromParent();
+      if (this.tools) {
+        this.shield.model.removeFromParent();
+        right.grip.add(this.tools.right);
+        left.grip.add(this.tools.left);
+      }
+    } else if (this.tools) {
       this.sword.model.removeFromParent();
       this.shield.model.removeFromParent();
       right.grip.add(this.tools.right);
       left.grip.add(this.tools.left);
-    } else if (this.class === 'warrior') {
+    } else if (this.klass === 'warrior') {
       right.grip.add(this.sword.model);
       left.grip.add(this.shield.model);
     }
@@ -126,13 +140,18 @@ export class Player {
     return this.stats.maxHp;
   }
 
-  /** The warrior's name for the bar: its rage, and nothing for a class whose bar is focus or mana. */
+  /** The warrior's name for their bar. */
   get rage(): number {
-    return this.stats.resource.kind === 'rage' ? this.resource : 0;
+    return this.resource;
   }
 
-  set rage(amount: number) {
-    if (this.stats.resource.kind === 'rage') this.resource = amount;
+  set rage(rage: number) {
+    this.resource = rage;
+  }
+
+  /** Mana, focus or rage: what the bar is called. */
+  get bar(): Resource {
+    return this.stats.resource;
   }
 
   /** Has your level brought it? */
@@ -181,7 +200,8 @@ export class Player {
     this.rig.updateMatrixWorld(true);
     this.sword.update(this.rig, dt);
     this.shield.update(this.rig, dt);
-    this.fill(dt);
+    // Rage drains; focus refills; mana refills slowly while anything fights you and fast once nothing does.
+    this.resource = refill(this.bar, this.resource, this.fighting, dt);
     this.frenzy = Math.max(0, this.frenzy - dt);
     this.sword.frenzy = this.frenzy > 0;
     this.abilities.tick(dt);
@@ -286,23 +306,16 @@ export class Player {
     this.hp = Math.min(this.maxHp, this.hp + amount);
   }
 
-  /** Your bar fills (focus, mana) or drains (rage) by the second, as your class's does, within its size. */
-  private fill(dt: number): void {
-    const { size, refill } = this.stats.resource;
-    const rate = this.fighting ? refill.fighting : refill.calm;
-    this.resource = Math.max(0, Math.min(size, this.resource + rate * dt));
-  }
-
   /** Rage builds only once the War Cry has come, which spends it. */
   addRage(amount: number): void {
-    if (!this.can('warCry') || this.stats.resource.kind !== 'rage') return;
-    this.resource = Math.min(this.stats.resource.size, this.resource + amount);
+    if (!this.can('warCry')) return;
+    this.rage = Math.min(CONFIG.player.maxRage, this.rage + amount);
   }
 
-  /** Back to full health, your bar as it starts (no rage, full focus or mana) and nothing charged, standing at (x, z) facing `yaw`. */
+  /** Back to full health, no rage and full focus or mana, nothing charged, standing at (x, z) facing `yaw`. */
   reset(x = 0, z = 0, yaw = 0): void {
     this.hp = this.maxHp;
-    this.resource = this.stats.resource.start;
+    this.resource = this.bar.start;
     this.frenzy = 0;
     this.abilities.clear();
     this.shield.walled = 0;

@@ -1,7 +1,8 @@
 // PROTOTYPE (abilities ticket 06, "How the mage fights"): throwaway code kept in
-// the repo so Tom can try it on the headset. `?arena&class=mage` swaps the
-// warrior's sword and shield for the mage's hands; the arena's waves, enemies
-// and level 1 numbers are unchanged. With no `?class=`, nothing here loads.
+// the repo so Tom can read it. It swapped the warrior's sword and shield for
+// the mage's hands at `?arena&class=mage`, until the mage was built from its
+// kit A (abilities ticket 23: src/player/mage.ts, src/combat/bolts.ts); that
+// flag now plays the built mage, and nothing loads this any more.
 //
 // The kits and the axes they pick on are in mageVariants.prototype.ts, the
 // numbers in mageNumbers.prototype.ts, the bolts in flight in

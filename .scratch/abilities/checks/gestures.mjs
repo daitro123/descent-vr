@@ -171,7 +171,8 @@ const FILL = {
 const tables = [];
 for (const cls of ['warrior', 'ranger', 'mage']) {
   console.log(`\n== ${cls}`);
-  await enter(`arena&class=${cls}&gestures`);
+  // The ranger's gestures lie over its prototype, kept at ranger-prototype since the class was built (ticket 21).
+  await enter(`arena&class=${cls === 'ranger' ? 'ranger-prototype' : cls}&gestures`);
   await step(1 / 72);
   const kit = await page.evaluate(() => {
     const { classKit, game } = window.__descent;

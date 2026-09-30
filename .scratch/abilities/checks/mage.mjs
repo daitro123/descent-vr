@@ -1,28 +1,40 @@
-// Checks for the mage prototype (issues/06-how-the-mage-fights.md) in headless
-// Chromium with the IWER emulator, against a running dev server:
+// Checks for the mage (issues/23-the-mage.md) in headless Chromium with the
+// IWER emulator, against a running dev server:
 //
 //   npx vite --port 5173
 //   node .scratch/abilities/checks/mage.mjs [http://localhost:5173] [shots/]
 //
-// The arena at `?arena&class=mage`, paused and stepped a frame at a time by
-// `__descent.game.update` and then the kit's (`__descent.classKit`), the grips
-// held where a player's hands would be and the triggers, grips and B pressed
-// through the emulated controllers.
+// (Until ticket 23 this file checked the mage prototype, `?arena&class=mage&kit=`;
+// that flag now plays the built mage, and the prototype's check is in git's history.)
 //
-// 1. The mage holds no sword, has no rage or War Cry, and starts on kit A.
-// 2. Kit A: bolts charged on the trigger and thrown kill wave 1's grunts:
-//    a full bolt takes 20, so three kill one (two with a head shot).
-// 3. A gentle toss makes a bigger, slower bolt than a hard throw.
-// 4. Let go without throwing and nothing is cast.
-// 5. The left grip raises the ward: an archer's arrow at your chest stops on
-//    it, costs 10 mana and no health; with the grip let go, the same arrow hurts.
-// 6. B blinks you 3.5 m back (the dash is 1.7 m); the dash doesn't also fire,
-//    and the blink waits out its cooldown.
-// 7. Kit B: the wand, pointed and triggered, kills a grunt, each bolt costing
-//    5 mana; its off hand only wards.
-// 8. Kit C: charged and pushed out, the palm's bolts kill a grunt, both hands casting.
-// 9. The right stick's click steps to the next kit.
-// 10. `?arena` alone is the warrior's: the sword in the right hand, the War Cry there.
+// Game time is stepped in the page (`__descent.game.update` in the arena, the
+// Adventure's `step`), the grips held where a player's hands would be (in the
+// rig's space, as the controllers put them) and the triggers, grips and
+// buttons pressed through the emulated controllers.
+//
+// The arena, `?arena&class=mage`:
+// 1. The mage holds a wand and a focus, no sword; 100 health and 100 mana,
+//    the belt's right orb blue; every base ability of the mage.
+// 2. Bolts charged on the trigger and thrown kill wave 1's grunts; a full bolt
+//    takes 20.
+// 3. The left grip raises the ward: an archer's arrow stops on it for 10 mana.
+// 4. B blinks you 3.5 m back.
+// 5. X: Frost Nova freezes the grunt in front of you, for 30 mana.
+// 6. A ring drawn with the right grip is Fireball: the next bolt burns, and
+//    bursts on the grunt beside the one it hits.
+// 7. `&kit=B` changes nothing: the prototype's kits no longer load.
+//
+// Oakvale, a mage from the page before VR:
+// 8. `?newgame`'s form has the mage's card; a mage made there plays Oakvale
+//    with a wand and mana, and no rage.
+// 9. Bolts kill the farm's camp (the first clearing, all four of them); the
+//    camp cleared twice more (by the debug handle) reaches level 2, "Frost
+//    Nova: press A or X", 120 health.
+// 10. X freezes a bandit grunt of the farm's camp standing beside you.
+// 11. Five more clearings reach level 3, "Fireball: hold the right grip, draw
+//    a ring, let go", the ring hanging in the air; drawn, it's Fireball, and
+//    the next bolt bursts on the farm's bandits.
+// 12. No page errors.
 //
 // Playwright is the global install; Chromium is the pre-installed one.
 
@@ -46,7 +58,6 @@ const check = (ok, what) => {
   console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`);
   if (!ok) failed++;
 };
-const near = (a, b, tol) => Math.abs(a - b) <= tol;
 const shot = async (name) => shots && page.screenshot({ path: `${shots}/${name}.png` });
 const xrFrames = (n) =>
   page.evaluate(
@@ -66,59 +77,54 @@ async function button(hand, name, value) {
   await xrFrames(2);
 }
 
-async function open(query) {
-  await page.goto(`${base}/?${query}&emulate&nodevui`);
-  await page.waitForFunction(() => window.__descent?.game, null, { timeout: 120000 });
-  if (query.includes('class=')) await page.waitForFunction(() => window.__descent.classKit, null, { timeout: 60000 });
+// Remember each floating text's words, so the check can read them back.
+await page.addInitScript(() => {
+  const fill = CanvasRenderingContext2D.prototype.fillText;
+  CanvasRenderingContext2D.prototype.fillText = function (text, ...rest) {
+    this.__text = text;
+    return fill.call(this, text, ...rest);
+  };
+});
+
+/** Into VR, paused, with the helpers the steps share on `window.__mage`. */
+async function enter() {
   await page.click('#VRButton');
   await page.waitForFunction(() => window.__descent.renderer.xr.isPresenting, null, { timeout: 60000 });
   await xrFrames(3);
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
     const d = window.__descent;
     d.paused = true;
-    const { game } = d;
+    window.__strokes = await import('/tests/support/gestureStrokes.ts');
+    const game = d.game ?? d.adventure;
     const { player } = game;
     const V = player.rig.position.constructor;
-    const Q = player.rig.quaternion.constructor;
     const { hands } = player.input;
-    const kit = d.classKit;
-    // Every buzz the kit asks for.
-    window.__buzzes = [];
-    if (kit) kit.onPulse = (hand, intensity, ms) => window.__buzzes.push({ hand, intensity, ms });
-    const DOWN = { left: [-0.35, 0.8, 0.1], right: [0.35, 0.8, 0.1] };
+    const arena = !!d.game;
     /** A grip where the controller would put it (rig space), and the emulated controller with it, so an XR frame doesn't move it. */
-    const hold = (hand, p, q = [0, 0, 0, 1]) => {
+    const hold = (hand, p) => {
       const g = hands[hand].grip;
       g.position.set(...p);
-      g.quaternion.set(...q);
+      g.quaternion.set(0, 0, 0, 1);
       g.updateMatrix();
       const c = d.device.controllers[hand];
       c.position.set(...p);
-      c.quaternion.set(...q);
+      c.quaternion.set(0, 0, 0, 1);
     };
+    const foes = () => (arena ? game.enemies : [...game.camps.enemies]);
+    /** One frame, your health kept full (and in the arena the next wave held back). */
     const tick = (dt = 1 / 72) => {
+      player.hp = player.maxHp;
+      if (arena) game.phaseTime = Math.min(game.phaseTime, 0);
       player.rig.updateMatrixWorld(true);
-      game.update(dt);
-      kit?.update(dt);
+      if (arena) game.update(dt);
+      else d.step(dt, dt);
     };
     const head = () => player.camera.getWorldPosition(new V());
-    /** Stand where you are, facing (x, z). */
-    const face = (x, z) => {
-      const h = head();
-      player.place(h.x, h.z, Math.atan2(-(x - h.x), -(z - h.z)));
-      player.rig.updateMatrixWorld(true);
+    const down = () => {
+      hold('left', [-0.35, 0.8, 0.1]);
+      hold('right', [0.35, 0.8, 0.1]);
     };
-    /** The nearest grunt standing, or null. */
-    const grunt = () => {
-      const me = head();
-      let best = null;
-      for (const e of game.enemies) {
-        if (!e.alive || !e.hittable || e.kind !== 'grunt') continue;
-        if (!best || e.position.distanceTo(me) < best.position.distanceTo(me)) best = e;
-      }
-      return best;
-    };
-    /** Keep a grunt at `range` m in front of you: step back as it closes (a mage keeps its distance). */
+    /** Stand `range` m from `e`, facing it. */
     const keepAt = (e, range) => {
       const h = head();
       const dx = h.x - e.position.x;
@@ -126,362 +132,429 @@ async function open(query) {
       const d0 = Math.hypot(dx, dz) || 1;
       const x = e.position.x + (dx / d0) * range;
       const z = e.position.z + (dz / d0) * range;
-      player.place(Math.max(-5, Math.min(5, x)), Math.max(-5, Math.min(5, z)), Math.atan2(-(e.position.x - x), -(e.position.z - z)));
+      player.place(x, z, Math.atan2(-(e.position.x - x), -(e.position.z - z)));
       player.rig.updateMatrixWorld(true);
     };
-    const down = () => {
-      hold('left', DOWN.left);
-      hold('right', DOWN.right);
-    };
-    /** Wait for the wave: step with hands down until a grunt stands (up to `seconds`). */
-    const waitForGrunt = (seconds = 12) => {
-      for (let t = 0; t < seconds; t += 1 / 72) {
-        down();
-        tick();
-        const g = grunt();
-        if (g && g.state !== 'rising') return true;
-      }
-      return false;
-    };
-    /** Aim: a quaternion turning the grip's -Z onto a rig-space direction. */
-    const aim = (dir) => new Q().setFromUnitVectors(new V(0, 0, -1), new V(...dir).normalize()).toArray();
-    window.__mage = { d, game, player, kit, hold, tick, head, face, grunt, keepAt, down, waitForGrunt, aim, V };
+    const words = () => (game.text.active ?? []).map((f) => f.sprite.material.map.image.getContext('2d').__text ?? '');
+    window.__mage = { d, game, player, hold, tick, head, down, keepAt, foes, words, V, arena };
   });
 }
-
-// ------------------------------------------------------------------ kit A
-
-await open('arena&class=mage');
-const start = await page.evaluate(() => {
-  const { player, kit } = window.__mage;
-  return {
-    sword: player.sword.model.parent !== null,
-    abilities: player.stats.abilities.length,
-    hp: player.hp,
-    kit: kit?.variant,
-    mana: kit?.mana,
-  };
-});
-check(!start.sword && start.abilities === 0 && start.hp === 100, `the mage holds no sword and has none of the warrior's abilities, at level 1's 100 health (sword ${start.sword}, ${start.abilities} abilities, ${start.hp} health)`);
-check(start.kit?.kit === 'A' && start.kit.cast === 'throw' && start.kit.focus === 'ward' && start.kit.move === 'blink' && start.kit.mana === 'free', `kit A by default: ${JSON.stringify(start.kit)}`);
-check(start.mana === 100, `a full 100 mana (${start.mana})`);
 
 /**
- * One thrown bolt at the nearest grunt: the trigger held 0.6 s with the hand
- * drawn back by the shoulder, then the arm thrown forward at `speed` m/s and
- * the trigger let go mid-throw. Returns the grunt's health before and after
- * the bolt lands (or flies wide).
+ * One bolt thrown with the right hand at `target()` (an enemy the page picks):
+ * standing `range` m from it, the trigger held 0.6 s with the hand drawn back
+ * by the shoulder, then the arm thrown forward at 4.5 m/s and the trigger let
+ * go mid-throw; the bolt let fly for up to a second. What came of it.
  */
-async function throwAt({ speed = 4.5, charge = 0.6, range = 4, hand = 'right' } = {}) {
-  const x = hand === 'right' ? 0.25 : -0.25;
-  const before = await page.evaluate(([range, x, hand]) => {
-    const { grunt, keepAt, hold, tick } = window.__mage;
-    const g = grunt();
-    if (!g) return null;
-    keepAt(g, range);
-    hold(hand, [x, 1.5, 0.15]);
-    tick();
-    window.__target = g;
-    return { hp: g.hp, id: g.root.id };
-  }, [range, x, hand]);
+async function throwAt(pick, range = 4) {
+  const before = await page.evaluate(
+    ([pick, range]) => {
+      const { keepAt, hold, tick, foes } = window.__mage;
+      const target = new Function('foes', `return (${pick})(foes)`)(foes());
+      if (!target) return null;
+      window.__target = target;
+      keepAt(target, range);
+      hold('right', [0.25, 1.5, 0.15]);
+      tick();
+      return { hp: target.hp };
+    },
+    [pick, range],
+  );
   if (!before) return null;
-  await button(hand, 'trigger', 1);
-  const after = await page.evaluate(([charge, x, hand]) => {
-    const { hold, tick, keepAt, kit } = window.__mage;
-    for (let t = 0; t < charge; t += 1 / 72) {
-      keepAt(window.__target, 4);
-      hold(hand, [x, 1.5, 0.15]);
+  await button('right', 'trigger', 1);
+  await page.evaluate((range) => {
+    const { hold, tick, keepAt } = window.__mage;
+    for (let t = 0; t < 0.6; t += 1 / 72) {
+      keepAt(window.__target, range);
+      hold('right', [0.25, 1.5, 0.15]);
       tick();
     }
-    return { charging: kit.casters[hand].held, orb: kit.casters[hand].orb.visible, fraction: kit.casters[hand].fraction };
-  }, [charge, x, hand]);
-  // The throw: forward (−Z, toward the grunt) and a little down, `speed` m/s, three frames before the release…
-  const stepZ = speed / 72;
-  await page.evaluate(([stepZ, x, hand]) => {
-    const { hold, tick } = window.__mage;
     for (let i = 1; i <= 3; i++) {
-      hold(hand, [x, 1.5 - i * 0.004, 0.15 - i * stepZ]);
+      hold('right', [0.25, 1.5 - i * 0.004, 0.15 - (i * 4.5) / 72]);
       tick();
     }
-  }, [stepZ, x, hand]);
-  await button(hand, 'trigger', 0);
-  // …and the frame the trigger is read as let go, the hand still going.
-  const cast = await page.evaluate(([stepZ, x, hand]) => {
-    const { hold, tick, kit } = window.__mage;
-    const n = kit.bolts.bolts.length;
-    hold(hand, [x, 1.5 - 4 * 0.004, 0.15 - 4 * stepZ]);
+  }, range);
+  await button('right', 'trigger', 0);
+  return page.evaluate((range) => {
+    const { hold, tick, keepAt, down, game } = window.__mage;
+    const bolts = game.combat.bolts.bolts;
+    const n = bolts.length;
+    hold('right', [0.25, 1.5 - 4 * 0.004, 0.15 - (4 * 4.5) / 72]);
     tick();
-    const b = kit.bolts.bolts[kit.bolts.bolts.length - 1];
-    return kit.bolts.bolts.length > n ? { speed: b.vel.length(), radius: b.radius, damage: b.damage, locked: b.target === window.__target } : null;
-  }, [stepZ, x, hand]);
-  // Let it fly, keeping the grunt at range.
-  const hp = await page.evaluate(() => {
-    const { tick, keepAt, down, kit } = window.__mage;
-    for (let t = 0; t < 1.2 && kit.bolts.bolts.length; t += 1 / 72) {
-      if (window.__target.alive) keepAt(window.__target, 4);
+    const b = bolts.length > n ? bolts[bolts.length - 1] : null;
+    const cast = b && { damage: b.damage, fire: b.fire, locked: b.target === window.__target };
+    for (let t = 0; t < 1 && bolts.length; t += 1 / 72) {
+      if (window.__target.alive) keepAt(window.__target, range);
       down();
       tick();
     }
-    return { hp: window.__target.hp, alive: window.__target.alive };
-  });
-  return { before: before.hp, ...hp, charging: after, cast };
+    return { hp: window.__target.hp, alive: window.__target.alive, cast };
+  }, range);
 }
 
-check(await page.evaluate(() => window.__mage.waitForGrunt()), 'wave 1 rises: a grunt stands');
-await shot('mage-wave1');
-const kills0 = await page.evaluate(() => window.__descent.combatStats.kills);
-const first = await throwAt();
-check(first?.charging.charging && first.charging.orb && first.charging.fraction >= 0.95, `holding the trigger charges a bolt in the palm, the orb showing (${JSON.stringify(first?.charging)})`);
-check(first?.cast && near(first.cast.damage, 20, 0.01), `let go mid-throw, a full bolt leaves: ${first?.cast?.damage} damage`);
-check(first?.cast?.locked, 'the aim assist locked it onto the grunt');
-check(first && first.before - first.hp >= 20, `it lands on the grunt: ${first?.before} → ${first?.hp} health`);
-const buzzes = await page.evaluate(() => window.__buzzes.length);
-check(buzzes >= 6, `the hand ticks through the charge and pulses on the cast and the hit (${buzzes} buzzes)`);
-
-// The assist may send a bolt to either of the wave's grunts: throw until one falls.
-let bolts = 1;
-while ((await page.evaluate(() => window.__descent.combatStats.kills)) === kills0 && bolts < 10) {
-  await throwAt();
-  bolts++;
-}
-const kills1 = await page.evaluate(() => window.__descent.combatStats.kills);
-check(kills1 > kills0, `thrown bolts killed a wave 1 grunt (kills ${kills0} → ${kills1})`);
-check(bolts >= 2 && bolts <= 5, `in ${bolts} bolts, some maybe landing on the other grunt (three full bolts kill one, two with a head shot)`);
-
-// 3. The throw shapes the bolt.
-const ready = async () => check(await page.evaluate(() => window.__mage.waitForGrunt(10)), 'a grunt stands');
-await ready();
-const toss = await throwAt({ speed: 1.6 });
-await ready();
-const hard = await throwAt({ speed: 5 });
-check(toss?.cast && hard?.cast && toss.cast.radius > hard.cast.radius && toss.cast.speed < hard.cast.speed, `a gentle toss makes a bigger, slower bolt (${toss?.cast?.radius.toFixed(2)} m at ${toss?.cast?.speed.toFixed(1)} m/s) than a hard throw (${hard?.cast?.radius.toFixed(2)} m at ${hard?.cast?.speed.toFixed(1)} m/s)`);
-
-// 4. No throw, no cast.
-await ready();
-const still = await throwAt({ speed: 0.3 });
-check(still && !still.cast, 'let go with the hand still: nothing is cast (a fizzle)');
-let more = 0;
-while ((await page.evaluate(() => !!window.__mage.grunt())) && more < 10) {
-  await throwAt();
-  more++;
-}
-const kills2 = await page.evaluate(() => window.__descent.combatStats.kills);
-check(kills2 >= 2, `wave 1 is down to bolts: ${kills2} kills`);
-
-// 5. The ward.
-/** An arrow from 5 m ahead at your chest, with the left grip held (the ward up in front of the chest) or not. */
-async function arrow(ward) {
-  await button('left', 'squeeze', ward ? 1 : 0);
-  return page.evaluate(() => {
-    const { d, game, player, kit, hold, tick, head, V } = window.__mage;
-    player.place(0, 2, 0);
-    // Tip the fist up 45° so the ward (the shield's board, pitched down 45°) stands upright.
-    hold('left', [-0.05, 1.3, -0.4], [Math.sin(Math.PI / 8), 0, 0, Math.cos(Math.PI / 8)]);
-    hold('right', [0.35, 0.8, 0.1]);
-    tick();
-    tick();
-    const warding = kit.warding;
-    const before = { hp: player.hp, mana: kit.mana, blocks: d.combatStats.blocks };
-    const h = head();
-    const from = new V(h.x, h.y - 0.3, h.z - 5);
-    const at = new V(h.x, h.y - 0.35, h.z);
-    const shooter = game.enemies[0] ?? null;
-    game.combat.projectiles.fire(shooter, from, at, 10);
-    let spent = 0;
-    for (let i = 0; i < 60; i++) {
-      hold('left', [-0.05, 1.3, -0.4], [Math.sin(Math.PI / 8), 0, 0, Math.cos(Math.PI / 8)]);
-      const mana = kit.mana;
+/**
+ * Draw a shape with the right hand: the grip squeezed at the stroke's first
+ * point, the hand moved along it frame by frame, the grip let go at its last.
+ * Returns the gestures' last outcome.
+ */
+async function draw(shape, seed = 1) {
+  const n = await page.evaluate(
+    ([shape, seed]) => {
+      const { player, V, d } = window.__mage;
+      const S = window.__strokes;
+      const stroke = S.performShape(shape, S.rng(seed));
+      const head = player.rig.worldToLocal(player.headPosition(new V()));
+      const gaze = player.camera.getWorldDirection(new V()).applyQuaternion(player.rig.quaternion.clone().invert());
+      const f = new V(gaze.x, 0, gaze.z).normalize();
+      const right = new V(-f.z, 0, f.x);
+      window.__stroke = stroke.points.map(([x, y, z]) => head.clone().addScaledVector(right, x).add(new V(0, y, 0)).addScaledVector(f, z).toArray());
+      d.device.controllers.right.position.set(...window.__stroke[0]);
+      return window.__stroke.length;
+    },
+    [shape, seed],
+  );
+  await xrFrames(2);
+  await button('right', 'squeeze', 1);
+  await page.evaluate((n) => {
+    const { player, tick } = window.__mage;
+    const grip = player.input.hands.right.grip;
+    for (let i = 0; i < n; i++) {
+      grip.position.fromArray(window.__stroke[i]);
+      grip.updateMatrix();
       tick();
-      // The pool refills out of a fight, so read the cost on the frame it's paid.
-      if (mana - kit.mana > spent) spent = mana - kit.mana;
     }
-    return { warding, hp: before.hp - player.hp, mana: spent, blocks: d.combatStats.blocks - before.blocks };
+    window.__descent.device.controllers.right.position.set(...window.__stroke[n - 1]);
+  }, n);
+  await button('right', 'squeeze', 0);
+  return page.evaluate(() => {
+    const { game, player, tick } = window.__mage;
+    const grip = player.input.hands.right.grip;
+    grip.position.fromArray(window.__stroke[window.__stroke.length - 1]);
+    grip.updateMatrix();
+    tick();
+    const l = game.gestures.last;
+    return { id: l?.verdict?.id ?? null, ability: l?.ability ?? null, use: l?.use ?? null };
   });
 }
-// Out of the fight the pool refills; wait for it to be full.
-await page.evaluate(() => {
-  const { down, tick, kit } = window.__mage;
-  for (let t = 0; t < 6 && kit.mana < 100; t += 1 / 72) {
+
+/** Press a controller's button for a frame, then let go. */
+async function press(hand, name) {
+  await button(hand, name, 1);
+  await page.evaluate(() => window.__mage.tick());
+  await button(hand, name, 0);
+  await page.evaluate(() => window.__mage.tick());
+}
+
+// ================================================================ the arena
+
+await page.goto(`${base}/?arena&class=mage&emulate&nodevui`);
+await page.waitForFunction(() => window.__descent?.game, null, { timeout: 120000 });
+await enter();
+
+// 1.
+{
+  const s = await page.evaluate(() => {
+    const { player, game } = window.__mage;
+    const right = player.input.hands.right.grip;
+    return {
+      klass: player.klass,
+      sword: player.sword.model.parent !== null,
+      wand: right.children.length,
+      mana: player.resource,
+      bar: player.bar.kind,
+      hp: player.hp,
+      abilities: player.stats.abilities.join(' '),
+      mage: !!game.mage,
+      kit: window.__descent.classKit,
+    };
+  });
+  check(s.klass === 'mage' && s.mage && !s.sword && s.kit === null, `?arena&class=mage plays the built mage: no sword, no prototype (${JSON.stringify(s)})`);
+  check(s.mana === 100 && s.bar === 'mana' && s.hp === 100, `100 health and 100 mana (${s.hp}, ${s.mana} ${s.bar})`);
+  check(s.abilities === 'frostNova fireball frostbolt chainLightning blizzard', `every base ability of the mage: ${s.abilities}`);
+}
+
+// 2. Bolts at wave 1.
+{
+  const up = await page.evaluate(() => {
+    const { down, tick, game } = window.__mage;
+    for (let t = 0; t < 12; t += 1 / 72) {
+      down();
+      game.phaseTime = Math.max(game.phaseTime, 0);
+      game.player.rig.updateMatrixWorld(true);
+      game.update(1 / 72);
+      if (game.enemies.some((e) => e.kind === 'grunt' && e.hittable)) return true;
+    }
+    return false;
+  });
+  check(up, 'wave 1 rises: a grunt stands');
+  await shot('arena-wave1');
+  const nearestGrunt = '(foes) => foes.filter((e) => e.kind === "grunt" && e.hittable)[0]';
+  const first = await throwAt(nearestGrunt);
+  check(first?.cast?.damage === 20 && first.cast.locked, `a full bolt, thrown, leaves for 20 locked on the grunt (${JSON.stringify(first?.cast)})`);
+  let kills = await page.evaluate(() => window.__descent.combatStats.kills);
+  for (let i = 0; i < 12 && kills === 0; i++) {
+    await throwAt(nearestGrunt);
+    kills = await page.evaluate(() => window.__descent.combatStats.kills);
+  }
+  check(kills > 0, `thrown bolts kill a wave 1 grunt (${kills} kills)`);
+}
+
+// 3. The ward.
+{
+  await page.evaluate(() => {
+    const { player, down, tick } = window.__mage;
+    player.resource = 100;
     down();
     tick();
+  });
+  await button('left', 'squeeze', 1);
+  const warded = await page.evaluate(() => {
+    const { player, game, hold, tick, head, V, d } = window.__mage;
+    const up = () => {
+      hold('left', [-0.05, 1.3, -0.4]);
+      const g = player.input.hands.left.grip;
+      g.quaternion.set(Math.sin(Math.PI / 8), 0, 0, Math.cos(Math.PI / 8));
+      d.device.controllers.left.quaternion.set(Math.sin(Math.PI / 8), 0, 0, Math.cos(Math.PI / 8));
+    };
+    up();
+    tick();
+    tick();
+    const warding = game.mage.warding;
+    const before = { hp: player.hp, blocks: d.combatStats.blocks };
+    const h = head();
+    const fwd = player.camera.getWorldDirection(new V()).setY(0).normalize();
+    const from = h.clone().addScaledVector(fwd, 5).setY(h.y - 0.3);
+    const at = h.clone().setY(h.y - 0.35);
+    let low = player.resource;
+    player.hp = player.maxHp;
+    game.combat.projectiles.fire(game.enemies[0], from, at, 10);
+    for (let i = 0; i < 60; i++) {
+      up();
+      const hp = player.hp;
+      player.rig.updateMatrixWorld(true);
+      game.phaseTime = Math.min(game.phaseTime, 0);
+      game.update(1 / 72);
+      if (player.hp < hp) before.hurt = hp - player.hp;
+      low = Math.min(low, player.resource);
+    }
+    return { warding, blocks: d.combatStats.blocks - before.blocks, spent: 100 - low, hurt: before.hurt ?? 0 };
+  });
+  await button('left', 'squeeze', 0);
+  check(warded.warding && warded.blocks >= 1 && warded.hurt === 0, `the ward up, an arrow at your chest stops on it (${JSON.stringify(warded)})`);
+  check(warded.spent >= 9.5 && warded.spent <= 12, `the block cost 10 mana (${warded.spent.toFixed(1)})`);
+  await shot('arena-ward');
+}
+
+// 4. The blink.
+{
+  await page.evaluate(() => {
+    const { player, down, tick } = window.__mage;
+    player.place(0, 0, 0);
+    down();
+    tick();
+    window.__from = window.__mage.head();
+  });
+  await button('right', 'b-button', 1);
+  const blinked = await page.evaluate(() => {
+    const { head, tick, player } = window.__mage;
+    tick();
+    const h = head();
+    return { back: h.z - window.__from.z, side: Math.abs(h.x - window.__from.x), dash: player.dashCooldown };
+  });
+  await button('right', 'b-button', 0);
+  check(Math.abs(blinked.back - 3.5) < 0.05 && blinked.side < 0.05 && blinked.dash > 0, `B blinks you 3.5 m back at once, shown on the dash bar (${JSON.stringify(blinked)})`);
+}
+
+// 5. Frost Nova on X.
+{
+  const set = await page.evaluate(() => {
+    const { game, player, keepAt, down, tick } = window.__mage;
+    for (let t = 0; t < 20 && !game.enemies.some((e) => e.hittable && e.kind !== 'archer'); t += 1 / 72) tick();
+    const g = game.enemies.find((e) => e.hittable && e.kind !== 'archer');
+    if (!g) return null;
+    window.__target = g;
+    player.resource = 100;
+    keepAt(g, 2);
+    down();
+    tick();
+    return { kind: g.kind, hp: g.hp };
+  });
+  await press('left', 'x-button');
+  const froze = await page.evaluate(() => {
+    const { player, words } = window.__mage;
+    return { state: window.__target.state, hp: window.__target.hp, mana: player.resource, said: words().includes('FROST NOVA') };
+  });
+  check(set && froze.state === 'frozen' && froze.hp < set.hp && froze.said, `X: Frost Nova freezes the ${set?.kind} beside you (${JSON.stringify(froze)})`);
+  check(froze.mana > 68 && froze.mana < 72, `for 30 mana (${froze.mana.toFixed(1)} left)`);
+  await shot('arena-frost-nova');
+}
+
+// 6. Fireball.
+{
+  const hinted = await page.evaluate(() => window.__mage.game.gestures.hinted);
+  check(hinted === 'ring', `the ring hangs in the air, not drawn yet (${hinted})`);
+  await page.evaluate(() => {
+    const { player, down, tick } = window.__mage;
+    player.resource = 100;
+    player.abilities.clear();
+    down();
+    tick();
+  });
+  const read = await draw('ring');
+  const primed = await page.evaluate(() => ({ primed: window.__mage.player.abilities.primed('fireball'), mana: window.__mage.player.resource }));
+  check(read.id === 'ring' && read.ability === 'fireball' && read.use === 'cast' && primed.primed, `a ring is read as Fireball and waits on the next bolt (${JSON.stringify({ ...read, ...primed })})`);
+  const burnt = await page.evaluate(() => window.__descent.combatStats.burnt);
+  // Two enemies side by side (a grunt raised beside the first if the wave has no other): throw at one.
+  await page.evaluate(() => {
+    const { game, tick } = window.__mage;
+    const live = game.enemies.filter((e) => e.hittable);
+    const [a] = live;
+    let b = live[1];
+    if (!b) {
+      b = game.addEnemy('grunt', a.position.clone().setX(a.position.x + 1.2));
+      for (let t = 0; t < 4 && !b.hittable; t += 1 / 72) tick();
+    }
+    b.position.set(a.position.x + 1.2, a.position.y, a.position.z);
+  });
+  const fire = await throwAt('(foes) => foes.filter((e) => e.hittable)[0]');
+  const after = await page.evaluate(() => window.__descent.combatStats.burnt);
+  check(fire?.cast?.fire && fire.cast.damage === 30, `the next bolt burns: 30 at full charge (${JSON.stringify(fire?.cast)})`);
+  check(after > burnt, `and bursts on the one beside it (${after - burnt} burnt)`);
+  await shot('arena-fireball');
+}
+
+// 7. The prototype's kits are gone.
+{
+  await page.goto(`${base}/?arena&class=mage&kit=B&emulate&nodevui`);
+  await page.waitForFunction(() => window.__descent?.game, null, { timeout: 120000 });
+  await page.waitForTimeout(1500);
+  const k = await page.evaluate(() => ({ kit: window.__descent.classKit, mage: !!window.__descent.game.mage }));
+  check(k.kit === null && k.mage, `&kit=B loads no prototype: the built mage still (${JSON.stringify(k)})`);
+}
+
+// ================================================================ Oakvale
+
+// 8. A mage from the page before VR.
+{
+  await page.goto(`${base}/?newgame&emulate&nodevui`);
+  await page.waitForSelector('#new-character[open] .class-card', { timeout: 120000 });
+  const cards = await page.$$eval('#new-character .class-card', (cs) => cs.map((c) => c.innerText.replace(/\s+/g, ' ').trim()));
+  check(cards.some((c) => c.startsWith('Mage')), `the form has the mage's card: ${cards.join(' | ')}`);
+  await page.click('#new-character input[value=mage]');
+  await page.fill('#new-character input[name=name]', 'Merlin');
+  await shot('oakvale-new-mage');
+  await page.click('#new-character button[value=make]');
+  await page.waitForFunction(() => window.__descent?.adventure && document.querySelector('#characters'), null, { timeout: 120000 });
+  await enter();
+  await page.evaluate(() => window.__descent.step(2));
+  const me = await page.evaluate(() => {
+    const { state, player, adventure } = window.__descent;
+    return { class: state.class, name: window.__descent.characters.play().who.name, klass: player.klass, bar: player.bar.kind, mana: player.resource, wand: adventure.state.inventory.gear.mainHand, sword: player.sword.model.parent !== null, level: state.level };
+  });
+  check(me.class === 'mage' && me.klass === 'mage' && me.name === 'Merlin', `a mage named Merlin plays Oakvale (${JSON.stringify(me)})`);
+  check(me.bar === 'mana' && me.mana === 100 && me.wand === 'apprentice-wand' && !me.sword, `with a wand, no sword, and 100 mana`);
+}
+
+const clearFarm = () =>
+  page.evaluate(() => {
+    const camp = window.__descent.camps.camps.find((c) => c.plan.id === 'farm');
+    for (const m of camp.members) if (m.enemy.alive) m.enemy.takeHit(999, m.enemy.position.clone().set(0, 0, 0));
+  });
+/** Clear the farm from where you stand and wait out its refill away in the village: 40 XP a time. */
+async function clearAndWait(times) {
+  for (let i = 0; i < times; i++) {
+    await clearFarm();
+    await page.evaluate(() => window.__descent.step(0.2));
+    await page.evaluate(() => {
+      const d = window.__descent;
+      const v = d.world.zoneAt(0, 0).respawns.village;
+      d.teleport(v.x, v.z, 0);
+      d.step(185, 1 / 30);
+    });
   }
-});
-const warded = await arrow(true);
-check(warded.warding && warded.blocks === 1 && warded.hp === 0, `the ward up, an arrow at your chest stops on it: no health lost (${JSON.stringify(warded)})`);
-check(near(warded.mana, 10, 0.6), `the block cost 10 mana (${warded.mana.toFixed(1)})`);
-await shot('mage-ward');
-const open_ = await arrow(false);
-check(!open_.warding && open_.hp === 10 && open_.blocks === 0, `with the grip let go the ward drops and the same arrow hurts: ${open_.hp} health`);
+}
+const farmStanding = () => page.evaluate(() => window.__descent.camps.camps.find((c) => c.plan.id === 'farm').members.filter((m) => m.enemy.alive).length);
 
-// 6. The blink.
-const blink = await page.evaluate(() => {
-  const { player, head, tick, down } = window.__mage;
-  player.place(0, 0, 0);
-  down();
-  tick();
-  window.__from = head();
-  return true;
-});
-await button('right', 'b-button', 1);
-const blinked = await page.evaluate(() => {
-  const { head, tick, down, kit, player } = window.__mage;
-  down();
-  tick();
-  const h1 = head();
-  // A dash would carry on over the next frames; a blink is done.
-  for (let i = 0; i < 20; i++) tick();
-  const h2 = head();
-  return { back: h1.z - window.__from.z, side: Math.abs(h1.x - window.__from.x), after: Math.hypot(h2.x - h1.x, h2.z - h1.z), cooldown: kit.blinkCooldown, dash: player.dashCooldown };
-});
-await button('right', 'b-button', 0);
-check(blink && near(blinked.back, 3.5, 0.05) && blinked.side < 0.05, `B blinks you 3.5 m back at once (${blinked.back.toFixed(2)} m)`);
-check(blinked.after < 0.01, `and no dash follows (moved ${blinked.after.toFixed(3)} m after)`);
-check(blinked.cooldown > 1.8 && blinked.dash > 0, `the blink cools down (${blinked.cooldown.toFixed(2)} s), shown on the belt's dash bar`);
-await button('right', 'b-button', 1);
-const again = await page.evaluate(() => {
-  const { head, tick, down } = window.__mage;
-  const h0 = head();
-  down();
-  tick();
-  const h1 = head();
-  return Math.hypot(h1.x - h0.x, h1.z - h0.z);
-});
-await button('right', 'b-button', 0);
-check(again < 0.01, `pressed again inside its cooldown, nothing (${again.toFixed(3)} m)`);
-
-// 9. The right stick's click.
-await button('right', 'thumbstick', 1);
-const next = await page.evaluate(() => {
-  const { tick, down, kit } = window.__mage;
-  down();
-  tick();
-  return kit.variant.kit;
-});
-await button('right', 'thumbstick', 0);
-check(next === 'B', `the right stick's click steps to kit ${next}`);
-
-// ------------------------------------------------------------------ kit B: the wand
-
-await open('arena&class=mage&kit=B');
-check(await page.evaluate(() => window.__mage.waitForGrunt()), 'kit B: wave 1 rises');
-/** Point the wand at the grunt, hold the trigger `charge` s, let go. */
-async function wandAt(charge = 0.6) {
-  const ready = await page.evaluate(() => {
-    const { grunt, keepAt, hold, tick, aim } = window.__mage;
-    const g = grunt();
-    if (!g) return false;
-    keepAt(g, 4);
-    hold('right', [0.2, 1.4, -0.2], aim([-0.05, -0.05, -1]));
-    tick();
-    window.__target = g;
-    return true;
+// 9. The farm's camp, by bolts.
+{
+  await page.evaluate(() => {
+    window.__descent.teleport(54.5, 26, Math.atan2(-(60 - 54.5), -(33 - 26)));
+    window.__descent.step(0.5);
   });
-  if (!ready) return null;
-  await button('right', 'trigger', 1);
-  await page.evaluate((charge) => {
-    const { hold, tick, keepAt, aim } = window.__mage;
-    for (let t = 0; t < charge; t += 1 / 72) {
-      keepAt(window.__target, 4);
-      hold('right', [0.2, 1.4, -0.2], aim([-0.05, -0.05, -1]));
-      tick();
-    }
-  }, charge);
-  await button('right', 'trigger', 0);
-  return page.evaluate(() => {
-    const { hold, tick, keepAt, down, kit, aim } = window.__mage;
-    const mana = kit.mana;
-    const n = kit.bolts.bolts.length;
-    hold('right', [0.2, 1.4, -0.2], aim([-0.05, -0.05, -1]));
-    tick();
-    const fired = kit.bolts.bolts.length > n;
-    const spent = mana - kit.mana;
-    for (let t = 0; t < 1.2 && kit.bolts.bolts.length; t += 1 / 72) {
-      if (window.__target.alive) keepAt(window.__target, 4);
-      down();
-      tick();
-    }
-    return { fired, spent, alive: window.__target.alive, hp: window.__target.hp };
+  const farmer = '(foes) => { const camp = window.__descent.camps.camps.find((c) => c.plan.id === "farm"); return camp.members.map((m) => m.enemy).find((e) => e.alive && e.hittable) ?? null; }';
+  let throws = 0;
+  while ((await farmStanding()) > 0 && throws < 40) {
+    const r = await throwAt(farmer, 5);
+    if (!r) await page.evaluate(() => window.__descent.step(0.3));
+    throws++;
+  }
+  const xp = await page.evaluate(() => window.__descent.state.xp);
+  check((await farmStanding()) === 0 && xp === 40, `bolts kill the farm's four in ${throws} throws: 40 XP (${xp})`);
+  await shot('oakvale-farm-cleared');
+  await page.evaluate(() => {
+    const d = window.__descent;
+    const v = d.world.zoneAt(0, 0).respawns.village;
+    d.teleport(v.x, v.z, 0);
+    d.step(185, 1 / 30);
   });
+  await clearAndWait(2);
+  const me = await page.evaluate(() => ({ level: window.__descent.state.level, hp: window.__descent.player.maxHp, frostNova: window.__descent.player.can('frostNova') }));
+  check(me.level === 2 && me.hp === 120 && me.frostNova, `two more clearings: level 2, 120 health, Frost Nova (${JSON.stringify(me)})`);
 }
-const wandKit = await page.evaluate(() => ({ wand: !!window.__mage.kit.variant && window.__mage.kit.variant.cast, held: window.__mage.player.input.hands.right.grip.children.length }));
-check(wandKit.wand === 'wand', `kit B casts with a wand (${wandKit.wand})`);
-let w = await wandAt();
-check(w?.fired && near(w.spent, 5, 0.1), `the wand fires where it points, the bolt costing 5 mana (${w?.spent?.toFixed(2)})`);
-let wandBolts = 1;
-while (w && w.alive && wandBolts < 8) {
-  w = await wandAt();
-  wandBolts++;
-}
-check(w && !w.alive, `the wand killed a wave 1 grunt in ${wandBolts} bolts`);
-await shot('mage-wand');
-const offHand = await page.evaluate(() => window.__mage.kit.variant.focus);
-check(offHand === 'wardOnly', `kit B's off hand only wards (${offHand})`);
 
-// ------------------------------------------------------------------ kit C: the push
-
-await open('arena&class=mage&kit=C');
-check(await page.evaluate(() => window.__mage.waitForGrunt()), 'kit C: wave 1 rises');
-/** Hold the trigger by the chest, then push the palm out toward the grunt, the trigger still held. */
-async function pushAt(hand = 'right') {
-  const x = hand === 'right' ? 0.15 : -0.15;
-  const ready = await page.evaluate(([x, hand]) => {
-    const { grunt, keepAt, hold, tick } = window.__mage;
-    const g = grunt();
-    if (!g) return false;
-    keepAt(g, 4);
-    hold(hand, [x, 1.35, -0.05]);
-    tick();
+// 10. Frost Nova on a bandit.
+{
+  const set = await page.evaluate(() => {
+    const d = window.__descent;
+    const { keepAt, tick, down, player } = window.__mage;
+    const camp = d.camps.camps.find((c) => c.plan.id === 'farm');
+    const g = camp.members.map((m) => m.enemy).find((e) => e.alive && e.hittable && e.kind === 'grunt');
+    if (!g) return null;
     window.__target = g;
-    return true;
-  }, [x, hand]);
-  if (!ready) return null;
-  await button(hand, 'trigger', 1);
-  const res = await page.evaluate(([x, hand]) => {
-    const { hold, tick, keepAt, down, kit } = window.__mage;
-    for (let t = 0; t < 0.6; t += 1 / 72) {
-      keepAt(window.__target, 4);
-      hold(hand, [x, 1.35, -0.05]);
-      tick();
-    }
-    const n = kit.bolts.bolts.length;
-    // The push: 3 m/s straight out, 0.5 m.
-    for (let i = 1; i <= 12; i++) {
-      hold(hand, [x, 1.35, -0.05 - (i * 3) / 72]);
-      tick();
-    }
-    const fired = kit.bolts.bolts.length > n;
-    for (let t = 0; t < 1.2 && kit.bolts.bolts.length; t += 1 / 72) {
-      if (window.__target.alive) keepAt(window.__target, 4);
-      down();
-      tick();
-    }
-    return { fired, alive: window.__target.alive };
-  }, [x, hand]);
-  await button(hand, 'trigger', 0);
-  return res;
+    player.resource = player.bar.size;
+    keepAt(g, 2);
+    down();
+    tick();
+    return { hp: g.hp };
+  });
+  await press('left', 'x-button');
+  const froze = await page.evaluate(() => ({ state: window.__target.state, hp: window.__target.hp, family: window.__target.family, mana: window.__mage.player.resource }));
+  check(set && froze.state === 'frozen' && froze.family === 'bandit' && froze.hp < set.hp, `X freezes a bandit grunt beside you (${JSON.stringify(froze)})`);
+  await shot('oakvale-frost-nova');
+  await page.evaluate(() => window.__descent.step(5));
 }
-let p = await pushAt();
-check(p?.fired, 'the palm pushed out casts, the trigger still held');
-const leftPush = await pushAt('left');
-check(leftPush?.fired, 'the off hand casts as well: kit C has two casters');
-p = leftPush;
-let pushes = 2;
-while (p && p.alive && pushes < 10) {
-  p = await pushAt(pushes % 2 ? 'left' : 'right');
-  pushes++;
+
+// 11. Level 3 and Fireball.
+{
+  await clearAndWait(5);
+  const me = await page.evaluate(() => ({ level: window.__descent.state.level, fireball: window.__descent.player.can('fireball'), hinted: window.__descent.adventure.gestures.hinted }));
+  check(me.level === 3 && me.fireball && me.hinted === 'ring', `five more clearings: level 3 and Fireball, the ring hanging in the air (${JSON.stringify(me)})`);
+  // Back to the farm: its camp stands again.
+  await page.evaluate(() => {
+    window.__descent.teleport(54.5, 26, Math.atan2(-(60 - 54.5), -(33 - 26)));
+    window.__descent.step(0.5);
+    window.__mage.player.resource = window.__mage.player.bar.size;
+    window.__mage.down();
+    window.__mage.tick();
+  });
+  const read = await draw('ring');
+  const learned = await page.evaluate(() => window.__descent.adventure.gestures.hinted);
+  check(read.ability === 'fireball' && read.use === 'cast' && learned === null, `a ring drawn is Fireball, and no longer hangs (${JSON.stringify(read)}, hint ${learned})`);
+  const burnt = await page.evaluate(() => window.__descent.combatStats.burnt);
+  // Two of the farm's side by side: throw at one.
+  await page.evaluate(() => {
+    const camp = window.__descent.camps.camps.find((c) => c.plan.id === 'farm');
+    const [a, b] = camp.members.map((m) => m.enemy).filter((e) => e.alive && e.hittable);
+    if (a && b) b.position.set(a.position.x + 1.2, a.position.y, a.position.z);
+  });
+  const farmer = '(foes) => window.__descent.camps.camps.find((c) => c.plan.id === "farm").members.map((m) => m.enemy).find((e) => e.alive && e.hittable) ?? null';
+  const fire = await throwAt(farmer, 5);
+  const after = await page.evaluate(() => window.__descent.combatStats.burnt);
+  check(fire?.cast?.fire && after > burnt, `the next bolt burns and bursts on the bandit beside the one it hit (${JSON.stringify(fire?.cast)}, ${after - burnt} burnt)`);
+  await shot('oakvale-fireball');
 }
-check(p && !p.alive, `pushed bolts killed a wave 1 grunt in ${pushes} bolts`);
 
-// ------------------------------------------------------------------ the warrior's arena, unchanged
-
-await open('arena');
-const warrior = await page.evaluate(() => {
-  const { player, kit } = window.__mage;
-  return { sword: player.sword.model.parent !== null, shield: player.shield.model.parent !== null, warCry: player.can('warCry'), kit: kit ?? null, dashes: player.dashes };
-});
-check(warrior.sword && warrior.shield && warrior.warCry && warrior.kit === null && warrior.dashes, `?arena alone is the warrior's: sword, shield, War Cry, dash, no kit (${JSON.stringify(warrior)})`);
-
-check(errors.length === 0, `no page errors${errors.length ? `: ${errors.slice(0, 3).join(' | ')}` : ''}`);
+check(errors.length === 0, `no page errors (${errors.slice(0, 3).join(' | ')})`);
 await browser.close();
 console.log(failed ? `${failed} FAILED` : 'all ok');
 process.exit(failed ? 1 : 0);

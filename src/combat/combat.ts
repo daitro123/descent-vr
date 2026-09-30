@@ -11,9 +11,12 @@ import type { Player } from '../player/player';
 import { clamp01, closestPointOnSegment, closestSegmentSegment, segmentIntersectsBox, type SegmentHit } from './geometry';
 import { type Arrow, type ArrowContact, type ArrowResolver, Projectiles } from './projectiles';
 import { ABILITY_COLOUR, blocked, type Refusal, sweptTo, throwTarget } from './abilities';
+import { assist, type Bolt, Bolts } from './bolts';
+import { afterBlock, boltDamage, type BoltShape, within } from './mage';
 import { RangerKit } from './ranger';
 import { type BladeResult, bladeTarget, type Defender, sweepBlade, sweepStrike, type SweepResult } from './strike';
 import { ThrownAxes } from './thrownAxes';
+import type { Handedness } from '../player/input';
 
 export interface CombatEvents {
   onEnemyHit(enemy: Enemy, killed: boolean): void;
@@ -24,9 +27,10 @@ export interface CombatEvents {
 /**
  * What came of using an ability: cast, or why not (still cooling down, not
  * enough of your class's bar, nobody in reach to throw at or nothing to use
- * it on, or an ability not built yet), in which case nothing was spent.
+ * it on, already waiting on your next attack, or an ability not built yet),
+ * in which case nothing was spent.
  */
-export type Use = 'cast' | Refusal | 'no target' | 'unbuilt';
+export type Use = 'cast' | Refusal | 'no target' | 'waiting' | 'unbuilt';
 
 /** Where an ability is used from: the right hand, where it faces as the gesture ends, and where you look. */
 export interface Aim {
@@ -85,6 +89,13 @@ export const combatStats = {
   walled: 0,
   /** Second enemies Sweeping Strikes hit. */
   swept: 0,
+  /** The mage's bolts thrown, and those that landed on an enemy. */
+  bolts: 0,
+  boltHits: 0,
+  /** Enemies Frost Nova froze. */
+  frozen: 0,
+  /** Enemies a Fireball's burst reached besides the one it hit. */
+  burnt: 0,
 };
 
 export function resetCombatStats(): void {
@@ -107,6 +118,8 @@ export class Combat implements ArrowResolver {
   readonly projectiles: Projectiles;
   /** Heroic Throw's axes in flight. */
   readonly axes: ThrownAxes;
+  /** The mage's bolts in flight. */
+  readonly bolts: Bolts;
   /** The ranger's bow, arrows, ward and traps: a ranger's only. */
   readonly ranger: RangerKit | null;
   private swinging = false;
@@ -124,8 +137,9 @@ export class Combat implements ArrowResolver {
   ) {
     this.projectiles = new Projectiles(parent, player.ground);
     this.axes = new ThrownAxes(parent);
+    this.bolts = new Bolts(parent);
     this.ranger =
-      player.class === 'ranger'
+      player.klass === 'ranger'
         ? new RangerKit(player, fx, { land: (e, d, head, at, push) => this.arrowLands(e, d, head, at, push), evade: (at) => this.evade(at), reflect: (a, label) => this.reflectArrow(a, label) }, parent)
         : null;
     const B = CONFIG.player.body;
@@ -154,6 +168,7 @@ export class Combat implements ArrowResolver {
     this.ranger?.update(dt, enemies);
     this.projectiles.update(dt, this);
     this.axes.update(dt, (enemy, at, dir, from) => this.axeLands(enemy, at, dir, from));
+    this.bolts.update(dt, enemies, this.player.ground, this.fx.particles, (bolt, enemy, at, crit) => this.boltLands(bolt, enemy, at, crit));
   }
 
   /** Snapshot the player's hurt volumes, shield and blade for this frame's enemy blows. */
@@ -275,21 +290,42 @@ export class Combat implements ArrowResolver {
   clear(): void {
     this.projectiles.clear();
     this.axes.clear();
+    this.bolts.clear();
     this.ranger?.clear();
   }
 
   /**
-   * A / X: your class's button ability. The warrior's War Cry; the ranger's
+   * A / X: the War Cry, or Frost Nova, whichever your class's level has
+   * brought (neither, before level 2). Frost Nova says why it can't be used
+   * over your hands, with a dull buzz, as a gesture does. The ranger's is
    * Power Shot while an arrow is drawn, which says over the bow what came of it.
    */
-  primary(enemies: Enemy[]): void {
+  press(enemies: Enemy[]): void {
     const { player, ranger } = this;
-    if (player.class === 'warrior') this.warCry(enemies);
-    else if (ranger?.drawing && player.can('powerShot') && player.alive) ranger.say(this.use('powerShot'));
+    if (ranger) {
+      if (ranger.drawing && player.can('powerShot') && player.alive) ranger.say(this.use('powerShot'));
+      return;
+    }
+    if (!player.can('frostNova')) {
+      this.warCry(enemies);
+      return;
+    }
+    if (!player.alive) return;
+    const use = this.use('frostNova');
+    if (use === 'cast') return;
+    const why = use === 'poor' ? `not enough ${player.bar.kind}` : `ready in ${Math.ceil(player.abilities.cooldown('frostNova'))} s`;
+    player.headPosition(_p);
+    player.camera.getWorldDirection(_to);
+    _p.addScaledVector(_to.setY(0).normalize(), 0.6).setY(_p.y - 0.35);
+    this.fx.text.spawn(`${ABILITY.frostNova.name}: ${why}`, _p, { color: '#8090a0', scale: 0.08, life: 1.6 });
+    const B = CONFIG.gestures.buzz.dull;
+    player.input.pulse('left', B.intensity, B.ms);
+    player.input.pulse('right', B.intensity, B.ms);
+    sfx.gestureDull();
   }
 
   /**
-   * Use an ability by gesture (aimed from the right hand) or by its button:
+   * Use an ability, aimed from the right hand where it points somewhere:
    * spend its cost from your class's bar and start its cooldown, or say why
    * not and spend nothing.
    */
@@ -317,6 +353,17 @@ export class Combat implements ArrowResolver {
       case 'sweepingStrikes':
         player.abilities.used(ability, W.sweepingStrikes.time);
         sfx.sweepingStrikes();
+        break;
+      case 'frostNova':
+        this.frostNova();
+        player.abilities.used(ability);
+        break;
+      case 'fireball':
+        // The next bolt you charge burns, until it's thrown.
+        if (player.abilities.primed(ability)) return 'waiting';
+        player.abilities.prime(ability);
+        player.abilities.used(ability);
+        sfx.fireballReady();
         break;
       case 'powerShot':
       case 'snareTrap': {
@@ -348,6 +395,113 @@ export class Combat implements ArrowResolver {
     this.events.onEnemyHit(enemy, killed);
     if (killed) this.onKill(enemy);
     return killed;
+  }
+
+  /**
+   * Frost Nova: frost bursts from you, and every enemy within reach takes a
+   * little and is frozen. The blow lands first, since any hit breaks a freeze.
+   */
+  private frostNova(): void {
+    const N = CONFIG.classes.mage.abilities.frostNova;
+    const { player } = this;
+    player.feetPosition(_feet);
+    const colour = ABILITY_COLOUR.frostNova!;
+    for (const enemy of within(_feet, N.radius, this.enemies)) {
+      const killed = enemy.takeHit(Math.round(N.damage * player.stats.damage), _push.set(0, 0, 0), { from: _feet });
+      enemy.capsule(_a, _b);
+      _a.lerp(_b, 0.5);
+      if (!killed && enemy.afflict('frozen', N.freeze) > 0) combatStats.frozen++;
+      this.fx.particles.burst('magic', _a, 14, undefined, colour);
+      this.events.onEnemyHit(enemy, killed);
+      if (killed) this.onKill(enemy);
+    }
+    for (const enemy of this.enemies) {
+      if (enemy.evading && Math.hypot(enemy.position.x - _feet.x, enemy.position.z - _feet.z) <= N.radius) this.evade(_a.copy(enemy.position).setY(enemy.position.y + 1.5));
+    }
+    this.fx.shockwaves.trigger(_feet, N.radius, colour, 0.4);
+    this.fx.particles.burst('magic', _p.copy(_feet).setY(_feet.y + 0.3), 40, undefined, colour);
+    this.fx.text.spawn('FROST NOVA', _p.copy(_feet).setY(_feet.y + 1.2), { color: '#bfe8ff', scale: 0.18 });
+    sfx.frostNova();
+    player.input.pulse('left', 0.9, 160);
+    player.input.pulse('right', 0.9, 160);
+  }
+
+  /**
+   * A bolt leaves your `hand` from `from` along `dir` (bent onto the chest of
+   * whoever the aim assist finds), shaped by the throw and as strong as its
+   * charge was full. A Fireball waiting on it makes it burn.
+   */
+  castBolt(hand: Handedness, from: Vector3, dir: Vector3, shape: BoltShape, fraction: number, colour: number): Bolt {
+    const target = assist(from, dir, this.enemies, CONFIG.mage.throw.assistDeg);
+    const fire = this.player.abilities.spend('fireball');
+    const F = CONFIG.classes.mage.abilities.fireball;
+    combatStats.bolts++;
+    combatStats.swings++;
+    sfx.whoosh(from);
+    if (fire) sfx.fireball(from);
+    else sfx.arrowLoose(from);
+    return this.bolts.fire({
+      pos: from.clone(),
+      vel: dir.clone().multiplyScalar(shape.speed),
+      radius: shape.radius * (fire ? 1.3 : 1),
+      damage: boltDamage(fraction) * (fire ? F.multiplier : 1),
+      color: fire ? ABILITY_COLOUR.fireball! : colour,
+      hand,
+      target,
+      fire,
+    });
+  }
+
+  /** A bolt lands on an enemy (its head a crit), or on nothing; a Fireball bursts either way. */
+  private boltLands(bolt: Bolt, enemy: Enemy | null, at: Vector3, crit: boolean): void {
+    const { player } = this;
+    if (enemy?.evading) {
+      this.evade(at);
+      return;
+    }
+    if (enemy) {
+      let damage = bolt.damage * player.stats.damage;
+      if (crit) damage *= enemy.def.critMultiplier;
+      if (enemy.exposed > 0) damage *= CONFIG.mage.bolt.exposedMultiplier;
+      damage = Math.round(damage);
+      _push.copy(bolt.vel).setY(0);
+      if (_push.lengthSq() > 1e-6) _push.normalize().multiplyScalar(CONFIG.mage.bolt.knockback);
+      const killed = enemy.takeHit(damage, _push, { from: bolt.from });
+      combatStats.hits++;
+      combatStats.boltHits++;
+      if (crit) combatStats.crits++;
+      this.fx.particles.burst('magic', at, 16, undefined, bolt.color);
+      if (crit) this.fx.particles.burst('sparks', at, 12, undefined, 0xbfe8ff);
+      const colour = bolt.fire ? '#ffb070' : '#bcdcff';
+      this.fx.text.spawn(crit ? `${damage}!` : `${damage}`, at, { color: crit ? '#ffd23a' : colour, scale: crit ? 0.3 : 0.22 });
+      sfx.hit(crit, at);
+      const h = CONFIG.mage.haptics.hit;
+      player.input.pulse(bolt.hand, h.intensity, h.ms);
+      this.landed(enemy, killed, 0.03);
+    } else this.fx.particles.burst('magic', at, 8, undefined, bolt.color);
+    if (bolt.fire) this.burst(at, enemy);
+  }
+
+  /** A Fireball bursts at `at`: every other enemy within reach burns for the burst. */
+  private burst(at: Vector3, struck: Enemy | null): void {
+    const F = CONFIG.classes.mage.abilities.fireball;
+    const colour = ABILITY_COLOUR.fireball!;
+    const damage = Math.round(F.burst * this.player.stats.damage);
+    for (const enemy of within(at, F.radius, this.enemies, struck)) {
+      _push.subVectors(enemy.position, at).setY(0);
+      if (_push.lengthSq() > 1e-6) _push.normalize().multiplyScalar(2);
+      const killed = enemy.takeHit(damage, _push, { from: at });
+      combatStats.burnt++;
+      enemy.capsule(_a, _b);
+      _a.lerp(_b, 0.6);
+      this.fx.particles.burst('embers', _a, 10, undefined, colour);
+      this.fx.text.spawn(`${damage}`, _a, { color: '#ffb070', scale: 0.2 });
+      this.events.onEnemyHit(enemy, killed);
+      if (killed) this.onKill(enemy);
+    }
+    this.fx.shockwaves.trigger(at, F.radius, colour, 0.35);
+    this.fx.particles.burst('embers', at, 30, undefined, colour);
+    sfx.fireballBurst(at);
   }
 
   /** Heroic Throw's axe reaches the enemy it was thrown at: a blow, and a stagger. */
@@ -599,6 +753,7 @@ export class Combat implements ArrowResolver {
       return 'parried';
     }
     combatStats.blocks++;
+    if (onShield) this.warded();
     this.fx.particles.burst('sparks', at, 12, _to.negate());
     player.addRage(CONFIG.rage.perBlock);
     const h = CONFIG.feel.hapticBlock;
@@ -630,6 +785,12 @@ export class Combat implements ArrowResolver {
       sfx.block(at);
     } else sfx.clash(at);
     return 'blocked';
+  }
+
+  /** The shield stopped a blow or an arrow: the mage's ward pays for it in mana (a parry is free). */
+  private warded(): void {
+    const { player } = this;
+    if (player.klass === 'mage') player.resource = afterBlock(player.resource);
   }
 
   /** A slam lands (EnemyContext.slam): unblockable, so only distance (or a dash) saves you. */
@@ -696,6 +857,7 @@ export class Combat implements ArrowResolver {
           return 'parried';
         }
         combatStats.blocks++;
+        this.warded();
         this.projectiles.attach(arrow, player.shield.board);
         player.shield.flash();
         player.addRage(CONFIG.rage.perBlock * 0.5);
