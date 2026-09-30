@@ -108,6 +108,22 @@ _Avoid_: elite, raid boss, mini-boss
 How strong a character or an enemy is. Each level adds the same step of health and damage to both, so a fight against an enemy of your own level feels the same at any level. Oakvale takes a character from level 1 to 5, its **level cap**.
 _Avoid_: rank, tier, difficulty
 
+**Class**:
+What kind of fighter a character is: a warrior, a ranger or a mage. It decides the character's abilities and talent trees.
+_Avoid_: role, archetype, job, spec
+
+**Ability**:
+A move a character uses in a fight beyond their plain attacks, like the warrior's War Cry or Earthshaker. Each class has its own.
+_Avoid_: skill (too broad: professions have skills too), spell, power, move
+
+**Talent**:
+A pick a character makes in their class's talent tree that grants a new ability or changes one they have. Talents are the character's choices; everything else a level brings is the same for everyone.
+_Avoid_: perk, feat, skill point
+
+**Attribute**:
+A number that describes a character's strength and rises on its own with their level and their gear, never by spending points.
+_Avoid_: stat point, characteristic
+
 **Respawn point**:
 Where you wake after dying, at full health, with nothing lost. Oakvale has two: the inn's hearth in the village, and just outside the old mine for a death inside it.
 _Avoid_: graveyard, checkpoint, spawn
