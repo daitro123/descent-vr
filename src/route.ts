@@ -13,6 +13,8 @@ export type Route =
   | { kind: 'walk'; map: string }
   /** `?arena`: the wave game. `?duel`, `?wave=N` and `?showcase` alone open it too. */
   | { kind: 'arena'; firstWave: number; duel: boolean; showcase: boolean }
+  /** `?proto=<name>`: a throwaway professions prototype (src/professions/prototypes). */
+  | { kind: 'proto'; name: string }
   /** Anything else: Oakvale, with the save. `?newgame` asks to start over. */
   | { kind: 'adventure'; newGame: boolean };
 
@@ -47,6 +49,7 @@ export function readPage(search: string): Page {
 function chooseRoute(params: URLSearchParams): Route {
   if (params.has('inspect')) return { kind: 'inspect' };
   if (params.has('fly')) return { kind: 'fly', map: params.get('fly') ?? '' };
+  if (params.has('proto')) return { kind: 'proto', name: params.get('proto') ?? '' };
   if (params.has('map')) return { kind: 'walk', map: params.get('map') || 'forest' };
   if (ARENA_FLAGS.some((f) => params.has(f))) {
     const waves = CONFIG.waves.list.length;
