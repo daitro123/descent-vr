@@ -216,11 +216,11 @@ describe('the belt', () => {
   });
 
   it('keeps the cooldown running through a drink from either hip, and refills from that potion only', () => {
-    const inv = carrying([{ id: 'torn-cloth', count: 1 }, potions(2)]);
+    const inv = carrying([{ id: 'torn-cloth-1', count: 1 }, potions(2)]);
     inv.move(bag(1), LEFT_HIP, 1);
     expect(inv.drink(0).map((e) => e.kind)).toEqual(['drank', 'slot', 'cooldown', 'slot', 'slot']);
     expect(inv.at(LEFT_HIP)).toEqual(potions(1));
-    expect(inv.at(bag(0))).toEqual({ id: 'torn-cloth', count: 1 });
+    expect(inv.at(bag(0))).toEqual({ id: 'torn-cloth-1', count: 1 });
     inv.tick(30);
     expect(inv.cooldown).toBe(30);
     expect(refusals(inv.drink(1))).toEqual(['cooldown']);
