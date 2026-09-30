@@ -223,6 +223,15 @@ function install() {
       tick();
     }
     const took = belt.holding('right') === 1;
+    // What the drink healed, read off the heal itself: a blow landing the same step would hide it in your health.
+    const heal = player.heal;
+    let healed = 0;
+    player.heal = function (n) {
+      const was = this.hp;
+      const r = heal.call(this, n);
+      healed += this.hp - was;
+      return r;
+    };
     let t = 0;
     let hp = was.hp;
     let fighting = was.fighting;
@@ -238,13 +247,14 @@ function install() {
       tick();
     }
     const drunk = belt.log.drunk > was.drunk;
+    player.heal = heal;
     squeeze('right', 0);
     for (let i = 0; i < 4; i++) {
       defend();
       hold('right', DOWN.right);
       tick();
     }
-    return { took, drunk, t, before: hp, after: drunk ? hp + (player.hp - hp) : hp, rose: drunk ? player.hp : hp, max: player.maxHp, fighting, was, belt: adventure.state.inventory.belt[1]?.count ?? 0, cooldown: adventure.state.inventory.cooldown };
+    return { took, drunk, t, before: hp, rose: hp + healed, now: player.hp, max: player.maxHp, fighting, was, belt: adventure.state.inventory.belt[1]?.count ?? 0, cooldown: adventure.state.inventory.cooldown };
   };
   /** Face (x, z) where you stand. */
   const face = (x, z) => {
@@ -615,10 +625,28 @@ const allDown = (id) => `() => window.__descent.camps.camps.find((c) => c.plan.i
 /** Fight camp `id` until every one of it is down (the camp's pull brings them in), walking back after a death. */
 async function clearCamp(id, extra = {}) {
   await toCamp(id);
-  const r = await battle({ done: allDown(id), pick: inCamp(id), near: 25, ...extra }, () => toCamp(id));
+  let r = await battle({ done: allDown(id), pick: inCamp(id), near: 25, ...extra }, () => toCamp(id), 10);
+  // One left standing at its post out of reach (it never noticed): walk over to it, as a player would.
+  for (let i = 0; i < 4 && r.r === 'timeout'; i++) {
+    note(`${id}: walking over to the one left standing: ${JSON.stringify(await upIn(id))}`);
+    await toCamp(id);
+    const again = await battle({ done: allDown(id), pick: inCamp(id), near: 25, ...extra }, () => toCamp(id), 10);
+    r = { r: again.r, deaths: r.deaths + again.deaths };
+  }
   // Anyone still fighting you (a neighbour come to help) fought off too.
   if (r.r === 'done') await battle({ done: '() => !window.__descent.camps.fighting', near: 25 }, () => toCamp(id), 10);
+  else note(`${id} not cleared (${r.r}): ${JSON.stringify(await upIn(id))}`);
   return r;
+}
+/** Who of camp `id` is still up: where, how hurt, in what mind, and how far from you. */
+async function upIn(id) {
+  return page.evaluate((id) => {
+    const me = window.__play.head();
+    return window.__descent.camps.camps
+      .find((c) => c.plan.id === id)
+      .members.filter((m) => m.enemy.alive)
+      .map((m) => ({ role: m.plan.role, mind: m.mind, hp: `${Math.round(m.enemy.hp)}/${m.enemy.maxHp}`, at: [m.enemy.position.x, m.enemy.position.y, m.enemy.position.z].map((v) => +v.toFixed(1)), post: [m.post.x, m.post.z].map((v) => +v.toFixed(1)), away: +Math.hypot(m.enemy.position.x - me.x, m.enemy.position.z - me.z).toFixed(1), hittable: m.enemy.hittable, evading: m.enemy.evading, state: m.enemy.state }));
+  }, id);
 }
 
 // ---------------------------------------------------------------- coins and drops, by stage
