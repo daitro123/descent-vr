@@ -21,6 +21,7 @@ import { Hale } from './people/hale';
 import { Villagers } from './people/villagers';
 import { type AlchemyBench, type Herbalist, standInHouse } from './professions/bench';
 import { PROFESSION_NAMES } from './professions/professions';
+import { Gestures } from './player/gestures/gestures';
 import { Player } from './player/player';
 import { Run } from './player/run';
 import { Anvil } from './professions/anvil/anvil';
@@ -111,6 +112,8 @@ export class Adventure {
   /** The Warden on its throne at the mine's foot, and what it raises; null in a zone without the mine. */
   readonly throne: Throne | null;
   readonly combat: Combat;
+  /** Abilities by gesture: the shapes your slots hold, once your level brings one. */
+  readonly gestures: Gestures;
   /** Marshal Hale, the quest giver, at the crossroads. */
   readonly hale: Hale;
   /** The innkeeper, the smith and the farmer, at work. */
@@ -258,6 +261,17 @@ export class Adventure {
       },
       scene,
     );
+    this.gestures = new Gestures({
+      player: this.player,
+      text: this.text,
+      particles: this.particles,
+      slots: () => this.state.slots,
+      unlearned: () => this.state.unlearned,
+      drawn: (shape) => this.apply({ kind: 'drawn', shape }, this.you.head),
+      use: (ability, aim) => this.combat.use(ability, aim),
+      // Your hands are the bag's while it's open, and the bench's while you work at it.
+      held: () => this.bag.isOpen || this.bench?.bare === true,
+    });
     // The mine's undead stand on the mine's own ground, whether or not you've come in.
     const below = this.world.mineGround;
     const hooks: CampHooks = {
@@ -416,6 +430,7 @@ export class Adventure {
     } else you.sword = null;
 
     this.combat.update(dt, foes);
+    this.gestures.update(dt);
     this.camps.update(enemyDt, you);
     this.throne?.update(enemyDt, you, this.state.wardenSeated);
     // The ambience's mix follows the light's cues, and dips while anything fights you.
@@ -865,6 +880,7 @@ export class Adventure {
     this.world.fill(x, z);
     this.lastHp = this.player.hp;
     this.combat.projectiles.clear();
+    this.combat.axes.clear();
     this.deadFor = null;
     this.wakingFor = 0;
   }

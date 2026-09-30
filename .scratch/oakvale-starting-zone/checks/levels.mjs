@@ -106,7 +106,7 @@ const belt = () =>
     const bar = ctx.getImageData(22, 12, 20, 1).data;
     let xp = 0;
     for (let i = 0; i < bar.length; i += 4) if (bar[i] > 200 && bar[i + 1] > 150) xp++;
-    return { health: count(1, 3, 18, 18), level: count(24, 4, 16, 5), xp, rage: count(44, 3, 18, 18), slamPip: count(49, 21, 3, 2), cryPip: count(54, 21, 3, 2) };
+    return { health: count(1, 3, 18, 18), level: count(24, 4, 16, 5), xp, rage: count(44, 3, 18, 18), slamPip: count(48, 21, 3, 2), cryPip: count(44, 21, 3, 2) };
   });
 /** Fell every standing member of the farm's camp; returns where each fell. */
 const clearFarm = () =>

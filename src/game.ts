@@ -1,4 +1,5 @@
 import { type PerspectiveCamera, type Scene, Vector3, type WebGLRenderer } from 'three';
+import { type Shape, SHAPES, slotsOf } from './classes';
 import { Combat, combatStats, resetCombatStats } from './combat/combat';
 import { CONFIG } from './config';
 import { type Enemy, type EnemyContext, keepApart, type PlayerSword } from './enemies/enemy';
@@ -11,6 +12,7 @@ import { Shockwaves } from './fx/shockwave';
 import { SwordTrail } from './fx/trail';
 import { Vines } from './fx/vines';
 import type { EnemyKind } from './models/characters';
+import { Gestures } from './player/gestures/gestures';
 import { Player } from './player/player';
 import { BeltHud } from './ui/beltHud';
 import { Arena } from './world/arena';
@@ -50,6 +52,10 @@ export class Game {
   readonly combat: Combat;
   readonly text: FloatingText;
   readonly particles: Particles;
+  /** Abilities by gesture: every base ability's shape, from the start. */
+  readonly gestures: Gestures;
+  /** The shapes drawn since the page loaded: the arena keeps no save, so each hangs in the air once a visit. */
+  private readonly learned = new Set<Shape>();
   private readonly shockwaves: Shockwaves;
   private readonly trail: SwordTrail;
   private readonly shadows = new BlobShadows();
@@ -101,6 +107,20 @@ export class Game {
       scene,
     );
 
+    const slots = () => slotsOf(this.player.stats.abilities);
+    this.gestures = new Gestures({
+      player: this.player,
+      text: this.text,
+      particles: this.particles,
+      slots,
+      unlearned: () => {
+        const held = slots();
+        return SHAPES.filter((s) => held[s] !== null && !this.learned.has(s));
+      },
+      drawn: (shape) => this.learned.add(shape),
+      use: (ability, aim) => this.combat.use(ability, aim),
+    });
+
     this.ctx = {
       playerFeet: new Vector3(),
       playerHead: new Vector3(),
@@ -144,6 +164,7 @@ export class Game {
     } else this.ctx.playerSword = null;
 
     this.combat.update(dt, this.enemies);
+    this.gestures.update(dt);
     this.meleeTokens.update(enemyDt);
     this.rangedTokens.update(enemyDt);
     for (let i = this.enemies.length - 1; i >= 0; i--) {
@@ -309,6 +330,7 @@ export class Game {
     this.text.clear();
     this.particles.clear();
     this.combat.projectiles.clear();
+    this.combat.axes.clear();
     this.player.reset();
     this.wave = this.firstWave - 1;
     resetCombatStats();
