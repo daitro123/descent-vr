@@ -4,7 +4,7 @@ import { PAL } from '../../models/palette';
 import type { Deck, Field, ForestLayout, Structure } from './layout';
 import { HOUSE } from './house';
 import { INN } from './inn';
-import { localToWorld, standingStones, TENT } from './layout';
+import { COTTAGE_CHIMNEY, localToWorld, MAP_BOARD, SIGNPOSTS, type SignpostPlan, standingStones, TENT } from './layout';
 import { MINE } from './mine';
 import { mulberry32 } from './noise';
 import { stump } from './nature';
@@ -35,7 +35,8 @@ export function buildStructure(s: Structure, ctx: StructureContext): BufferGeome
     case 'farmhouse': farmhouse(b, s); break;
     case 'smithy': smithy(b, s, ctx); break;
     case 'well': well(b); break;
-    case 'signpost': signpost(b); break;
+    case 'signpost': signpost(b, SIGNPOSTS[s.variant]); break;
+    case 'mapboard': mapBoard(b); break;
     case 'lamp': lamp(b, ctx); break;
     case 'cart': cart(b); break;
     case 'barn': barn(b, s); break;
@@ -213,8 +214,7 @@ function inn(b: ModelBuilder, s: Structure, ctx: StructureContext): void {
   b.box(W + 0.1, 0.22, D + 0.1, { at: [0, y1, 0], color: BUILD.timber });
   frame(b, W, D, y1, h1);
   gable(b, W, D, y1 + h1, 3.6, 0.6, BUILD.slate, BUILD.plaster);
-  chimney(b, W / 2 - 1.3, -1.4, y1 + h1, y1 + h1 + 3.6);
-  chimney(b, -W / 2 + 1.1, 1.0, y1 + h1, y1 + h1 + 3.0);
+  for (const c of INN.chimneys) chimney(b, c.x, c.z, y1 + h1, c.top);
   // A dormer window in each roof slope.
   for (const x of [-2.6, 2.6]) {
     b.box(1.4, 1.4, 1.6, { at: [x, y1 + h1 + 1.0, D / 2 - 0.9], color: BUILD.plaster })
@@ -308,8 +308,8 @@ function house(b: ModelBuilder, s: Structure, ctx: StructureContext): void {
   frame(b, w, d, y0, h, opens ? door : undefined);
   gable(b, w, d, y0 + h, thatched ? 2.8 : HOUSE.rise, 0.5, thatched ? BUILD.thatch : BUILD.slate, BUILD.plaster, thatched ? 0.35 : 0.16, opens ? HOUSE.wall : undefined);
   // The house by the well's chimney stands at its gable end, over the hearth in the room's back corner.
-  if (opens) chimney(b, HOUSE.chimney.x, HOUSE.hearth.z, y0 + h, y0 + h + 3.1);
-  else if (!thatched) chimney(b, w / 2 - 0.9, -0.8, y0 + h, y0 + h + 3.1);
+  if (opens) chimney(b, HOUSE.chimney.x, HOUSE.hearth.z, y0 + h, y0 + h + HOUSE.chimney.rise);
+  else if (!thatched) chimney(b, w / 2 - COTTAGE_CHIMNEY.inset, COTTAGE_CHIMNEY.z, y0 + h, y0 + h + COTTAGE_CHIMNEY.rise);
   if (!opens) doorOn(b, 'front', w, d, 0.9, y0);
   windowOn(b, 'front', w, d, -1.4, y0 + 1.5, s.variant === 0);
   windowOn(b, 'left', w, d, 0, y0 + 1.5);
@@ -389,7 +389,7 @@ function smithy(b: ModelBuilder, s: Structure, ctx: StructureContext): void {
   b.box(2 * forge.hw, 0.95, 2 * forge.hd, { at: [fx, 0.48, fz], color: PAL.stone, jitter: 0.12 })
     .box(1.3, 0.06, 0.9, { at: [fx, 0.97, fz], color: PAL.coal, glow: 0.85, jitter: 0.2 })
     .taper(1.8, 1.4, 0.8, 0.8, 1.1, { at: [fx, 2.0, fz], color: PAL.stoneDark })
-    .box(0.8, 2.4, 0.8, { at: [fx, 4.2, fz], color: PAL.stoneDark });
+    .box(0.8, SMITHY.flue - 3.0, 0.8, { at: [fx, (SMITHY.flue + 3.0) / 2, fz], color: PAL.stoneDark });
   ctx.glow([fx, 1.2, fz + 0.3], 1.1, 0xff7a2a);
   // The bellows on a stand at the forge's side, nozzle into the fire, their handle standing up off the far end.
   const { x: bx, z: bz, hw: bhw, hd: bhd, handle } = bellows;
@@ -433,20 +433,41 @@ function well(b: ModelBuilder): void {
     .cyl(0.14, 0.11, 0.24, 6, { at: [0.1, 0.9, 0.3], color: PAL.wood });
 }
 
-/** Boards point down the four roads (built unturned, so local axes are the world's). */
-function signpost(b: ModelBuilder): void {
-  b.box(0.14, 2.6, 0.14, { at: [0, 1.3, 0], color: BUILD.timber }).cone(0.1, 0.14, 4, { at: [0, 2.67, 0], color: BUILD.timber });
-  const boards: [number, number][] = [
-    [PI, 2.3], // north, to the mine
-    [PI / 2 - 0.1, 2.0], // east, to the farm
-    [-PI / 2 - 0.2, 1.75], // west, to the pond
-    [0.1, 1.5], // south, the road out
-  ];
-  for (const [a, y] of boards) {
+/**
+ * A post with its boards, each pointing its way with its end cut to a point
+ * (built unturned, so local axes are the world's). The names painted on them
+ * are one mesh of their own (wayfinding.ts).
+ */
+function signpost(b: ModelBuilder, plan: SignpostPlan): void {
+  const { post, length, height, boards } = plan;
+  b.box(0.14, post, 0.14, { at: [0, post / 2, 0], color: BUILD.timber }).cone(0.1, 0.14, 4, { at: [0, post + 0.07, 0], color: BUILD.timber });
+  for (const { a, y } of boards) {
     const dir: Vec3 = [Math.sin(a), 0, Math.cos(a)];
-    b.box(1.0, 0.2, 0.05, { at: [dir[0] * 0.5, y, dir[2] * 0.5], rot: [0, a - PI / 2, 0], color: BUILD.plank })
-      .box(0.2, 0.2, 0.05, { at: [dir[0] * 1.02, y, dir[2] * 1.02], rot: [0, a - PI / 2 + PI / 4, 0], color: BUILD.plank });
+    b.box(length, height, 0.05, { at: [dir[0] * length / 2, y, dir[2] * length / 2], rot: [0, a - PI / 2, 0], color: BUILD.plank })
+      .box(height, height, 0.05, { at: [dir[0] * (length + 0.02), y, dir[2] * (length + 0.02)], rot: [0, a - PI / 2 + PI / 4, 0], color: BUILD.plank });
   }
+}
+
+/**
+ * The map board's frame on two posts, its face leaning back a little; the
+ * painted map on its face is a mesh of its own (wayfinding.ts). Its front
+ * (+Z) is the side you read.
+ */
+function mapBoard(b: ModelBuilder): void {
+  const { w, h, top, lean } = MAP_BOARD;
+  const mid = top - (h / 2) * Math.cos(lean);
+  const tilt: Vec3 = [-lean, 0, 0];
+  // The backing board and its frame, leaning back about its middle.
+  b.box(w + 0.04, h + 0.04, 0.04, { at: [0, mid, -0.03], rot: tilt, color: BUILD.plank });
+  const frame = (fw: number, fh: number, x: number, y: number) =>
+    b.box(fw, fh, 0.07, { at: [x, mid + y * Math.cos(lean), -0.02 - y * Math.sin(lean)], rot: tilt, color: BUILD.timber });
+  frame(w + 0.14, 0.07, 0, h / 2 + 0.035);
+  frame(w + 0.14, 0.07, 0, -h / 2 - 0.035);
+  frame(0.07, h, -w / 2 - 0.035, 0);
+  frame(0.07, h, w / 2 + 0.035, 0);
+  // Two posts behind it, and a little roof over it.
+  for (const x of [-w / 2 + 0.05, w / 2 - 0.05]) b.box(0.1, top + 0.15, 0.1, { at: [x, (top + 0.15) / 2, -0.19], color: BUILD.timber });
+  b.box(w + 0.3, 0.05, 0.4, { at: [0, top + 0.17, -0.1], rot: [0.25, 0, 0], color: BUILD.slate });
 }
 
 function lamp(b: ModelBuilder, ctx: StructureContext): void {

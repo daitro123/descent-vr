@@ -371,6 +371,25 @@ export const CONFIG = {
     distance: 1.1, // …this far out (m)
     lag: 3, // per s: how quickly it catches up as you turn your head, so it drifts rather than sticks
     flash: 1.5, // s it flashes when you take a quest, make progress or finish
+    // The quest arrow at the left of the objective you're working on, pointing its way as the crow flies.
+    arrow: {
+      size: 0.022, // m across, on the tracker
+      nearHale: 10, // m: it hides this close to Hale, when it points at them (their gold "?" shows the way)
+    },
+  },
+
+  // Smoke over the zone (world/smoke.ts): the inn's and the cottages'
+  // chimneys, the smithy's forge and the lumber camp's fire.
+  smoke: {
+    puffs: 10, // per plume, all in one instanced mesh
+    life: 9, // s a puff takes to rise and thin away
+    fadeIn: 0.12, // of its life it takes to thicken, leaving the chimney
+    opacity: 0.55, // at its thickest: few and thin, for the overdraw
+    drift: 3.5, // m the breeze has carried it by the end
+    sway: 0.4, // m it wanders across the breeze
+    wind: [0.8, -0.6], // the breeze's way on the floor plane (x east, z south)
+    chimney: { rise: 8, size: [0.8, 3], color: 0xb4b0a8 }, // m it rises; m across leaving the chimney and at the end
+    fire: { rise: 5, size: [0.4, 2], color: 0x8e8a84 }, // the lumber camp's fire: lower, smaller and darker
   },
 
   // A hand-in's reward floats over Hale with a fanfare.

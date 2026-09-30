@@ -48,6 +48,10 @@ _Avoid_: storyline, questline
 The small arrow beside the objective you're working on that points the way to where it is, as the crow flies.
 _Avoid_: waypoint, compass, marker (a marker is the "!" or "?" over a quest giver)
 
+**Map board**:
+The painted map of the zone on a board at the crossroads, with a red "You are here". It's part of the world: painted once, it never changes and shows no quests.
+_Avoid_: minimap, world map, map (a map is any place the game can put you)
+
 **Hand in**:
 Returning a finished quest to its quest giver, which completes it and pays its reward.
 _Avoid_: turn in, complete

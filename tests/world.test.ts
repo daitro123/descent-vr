@@ -2,6 +2,7 @@ import { HemisphereLight, DirectionalLight, type InstancedMesh, type Light, type
 import { beforeAll, describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
 import { Camps, type You } from '../src/enemies/camps';
+import { buildStructure } from '../src/maps/forest/buildings';
 import { buildForest } from '../src/maps/forest/forest';
 import { floorOf, Hollow } from '../src/maps/forest/hollow';
 import { HOUSE } from '../src/maps/forest/house';
@@ -1103,5 +1104,31 @@ describe('the old mine', () => {
     const parts = mine().flames.map((f) => mine().partAt(f.x, f.z));
     const count = (part: number) => parts.filter((p) => p === part).length;
     expect(MINE.parts.map((_, i) => count(i))).toEqual([2, 3, 2, 3, 1, 0, 2, 4]);
+  });
+});
+
+describe("Oakvale's ways of finding your way", () => {
+  const named = (name: string) => oakvale.root.children.filter((o) => o.name === name) as Mesh[];
+  const triangles = (m: { geometry: Mesh['geometry'] }) => (m.geometry.index?.count ?? m.geometry.attributes.position.count) / 3;
+
+  it("paints each signpost's names on one mesh, a quad on each face of each board", () => {
+    const names = named('sign-names');
+    expect(names).toHaveLength(2);
+    expect(names.map(triangles)).toEqual([5 * 4, 4 * 4]);
+  });
+
+  it('draws the map board in under 100 triangles and two draw calls: its frame and posts with the zone, its painted face one quad', () => {
+    const [face] = named('map-board');
+    expect(triangles(face)).toBe(2);
+    const board = plan.structures.find((s) => s.kind === 'mapboard')!;
+    const frame = buildStructure(board, { layout: plan, glow: () => {}, spinner: () => {} });
+    expect(triangles({ geometry: frame }) + triangles(face)).toBeLessThan(100);
+  });
+
+  it('raises all the smoke in one instanced mesh of about 60 puffs', () => {
+    const [smoke] = named('smoke') as unknown as InstancedMesh[];
+    expect(smoke.isInstancedMesh).toBe(true);
+    expect(smoke.count).toBe(60);
+    expect(triangles(smoke)).toBe(2);
   });
 });

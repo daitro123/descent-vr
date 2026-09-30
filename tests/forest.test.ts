@@ -1,7 +1,7 @@
 import { Vector3 } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
-import { buildLayout, FOREST, type ForestLayout, HALE, localToWorld, type StructureKind, TENT, worldToLocal } from '../src/maps/forest/layout';
+import { buildLayout, FOREST, type ForestLayout, HALE, localToWorld, MAP_BOARD, SIGNPOSTS, type StructureKind, TENT, worldToLocal } from '../src/maps/forest/layout';
 import type { CampPlan } from '../src/maps/types';
 import { nearestOnPolyline } from '../src/maps/forest/noise';
 import { MAPS } from '../src/maps/registry';
@@ -492,6 +492,133 @@ describe('the village respawn point', () => {
     const { village } = layout.respawns;
     for (const camp of layout.camps) {
       expect(Math.hypot(village.x - camp.place.x, village.z - camp.place.z) - camp.place.r).toBeGreaterThan(CONFIG.camps.refillAway);
+    }
+  });
+});
+
+describe('finding the way', () => {
+  const signposts = () => layout.structures.filter((s) => s.kind === 'signpost');
+  const onRoad = (x: number, z: number) => layout.roadDistance.at(x, z) < 0.2;
+  /** Is (x, z) off every road, the whole footprint of `s` round it? */
+  const offRoads = (s: { x: number; z: number; yaw: number; hw: number; hd: number }) => {
+    for (let u = -1; u <= 1; u += 0.25) for (let v = -1; v <= 1; v += 0.25) if (onRoad(...localToWorld(s, u * s.hw, v * s.hd))) return false;
+    return true;
+  };
+  const main = () => layout.paths.find((p) => p.id === 'main')!;
+  const leaves = (id: string) => layout.paths.find((p) => p.id === id)!.line[0];
+
+  it("names the crossroads signpost's roads: Old Mine and Lumber Camp north, Farm east, Pond west, Brackenmoor south", () => {
+    const [crossroads] = signposts();
+    expect(Math.hypot(crossroads.x, crossroads.z)).toBeLessThan(7);
+    const way = (a: number) => (Math.abs(Math.cos(a)) > Math.abs(Math.sin(a)) ? (Math.cos(a) < 0 ? 'north' : 'south') : Math.sin(a) > 0 ? 'east' : 'west');
+    expect(SIGNPOSTS[crossroads.variant].boards.map((b) => [b.name, way(b.a)])).toEqual([
+      ['Old Mine', 'north'],
+      ['Lumber Camp', 'north'],
+      ['Farm', 'east'],
+      ['Pond', 'west'],
+      ['Brackenmoor', 'south'],
+    ]);
+  });
+
+  it('stands a second, smaller signpost north of the bridge, between where the watchtower and lumber camp roads leave the main road, off every road', () => {
+    const posts = signposts();
+    expect(posts).toHaveLength(2);
+    const fork = posts[1];
+    const [crossroads] = posts;
+    expect(SIGNPOSTS[fork.variant].post).toBeLessThan(SIGNPOSTS[crossroads.variant].post);
+    expect(SIGNPOSTS[fork.variant].length).toBeLessThan(SIGNPOSTS[crossroads.variant].length);
+    expect(fork.z).toBeLessThan(layout.bridge.z - layout.bridge.hd);
+    const [, towerZ] = leaves('tower');
+    const [, campZ] = leaves('camp');
+    expect(fork.z).toBeLessThan(towerZ);
+    expect(fork.z).toBeGreaterThan(campZ);
+    expect(offRoads(fork)).toBe(true);
+    // Beside the main road, where you'd see it walking up it.
+    const { d } = nearestOnPolyline(main().line, fork.x, fork.z);
+    expect(d - main().width / 2).toBeLessThan(2.5);
+    expect(SIGNPOSTS[fork.variant].boards.map((b) => b.name)).toEqual(['Old Mine', 'Lumber Camp', 'Watchtower', 'Village']);
+    // Each board points down its road as it leaves: the watchtower's east, the lumber camp's west, the mine's north, the village's south.
+    const along = (id: string, name: string) => {
+      const b = SIGNPOSTS[fork.variant].boards.find((b) => b.name === name)!;
+      const [x0, z0] = leaves(id);
+      const [x1, z1] = layout.paths.find((p) => p.id === id)!.line[8];
+      return Math.sin(b.a) * (x1 - x0) + Math.cos(b.a) * (z1 - z0) > 0.9 * Math.hypot(x1 - x0, z1 - z0);
+    };
+    expect(along('tower', 'Watchtower')).toBe(true);
+    expect(along('camp', 'Lumber Camp')).toBe(true);
+    const north = SIGNPOSTS[fork.variant].boards.find((b) => b.name === 'Old Mine')!;
+    const south = SIGNPOSTS[fork.variant].boards.find((b) => b.name === 'Village')!;
+    expect(Math.cos(north.a)).toBeLessThan(-0.9);
+    expect(Math.cos(south.a)).toBeGreaterThan(0.9);
+  });
+
+  it('keeps every board of both signposts clear of the rest, one above another, under the post\'s top', () => {
+    for (const plan of SIGNPOSTS) {
+      const ys = plan.boards.map((b) => b.y).sort((a, b) => b - a);
+      for (let i = 1; i < ys.length; i++) expect(ys[i - 1] - ys[i]).toBeGreaterThanOrEqual(plan.height + 0.04);
+      expect(ys[0] + plan.height / 2).toBeLessThan(plan.post);
+    }
+  });
+
+  it('stands the map board about 2.5 m east of the crossroads signpost, south of the farm road, facing west over the crossroads, off the roads', () => {
+    const [crossroads] = signposts();
+    const board = layout.structures.find((s) => s.kind === 'mapboard')!;
+    expect(board.x - crossroads.x).toBeCloseTo(2.5, 0);
+    expect(Math.abs(board.z - crossroads.z)).toBeLessThan(0.5);
+    const east = layout.paths.find((p) => p.id === 'east')!;
+    const { i, t } = nearestOnPolyline(east.line, board.x, board.z);
+    const roadZ = east.line[i][1] + (east.line[i + 1][1] - east.line[i][1]) * t;
+    expect(board.z).toBeGreaterThan(roadZ);
+    // Its face (+Z) looks west.
+    expect(Math.sin(board.yaw)).toBeCloseTo(-1, 6);
+    expect(offRoads(board)).toBe(true);
+    expect(layout.colliders.blocked(board.x, board.z, 0.1)).toBe(true);
+    // Across the signpost from Hale, so it never overlaps their board.
+    expect(board.x).toBeGreaterThan(crossroads.x);
+    expect(HALE.x).toBeLessThan(crossroads.x);
+  });
+
+  it('is about 1.2 by 0.9 m, its top a little below eye height, and shows the whole zone you can walk', () => {
+    expect([MAP_BOARD.w, MAP_BOARD.h]).toEqual([1.2, 0.9]);
+    expect(MAP_BOARD.top).toBeGreaterThan(1.3);
+    expect(MAP_BOARD.top).toBeLessThan(1.6);
+    const { minX, maxX, minZ, maxZ } = MAP_BOARD.shows;
+    for (const s of layout.structures) {
+      if (Math.abs(s.x) > FOREST.play || Math.abs(s.z) > FOREST.play) continue;
+      expect(s.x).toBeGreaterThan(minX);
+      expect(s.x).toBeLessThan(maxX);
+      expect(s.z).toBeGreaterThan(minZ);
+      expect(s.z).toBeLessThan(maxZ);
+    }
+  });
+
+  it('sends each quest to its camp: the farm, the lumber camp, and the old mine\'s mouth with its front', () => {
+    const { places } = layout;
+    const camp = (id: string) => layout.camps.find((c) => c.id === id)!.place;
+    expect(places.farm.clearing).toEqual(camp('farm'));
+    expect(places.lumberCamp.clearing).toEqual(camp('lumberCamp'));
+    const front = layout.clearings.find((c) => c.id === 'mineFront')!;
+    expect(places.mine.clearing).toEqual({ x: front.x, z: front.z, r: front.r });
+    // It points at the mouth, inside the front.
+    const mine = layout.structures.find((s) => s.kind === 'mine')!;
+    expect(Math.abs(places.mine.x - mine.x)).toBeLessThan(0.5);
+    expect(places.mine.z).toBeGreaterThan(mine.z);
+    expect(Math.hypot(places.mine.x - front.x, places.mine.z - front.z)).toBeLessThan(front.r);
+    // You start out of every place.
+    for (const p of Object.values(places)) expect(Math.hypot(layout.spawn.x - p.clearing.x, layout.spawn.z - p.clearing.z)).toBeGreaterThan(p.clearing.r);
+  });
+
+  it("raises smoke from the inn's two chimneys, the two cottages that have one, the smithy's forge and the lumber camp's fire, not the farmhouse", () => {
+    const from = layout.smoke.map((p) => {
+      const s = layout.structures.reduce((a, b) => (Math.hypot(b.x - p.x, b.z - p.z) < Math.hypot(a.x - p.x, a.z - p.z) ? b : a));
+      return `${s.kind}${s.kind === 'house' ? s.variant : ''}${p.fire ? ' fire' : ''}`;
+    });
+    expect(from.sort()).toEqual(['campfire fire', 'house0', 'house2', 'inn', 'inn', 'smithy']);
+    // Each rises from its chimney's top, over the roof, and the fire's from the fire.
+    for (const p of layout.smoke) {
+      const ground = layout.heightAt(p.x, p.z);
+      if (p.fire) expect(p.y - ground).toBeLessThan(1);
+      else expect(p.y - ground).toBeGreaterThan(5);
     }
   });
 });

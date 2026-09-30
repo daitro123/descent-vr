@@ -2,7 +2,8 @@ import { PatrolWalk } from '../../enemies/patrol';
 import type { PlaceSound, Tree } from '../../world/ambience';
 import type { InteriorPlan } from '../../world/interiors';
 import type { MinePlan } from '../../world/mine';
-import type { CampId, CampPlan, Pickup, PostPlan, Respawn, Spot, VillagerSpot } from '../types';
+import type { Place } from '../../quests';
+import type { CampId, CampPlan, Pickup, PostPlan, QuestPlace, Respawn, Spot, VillagerSpot } from '../types';
 import { Colliders } from './colliders';
 import { HOUSE, planHouse } from './house';
 import { INN, planInn } from './inn';
@@ -156,6 +157,80 @@ export const TENT = {
   orders: { x: 0, z: 1.75 },
 } as const;
 
+/** A board on a signpost: the name painted on it, the way it points (as a yaw: towards (sin a, cos a)) and its middle's height. */
+export interface SignBoard {
+  readonly name: string;
+  readonly a: number;
+  readonly y: number;
+}
+
+/** A signpost: its post's height, and its boards' length and height, each with its name painted on both faces. */
+export interface SignpostPlan {
+  readonly post: number;
+  readonly length: number;
+  readonly height: number;
+  readonly boards: readonly SignBoard[];
+}
+
+/**
+ * The signposts, by the variant of their structure. The crossroads' boards
+ * point down its four roads, "Lumber Camp" under "Old Mine" since both lie up
+ * the north road. The smaller one stands north of the bridge, where the
+ * watchtower's road leaves the main road to the east and the lumber camp's to
+ * the west, its boards along each road as it leaves. They name the world's
+ * places; nothing on them follows the quest.
+ */
+export const SIGNPOSTS: readonly SignpostPlan[] = [
+  {
+    post: 2.6,
+    length: 1.0,
+    height: 0.2,
+    boards: [
+      { name: 'Old Mine', a: Math.PI, y: 2.3 },
+      { name: 'Lumber Camp', a: Math.PI, y: 2.05 },
+      { name: 'Farm', a: Math.PI / 2 - 0.1, y: 1.8 },
+      { name: 'Pond', a: -Math.PI / 2 - 0.2, y: 1.55 },
+      { name: 'Brackenmoor', a: 0.1, y: 1.3 },
+    ],
+  },
+  {
+    post: 2.3,
+    length: 0.85,
+    height: 0.17,
+    boards: [
+      { name: 'Old Mine', a: -2.86, y: 2.05 },
+      { name: 'Lumber Camp', a: -1.34, y: 1.83 },
+      { name: 'Watchtower', a: 2.07, y: 1.61 },
+      { name: 'Village', a: -0.11, y: 1.39 },
+    ],
+  },
+];
+
+/**
+ * The painted map of Oakvale at the crossroads: its face's width and height,
+ * its top's height, how far it leans back, and the patch of the zone it shows
+ * (x is east, z south). It's painted heads-up: facing it you face east, so
+ * east is at its top and north at its left, as the zone lies before you.
+ */
+export const MAP_BOARD = {
+  w: 1.2,
+  h: 0.9,
+  top: 1.5,
+  lean: 0.17,
+  shows: { minX: -64, maxX: 78, minZ: -88, maxZ: 92 },
+} as const;
+
+/** A plain cottage's chimney, over its right gable: in from the side wall, along its depth, and how far it rises over the eaves. */
+export const COTTAGE_CHIMNEY = { inset: 0.9, z: -0.8, rise: 3.1 } as const;
+
+/** Where smoke rises: a chimney's top or the lumber camp's fire. */
+export interface Plume {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly fire: boolean;
+}
+
 export interface Clearing {
   id: string;
   x: number;
@@ -180,7 +255,7 @@ const CLEARINGS: Clearing[] = [
 export type StructureKind =
   | 'inn' | 'house' | 'smithy' | 'well' | 'signpost' | 'lamp' | 'cart' | 'farmhouse' | 'barn'
   | 'windmill' | 'scarecrow' | 'haybale' | 'trough' | 'tower' | 'mine' | 'tent' | 'campfire'
-  | 'logpile' | 'stones' | 'dock' | 'boat' | 'bridge';
+  | 'logpile' | 'stones' | 'dock' | 'boat' | 'bridge' | 'mapboard';
 
 export interface Structure {
   kind: StructureKind;
@@ -216,6 +291,8 @@ const STRUCTURES: Spec[] = [
   { kind: 'smithy', x: 13, z: 12, yaw: facing(13, 12, 3, 3), hw: SMITHY.hw, hd: SMITHY.hd, solid: false },
   { kind: 'well', x: -5.5, z: -5.5, yaw: 0.3, hw: 1, hd: 1 },
   { kind: 'signpost', x: 3.8, z: 4.4, yaw: 0, hw: 0.2, hd: 0.2 },
+  // The map board, across the signpost from Hale on the farm road's south side, facing west over the crossroads.
+  { kind: 'mapboard', x: 6.3, z: 4.4, yaw: -Math.PI / 2, hw: MAP_BOARD.w / 2 + 0.1, hd: 0.25 },
   { kind: 'lamp', x: 3.4, z: -8, yaw: 0, hw: 0.2, hd: 0.2 },
   { kind: 'lamp', x: -3.4, z: 8, yaw: 0, hw: 0.2, hd: 0.2 },
   { kind: 'lamp', x: 7, z: -4.6, yaw: 0, hw: 0.2, hd: 0.2 },
@@ -237,6 +314,8 @@ const STRUCTURES: Spec[] = [
   { kind: 'logpile', x: -55, z: -38, yaw: 0.35, hw: 2.1, hd: 1 },
   // The old mine opens: the boulders round its mouth collide (mine.ts), and inside is the mine's own.
   { kind: 'mine', x: -14, z: -80.5, yaw: 0, hw: 4.5, hd: 2.5, solid: false },
+  // The second signpost, west of the main road between the watchtower's road and the lumber camp's.
+  { kind: 'signpost', x: -10, z: -45.5, yaw: 0, hw: 0.2, hd: 0.2, variant: 1 },
   { kind: 'stones', x: -30, z: 52, yaw: 0, hw: 6, hd: 6, solid: false },
 ];
 
@@ -404,6 +483,10 @@ export interface ForestLayout {
   mine: MinePlan;
   /** Where Marshal Hale stands, facing the crossroads' centre (yaw as a model turns: 0 faces +Z). */
   hale: Spot;
+  /** Where each quest sends you, for the quest arrow: the farm, the lumber camp, and the old mine's mouth with its front. */
+  places: Record<Place, QuestPlace>;
+  /** Where smoke rises: the inn's two chimneys, the two cottages' that have one, the smithy's forge and the lumber camp's fire. */
+  smoke: Plume[];
   /** Where the innkeeper (behind the inn's bar), the smith (at the anvil) and the farmer (by the well) work. */
   villagers: VillagerSpot[];
   camps: CampPlan[];
@@ -611,6 +694,15 @@ export function buildLayout(): ForestLayout {
   const respawns = { village: { ...interiors[0].respawn!, interior: interiors[0].id }, mine: mineRespawn(mouth) };
   const hale = { ...HALE, yaw: facing(HALE.x, HALE.z, 0, 0) };
   const villagers = placeVillagers(at('inn'), at('smithy'));
+  const clearing = (id: string) => {
+    const { x, z, r } = CLEARINGS.find((c) => c.id === id)!;
+    return { x, z, r };
+  };
+  const places: Record<Place, QuestPlace> = {
+    farm: { ...clearing('farm'), clearing: clearing('farm') },
+    lumberCamp: { ...clearing('camp'), clearing: clearing('camp') },
+    mine: { x: mouth.x, z: mouth.z, clearing: clearing('mineFront') },
+  };
   const camps: CampPlan[] = CAMPS.map((c) => {
     const clearing = CLEARINGS.find((cl) => cl.id === c.clearing)!;
     return {
@@ -641,6 +733,7 @@ export function buildLayout(): ForestLayout {
   const [ox, oz] = localToWorld(tent, TENT.orders.x, TENT.orders.z);
   const pickups: Pickup[] = [{ item: 'orders', x: ox, y: tent.y + TENT.crates.top, z: oz, yaw: tent.yaw }];
   const sounds = placeSounds(structures, bridge, dock, interiors, mouth);
+  const smoke = placeSmoke(structures);
   const trees: Tree[] = plants
     .filter((p) => TREE_HEIGHT[p.kind] && Math.abs(p.x) <= play && Math.abs(p.z) <= play)
     .map((p) => ({ x: p.x, y: p.y, z: p.z, height: TREE_HEIGHT[p.kind]! * p.scale }));
@@ -674,6 +767,8 @@ export function buildLayout(): ForestLayout {
     interiors,
     mine: planMine(mouth),
     hale,
+    places,
+    smoke,
     villagers,
     camps,
     pickups,
@@ -713,6 +808,27 @@ function placeSounds(structures: Structure[], bridge: Deck, dock: Deck, interior
     { id: 'campfire', x: fire.x, y: fire.y + 0.3, z: fire.z, interior: null },
     { id: 'mineMouth', x: mx, y: mouth.y + 1.5, z: mz, interior: null },
   ];
+}
+
+/**
+ * Where smoke rises: the inn's two chimneys, the house by the well's and the
+ * plain cottage's (the thatched one has none), the smithy's forge's flue and
+ * the lumber camp's fire. Not the farmhouse, whose farmer is at the well.
+ */
+function placeSmoke(structures: Structure[]): Plume[] {
+  const plumes: Plume[] = [];
+  const add = (s: Structure, lx: number, lz: number, y: number, fire = false) => {
+    const [x, z] = localToWorld(s, lx, lz);
+    plumes.push({ x, y: s.y + y, z, fire });
+  };
+  for (const s of structures) {
+    if (s.kind === 'inn') for (const c of INN.chimneys) add(s, c.x, c.z, c.top);
+    if (s.kind === 'house' && s.variant === 0) add(s, HOUSE.chimney.x, HOUSE.hearth.z, HOUSE.eaves + HOUSE.chimney.rise);
+    if (s.kind === 'house' && s.variant === 2) add(s, s.hw - COTTAGE_CHIMNEY.inset, COTTAGE_CHIMNEY.z, HOUSE.eaves + COTTAGE_CHIMNEY.rise);
+    if (s.kind === 'smithy') add(s, SMITHY.forge.x, SMITHY.forge.z, SMITHY.flue);
+    if (s.kind === 'campfire') add(s, 0, 0, 0.6, true);
+  }
+  return plumes;
 }
 
 /**

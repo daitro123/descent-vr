@@ -16,6 +16,8 @@ export const SMITHY = {
   posts: { size: 0.26, inset: 0.2 },
   /** The forge in the back left corner: its middle and half extents. */
   forge: { x: -2.2, z: -1.8, hw: 0.9, hd: 0.7 },
+  /** The top of the forge's flue, over the floor. */
+  flue: 5.4,
   /** The anvil on its stump, a step from the forge. */
   anvil: { x: -0.35, z: -0.2, r: 0.46 },
   /** The bellows on their stand against the forge's right side, blowing into it: middle and half extents, and their handle's end. */

@@ -9,6 +9,9 @@ import type { CampId } from './maps/types';
 
 export type QuestId = 'raiders' | 'lumber' | 'below';
 
+/** Where a quest sends you, for the quest arrow: the farm, the lumber camp, or the old mine's mouth. */
+export type Place = 'farm' | 'lumberCamp' | 'mine';
+
 /** Something an objective asks you to pick up by hand. */
 export type Item = 'orders';
 
@@ -29,6 +32,8 @@ export interface Quest {
   readonly id: QuestId;
   readonly title: string;
   readonly objectives: readonly Objective[];
+  /** Where its objectives are, which the quest arrow points at while it's under way. */
+  readonly place: Place;
   readonly xp: number;
   /** A sword it pays besides the XP. */
   readonly sword?: Sword;
@@ -44,6 +49,7 @@ export const CHAIN: readonly Quest[] = [
     id: 'raiders',
     title: 'Raiders in the Fields',
     objectives: [{ kind: 'kill', text: 'Bandits defeated at the farm', need: Q.raiders.bandits, camp: 'farm' }],
+    place: 'farm',
     xp: Q.raiders.xp,
     says: {
       offered:
@@ -60,6 +66,7 @@ export const CHAIN: readonly Quest[] = [
       { kind: 'kill', text: 'Bandits defeated at the lumber camp', need: Q.lumber.bandits, camp: 'lumberCamp' },
       { kind: 'pickup', text: "Leader's orders taken", need: 1, item: 'orders' },
     ],
+    place: 'lumberCamp',
     xp: Q.lumber.xp,
     says: {
       offered:
@@ -72,6 +79,7 @@ export const CHAIN: readonly Quest[] = [
     id: 'below',
     title: 'What Lies Below',
     objectives: [{ kind: 'kill', text: 'What woke the dead defeated', need: 1, role: 'warden' }],
+    place: 'mine',
     xp: Q.below.xp,
     sword: 'hale',
     says: {
