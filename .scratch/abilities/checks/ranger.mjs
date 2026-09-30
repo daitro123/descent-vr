@@ -3,7 +3,8 @@
 //
 //   node .scratch/abilities/checks/ranger.mjs [http://localhost:5173] [shots/]
 //
-// The arena at `?arena&class=ranger`, paused and stepped in the page. The
+// The arena at `?arena&class=ranger-prototype` (`&class=ranger` since the
+// ranger was built, ticket 21), paused and stepped in the page. The
 // controllers are posed by code: the bow hand held out towards a grunt, the
 // draw hand on the string, the trigger held, the hand pulled back, let go.
 // What it checks:
@@ -171,7 +172,7 @@ async function shoot(i, head = false) {
 }
 
 // ---------------------------------------------------------------- 1. the kit
-await enter('arena&class=ranger');
+await enter('arena&class=ranger-prototype');
 await page.waitForFunction(() => window.__descent.classKit, null, { timeout: 30000 });
 const kit = await page.evaluate(() => {
   const { game, classKit } = window.__descent;

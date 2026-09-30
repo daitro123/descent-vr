@@ -310,8 +310,9 @@ export class Adventure {
       use: (ability, aim) => this.combat.use(ability, aim),
       // Your hands are the bag's while it's open, and the bench's while you work at it.
       held: () => this.handsHeld,
-      busy: () => this.mage?.charging('right') ?? false,
+      busy: () => this.combat.busy || (this.mage?.charging('right') ?? false),
     });
+    if (this.combat.ranger) this.combat.ranger.held = () => this.handsHeld;
     // The mine's undead stand on the mine's own ground, whether or not you've come in.
     const below = this.world.mineGround;
     const hooks: CampHooks = {
@@ -865,8 +866,9 @@ export class Adventure {
 
   /**
    * Your hands show what you wear: the main hand's item is the sword you hold
-   * (none, with it empty), the off hand's the shield on your arm, and gloves
-   * tint your fists. Your numbers read what you wear.
+   * (none, with it empty), or the ranger's bow in the other hand; the off
+   * hand's the shield on your arm, and gloves tint your fists. Your numbers
+   * read what you wear.
    */
   private dressHands(): void {
     const { player, state } = this;
@@ -874,6 +876,7 @@ export class Adventure {
     player.sword.sword = state.sword ?? 'plain';
     player.sword.model.visible = gear.mainHand !== null;
     player.shield.model.visible = gear.offHand !== null;
+    if (this.combat.ranger) this.combat.ranger.worn = gear.mainHand !== null;
     this.mage?.wear(itemOf(gear.mainHand ?? ''), itemOf(gear.offHand ?? ''));
     const gloves = itemOf(gear.hands ?? '');
     const tint = gloves ? lookOf(gloves).tint : null;
@@ -1065,10 +1068,7 @@ export class Adventure {
     // Behind the fade, the chunks round where you wake, at once.
     this.world.fill(x, z);
     this.lastHp = this.player.hp;
-    this.combat.projectiles.clear();
-    this.combat.axes.clear();
-    this.combat.bolts.clear();
-    this.combat.blizzard.clear();
+    this.combat.clear();
     this.mage?.clear();
     this.deadFor = null;
     this.wakingFor = 0;
