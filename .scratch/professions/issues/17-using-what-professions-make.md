@@ -33,7 +33,7 @@ Built on 2026-09-30 by Claude **on Tom's behalf**: he asked for the build ticket
 
 - `npm run typecheck`, `npm test` (1203 passed after merging main's talents, with the new cases in `tests/professionItems.test.ts`, `tests/adventureState.test.ts` and `tests/sharpen.test.ts`) and `npm run build` pass.
 - `.scratch/professions/checks/consumables.mjs`, all passed: a level-2 warrior against the lumber camp, fighting you, drinks a rage draught off the left hip at 0.71 s and rage goes from 3.5 to 33.5 in that frame, with the belt dim for 60 s and the hip refilled; with the bag open, the whetstone carried in the left fist and rubbed along the sword over two strokes sharpens it (6 scrape buzzes, then a strong one), damage goes from ×1.217 to ×1.278 (5%), and its icon shows 10, then 9 a minute later; the elixir carried to the mouth is drunk while the belt is dim, for 15% in all and two icons; at the bench a brewed minor healing potion held at the mouth is refused while the cooldown runs, isn't retried while held there, and once the cooldown is over it's drunk at 0.71 s for 40% health, leaving the bag and its stand; a reload has no buff; `?belt` and `?proto=brew` still run.
-- After merging main: `consumables.mjs` again, and `inventory/checks/belt-adventure.mjs`, `professions/checks/bench.mjs` and `inventory/checks/bag-adventure.mjs`, all passed.
+- After merging main's talents: `consumables.mjs` again, and `inventory/checks/belt-adventure.mjs`, `professions/checks/bench.mjs` and `inventory/checks/bag-adventure.mjs`, all passed. After merging ticket 13 (the tool loop): `npm test` 1222 passed, and `consumables.mjs`, `mining.mjs` and `belt-adventure.mjs` all passed.
 
 **Calls made on Tom's behalf**
 
