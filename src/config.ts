@@ -372,6 +372,51 @@ export const CONFIG = {
     slots: 16,
     stash: 32, // slots, in two pages of 16, the same from every inn
     buyback: 6, // the last things sold, bought back at the price you got until you leave the zone
+    // Reaching over a shoulder for the bag (ui/bag/reach.ts): a sphere over each shoulder, placed from
+    // the headset's position and facing (not its tilt). The grip must go down with the hand already
+    // inside it, moving slower than the gate, so an overhead swing never opens it.
+    reach: {
+      side: 0.2, // m out to the side of the eyes…
+      down: 0.14, // …below them…
+      back: 0.12, // …and behind them, the sphere's centre
+      radius: 0.18, // m
+      speedGate: 1.5, // m/s the hand must be under as the grip goes down
+      speedLag: 0.03, // s the measured hand speed takes to follow the hand
+      zoneBuzz: { intensity: 0.15, ms: 25, every: 0.2 }, // while a slow hand is in the zone
+      openPulse: { intensity: 0.9, ms: 90 },
+      closePulse: { intensity: 0.5, ms: 60 },
+    },
+    grip: { on: 0.6, off: 0.4 }, // the grip counts as squeezed past `on`, and let go under `off`
+    // The panel (ui/bag/panel.ts): placed once in front of you, turned to face you.
+    panel: {
+      out: 0.45, // m in front of the eyes…
+      down: 0.28, // …and below them
+      turn: 60, // ° turned away from it before it comes round in front again
+      walkAway: 1.5, // m walked from it (on the floor) and it closes
+      slot: 0.06, // m square
+      pitch: 0.072, // m between slots' centres
+    },
+    // Touching a slot with a fist or the weapon's tip: round its face, in front of it and behind it (m).
+    touch: { margin: 0.006, front: 0.035, back: 0.07 },
+    // Letting a carried item go: anywhere near the panel's face, and within `near` of a slot's centre counts (m).
+    release: { margin: 0.006, front: 0.12, back: 0.1, near: 0.05 },
+    // The tabs along the panel's top, pressed like the talk board's buttons (s before a press counts).
+    tabs: { arming: 0.4, rearm: 0.3 },
+    buzz: {
+      touch: { intensity: 0.25, ms: 20 }, // a fist or the tip arriving on an item
+      pick: { intensity: 0.6, ms: 40 }, // the grip taking it
+      place: { intensity: 0.8, ms: 50 }, // let go where it went
+      refused: { intensity: 1, ms: 120 }, // let go where it can't go
+      tab: { intensity: 0.5, ms: 40 },
+      takeBack: { intensity: 0.8, ms: 70 }, // a dropped item taken back off the ground
+    },
+    // What you drop off the panel lies on the ground (world/dropped.ts), as loot does: not saved.
+    dropped: {
+      most: 12, // lying at once: past that the oldest goes
+      lasts: 300, // s
+      take: 0.25, // m from a hand to take it back, the orb's pickup radius
+      settle: 0.6, // s after it's let go before a hand can take it back
+    },
   },
 
   // The belt at your hips (inventory.ts).

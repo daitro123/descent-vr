@@ -85,9 +85,6 @@ const gear = (id: ItemId, name: string, slot: GearSlot, level: number, rarity: R
   ...more,
 });
 
-/** WoW's rarity colours: grey junk, then white, green and blue gear. */
-export const RARITY_COLOUR: Readonly<Record<Rarity, number>> = { grey: 0x9d9d9d, white: 0xffffff, green: 0x1eff00, blue: 0x0070dd };
-
 /** Loot's item levels, 1 to `CONFIG.loot.levels`. */
 export const LOOT_LEVELS: readonly number[] = Array.from({ length: CONFIG.loot.levels }, (_, i) => i + 1);
 

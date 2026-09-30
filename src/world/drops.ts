@@ -1,6 +1,7 @@
 import {
   AdditiveBlending,
   BufferAttribute,
+  type BufferGeometry,
   Color,
   CylinderGeometry,
   Group,
@@ -12,12 +13,13 @@ import {
   type WebGLRenderer,
 } from 'three';
 import { CONFIG } from '../config';
-import { type ItemId, itemOf, RARITY_COLOUR, type Rarity } from '../items';
+import { type ItemId, itemOf, type Rarity } from '../items';
 import type { Loot } from '../loot';
-import { itemGeometry, pouchGeometry } from '../models/itemModels';
+import { ModelBuilder } from '../models/kit';
 import { createModelMaterial, type ModelMaterial } from '../models/materials';
 import type { Handedness } from '../player/input';
 import type { Interior } from '../save/record';
+import { modelOf, RARITY_COLOUR } from '../ui/bag/looks';
 import type { Probe } from '../ui/talkBoard';
 
 // Loot lying where an enemy fell (.scratch/inventory/spec.md, "Loot on the
@@ -71,7 +73,7 @@ const best = (items: readonly ItemId[]): Rarity =>
   }, 'grey');
 
 /** The model material with a rim of `color` round its edge, seen from wherever you look. One shader for them all. */
-function rimMaterial(color: number): ModelMaterial {
+function rimMaterial(color: string): ModelMaterial {
   const mat = createModelMaterial();
   const rim = { value: new Color(color).multiplyScalar(CONFIG.loot.rim) };
   const base = mat.onBeforeCompile;
@@ -97,8 +99,20 @@ const rimsOf = () =>
     white: rimMaterial(RARITY_COLOUR.white),
     green: rimMaterial(RARITY_COLOUR.green),
     blue: rimMaterial(RARITY_COLOUR.blue),
-    full: rimMaterial(0xff2020),
+    full: rimMaterial('#ff2020'),
   });
+
+let pouchGeo: BufferGeometry | null = null;
+/** The pouch a kill's coins lie in: a small tied sack, about a metre across to scale down like an item's model. */
+function pouchGeometry(): BufferGeometry {
+  if (pouchGeo) return pouchGeo;
+  const m = new ModelBuilder(11);
+  m.ball(0.32, { at: [0, -0.1, 0], color: 0x6a4a2a, jitter: 0.12 }, 1);
+  m.cyl(0.1, 0.16, 0.16, 7, { at: [0, 0.24, 0], color: 0x5a3c22, jitter: 0.1 });
+  m.cyl(0.12, 0.12, 0.05, 7, { at: [0, 0.2, 0], color: 0x8a1810 });
+  m.cyl(0.13, 0.09, 0.12, 7, { at: [0, 0.36, 0], color: 0x6a4a2a, jitter: 0.1 });
+  return (pouchGeo = m.build());
+}
 
 let beamGeo: CylinderGeometry | null = null;
 /** A thin open tube standing on the ground, bright at its foot and fading to nothing at its top. */
@@ -177,7 +191,7 @@ export class Drops {
       const item = itemOf(id);
       if (!item) return;
       const a = turn + (i / loot.items.length) * Math.PI * 2;
-      const mesh = new Mesh(itemGeometry(item), materials[item.rarity]);
+      const mesh = new Mesh(modelOf(item), materials[item.rarity]);
       mesh.scale.setScalar(L.size);
       mesh.position.set(Math.sin(a) * L.ring, L.hover, Math.cos(a) * L.ring);
       mesh.rotation.y = a;

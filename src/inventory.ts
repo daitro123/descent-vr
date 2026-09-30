@@ -259,30 +259,49 @@ export class Inventory {
    * it's dropped. Quest items never leave their page.
    */
   move(from: Where, to: Where, count?: number): InventoryEffect[] {
-    if (from.in === 'quest') return refuse('quest', to);
-    if (from.in === 'ground' || to.in === 'quest' || !this.exists(from) || !this.exists(to)) return refuse('slot', to);
-    const src = this.at(from);
-    if (!src) return refuse('empty', from);
+    const no = this.check(from, to, count);
+    if (no) return refuse(no, no === 'empty' ? from : to);
+    const src = this.at(from)!;
     const n = Math.min(Math.max(1, Math.floor(count ?? src.count)), src.count);
     if (to.in === 'ground') {
       return [...this.remove(from, n), { kind: 'dropped', stack: { id: src.id, count: n } }];
     }
     if (same(from, to)) return [];
-    const item = itemOf(src.id)!;
-    const no = this.refusal(to, item);
-    if (no) return refuse(no, to);
     const dst = this.at(to);
     if (!dst) return [...this.remove(from, n), ...this.put(to, { id: src.id, count: n })];
     if (dst.id === src.id) {
-      const moved = Math.min(n, stackOf(item) - dst.count);
-      if (moved <= 0) return refuse('full', to);
+      const moved = Math.min(n, stackOf(itemOf(src.id)!) - dst.count);
       return [...this.remove(from, moved), ...this.put(to, { id: src.id, count: dst.count + moved })];
     }
-    // Onto another item: the whole stack swaps with it, if it may go back where this came from.
-    if (n < src.count) return refuse('slot', to);
-    const back = this.refusal(from, itemOf(dst.id)!);
-    if (back) return refuse(back, to);
+    // Onto another item: the whole stack swaps with it.
     return [...this.put(to, src), ...this.put(from, dst)];
+  }
+
+  /**
+   * Why `move(from, to, count)` would be refused, or null if it would go:
+   * for the view to light a slot red under a carried item before it's let go.
+   */
+  check(from: Where, to: Where, count?: number): Refusal | null {
+    if (from.in === 'quest') return 'quest';
+    if (from.in === 'ground' || to.in === 'quest' || !this.exists(from) || !this.exists(to)) return 'slot';
+    const src = this.at(from);
+    if (!src) return 'empty';
+    if (to.in === 'ground' || same(from, to)) return null;
+    const item = itemOf(src.id)!;
+    const no = this.refusal(to, item);
+    if (no) return no;
+    const dst = this.at(to);
+    if (!dst) return null;
+    if (dst.id === src.id) return dst.count < stackOf(item) ? null : 'full';
+    // Onto another item: the whole stack swaps with it, if it may go back where this came from.
+    const n = Math.min(Math.max(1, Math.floor(count ?? src.count)), src.count);
+    if (n < src.count) return 'slot';
+    return this.refusal(from, itemOf(dst.id)!);
+  }
+
+  /** Who wears the gear, for the card: their class and level. */
+  get wearing(): Wearer {
+    return this.wearer;
   }
 
   /**
