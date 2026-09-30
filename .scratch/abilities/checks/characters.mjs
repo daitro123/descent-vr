@@ -12,8 +12,8 @@
 //    name (picked, not saved yet), the others "New character". Nothing is
 //    written before VR; taking a quest writes the character under today's key
 //    and the roster listing it.
-// 2. "New character" in an empty slot opens the form: one class card (the
-//    warrior, the only class built) and a suggested name. "Make" with a name
+// 2. "New character" in an empty slot opens the form: a class card for each
+//    class built, the warrior first and picked, and a suggested name. "Make" with a name
 //    typed makes the character, and the page plays it: level 1 at the start,
 //    Hale offering his first quest.
 // 3. The second warrior takes a quest and walks; the first one's record is
@@ -171,7 +171,8 @@ await open();
     cards: [...document.querySelectorAll('#new-character .class-card')].map((c) => c.innerText.replace(/\s+/g, ' ').trim()),
     name: document.querySelector('#new-character input[name=name]').value,
   }));
-  check(form.cards.length === 1 && form.cards[0].startsWith('Warrior Sword and shield'), `the form's class cards: ${form.cards.join(' | ')}`);
+  const picked = await page.$eval('#new-character input[name=class]:checked', (i) => i.value);
+  check(form.cards[0].startsWith('Warrior Sword and shield') && form.cards.some((c) => c.startsWith('Mage')) && picked === 'warrior', `the form's class cards, the warrior picked: ${form.cards.join(' | ')}`);
   check(form.name.length > 0 && form.name !== first.name, `a suggested name, not the first's ("${form.name}")`);
   await shot('02-new-character-form');
   await page.fill('#new-character input[name=name]', 'Second');

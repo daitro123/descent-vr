@@ -153,6 +153,8 @@ async function startAdventure(
     world: adventure.world,
     player: adventure.player,
     camps: adventure.camps,
+    /** What the fighting has come to: hits, kills, blocks, bolts, freezes. */
+    combatStats,
     /** Resolves once no save write is in flight. */
     saved: () => adventure.saves.settled(),
     device,
