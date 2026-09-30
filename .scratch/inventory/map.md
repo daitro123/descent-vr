@@ -40,14 +40,32 @@ A written **spec for the inventory**, ready to hand off as build tickets: the ba
 
 - [VR inventories in shipped games](issues/01-vr-inventories-in-shipped-games.md): shipped games use the same mix; zones are spheres placed from the headset with a speed gate, every slot glows and ticks, the grip is free to use, and the menu button isn't.
 - [What an item is](issues/02-what-an-item-is.md): five kinds; quest items on their own page; hand-made items whose numbers come from item level and rarity by one rule; white plain, green adds attributes, blue about 1.5 times a green; no wearing gear above your level; weapons and off hands class-locked; a full green set is about a third of your attributes. On Tom's behalf.
+- [The bag and the gear panel](issues/03-the-bag-and-the-gear-panel.md): A, touch an item with a fist or the sword's tip and hold the grip to carry it; an 18 cm sphere over each shoulder with a 1.5 m/s gate opens it; the panel 45 cm out, turning after 60°, shut by walking 1.5 m off; icons from one atlas (4 draws an eye), the held item as a model. On Tom's behalf; the prototype stays at `?bag`.
 - [Loot](issues/05-loot.md): drops at the enemy's level and only for your class; coins always, junk and gear by role (a leader or deep brute always drops green or blue, the Warden a blue and a green); chests open once per character; a glowing pouch with unlit beams for green and blue, lying 5 minutes; a full bag leaves the item on the ground; healing orbs stay. On Tom's behalf.
 - [The belt and drinking a potion](issues/04-the-belt-and-drinking-a-potion.md): the grip takes a flask from a hip slot and that hand's weapon fades out until it's drunk (0.7 s at the mouth) or let go; the slot refills from its stack; prototype at `?belt`.
+- [Vendors and the stash](issues/06-vendors-and-the-stash.md): a vendor's wares board unfolds beside them with your bag panel, and you buy and sell by carrying; stock never runs out, a Sold row buys back the last six, a Sell junk button; the smith sells white gear, the innkeeper the minor healing potion; sell prices by rule, buying at 4 times; a 32-slot stash shared by every inn's chest. On Tom's behalf.
+- [Oakvale's items](issues/07-oakvales-items.md): a white starting kit per class with three potions on the belt; each hand-in offers a pick of two items fitting your class, blues at What Lies Below (Hale's longsword for a warrior); the orders on the quest page; three chests (watchtower, leader's tent, the dig's strongbox); an old save becomes a warrior in the kit with its sword. On Tom's behalf.
 
 ## Not yet specified
 
-- **Saving the inventory:** the record's next version (bag, gear, belt, coins, stash, and Professions' learned professions and recipes, per character under Abilities' roster) and the migration from version 1's `sword`. Whichever map builds first takes version 2. It sharpens once [What an item is](issues/02-what-an-item-is.md), [The bag and the gear panel](issues/03-the-bag-and-the-gear-panel.md) and [Vendors and the stash](issues/06-vendors-and-the-stash.md) are settled.
-- **Bigger bags:** where they come from and how many slots they add.
-- **Each class's off hand:** what a quiver and a mage's focus do as gear, once Abilities settles how the ranger and mage fight.
+Nothing: the destination is reached. The last patches of fog went into [the spec](spec.md): saving (the record's shape and the version-1 migration), bigger bags (out of scope until a later zone offers one) and the quiver's and focus's numbers (attributes and no armour, until the Abilities map gives them more).
+
+## The spec and its build tickets
+
+[The spec](spec.md) was written on 2026-09-30 on Tom's behalf. `/to-tickets` would have asked Tom whether the granularity, the blocking edges and the splits were right; these were answered **on Tom's behalf**, for him to revisit. Ten build tickets, each sized for one thread session with a large context window:
+
+- [08: The inventory and its save](issues/08-the-inventory-and-its-save.md): the pure module, the catalogue and the rule, the save and migration. No new view. Blocked by nothing.
+- [09: The bag in the Adventure](issues/09-the-bag-in-the-adventure.md): prototype A promoted. Blocked by 08.
+- [10: The belt in the Adventure](issues/10-the-belt-in-the-adventure.md): prototype (a) promoted, the cooldown, bag to belt. Blocked by 09.
+- [11: Loot from kills](issues/11-loot-from-kills.md). Blocked by 09.
+- [12: Quest items and hand-in picks](issues/12-quest-items-and-hand-in-picks.md). Blocked by 09.
+- [13: Oakvale's chests](issues/13-oakvales-chests.md). Blocked by 11.
+- [14: Vendors](issues/14-vendors.md). Blocked by 11.
+- [15: The stash](issues/15-the-stash.md). Blocked by 09.
+- [16: The ranger and mage in the inventory](issues/16-the-ranger-and-mage-in-the-inventory.md). Blocked by 12, 14 and the Abilities map's ranger and mage builds.
+- [17: Oakvale with the inventory, in one sitting](issues/17-oakvale-with-the-inventory-in-one-sitting.md). Blocked by 10, 13, 14 and 15.
+
+After 09, tickets 10, 11, 12 and 15 can run in parallel; each merges `main` before its PR.
 
 ## Out of scope
 
