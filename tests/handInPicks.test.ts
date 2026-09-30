@@ -9,7 +9,14 @@ import type { CampId } from '../src/maps/types';
 // Every character is a warrior until the Abilities roster lands, so the
 // ranger's and mage's picks are tested through the state.
 
-const kill = (camp: CampId | null, level: number, role: Role = 'ordinary'): AdventureEvent => ({ kind: 'kill', camp, level, role });
+const kill = (camp: CampId | null, level: number, role: Role = 'ordinary'): AdventureEvent => ({
+  kind: 'kill',
+  camp,
+  level,
+  role,
+  family: role === 'warden' ? 'undead' : 'bandit',
+  seed: 1,
+});
 const ACCEPT: AdventureEvent = { kind: 'accept' };
 const ORDERS: AdventureEvent = { kind: 'pickup', item: 'orders' };
 const FARM = kill('farm', 1);
@@ -26,7 +33,7 @@ function play(state: AdventureState, ...events: AdventureEvent[]): Effect[] {
 
 /** Ready to hand in Raiders in the Fields. */
 const raidersReady = (klass: ClassId = 'warrior') => {
-  const state = new AdventureState(undefined, undefined, klass);
+  const state = new AdventureState(undefined, undefined, { class: klass });
   play(state, ACCEPT, FARM, FARM, FARM);
   return state;
 };
@@ -129,7 +136,7 @@ describe('carrying a pick into the bag', () => {
 
   it('is refused onto a slot that holds something else, and says so before it is let go', () => {
     const state = raidersReady();
-    state.inventory.take([{ id: 'torn-cloth', count: 1 }]);
+    state.inventory.take([{ id: 'torn-cloth-1', count: 1 }]);
     const gloves = state.hale.picks[0];
     expect(state.pickRefusal(gloves, { in: 'bag', slot: 0 })).toBe('full');
     expect(state.pickRefusal(gloves, { in: 'bag', slot: 1 })).toBeNull();
@@ -194,7 +201,7 @@ describe("the leader's orders", () => {
 });
 
 describe("Hale's sword at their hip", () => {
-  const at = (state: AdventureState) => [state.haleSwordAtHip, new AdventureState(state.snapshot(), undefined, state.klass).haleSwordAtHip];
+  const at = (state: AdventureState) => [state.haleSwordAtHip, new AdventureState(state.snapshot(), undefined, { class: state.class }).haleSwordAtHip];
 
   it('leaves it only when a warrior takes it', () => {
     const warrior = belowReady('warrior');

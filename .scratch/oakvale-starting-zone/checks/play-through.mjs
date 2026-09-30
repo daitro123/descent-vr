@@ -402,6 +402,7 @@ const look = () =>
       marker: state.hale.marker,
       line: state.hale.line,
       board: adventure.board.isOpen,
+      // The tracker lists every quest you're on; Hale's chain has one at a time, the last.
       tracker: state.tracker.length ? [state.tracker.at(-1).title, ...state.tracker.at(-1).lines] : null,
       arrow: state.arrow?.target ?? null,
       beaten: state.wardenBeaten,

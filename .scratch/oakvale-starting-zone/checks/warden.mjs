@@ -171,7 +171,7 @@ const faceHale = (d) =>
 await page.evaluate(() => {
   const { adventure } = window.__descent;
   const at = adventure.hale.position;
-  const kill = (camp, level, role = 'ordinary') => adventure.apply({ kind: 'kill', camp, level, role }, at);
+  const kill = (camp, level, role = 'ordinary') => adventure.apply({ kind: 'kill', camp, level, role, family: 'bandit', seed: 1 }, at);
   adventure.apply({ kind: 'accept' }, at);
   for (let i = 0; i < 3; i++) kill('farm', 1);
   adventure.apply({ kind: 'handIn' }, at);
