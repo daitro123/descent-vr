@@ -15,6 +15,7 @@ import {
   Vector3,
   type WebGLRenderer,
 } from 'three';
+import { ABILITY } from '../classes';
 import { CONFIG } from '../config';
 import type { Player } from '../player/player';
 
@@ -204,8 +205,10 @@ export class BeltHud {
     const frenzyBlink = p.frenzy > 0 && (p.frenzy > 2 || Math.sin(this.time * 12) > 0);
     // Rage shows once the War Cry has brought it; focus and mana always.
     const canCry = bar.kind !== 'rage' || p.can('warCry');
-    // A pip per ability your level has brought, in the order they came: lit when it's ready and you can pay for it.
-    const pips = p.stats.abilities.map((a) => p.abilities.refuses(a, p.resource) === null);
+    // A pip per ability your level has brought, in the order they came, then one per ability your talents grant:
+    // lit when it's ready and you can pay for it.
+    const pips = p.stats.abilities.map((a) => p.abilities.refuses(a, p.resource, p.costOf(a)) === null);
+    const base = p.stats.abilities.filter((a) => !ABILITY[a].byTalent).length;
     const key = [
       Math.round(hp * 18),
       Math.round(rage * 18),
@@ -228,7 +231,7 @@ export class BeltHud {
     c.fillRect(20, 2, 24, 20);
     this.orb(10, hp, '#c81e1e', '#3a0c0c');
     if (bar.kind === 'rage') {
-      const warCry = rage >= CONFIG.warCry.cost / CONFIG.player.maxRage;
+      const warCry = rage >= p.costOf('warCry') / CONFIG.player.maxRage;
       if (canCry) this.orb(W - 11, rage, p.frenzy > 0 ? '#ff5a10' : warCry ? '#ffb020' : '#b86a10', '#2e1a06');
     } else if (bar.kind === 'mana') this.orb(W - 11, rage, '#2f7bff', '#0a1430');
     else this.orb(W - 11, rage, '#e0b030', '#2a2008');
@@ -253,10 +256,11 @@ export class BeltHud {
     c.fillRect(22, 18, 20, 2);
     c.fillStyle = dash >= 1 ? '#9fd8ff' : '#4a6a80';
     c.fillRect(22, 18, Math.round(20 * Math.min(1, dash)), 2);
-    // Ability pips under the rage orb, left to right in the order they came, each always in its own place.
+    // Ability pips under the rage orb, left to right in the order they came, each always in its own place;
+    // those your talents grant go leftwards from the first, so none of the others moves.
     pips.forEach((lit, i) => {
       c.fillStyle = lit ? '#ffd060' : '#3a3228';
-      c.fillRect(PIPS + i * 4, 21, 3, 2);
+      c.fillRect(i < base ? PIPS + i * 4 : PIPS - (i - base + 1) * 4, 21, 3, 2);
     });
     if (frenzyBlink) {
       c.fillStyle = '#ff7a20';

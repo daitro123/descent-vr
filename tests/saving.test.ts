@@ -106,6 +106,7 @@ describe("the adventure state's snapshot", () => {
       },
       wardenBeaten: false,
       professions: NO_PROFESSIONS,
+      talents: {},
     });
   });
 
@@ -235,6 +236,8 @@ describe('the save record', () => {
     },
     // Before the roster: one character, with no class or name.
     3: V3,
+    // Before talents: a level-4 warrior with no points spent anywhere, and the shapes they've drawn.
+    4: { ...V3, version: 4, class: 'warrior', name: 'Aldric', drawn: ['ring'] },
   };
 
   it('upgrades a record of every older version to the current one', () => {
@@ -286,7 +289,7 @@ describe('the save record', () => {
     const read = readSave(stored(OLDER[2]));
     if (read.kind !== 'saved') throw new Error(read.kind);
     expect(read.record.professions).toEqual(NO_PROFESSIONS);
-    const { version: _, professions: __, class: ___c, name: ___n, ...kept } = read.record;
+    const { version: _, professions: __, class: ___c, name: ___n, talents: ___t, ...kept } = read.record;
     const { version: ___, ...before } = OLDER[2] as SaveRecord;
     expect(kept).toEqual(before);
     const state = new AdventureState(read.record);
@@ -469,8 +472,8 @@ describe('your characters', () => {
     expect(saved(characters)).toEqual(['character: Warrior, level 4']);
     const slot = characters.slots[0];
     if (slot.kind !== 'saved') throw new Error(slot.kind);
-    const { version: _, class: klass, name, ...kept } = slot.record;
-    expect({ klass, name }).toEqual({ klass: 'warrior', name: 'Warrior' });
+    const { version: _, class: klass, name, talents, ...kept } = slot.record;
+    expect({ klass, name, talents }).toEqual({ klass: 'warrior', name: 'Warrior', talents: {} });
     const { version: __, ...before } = V3;
     expect(kept).toEqual(before);
     expect(characters.picked).toBe(FIRST);

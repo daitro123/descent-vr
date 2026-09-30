@@ -109,7 +109,7 @@ async function startAdventure(
   camera: PerspectiveCamera,
   device: unknown,
   perf: PerfReadout | null,
-  { newGame }: Extract<Route, { kind: 'adventure' }>,
+  { newGame, cap }: Extract<Route, { kind: 'adventure' }>,
 ): Promise<void> {
   const characters = await openCharacter(newGame);
   const played = characters.play();
@@ -121,7 +121,7 @@ async function startAdventure(
   await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
   const oakvale = await findMap('forest')!.load();
   if (oakvale.kind !== 'zone' || !isStartingZone(oakvale)) throw new Error('Oakvale should be a zone a character can start in');
-  const adventure = new Adventure(scene, camera, renderer, oakvale, played, await loadNeighbours(oakvale));
+  const adventure = new Adventure(scene, camera, renderer, oakvale, played, await loadNeighbours(oakvale), cap);
   if (perf) perf.chunks = () => adventure.world.chunkCounts;
   document.querySelector('#intro .loading')?.remove();
   // The page before VR: your characters, the one Enter VR plays picked.

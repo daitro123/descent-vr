@@ -1,4 +1,20 @@
-import { type Ability, abilitiesAt, type ClassId, type MainAttribute, mainOf, type Resource, resourceOf, type Shape, SHAPES, type Slots, slotsOf } from './classes';
+import {
+  type Ability,
+  abilitiesAt,
+  type ClassId,
+  isShape,
+  ABILITY,
+  type MainAttribute,
+  mainOf,
+  type Placed,
+  type Resource,
+  resourceOf,
+  type Shape,
+  SHAPES,
+  type Slots,
+  slotsOf,
+  swapped,
+} from './classes';
 import { CONFIG, type EnemyConfig } from './config';
 import { Inventory, type InventoryEffect, type InventorySave, type Refusal, type Where } from './inventory';
 import { type ProfessionEffect, Professions, type ProfessionsSave, type RecipeId, type SpotKind } from './professions/professions';
@@ -7,6 +23,7 @@ import { chestSeed, type Loot, rollChest, rollLoot, seeded } from './loot';
 import type { CampId } from './maps/types';
 import type { Family } from './models/characters';
 import { BARKS, type Chain, CHAINS, type GiverId, type Item, type Objective, type Place, type Quest, QUEST_ITEM, type QuestId, type Sword, SWORDS, type VillagerId } from './quests';
+import { fits, type Knobs, knobsOf, pointsAt, refusal, type Spent, spentAll, spentIn, type Talent, TALENT, talentAbilities, type TalentRefusal, tierOpen, type Tree } from './talents';
 
 // The rules of progress in the Adventure, with no three.js in it: events in,
 // effects and answers out. The Adventure feeds it what happens in the world
@@ -16,8 +33,8 @@ import { BARKS, type Chain, CHAINS, type GiverId, type Item, type Objective, typ
 // (.scratch/oakvale-starting-zone/spec.md, "The adventure state";
 // .scratch/professions/spec.md, "Trainers and quests"). So does the
 // character's class, and what it makes of their level: attributes, health,
-// damage, resource and abilities (.scratch/abilities/spec.md, "The adventure
-// state learns classes").
+// damage, resource and abilities, and the talents they've spent points in
+// (.scratch/abilities/spec.md, "The adventure state learns classes").
 
 export { ABILITIES, type Ability, type ClassId } from './classes';
 
@@ -58,6 +75,10 @@ export interface Progress {
   readonly professions: ProfessionsSave;
   /** The shapes you've drawn an ability in at least once: none in an older record. */
   readonly drawn?: readonly Shape[];
+  /** Points spent in each talent. */
+  readonly talents: Spent;
+  /** Where the gesture slots' swaps put abilities: none if you've never swapped. */
+  readonly placed?: Placed;
 }
 
 /** Something that happened in the world that progress may care about. */
@@ -97,7 +118,13 @@ export type AdventureEvent =
   /** A recipe made (into the bag or left on the station): the professions module's own effect, passed straight in. */
   | { readonly kind: 'made'; readonly recipe: RecipeId }
   /** A shape drawn and read, whatever came of it (cast, or not enough rage). */
-  | { readonly kind: 'drawn'; readonly shape: Shape };
+  | { readonly kind: 'drawn'; readonly shape: Shape }
+  /** A talent pressed on the talent page: a point in it, unless you're `fighting`. */
+  | { readonly kind: 'spend'; readonly talent: Talent; readonly fighting: boolean }
+  /** Reset on the talent page: every point back, unless you're `fighting`. */
+  | { readonly kind: 'resetTalents'; readonly fighting: boolean }
+  /** Two shapes pressed on the talent page: their slots swap, unless you're `fighting`. */
+  | { readonly kind: 'swap'; readonly shapes: readonly [Shape, Shape]; readonly fighting: boolean };
 
 /** What an event did, for the Adventure to show. */
 export type Effect =
@@ -115,7 +142,15 @@ export type Effect =
   /** What happened to your professions: one learned, proficiency gained, a recipe known. */
   | ProfessionEffect
   /** The first time a shape holding an ability was drawn: its shape stops hanging in the air. */
-  | { readonly kind: 'learned'; readonly shape: Shape };
+  | { readonly kind: 'learned'; readonly shape: Shape }
+  /** A point went in a talent: it has `points` now. */
+  | { readonly kind: 'talent'; readonly talent: Talent; readonly points: number }
+  /** Every talent point came back: `points` of them. */
+  | { readonly kind: 'talentsReset'; readonly points: number }
+  /** Two shapes' slots swapped. */
+  | { readonly kind: 'swapped'; readonly shapes: readonly [Shape, Shape] }
+  /** Nothing done on the talent page, and why: in a fight, no points, a full talent or a closed tier. */
+  | { readonly kind: 'talentRefused'; readonly reason: TalentRefusal };
 
 /** A button on a giver's board: Accept, Not now, Hand in, Goodbye. */
 export type Button = 'accept' | 'notNow' | 'handIn' | 'goodbye';
@@ -180,8 +215,10 @@ export interface Stats {
   readonly armour: number;
   /** Your class's rage, focus or mana. */
   readonly resource: Resource;
-  /** Your class's base abilities your level has brought, in the order they came. */
+  /** Your class's base abilities your level has brought, in the order they came, then those your talents grant. */
   readonly abilities: readonly Ability[];
+  /** What your talents add to your numbers, by name (talents.ts): 0 without talents. */
+  readonly talents: Knobs;
 }
 
 /** The step a level brings to an enemy's health and damage: 1 at level 1. */
@@ -189,26 +226,30 @@ const stepAt = (level: number) => 1 + CONFIG.levels.step * (level - 1);
 
 /**
  * Your numbers at `level` as a `klass` (a warrior unless it says), wearing
- * gear that adds up to `worn`. Your level's attributes and your gear's add up
- * by one rule: every point of Stamina is 10 health, and every point of your
- * class's main attribute is a tenth of level 1's damage, so a character
- * without gear has 100 health and deals ×1 at level 1, 180 and ×1.8 at 5.
- * Your weapon's damage rating adds to your damage (Hale's old longsword adds
- * one level's step), and gear's armour cuts what you take.
+ * gear that adds up to `worn`, with points `spent` in talents. Your level's
+ * attributes and your gear's add up by one rule: every point of Stamina is 10
+ * health, and every point of your class's main attribute is a tenth of level
+ * 1's damage, so a character without gear has 100 health and deals ×1 at
+ * level 1, 180 and ×1.8 at 5. Your weapon's damage rating adds to your damage
+ * (Hale's old longsword adds one level's step), and gear's armour cuts what
+ * you take. Talents add their abilities, a share of health (Toughness), and
+ * the numbers Combat reads (`talents`).
  */
-export function statsAt(level: number, worn: Worn = WORN_NOTHING, klass: ClassId = 'warrior'): Stats {
+export function statsAt(level: number, worn: Worn = WORN_NOTHING, klass: ClassId = 'warrior', spent: Spent = {}): Stats {
   const A = CONFIG.items.attribute;
   const stamina = attributesAt(level) + worn.stamina;
   const main = attributesAt(level) + worn.main;
+  const talents = knobsOf(spent);
   return {
     stamina,
     attribute: mainOf(klass),
     main,
-    maxHp: A.health * stamina,
+    maxHp: Math.round(A.health * stamina * (1 + talents.health)),
     damage: A.damage * main + worn.damage,
     armour: worn.armour,
     resource: resourceOf(klass, main),
-    abilities: abilitiesAt(klass, level),
+    abilities: [...abilitiesAt(klass, level), ...talentAbilities(spent)],
+    talents,
   };
 }
 
@@ -262,6 +303,10 @@ export class AdventureState {
   private beaten = false;
   /** The shapes you've drawn an ability in at least once. */
   private readonly drawn = new Set<Shape>();
+  /** Points spent in each talent. */
+  private spent: Partial<Record<Talent, number>> = {};
+  /** Where the gesture slots' swaps put abilities. */
+  private placed: Placed = {};
   /** Your class: a warrior unless the character's record says otherwise. */
   readonly class: ClassId;
   /** Which character you are: their key in the save (the roster's), or your class where there's none (tests, a new state). */
@@ -310,6 +355,8 @@ export class AdventureState {
       inventory: this.inventory.snapshot(),
       professions: this.professions.snapshot(),
       ...(this.drawn.size ? { drawn: SHAPES.filter((s) => this.drawn.has(s)) } : {}),
+      talents: { ...this.spent },
+      ...(Object.keys(this.placed).length ? { placed: { ...this.placed } } : {}),
     };
   }
 
@@ -328,6 +375,7 @@ export class AdventureState {
     this.total = Math.min(Math.max(saved.xp, levelNeeds, 0), xpToReach(this.cap));
     this.beaten = saved.wardenBeaten;
     for (const shape of Array.isArray(saved.drawn) ? saved.drawn : []) if (SHAPES.includes(shape)) this.drawn.add(shape);
+    this.restoreTalents(saved);
     for (const h of this.held) {
       const kept = saved.quests[h.quest.id] as QuestProgress | undefined;
       if (!kept) continue;
@@ -358,6 +406,28 @@ export class AdventureState {
       if (h.stage !== 'handedIn') h.picked = undefined;
     }
     this.renumber();
+  }
+
+  /**
+   * Take up the talents a snapshot spent and the swaps it made. Points that
+   * couldn't have been spent at the level kept (a talent another build doesn't
+   * know, one past its maximum or in a tier not open, more points than the
+   * level brings) all come back, as a free reset would; swaps of abilities
+   * this build doesn't know, or to no shape, are dropped.
+   */
+  private restoreTalents(saved: Progress): void {
+    const spent: Partial<Record<Talent, number>> = {};
+    let known = true;
+    for (const [t, n] of Object.entries(saved.talents ?? {})) {
+      if (!(t in TALENT)) known = false;
+      else if (typeof n === 'number' && n !== 0) spent[t as Talent] = n;
+    }
+    this.spent = known && fits(spent, this.class, this.level) ? spent : {};
+    const placed: Partial<Record<Ability, Shape>> = {};
+    for (const [a, shape] of Object.entries(saved.placed ?? {})) {
+      if (a in ABILITY && isShape(shape as Shape)) placed[a as Ability] = shape as Shape;
+    }
+    this.placed = placed;
   }
 
   /**
@@ -405,12 +475,51 @@ export class AdventureState {
   }
 
   get stats(): Stats {
-    return statsAt(this.level, this.inventory.numbers, this.class);
+    return statsAt(this.level, this.inventory.numbers, this.class, this.spent);
   }
 
-  /** Which ability each shape holds: your class's base gesture abilities in their own shapes. */
+  /**
+   * Which ability each shape holds: your class's base gesture abilities in
+   * their own shapes and a tier-3 talent's in the triangle (or the next free
+   * shape), wherever the talent page's swaps put them.
+   */
   get slots(): Slots {
-    return slotsOf(abilitiesAt(this.class, this.level));
+    return slotsOf([...abilitiesAt(this.class, this.level), ...talentAbilities(this.spent)], this.placed);
+  }
+
+  /** Points spent in `talent`. */
+  spentOn(talent: Talent): number {
+    return this.spent[talent] ?? 0;
+  }
+
+  /** Points spent in `tree`. */
+  spentIn(tree: Tree): number {
+    return spentIn(this.spent, tree);
+  }
+
+  /** Every point spent, by talent. */
+  get talents(): Spent {
+    return this.spent;
+  }
+
+  /** Talent points spent in all. */
+  get pointsSpent(): number {
+    return spentAll(this.spent);
+  }
+
+  /** Talent points to spend: one a level from 2, less those spent. */
+  get pointsLeft(): number {
+    return pointsAt(this.level) - spentAll(this.spent);
+  }
+
+  /** Is `tree`'s `tier` open: enough points spent in the tiers above it? */
+  opens(tree: Tree, tier: number): boolean {
+    return tierOpen(this.spent, tree, tier);
+  }
+
+  /** Can a point go in `talent` now? Null if so, or why not. */
+  refuses(talent: Talent, fighting = false): TalentRefusal | null {
+    return refusal(this.spent, talent, this.class, this.level, fighting);
   }
 
   /**
@@ -584,11 +693,44 @@ export class AdventureState {
         if (this.slots[event.shape] === null || this.drawn.has(event.shape)) return [];
         this.drawn.add(event.shape);
         return [{ kind: 'learned', shape: event.shape }];
+      case 'spend':
+        return this.spend(event.talent, event.fighting);
+      case 'resetTalents':
+        return this.resetTalents(event.fighting);
+      case 'swap':
+        return this.swap(event.shapes, event.fighting);
       case 'accept':
         return this.accept(event.giver ?? 'hale');
       case 'handIn':
         return this.handIn(event.giver ?? 'hale', event.pick, event.to);
     }
+  }
+
+  /** A point in `talent`, if one can go there now. */
+  private spend(talent: Talent, fighting: boolean): Effect[] {
+    const reason = refusal(this.spent, talent, this.class, this.level, fighting);
+    if (reason) return [{ kind: 'talentRefused', reason }];
+    const points = (this.spent[talent] ?? 0) + 1;
+    this.spent = { ...this.spent, [talent]: points };
+    return [{ kind: 'talent', talent, points }];
+  }
+
+  /** Every point back, free, out of a fight: the abilities talents granted go with them. */
+  private resetTalents(fighting: boolean): Effect[] {
+    if (fighting) return [{ kind: 'talentRefused', reason: 'fighting' }];
+    const points = spentAll(this.spent);
+    if (points === 0) return [];
+    this.spent = {};
+    return [{ kind: 'talentsReset', points }];
+  }
+
+  /** The slots of two shapes swap, out of a fight: nothing for a shape with itself, or two empty ones. */
+  private swap([a, b]: readonly [Shape, Shape], fighting: boolean): Effect[] {
+    if (fighting) return [{ kind: 'talentRefused', reason: 'fighting' }];
+    const slots = this.slots;
+    if (a === b || (slots[a] === null && slots[b] === null)) return [];
+    this.placed = swapped(slots, a, b, this.placed);
+    return [{ kind: 'swapped', shapes: [a, b] }];
   }
 
   /**

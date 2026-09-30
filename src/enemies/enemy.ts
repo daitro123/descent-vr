@@ -260,6 +260,8 @@ export abstract class Enemy {
   private slowBy = 0;
   /** s since the root took hold, for its vines to grow in. */
   private rootedTime = 0;
+  /** s left that it can't heal (Mortal Strike's wound), walking home included. */
+  woundedFor = 0;
 
   constructor(
     /** Its behaviour: how it fights. */
@@ -500,9 +502,19 @@ export abstract class Enemy {
     this.exposed = Math.max(this.exposed, seconds);
   }
 
-  /** Back to full health, as it was before the fight. */
+  /** It can't heal for `seconds`: walking home, it comes back as hurt as it left. */
+  wound(seconds: number): void {
+    if (this.alive) this.woundedFor = Math.max(this.woundedFor, seconds);
+  }
+
+  /** Can it heal: not while a wound holds. */
+  get heals(): boolean {
+    return this.woundedFor <= 0;
+  }
+
+  /** Back to full health, as it was before the fight, unless a wound holds. */
   recover(): void {
-    this.hp = this.maxHp;
+    if (this.heals) this.hp = this.maxHp;
     this.exposed = 0;
   }
 
@@ -1098,6 +1110,7 @@ export abstract class Enemy {
     this.rootedFor = Math.max(0, this.rootedFor - dt);
     this.frozenFor = Math.max(0, this.frozenFor - dt);
     this.slowedFor = Math.max(0, this.slowedFor - dt);
+    this.woundedFor = Math.max(0, this.woundedFor - dt);
     const blade = ctx.playerSword;
     if (!blade || blade.speed < CONFIG.guard.threatSpeed || blade.swing !== this.lastSwing) this.swingSeen = false;
     this.lastSwing = blade?.swing;
