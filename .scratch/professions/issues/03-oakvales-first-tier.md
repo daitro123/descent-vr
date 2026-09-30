@@ -55,3 +55,8 @@ No vials to buy: a potion's flask is part of brewing it.
 - **How long a fight's worth takes:** four minor healing potions are 8 Hearthleaf, about four minutes of walking the fields and two of brewing. A pair of gauntlets is 8 ore, three or four veins.
 - **The effects need Abilities' numbers** (rage, mana, damage); the percentages here are starting points to set against them when that map settles.
 - **What Inventory must provide** (sent to the Inventory thread): stacks for the five materials and the crafted consumables; the gauntlets as ordinary gear; potions on the belt with the shared cooldown; and vendors that buy all of it.
+
+## Comments
+
+**2026-09-30:** The pick prototype ([Swinging the pick and cutting herbs](05-swinging-the-pick-and-cutting-herbs.md)) settled a vein at 3 copper ore and a clump at 2 herbs, and [Gathering spots in Oakvale](10-gathering-spots-in-oakvale.md) adds 1 rough stone per vein. Those numbers replace the table's first guess.
+
