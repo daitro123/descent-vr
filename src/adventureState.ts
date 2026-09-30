@@ -1,8 +1,21 @@
 import { CONFIG, type EnemyConfig } from './config';
-import { Inventory, type InventoryEffect, type InventorySave } from './inventory';
-import { type ClassId, itemOf, type Worn, WORN_NOTHING } from './items';
+import { Inventory, type InventoryEffect, type InventorySave, type Refusal, type Where } from './inventory';
+import { type ClassId, type ItemId, itemOf, type Worn, WORN_NOTHING } from './items';
 import type { CampId } from './maps/types';
-import { BARKS, CHAIN, CHAIN_DONE, type Item, type Objective, type Place, type QuestId, RETURN_TO_HALE, type Sword, SWORDS, type VillagerId } from './quests';
+import {
+  BARKS,
+  CHAIN,
+  CHAIN_DONE,
+  type Item,
+  type Objective,
+  type Place,
+  QUEST_ITEM,
+  type QuestId,
+  RETURN_TO_HALE,
+  type Sword,
+  SWORDS,
+  type VillagerId,
+} from './quests';
 
 // The rules of progress in the Adventure, with no three.js in it: events in,
 // effects and answers out. The Adventure feeds it what happens in the world
@@ -30,6 +43,8 @@ export interface QuestProgress {
   readonly stage: Stage;
   /** Each objective's count, in the chain's order: The Lumber Camp's second is its orders, 1 once taken. */
   readonly counts: readonly number[];
+  /** The item picked at its hand-in, once handed in: Hale's sword stays at their hip unless it was theirs. */
+  readonly picked?: ItemId;
 }
 
 /** One character's progress, as the save keeps it: a snapshot of the state, and what restores it. */
@@ -56,8 +71,12 @@ export type AdventureEvent =
     }
   /** "Accept" on Hale's board: take the quest on offer. */
   | { readonly kind: 'accept' }
-  /** "Hand in" on Hale's board: give back the quest that's ready. */
-  | { readonly kind: 'handIn' }
+  /**
+   * Give back the quest that's ready: "Hand in" on Hale's board, or one of its
+   * picks carried from the board into the bag (into bag slot `to`, or wherever
+   * it fits). Without a pick, the first on offer is taken.
+   */
+  | { readonly kind: 'handIn'; readonly pick?: ItemId; readonly to?: Where }
   /** Something picked up by hand (the leader's orders). */
   | { readonly kind: 'pickup'; readonly item: Item };
 
@@ -90,6 +109,8 @@ export interface HaleShows {
   /** What they say on the board. */
   readonly line: string;
   readonly buttons: readonly Button[];
+  /** The reward row at a hand-in: the items to pick from, fitting your class. Empty unless one is ready. */
+  readonly picks: readonly ItemId[];
 }
 
 /** The quest you're on, as the tracker shows it. */
@@ -114,6 +135,9 @@ const BUTTONS: Record<ShownStage, readonly Button[]> = {
   active: ['goodbye'],
   ready: ['handIn'],
 };
+
+/** What a record from before hand-ins had picks says was paid: What Lies Below's longsword. */
+const paidBefore = (i: number, kept: QuestProgress) => (typeof kept.picked === 'string' ? kept.picked : CHAIN[i].paid);
 
 /** Your numbers at a level. */
 export interface Stats {
@@ -171,22 +195,34 @@ export class AdventureState {
   private readonly stages: Stage[] = CHAIN.map((_, i) => (i === 0 ? 'offered' : 'locked'));
   /** Each quest's objectives' counts. */
   private readonly counts: number[][] = CHAIN.map((q) => q.objectives.map(() => 0));
+  /** The item picked at each quest's hand-in, once handed in. */
+  private readonly picked: (ItemId | undefined)[] = CHAIN.map(() => undefined);
   private beaten = false;
-  /** Your things. Every character is a warrior until the Abilities map's roster brings classes. */
+  /** Your things. */
   readonly inventory: Inventory;
 
-  /** A new character, or one restored from a snapshot. */
-  constructor(saved?: Progress) {
+  /**
+   * A new character, or one restored from a snapshot, of class `klass`: every
+   * character is a warrior until the Abilities map's roster brings classes.
+   */
+  constructor(
+    saved?: Progress,
+    readonly klass: ClassId = 'warrior',
+  ) {
     const you = this;
-    const wearer = { class: 'warrior' as ClassId, get level() { return you.level; } };
+    const wearer = { class: klass, get level() { return you.level; } };
     this.inventory = new Inventory(wearer, saved?.inventory);
     if (saved) this.restore(saved);
+    this.carryQuestItems();
   }
 
   /** Your progress, for the save. */
   snapshot(): Progress {
     const quests = {} as Record<QuestId, QuestProgress>;
-    CHAIN.forEach((q, i) => (quests[q.id] = { stage: this.stages[i], counts: [...this.counts[i]] }));
+    CHAIN.forEach((q, i) => {
+      const picked = this.picked[i];
+      quests[q.id] = { stage: this.stages[i], counts: [...this.counts[i]], ...(picked ? { picked } : {}) };
+    });
     return { level: this.level, xp: this.total, quests, wardenBeaten: this.beaten, inventory: this.inventory.snapshot() };
   }
 
@@ -209,6 +245,7 @@ export class AdventureState {
       const kept = saved.quests[quest.id] as QuestProgress | undefined;
       if (!kept) return;
       this.stages[i] = kept.stage;
+      if (kept.stage === 'handedIn') this.picked[i] = paidBefore(i, kept);
       quest.objectives.forEach((o, k) => (this.counts[i][k] = Math.max(0, Math.min(o.need, Math.floor(kept.counts[k] ?? 0)))));
     });
     const i = this.current;
@@ -217,6 +254,21 @@ export class AdventureState {
     if (this.stages[i] === 'active' && CHAIN[i].objectives.every((o, k) => this.counts[i][k] >= o.need)) this.stages[i] = 'ready';
     for (let k = i + 1; k < CHAIN.length; k++) this.stages[k] = 'locked';
     this.stages.forEach((stage, k) => (stage === 'locked' || stage === 'offered') && this.counts[k].fill(0));
+    this.stages.forEach((stage, k) => stage !== 'handedIn' && (this.picked[k] = undefined));
+  }
+
+  /**
+   * What the quest you're on has had you pick up is on the quest page: a
+   * record from before the orders went on it gains them here.
+   */
+  private carryQuestItems(): void {
+    CHAIN.forEach((quest, i) => {
+      if (this.stages[i] === 'handedIn') return;
+      quest.objectives.forEach((o, k) => {
+        const id = o.kind === 'pickup' ? QUEST_ITEM[o.item] : null;
+        if (id && this.counts[i][k] > 0 && !this.inventory.quest.includes(id)) this.inventory.take([{ id, count: 1 }]);
+      });
+    });
   }
 
   get level(): number {
@@ -273,9 +325,14 @@ export class AdventureState {
     return !this.beaten && this.stages[WARDEN_QUEST] === 'active';
   }
 
-  /** Does Hale's old longsword still hang at their hip? Until they hand it to you, with the quest that pays it. */
+  /** Does Hale's old longsword still hang at their hip? Until a warrior picks it at the hand-in that offers it. */
   get haleSwordAtHip(): boolean {
-    return CHAIN.every((q, i) => q.reward !== 'hale-longsword' || this.stages[i] !== 'handedIn');
+    return !this.picked.includes('hale-longsword');
+  }
+
+  /** The item picked at quest `id`'s hand-in, once it's handed in. */
+  pickedAt(id: QuestId): ItemId | undefined {
+    return this.picked[CHAIN.findIndex((q) => q.id === id)];
   }
 
   /** The chain's quest Hale has for you (on offer, under way or ready), or -1 once it's all handed in. */
@@ -286,9 +343,27 @@ export class AdventureState {
   /** The marker over Hale, and their line and buttons on the board. */
   get hale(): HaleShows {
     const i = this.current;
-    if (i < 0) return { marker: null, line: CHAIN_DONE, buttons: ['goodbye'] };
+    if (i < 0) return { marker: null, line: CHAIN_DONE, buttons: ['goodbye'], picks: [] };
     const stage = this.stages[i] as ShownStage;
-    return { marker: stage, line: CHAIN[i].says[stage], buttons: BUTTONS[stage] };
+    const picks = stage === 'ready' ? this.picksOf(i) : [];
+    // A pick carried into the bag hands the quest in, so there's no button for it.
+    return { marker: stage, line: CHAIN[i].says[stage], buttons: picks.length ? [] : BUTTONS[stage], picks };
+  }
+
+  /** What quest `i` offers you to pick from at its hand-in. */
+  private picksOf(i: number): readonly ItemId[] {
+    return CHAIN[i].picks?.[this.klass] ?? [];
+  }
+
+  /**
+   * Why carrying `pick` from Hale's board into bag slot `to` (or anywhere)
+   * wouldn't hand the quest in, or null if it would: for the view to light the
+   * slot under it red or green.
+   */
+  pickRefusal(pick: ItemId, to?: Where): Refusal | null {
+    const i = this.current;
+    if (this.stages[i] !== 'ready' || !this.picksOf(i).includes(pick)) return 'empty';
+    return this.inventory.checkReceive({ id: pick, count: 1 }, to);
   }
 
   /** The quest you're on, or null while you have none. */
@@ -344,12 +419,15 @@ export class AdventureState {
         const xp = this.earn(L.killXp * event.level * L.roles[event.role]);
         return [...xp, ...this.count((o) => credits(o, event.camp, event.role))];
       }
-      case 'pickup':
-        return this.count((o) => o.kind === 'pickup' && o.item === event.item);
+      case 'pickup': {
+        // Picked up for the quest, it goes on the bag's quest page.
+        const counted = this.count((o) => o.kind === 'pickup' && o.item === event.item);
+        return counted.length ? [...counted, ...this.inventory.take([{ id: QUEST_ITEM[event.item], count: 1 }])] : counted;
+      }
       case 'accept':
         return this.accept();
       case 'handIn':
-        return this.handIn();
+        return this.handIn(event.pick, event.to);
     }
   }
 
@@ -361,14 +439,28 @@ export class AdventureState {
     return [{ kind: 'quest', quest: CHAIN[i].id, stage: 'active' }];
   }
 
-  /** Give back the quest that's ready: its XP, any reward (straight into your hand), and the next quest on offer. */
-  private handIn(): Effect[] {
+  /**
+   * Give back the quest that's ready: the pick into your bag, what it had you
+   * pick up off the quest page, its XP, and the next quest on offer. With no
+   * room for the pick, it's refused, and the pick and the quest wait on the board.
+   */
+  private handIn(pick?: ItemId, to?: Where): Effect[] {
     const i = this.current;
     if (this.stages[i] !== 'ready') return [];
     const quest = CHAIN[i];
+    const picks = this.picksOf(i);
+    const chosen = pick ?? picks[0];
+    let got: InventoryEffect[] = [];
+    if (picks.length) {
+      if (!picks.includes(chosen)) return [{ kind: 'refused', reason: 'empty', ...(to ? { where: to } : {}) }];
+      got = this.inventory.receive({ id: chosen, count: 1 }, to);
+      if (got.some((e) => e.kind === 'refused')) return got;
+      this.picked[i] = chosen;
+    }
     this.stages[i] = 'handedIn';
-    const effects: Effect[] = [{ kind: 'quest', quest: quest.id, stage: 'handedIn' }, ...this.earn(quest.xp)];
-    if (quest.reward) effects.push(...this.inventory.wear(quest.reward));
+    const effects: Effect[] = [{ kind: 'quest', quest: quest.id, stage: 'handedIn' }, ...got];
+    for (const o of quest.objectives) if (o.kind === 'pickup') effects.push(...this.inventory.giveUp(QUEST_ITEM[o.item]));
+    effects.push(...this.earn(quest.xp));
     const next = CHAIN[i + 1];
     if (next) {
       this.stages[i + 1] = 'offered';

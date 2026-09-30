@@ -84,9 +84,18 @@ const gear = (id: ItemId, name: string, slot: GearSlot, level: number, rarity: R
 
 const junk = (id: ItemId, name: string, model: string): JunkItem => ({ id, name, kind: 'junk', level: 1, rarity: 'grey', model });
 
+const MAINS = Object.values(CLASS_MAIN);
+
+/** An armour piece made once for each main attribute, so it can fit any class: `pickFor(id, klass)` names each. */
+const forEveryClass = (id: ItemId, name: string, slot: GearSlot, level: number, rarity: Rarity, model: string): GearItem[] =>
+  MAINS.map((main) => gear(`${id}-${main}`, name, slot, level, rarity, model, { main }));
+
+/** The one of an armour piece made for every class that carries `klass`'s main attribute. */
+export const pickFor = (id: ItemId, klass: ClassId): ItemId => `${id}-${CLASS_MAIN[klass]}`;
+
 const potion = CONFIG.items.minorHealingPotion;
 
-/** Every item the game knows, by id. Later tickets add Oakvale's picks, the smith's stock, loot and Professions' items. */
+/** Every item the game knows, by id. Later tickets add the smith's stock, loot and Professions' items. */
 export const CATALOGUE: Readonly<Record<ItemId, ItemDef>> = Object.fromEntries(
   ([
     // The warrior's starting kit, as today: the plain sword and the round shield.
@@ -100,8 +109,17 @@ export const CATALOGUE: Readonly<Record<ItemId, ItemDef>> = Object.fromEntries(
     // Everyone's.
     gear('worn-tunic', 'Worn Tunic', 'chest', 1, 'white', 'tunic'),
     gear('worn-boots', 'Worn Boots', 'feet', 1, 'white', 'boots'),
-    // What Lies Below's reward for a warrior: darker-bladed, with a gilded guard.
+    // Hale's hand-ins' picks (07-oakvales-items.md): two greens for Raiders in the Fields, two for
+    // The Lumber Camp, and for What Lies Below your class's blue weapon or the Warden's Mantle.
+    ...forEveryClass('farmstead-gloves', 'Farmstead Gloves', 'hands', 2, 'green', 'farmstead-gloves'),
+    ...forEveryClass('hedgerow-boots', 'Hedgerow Boots', 'feet', 2, 'green', 'hedgerow-boots'),
+    ...forEveryClass('timberline-leggings', 'Timberline Leggings', 'legs', 3, 'green', 'timberline-leggings'),
+    ...forEveryClass('marshals-cap', "Marshal's Cap", 'head', 3, 'green', 'marshals-cap'),
+    ...forEveryClass('wardens-mantle', "Warden's Mantle", 'chest', 5, 'blue', 'wardens-mantle'),
+    // The warrior's: darker-bladed, with a gilded guard. The ranger's and mage's are placeholders.
     gear('hale-longsword', "Hale's Old Longsword", 'mainHand', 5, 'blue', 'hale', { class: 'warrior' }),
+    gear('hale-hunting-bow', "Hale's Old Hunting Bow", 'mainHand', 5, 'blue', 'hunting-bow', { class: 'ranger' }),
+    gear('crypt-warded-staff', 'Crypt-Warded Staff', 'mainHand', 5, 'blue', 'crypt-staff', { class: 'mage' }),
     { id: 'minor-healing-potion', name: 'Minor Healing Potion', kind: 'consumable', level: 1, rarity: 'white', model: 'flask-red', ...potion },
     { id: 'leaders-orders', name: "Leader's Orders", kind: 'quest', level: 2, rarity: 'white', model: 'scroll' },
     junk('worn-trinket', 'Worn Trinket', 'trinket'),

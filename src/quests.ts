@@ -1,6 +1,6 @@
 import type { Role, Stage } from './adventureState';
 import { CONFIG } from './config';
-import type { ItemId } from './items';
+import { type ClassId, type ItemId, pickFor } from './items';
 import type { CampId } from './maps/types';
 
 // Marshal Hale's quest chain, as data: what each quest asks, what it pays, and
@@ -15,6 +15,9 @@ export type Place = 'farm' | 'lumberCamp' | 'mine';
 
 /** Something an objective asks you to pick up by hand. */
 export type Item = 'orders';
+
+/** What each is in the bag: a quest item on its quest page, from when it's picked up until the hand-in. */
+export const QUEST_ITEM: Readonly<Record<Item, ItemId>> = { orders: 'leaders-orders' };
 
 /** Every sword's look: the one you start with, and Hale's old longsword. A warrior's weapon's model is one of them. */
 export const SWORDS = ['plain', 'hale'] as const;
@@ -36,13 +39,25 @@ export interface Quest {
   /** Where its objectives are, which the quest arrow points at while it's under way. */
   readonly place: Place;
   readonly xp: number;
-  /** An item it pays besides the XP, worn at once (items.ts). */
-  readonly reward?: ItemId;
+  /**
+   * The pick it pays besides the XP, for each class: two items laid out on
+   * Hale's board at the hand-in, one of them carried into the bag to hand it in.
+   */
+  readonly picks?: Readonly<Record<ClassId, readonly ItemId[]>>;
+  /** What it paid before hand-ins had picks, for a record with no pick kept (What Lies Below's longsword). */
+  readonly paid?: ItemId;
   /** What Hale says while it's on offer, under way, and ready to hand in. */
   readonly says: { readonly offered: string; readonly active: string; readonly ready: string };
 }
 
 const Q = CONFIG.quests;
+
+/** A pick of two armour pieces, each carrying your class's main attribute. */
+const armour = (a: ItemId, b: ItemId): Readonly<Record<ClassId, readonly ItemId[]>> => ({
+  warrior: [pickFor(a, 'warrior'), pickFor(b, 'warrior')],
+  ranger: [pickFor(a, 'ranger'), pickFor(b, 'ranger')],
+  mage: [pickFor(a, 'mage'), pickFor(b, 'mage')],
+});
 
 /** Hale's quests, in the order they come: handing one in offers the next. */
 export const CHAIN: readonly Quest[] = [
@@ -52,6 +67,7 @@ export const CHAIN: readonly Quest[] = [
     objectives: [{ kind: 'kill', text: 'Bandits defeated at the farm', need: Q.raiders.bandits, camp: 'farm' }],
     place: 'farm',
     xp: Q.raiders.xp,
+    picks: armour('farmstead-gloves', 'hedgerow-boots'),
     says: {
       offered:
         'Bandits in red masks are raiding the farm east of the village. The farmer barely got out. Drive them off. Three of them down should send the rest a message.',
@@ -69,6 +85,7 @@ export const CHAIN: readonly Quest[] = [
     ],
     place: 'lumberCamp',
     xp: Q.lumber.xp,
+    picks: armour('timberline-leggings', 'marshals-cap'),
     says: {
       offered:
         'The same gang holds the lumber camp across the bridge. Clear them out, and bring me whatever their leader keeps in that tent.',
@@ -82,12 +99,18 @@ export const CHAIN: readonly Quest[] = [
     objectives: [{ kind: 'kill', text: 'What woke the dead defeated', need: 1, role: 'warden' }],
     place: 'mine',
     xp: Q.below.xp,
-    reward: 'hale-longsword',
+    // Your class's blue weapon, or the Warden's Mantle. For a warrior that's still Hale's old longsword.
+    picks: {
+      warrior: ['hale-longsword', pickFor('wardens-mantle', 'warrior')],
+      ranger: ['hale-hunting-bow', pickFor('wardens-mantle', 'ranger')],
+      mage: ['crypt-warded-staff', pickFor('wardens-mantle', 'mage')],
+    },
+    paid: 'hale-longsword',
     says: {
       offered:
         'Something stirs under that hill. The dead are walking in the old mine. Go down, find what woke them, and put it back to rest.',
       active: "The mine's at the end of the north road. Whatever's down there, end it.",
-      ready: "So it's done. Take my old sword. It served me well; it'll serve you better.",
+      ready: "So it's done. Take what you like of my old kit. It served me well; it'll serve you better.",
     },
   },
 ];

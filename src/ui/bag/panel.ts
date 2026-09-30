@@ -20,7 +20,7 @@ import { itemOf, type ItemId } from '../../items';
 import { ModelBuilder } from '../../models/kit';
 import { sharedModelMaterial } from '../../models/materials';
 import { Card, FONT, roundRect } from '../card';
-import { cardText } from './cardLines';
+import { type CardText, cardText } from './cardLines';
 import {
   BOARD,
   CARD,
@@ -441,58 +441,61 @@ export class BagPanel {
     const x = over ? spotXY(over)[0] : 0;
     this.card.mesh.position.x = Math.max(BOARD.left + CARD.w / 2, Math.min(BOARD.right - CARD.w / 2, x));
     const key = `${stack.id}|${stack.count}|${JSON.stringify(this.inventory.gear)}|${this.inventory.wearing.level}`;
-    this.card.paint(key, (c, w, h) => {
-      const colour = RARITY_COLOUR[text.rarity];
-      c.fillStyle = 'rgba(12, 10, 16, 0.94)';
-      roundRect(c, 0, 0, w, h, 18);
-      c.fill();
-      c.strokeStyle = colour;
-      c.lineWidth = 4;
-      roundRect(c, 3, 3, w - 6, h - 6, 16);
-      c.stroke();
-      c.textBaseline = 'top';
-      c.fillStyle = colour;
-      c.font = `bold 32px ${FONT}`;
-      c.fillText(text.count > 1 ? `${text.name} ×${text.count}` : text.name, 20, 14, w - 40);
-      c.font = `24px ${FONT}`;
-      let y = 54;
-      // What it is, and the class it's locked to (red if it isn't yours).
-      c.fillStyle = '#a89c80';
-      const kind = text.worn ? `${text.kind} · worn` : text.kind;
-      c.fillText(kind, 20, y);
-      if (text.lock) {
-        c.fillStyle = text.lock.yours ? '#a89c80' : '#ff5040';
-        c.textAlign = 'right';
-        c.fillText(text.lock.name, w - 20, y);
-        c.textAlign = 'left';
-      }
-      y += 30;
-      if (text.level) {
-        c.fillStyle = text.level.reached ? '#a89c80' : '#ff5040';
-        c.fillText(`Item level ${text.level.value}`, 20, y);
-        y += 32;
-      }
-      c.font = `26px ${FONT}`;
-      for (const s of text.stats) {
-        c.fillStyle = s.yours ? '#ece6d6' : '#6a6458';
-        c.fillText(`${s.name} ${s.value}`, 20, y);
-        if (s.diff) {
-          c.fillStyle = s.diff > 0 ? '#40e040' : '#ff5040';
-          c.fillText(`${s.diff > 0 ? '+' : '−'}${Math.abs(s.diff)}${s.name === 'Damage' ? '%' : ''}`, 270, y);
-        }
-        y += 30;
-      }
-      if (text.note) {
-        c.fillStyle = '#ece6d6';
-        c.fillText(text.note, 20, y, w - 40);
-      }
-      if (text.sells) {
-        c.fillStyle = '#a89c80';
-        c.font = `20px ${FONT}`;
-        c.textAlign = 'right';
-        c.fillText(`Sells for ${text.sells} ${text.sells === 1 ? 'coin' : 'coins'}`, w - 20, h - 32);
-        c.textAlign = 'left';
-      }
-    });
+    this.card.paint(key, (c, w, h) => paintItemCard(c, w, h, text));
+  }
+}
+
+/** An item's card, as `cardText` says it: on the bag panel, and under each of a hand-in's picks on Hale's board. */
+export function paintItemCard(c: CanvasRenderingContext2D, w: number, h: number, text: CardText): void {
+  const colour = RARITY_COLOUR[text.rarity];
+  c.fillStyle = 'rgba(12, 10, 16, 0.94)';
+  roundRect(c, 0, 0, w, h, 18);
+  c.fill();
+  c.strokeStyle = colour;
+  c.lineWidth = 4;
+  roundRect(c, 3, 3, w - 6, h - 6, 16);
+  c.stroke();
+  c.textBaseline = 'top';
+  c.fillStyle = colour;
+  c.font = `bold 32px ${FONT}`;
+  c.fillText(text.count > 1 ? `${text.name} ×${text.count}` : text.name, 20, 14, w - 40);
+  c.font = `24px ${FONT}`;
+  let y = 54;
+  // What it is, and the class it's locked to (red if it isn't yours).
+  c.fillStyle = '#a89c80';
+  const kind = text.worn ? `${text.kind} · worn` : text.kind;
+  c.fillText(kind, 20, y);
+  if (text.lock) {
+    c.fillStyle = text.lock.yours ? '#a89c80' : '#ff5040';
+    c.textAlign = 'right';
+    c.fillText(text.lock.name, w - 20, y);
+    c.textAlign = 'left';
+  }
+  y += 30;
+  if (text.level) {
+    c.fillStyle = text.level.reached ? '#a89c80' : '#ff5040';
+    c.fillText(`Item level ${text.level.value}`, 20, y);
+    y += 32;
+  }
+  c.font = `26px ${FONT}`;
+  for (const s of text.stats) {
+    c.fillStyle = s.yours ? '#ece6d6' : '#6a6458';
+    c.fillText(`${s.name} ${s.value}`, 20, y);
+    if (s.diff) {
+      c.fillStyle = s.diff > 0 ? '#40e040' : '#ff5040';
+      c.fillText(`${s.diff > 0 ? '+' : '−'}${Math.abs(s.diff)}${s.name === 'Damage' ? '%' : ''}`, 270, y);
+    }
+    y += 30;
+  }
+  if (text.note) {
+    c.fillStyle = '#ece6d6';
+    c.fillText(text.note, 20, y, w - 40);
+  }
+  if (text.sells) {
+    c.fillStyle = '#a89c80';
+    c.font = `20px ${FONT}`;
+    c.textAlign = 'right';
+    c.fillText(`Sells for ${text.sells} ${text.sells === 1 ? 'coin' : 'coins'}`, w - 20, h - 32);
+    c.textAlign = 'left';
   }
 }
