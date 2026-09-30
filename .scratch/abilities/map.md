@@ -31,6 +31,7 @@ A written **spec for character development in combat**, ready to hand off as bui
 <!-- one line per resolved ticket: [title](link): gist -->
 
 - [Bows, spells and abilities in shipped VR games](issues/01-bows-spells-and-abilities-in-shipped-vr-games.md): shipped games nock an arrow by touching the string, with no quiver reach; cast a spell from each hand by charge and throw, with merged two-hand spells at the top; call abilities with a grip and a flick, about four per hand; and keep gestures loose, poses at chest height and fights paced. Sourced from search extracts only.
+- [Recognising gestures in the browser](issues/02-recognising-gestures-in-the-browser.md): Earthshaker stays a rule check; shaped gestures use our own small Jackknife-style template matcher (not UCF's non-commercial code), armed by holding that hand's grip and classified on release, at well under 1 ms a gesture.
 
 ## Not yet specified
 
