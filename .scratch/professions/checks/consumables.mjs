@@ -389,6 +389,13 @@ const pickUp = async (i) => {
   check(s.icons.key === 'whetstone9:elixir5', `two icons beside the belt HUD (${s.icons.key})`);
   await grip('left', 0);
   await handsDown();
+  // Glance down at the HUD, the bag shut.
+  await page.evaluate(() => window.__descent.bag.close('the check'));
+  await page.evaluate(() => window.__descent.device.quaternion.set(-0.45, 0, 0, 0.893));
+  await xrFrames(4);
+  await shot('02-two-icons');
+  await page.evaluate(() => window.__descent.device.quaternion.set(0, 0, 0, 1));
+  await xrFrames(4);
 }
 
 // 4. At the bench: a potion off its stand, refused while the cooldown runs, then drunk.
