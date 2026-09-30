@@ -11,7 +11,14 @@ import type { Ground } from '../world/ground';
 import { ATTACK_POSES, GUARD, type GuardSide, IDLE, KNEEL, KNEEL_DROP, RISE, SEATED, STAGGER, walkOffsets } from './poses';
 import type { AttackTokens } from './tokens';
 
-export type EnemyState = 'rising' | 'move' | 'attack' | 'guard' | 'stagger' | 'kneel' | 'seated' | 'sitting' | 'dead';
+export type EnemyState = 'rising' | 'move' | 'attack' | 'guard' | 'stagger' | 'kneel' | 'seated' | 'sitting' | 'frozen' | 'dead';
+/**
+ * What an ability can hold an enemy in, on top of what it's doing: _rooted_
+ * (it can't walk, but strikes what's in reach), _frozen_ (it does nothing at
+ * all until the time runs out or a hit breaks it; its state is 'frozen') and
+ * _slowed_ (it walks and winds up slower by a fraction).
+ */
+export type Affliction = 'rooted' | 'frozen' | 'slowed';
 export type AttackPhase = 'windup' | 'active' | 'recover';
 /** What one frame of a swing did. `dodged` = the player was in dodge frames. */
 export type StrikeOutcome = 'hit' | 'blocked' | 'parried' | 'dodged';
@@ -100,6 +107,15 @@ const _telegraphBlock = new Color(1.0, 0.45, 0.05);
 const _telegraphUnblock = new Color(1.0, 0.05, 0.02);
 const _exposedGlow = new Color(0.15, 0.35, 0.6);
 const _blockGlint = new Color(0.9, 0.95, 1.0);
+const _plain = new Color(1, 1, 1);
+const _frozenTint = new Color(0.62, 0.8, 1.0);
+const _frozenGlow = new Color(0.07, 0.15, 0.26);
+const _frostTint = new Color(0.84, 0.93, 1.0);
+const _frostGlow = new Color(0.03, 0.06, 0.1);
+/** The most a slow can take off its pace and wind-ups. */
+const MAX_SLOW = 0.9;
+/** s for its vines to grow in as a root takes hold, and to wither as it ends. */
+const VINE_GROW = 0.25;
 
 function easeOut(t: number): number {
   return 1 - (1 - t) * (1 - t);
@@ -237,6 +253,13 @@ export abstract class Enemy {
   private readonly seatFrom = new Vector3();
   private readonly seatTo = new Vector3();
   private seatTime = 1;
+  /** s left rooted, frozen and slowed, and how much slower (0 to MAX_SLOW) while slowed. */
+  private rootedFor = 0;
+  private frozenFor = 0;
+  private slowedFor = 0;
+  private slowBy = 0;
+  /** s since the root took hold, for its vines to grow in. */
+  private rootedTime = 0;
 
   constructor(
     /** Its behaviour: how it fights. */
@@ -373,6 +396,8 @@ export abstract class Enemy {
       this.die(push);
       return true;
     }
+    // A hit breaks a freeze: it takes the blow as it would have unfrozen.
+    if (this.state === 'frozen') this.thaw();
     this.onDamaged();
     if (opts.from) this.staggerSide = this.sideOf(opts.from);
     const breaks = damage >= this.def.poise || this.exposed > 0 || opts.ignorePoise;
@@ -398,6 +423,67 @@ export abstract class Enemy {
     this.staggerDuration = duration;
     if (this.def.steadyTime !== undefined) this.steady = duration + this.def.steadyTime;
     this.enter('stagger');
+  }
+
+  // ------------------------------------------------------------ rooted, frozen and slowed
+
+  /**
+   * Root, freeze or slow it for `seconds`; a slow takes `by` (a fraction) off
+   * its pace and wind-ups. Its behaviour decides how much of it takes
+   * (`def.takes`: a brute half, the Warden no root or freeze), and one that
+   * can't be hit takes none. Again while it lasts, the longer time and the
+   * stronger slow hold. Returns the seconds it took, 0 if none.
+   */
+  afflict(what: Affliction, seconds: number, by = 0): number {
+    if (!this.hittable || seconds <= 0) return 0;
+    const takes = this.def.takes ?? { hold: 1, slow: 1 };
+    if (what === 'slowed') {
+      const k = Math.min(MAX_SLOW, by * takes.slow);
+      if (k <= 0) return 0;
+      this.slowBy = this.slowedFor > 0 ? Math.max(this.slowBy, k) : k;
+      this.slowedFor = Math.max(this.slowedFor, seconds);
+      return seconds;
+    }
+    const held = seconds * takes.hold;
+    if (held <= 0) return 0;
+    if (what === 'rooted') {
+      if (this.rootedFor <= 0) this.rootedTime = 0;
+      this.rootedFor = Math.max(this.rootedFor, held);
+      return held;
+    }
+    // Frozen where it stands, mid-swing or not: its token goes back, so it doesn't count against the attackers' limit.
+    this.endAttack();
+    this.releaseTokens();
+    this.frozenFor = Math.max(this.frozenFor, held);
+    if (this.state !== 'frozen') this.enter('frozen');
+    return held;
+  }
+
+  /** s left of `what`, 0 when it isn't. */
+  afflictedFor(what: Affliction): number {
+    return what === 'rooted' ? this.rootedFor : what === 'frozen' ? this.frozenFor : this.slowedFor;
+  }
+
+  /** How much slower it walks and winds up: 0 when it isn't slowed. */
+  get slowness(): number {
+    return this.slowedFor > 0 ? this.slowBy : 0;
+  }
+
+  /** How far its vines have grown, 0 to 1: up as a root takes hold, down as it ends, 0 unrooted. */
+  get vineGrowth(): number {
+    if (this.rootedFor <= 0) return 0;
+    return Math.min(1, this.rootedTime / VINE_GROW, this.rootedFor / VINE_GROW);
+  }
+
+  /** Out of a freeze, back to what it was doing. */
+  private thaw(): void {
+    this.enter('move');
+  }
+
+  /** Rid of any root, freeze or slow: walking home, or dead. */
+  private shakeOff(): void {
+    this.rootedFor = this.slowedFor = this.slowBy = 0;
+    if (this.state === 'frozen') this.thaw();
   }
 
   expose(seconds: number): void {
@@ -490,6 +576,7 @@ export abstract class Enemy {
 
   private die(push: Vector3): void {
     this.endAttack();
+    this.shakeOff();
     this.enter('dead');
     this.releaseTokens();
     this.root.updateMatrixWorld(true);
@@ -659,7 +746,8 @@ export abstract class Enemy {
 
   private updateAttack(dt: number, ctx: EnemyContext): void {
     const a = this.attack!;
-    this.phaseTime += dt;
+    // Slowed, it winds up slower; the blow itself comes as fast.
+    this.phaseTime += this.phase === 'windup' ? dt * (1 - this.slowness) : dt;
     const k = Math.min(1, this.phaseTime / this.phaseDuration);
 
     if (this.phase === 'windup') {
@@ -857,6 +945,8 @@ export abstract class Enemy {
 
   /** Walk along `dir` (unit, XZ) at `speed`, steering round pillars and props. */
   protected walk(dir: Vector3, speed: number, dt: number, ctx: EnemyContext): void {
+    if (this.rootedFor > 0) return; // held by the vines: it can still turn and strike
+    speed *= 1 - this.slowness;
     _v.copy(dir);
     if (this.detour > 0) {
       // Stuck: side-step along the detour for a moment instead.
@@ -927,6 +1017,8 @@ export abstract class Enemy {
     if (!post) return;
     this.endAttack();
     this.releaseTokens();
+    // Its leash ran out whatever held it: it shakes it off and walks home.
+    this.shakeOff();
     if (this.state === 'attack' || this.state === 'guard') this.enter('move');
   }
 
@@ -992,6 +1084,10 @@ export abstract class Enemy {
     this.cooldown = Math.max(0, this.cooldown - dt);
     this.guardCooldown = Math.max(0, this.guardCooldown - dt);
     this.glint = Math.max(0, this.glint - dt);
+    if (this.rootedFor > 0) this.rootedTime += dt;
+    this.rootedFor = Math.max(0, this.rootedFor - dt);
+    this.frozenFor = Math.max(0, this.frozenFor - dt);
+    this.slowedFor = Math.max(0, this.slowedFor - dt);
     const blade = ctx.playerSword;
     if (!blade || blade.speed < CONFIG.guard.threatSpeed || blade.swing !== this.lastSwing) this.swingSeen = false;
     this.lastSwing = blade?.swing;
@@ -1071,6 +1167,11 @@ export abstract class Enemy {
       case 'seated':
         target = SEATED;
         break;
+      case 'frozen':
+        // Stock still, held in the pose it was caught in.
+        snap = true;
+        if (this.frozenFor <= 0) this.thaw();
+        break;
       case 'sitting': {
         // Back onto its seat, turning to face out from it; the hips go down as it gets there.
         const seat = this.seat!;
@@ -1091,7 +1192,7 @@ export abstract class Enemy {
       case 'dead':
         return this.updateDeath(dt);
     }
-    if (this.state !== 'kneel' && !this.seated) this.hipDrop += (0 - this.hipDrop) * Math.min(1, dt * 5);
+    if (this.state !== 'kneel' && this.state !== 'frozen' && !this.seated) this.hipDrop += (0 - this.hipDrop) * Math.min(1, dt * 5);
 
     if (!snap) {
       // Everything outside an attack eases toward its target pose.
@@ -1141,9 +1242,13 @@ export abstract class Enemy {
       if (this.phase === 'recover') tele.setRGB(0, 0, 0);
     } else if (this.glint > 0) tele.copy(_blockGlint).multiplyScalar(this.glint * 8);
     else tele.setRGB(0, 0, 0);
-    // Body: white hit flash, or a cold pulse while exposed.
+    // Body: pale blue while frozen, a faint frost while slowed; a white hit
+    // flash, or a cold pulse while exposed.
+    const frozen = this.state === 'frozen';
+    this.material.color.copy(frozen ? _frozenTint : this.slowedFor > 0 ? _frostTint : _plain);
     const e = this.material.emissive;
     if (this.flash > 0) e.setRGB(1, 1, 1);
+    else if (frozen) e.copy(_frozenGlow);
     else if (this.exposed > 0) e.copy(_exposedGlow).multiplyScalar(0.6 + 0.4 * Math.sin(this.stateTime * 12));
     else if (a && this.phase === 'windup' && a.kind !== 'summon') {
       // The whole body warms up too, so an overhead wind-up (weapon hidden
@@ -1151,7 +1256,8 @@ export abstract class Enemy {
       const k = Math.min(1, this.phaseTime / this.phaseDuration);
       if (a.blockable) e.setRGB(0.4 * k, 0.16 * k, 0);
       else e.setRGB(0.45 * k, 0, 0);
-    } else e.setRGB(0, 0, 0);
+    } else if (this.slowedFor > 0) e.copy(_frostGlow);
+    else e.setRGB(0, 0, 0);
   }
 
   private updateDeath(dt: number): boolean {
@@ -1189,6 +1295,7 @@ export abstract class Enemy {
   }
 
   protected enter(state: EnemyState): void {
+    if (state !== 'frozen') this.frozenFor = 0; // whatever takes it out of a freeze ends it
     this.state = state;
     this.stateTime = 0;
   }

@@ -11,6 +11,7 @@ import { Particles } from './fx/particles';
 import { sfx, updateListener } from './fx/sfx';
 import { Shockwaves } from './fx/shockwave';
 import { SwordTrail } from './fx/trail';
+import { Vines } from './fx/vines';
 import { itemOf } from './items';
 import { findMap } from './maps/registry';
 import type { Respawn, StartingZone, Zone } from './maps/types';
@@ -131,6 +132,7 @@ export class Adventure {
   private readonly particles: Particles;
   private readonly shockwaves: Shockwaves;
   private readonly shadows = new BlobShadows();
+  private readonly vines = new Vines();
   private readonly orbs = new Orbs();
   private readonly fade: Fade;
   /** The edges of your view darkening while you run. */
@@ -179,7 +181,7 @@ export class Adventure {
     this.respawn = zone.respawns.village;
     this.player = new Player(camera, renderer, this.world);
     this.player.run = new Run();
-    scene.add(this.player.rig, this.orbs.root, this.shadows.mesh);
+    scene.add(this.player.rig, this.orbs.root, this.shadows.mesh, this.vines.mesh);
     this.trail = new SwordTrail(scene);
     this.text = new FloatingText(scene);
     this.particles = new Particles(scene);
@@ -341,6 +343,7 @@ export class Adventure {
     this.updateDeath(dt);
 
     this.shadows.cast(you.feet, this.gatherFoes());
+    this.vines.place(this.foes); // as just gathered
     if (sword.tip.valid) {
       sword.segment(rig, _a, _b);
       this.trail.update(dt, _a, _b, sword.hot, player.frenzy > 0);
