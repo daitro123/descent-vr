@@ -1,7 +1,8 @@
+import { type Ability, abilitiesAt, type ClassId, type MainAttribute, mainOf, type Resource, resourceOf } from './classes';
 import { CONFIG, type EnemyConfig } from './config';
 import { Inventory, type InventoryEffect, type InventorySave } from './inventory';
 import { type ProfessionEffect, Professions, type ProfessionsSave, type RecipeId, type SpotKind } from './professions/professions';
-import { type ClassId, itemOf, type Worn, WORN_NOTHING } from './items';
+import { attributesAt, itemOf, type Worn, WORN_NOTHING } from './items';
 import type { CampId } from './maps/types';
 import { BARKS, type Chain, CHAINS, type GiverId, type Item, type Objective, type Place, type Quest, type QuestId, type Sword, SWORDS, type VillagerId } from './quests';
 
@@ -11,16 +12,15 @@ import { BARKS, type Chain, CHAINS, type GiverId, type Item, type Objective, typ
 // the tracker show; the save keeps its snapshot. Levels, XP and the quest
 // givers' chains live here: Marshal Hale's, and the trainers' once they come
 // (.scratch/oakvale-starting-zone/spec.md, "The adventure state";
-// .scratch/professions/spec.md, "Trainers and quests").
+// .scratch/professions/spec.md, "Trainers and quests"). So does the
+// character's class, and what it makes of their level: attributes, health,
+// damage, resource and abilities (.scratch/abilities/spec.md, "The adventure
+// state learns classes").
 
-/** What you can use besides the sword, the shield and the dash, once your level brings it. */
-export type Ability = 'warCry' | 'earthshaker';
+export { ABILITIES, type Ability, type ClassId } from './classes';
 
 /** What a slain enemy was, for the XP it pays. */
 export type Role = 'ordinary' | 'leader' | 'deepBrute' | 'warden' | 'raised';
-
-/** Every ability, in the order the levels bring them. */
-export const ABILITIES = Object.keys(CONFIG.levels.unlocks) as Ability[];
 
 /** Every stage, in the order a quest goes through them. */
 export const STAGES = ['locked', 'offered', 'active', 'ready', 'handedIn'] as const;
@@ -78,7 +78,7 @@ export type AdventureEvent =
 /** What an event did, for the Adventure to show. */
 export type Effect =
   | { readonly kind: 'xp'; readonly amount: number }
-  /** A level reached, with the abilities it brings. */
+  /** A level reached, with the abilities it brings your class. */
   | { readonly kind: 'level'; readonly level: number; readonly unlocks: readonly Ability[] }
   /** A quest moved on a stage: offered, taken (active), ready, or handed in. */
   | { readonly kind: 'quest'; readonly quest: QuestId; readonly stage: Stage }
@@ -136,34 +136,57 @@ const BUTTONS: Record<ShownStage, readonly Button[]> = {
 
 /** Your numbers at a level. */
 export interface Stats {
+  /** Stamina, your level's and your gear's: health. */
+  readonly stamina: number;
+  /** Which attribute is your class's main one: Strength, Agility or Intellect. */
+  readonly attribute: MainAttribute;
+  /** Your class's main attribute, your level's and your gear's: damage. */
+  readonly main: number;
   /** Full health. */
   readonly maxHp: number;
   /** Every blow you deal is multiplied by this. */
   readonly damage: number;
   /** Cuts the blows you take (items.ts, armourCut). */
   readonly armour: number;
+  /** Your class's rage, focus or mana. */
+  readonly resource: Resource;
+  /** Your class's base abilities your level has brought, in the order they came. */
   readonly abilities: readonly Ability[];
 }
 
-/** The step a level brings, to your damage and to an enemy's health and damage: 1 at level 1. */
+/** The step a level brings to an enemy's health and damage: 1 at level 1. */
 const stepAt = (level: number) => 1 + CONFIG.levels.step * (level - 1);
 
 /**
- * Your numbers at `level`, wearing gear that adds up to `worn`: its Stamina
- * adds health, its main attribute and your weapon's damage rating add to your
- * damage (Hale's old longsword adds one level's step), and its armour cuts
- * what you take.
+ * Your numbers at `level` as a `klass` (a warrior unless it says), wearing
+ * gear that adds up to `worn`. Your level's attributes and your gear's add up
+ * by one rule: every point of Stamina is 10 health, and every point of your
+ * class's main attribute is a tenth of level 1's damage, so a character
+ * without gear has 100 health and deals ×1 at level 1, 180 and ×1.8 at 5.
+ * Your weapon's damage rating adds to your damage (Hale's old longsword adds
+ * one level's step), and gear's armour cuts what you take.
  */
-export function statsAt(level: number, worn: Worn = WORN_NOTHING): Stats {
-  const L = CONFIG.levels;
+export function statsAt(level: number, worn: Worn = WORN_NOTHING, klass: ClassId = 'warrior'): Stats {
   const A = CONFIG.items.attribute;
+  const stamina = attributesAt(level) + worn.stamina;
+  const main = attributesAt(level) + worn.main;
   return {
-    maxHp: CONFIG.player.maxHp + L.health * (level - 1) + A.health * worn.stamina,
-    damage: stepAt(level) + worn.damage + A.damage * worn.main,
+    stamina,
+    attribute: mainOf(klass),
+    main,
+    maxHp: A.health * stamina,
+    damage: A.damage * main + worn.damage,
     armour: worn.armour,
-    abilities: ABILITIES.filter((a) => L.unlocks[a] <= level),
+    resource: resourceOf(klass, main),
+    abilities: abilitiesAt(klass, level),
   };
 }
+
+/** XP in all, since level 1, to reach `level`: level L needs 100 × (L − 1) more than the one before. */
+export const xpToReach = (level: number) => (CONFIG.levels.xp * (level - 1) * level) / 2;
+
+/** Does an enemy of `level` pay you XP at yours? Not once it's five or more levels below you. */
+export const paysXp = (level: number, yours: number) => yours - level < CONFIG.levels.grey;
 
 /**
  * An enemy's numbers at `level`: its behaviour's health and every blow's
@@ -205,15 +228,25 @@ export class AdventureState {
   /** Every quest of every chain, in the chains' order: an open chain's first is on offer from the start. */
   private readonly held: Held[];
   private beaten = false;
-  /** Your things. Every character is a warrior until the Abilities map's roster brings classes. */
+  /** Your class: every character is a warrior until the roster (abilities ticket 18) makes others. */
+  readonly class: ClassId;
+  /** The top level: the content's (CONFIG.levels.cap), unless a test brings its own. */
+  readonly cap: number;
+  /** Your things, for your class. */
   readonly inventory: Inventory;
   /** Your professions, working on your things. */
   readonly professions: Professions;
 
-  /** A new character, or one restored from a snapshot, with the givers' `chains` (every one in the game, unless a test brings its own). */
-  constructor(saved?: Progress, chains: readonly Chain[] = CHAINS) {
+  /**
+   * A new character, or one restored from a snapshot, with the givers'
+   * `chains` (every one in the game, unless a test brings its own), of
+   * `options.class` (a warrior unless it says).
+   */
+  constructor(saved?: Progress, chains: readonly Chain[] = CHAINS, options: { readonly class?: ClassId; readonly cap?: number } = {}) {
+    this.class = options.class ?? 'warrior';
+    this.cap = options.cap ?? CONFIG.levels.cap;
     const you = this;
-    const wearer = { class: 'warrior' as ClassId, get level() { return you.level; } };
+    const wearer = { class: this.class, get level() { return you.level; } };
     this.inventory = new Inventory(wearer, saved?.inventory);
     this.professions = new Professions(this.inventory, saved?.professions);
     this.chains = chains;
@@ -250,11 +283,8 @@ export class AdventureState {
    * keep the order they were taken in (the chains' order where it doesn't say).
    */
   private restore(saved: Progress): void {
-    const L = CONFIG.levels;
-    const cap = L.xp[L.xp.length - 1];
-    // The XP its recorded level needs: L.xp[0] is level 2's.
-    const levelNeeds = L.xp[Math.min(saved.level, L.xp.length + 1) - 2] ?? 0;
-    this.total = Math.min(Math.max(saved.xp, levelNeeds, 0), cap);
+    const levelNeeds = xpToReach(Math.max(1, Math.min(saved.level, this.cap)));
+    this.total = Math.min(Math.max(saved.xp, levelNeeds, 0), xpToReach(this.cap));
     this.beaten = saved.wardenBeaten;
     for (const h of this.held) {
       const kept = saved.quests[h.quest.id] as QuestProgress | undefined;
@@ -285,7 +315,9 @@ export class AdventureState {
   }
 
   get level(): number {
-    return 1 + this.reached.length;
+    let level = 1;
+    while (level < this.cap && xpToReach(level + 1) <= this.total) level++;
+    return level;
   }
 
   /** XP in all, since level 1. */
@@ -303,22 +335,17 @@ export class AdventureState {
   get progress(): number {
     const next = this.next;
     if (next === undefined) return 1;
-    const from = this.reached.at(-1) ?? 0;
+    const from = xpToReach(this.level);
     return (this.total - from) / (next - from);
-  }
-
-  /** The XP totals of the levels you've reached above 1. */
-  private get reached(): readonly number[] {
-    return CONFIG.levels.xp.filter((at) => at <= this.total);
   }
 
   /** The XP total of the next level, or undefined at the cap. */
   private get next(): number | undefined {
-    return CONFIG.levels.xp.find((at) => at > this.total);
+    return this.level < this.cap ? xpToReach(this.level + 1) : undefined;
   }
 
   get stats(): Stats {
-    return statsAt(this.level, this.inventory.numbers);
+    return statsAt(this.level, this.inventory.numbers, this.class);
   }
 
   /** The sword in your hand, as the main hand's item draws it: null for none. */
@@ -439,7 +466,8 @@ export class AdventureState {
       case 'kill': {
         if (event.role === 'warden') this.beaten = true;
         const L = CONFIG.levels;
-        const xp = this.earn(L.killXp * event.level * L.roles[event.role]);
+        // A grey enemy, five or more levels below you, pays nothing, but still counts for your quests.
+        const xp = paysXp(event.level, this.level) ? this.earn(L.killXp * event.level * L.roles[event.role]) : [];
         return [...xp, ...this.count((o) => credits(o, event.camp, event.role))];
       }
       case 'pickup':
@@ -518,16 +546,14 @@ export class AdventureState {
 
   /** Gain XP, up to the cap: the XP kept, then each level it reaches. */
   private earn(xp: number): Effect[] {
-    const L = CONFIG.levels;
     // Past the cap, XP is dropped.
-    const cap = L.xp[L.xp.length - 1];
-    const amount = Math.min(xp, cap - this.total);
+    const amount = Math.min(xp, xpToReach(this.cap) - this.total);
     if (amount <= 0) return [];
     const was = this.level;
     this.total += amount;
     const effects: Effect[] = [{ kind: 'xp', amount }];
     for (let level = was + 1; level <= this.level; level++) {
-      const unlocks = statsAt(level).abilities.filter((a) => !statsAt(level - 1).abilities.includes(a));
+      const unlocks = abilitiesAt(this.class, level).filter((a) => !abilitiesAt(this.class, level - 1).includes(a));
       effects.push({ kind: 'level', level, unlocks });
     }
     return effects;

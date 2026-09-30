@@ -1,5 +1,6 @@
 import { Euler, type Object3D, type PerspectiveCamera, Quaternion, type Scene, Vector3, type WebGLRenderer } from 'three';
 import { type Ability, type AdventureEvent, AdventureState, type Effect } from './adventureState';
+import { unlockLine } from './classes';
 import { Combat } from './combat/combat';
 import { CONFIG } from './config';
 import { type Camp, type CampHooks, Camps, type Member, type You } from './enemies/camps';
@@ -55,12 +56,6 @@ const HAND_IN_FLOAT: FloatStyle = { scale: 0.2, life: CONFIG.handIn.time, rise: 
 function showInMine(mine: Mine, root: Object3D): void {
   for (const body of root.children) body.visible = mine.drawn[mine.partAt(body.position.x, body.position.z)];
 }
-
-/** What a level-up says about each ability it brings. */
-const UNLOCKED: Record<Ability, string> = {
-  warCry: 'War Cry: press A or X',
-  earthshaker: "Earthshaker: drive your sword's tip into the ground",
-};
 
 /**
  * The game at the plain URL: Oakvale, loaded into the World, with the
@@ -627,7 +622,7 @@ export class Adventure {
       sfx.levelUp();
       text.banner(player.camera, `LEVEL ${level}`, '#ffd23a', 0.34, 0.3, banner);
     }
-    unlocks.forEach((a, i) => text.banner(player.camera, UNLOCKED[a], '#f0e0b0', 0.09, 0.08 - i * 0.12, lines));
+    unlocks.forEach((a, i) => text.banner(player.camera, unlockLine(a), '#f0e0b0', 0.09, 0.08 - i * 0.12, lines));
   }
 
   /** Words floating up from `height` metres over `at`. */
