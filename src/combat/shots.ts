@@ -7,8 +7,8 @@ import { type BladeResult, bladeTarget, sweepBlade } from './strike';
 // The ranger's arrows in flight (.scratch/abilities/spec.md, "The ranger"):
 // loosed from the bow with damage and speed by the draw, falling under
 // gravity, and meeting the first enemy along their way. A Power Shot passes
-// through the first enemy it hits to hit one behind. One instanced mesh for
-// them all. Combat lands the blows (ranger.ts); the flight is here, so the
+// through the first enemy it hits to hit one behind; a Volley is five arrows
+// loosed at once in a fan. One instanced mesh for them all. Combat lands the blows (ranger.ts); the flight is here, so the
 // tests drive it with real enemies.
 
 /** An arrow of the ranger's, flying or stuck. */
@@ -25,6 +25,8 @@ export interface Shot {
   readonly passed: Enemy[];
   /** A Power Shot. */
   readonly powered: boolean;
+  /** One of a Volley's arrows. */
+  readonly volley: boolean;
   /** s left stuck in a wall or the ground; 0 while it flies. */
   stuck: number;
 }
@@ -56,6 +58,27 @@ export interface ShotHooks {
   stuck(at: Vector3): void;
 }
 
+/** What rides on a loosed arrow besides the draw: enemies it passes through, and which ability it is. */
+export interface Loosed {
+  readonly pierce?: number;
+  readonly powered?: boolean;
+  readonly volley?: boolean;
+}
+
+/**
+ * The ways a Volley's `arrows` fly, loosed along `dir` (unit): a fan `fanDeg`°
+ * across, level (turned about the up axis), its middle arrow along `dir`.
+ */
+export function fanOf(dir: Vector3, arrows: number, fanDeg: number): Vector3[] {
+  const out: Vector3[] = [];
+  const fan = (fanDeg * Math.PI) / 180;
+  for (let i = 0; i < arrows; i++) {
+    const a = arrows > 1 ? (i / (arrows - 1) - 0.5) * fan : 0;
+    out.push(dir.clone().applyAxisAngle(_up, a));
+  }
+  return out;
+}
+
 /** What a flying arrow can strike besides enemies. */
 export interface ShotGround {
   arrowStops(p: Vector3): boolean;
@@ -67,6 +90,7 @@ const _q = new Quaternion();
 const _v = new Vector3();
 const _one = new Vector3(1, 1, 1);
 const _fwd = new Vector3(0, 0, 1);
+const _up = new Vector3(0, 1, 0);
 const _blade: BladeResult = { zone: 'body', point: new Vector3() };
 const _best: BladeResult = { zone: 'body', point: new Vector3() };
 const _target = bladeTarget();
@@ -85,10 +109,10 @@ export class Shots {
 
   /**
    * Loose an arrow from `from` along `dir` (unit), drawn `draw` of the way,
-   * its damage times `multiplier` (your damage, and Power Shot's), passing
-   * through `pierce` enemies. The oldest arrow goes if there are too many.
+   * its damage times `multiplier` (your damage, and Power Shot's or Volley's),
+   * passing through `pierce` enemies. The oldest arrow goes if there are too many.
    */
-  loose(from: Vector3, dir: Vector3, draw: number, multiplier: number, pierce = 0, powered = false): Shot {
+  loose(from: Vector3, dir: Vector3, draw: number, multiplier: number, { pierce = 0, powered = false, volley = false }: Loosed = {}): Shot {
     const { damage, speed } = shotOf(draw);
     if (this.flying.length >= MAX) {
       const i = this.flying.findIndex((s) => s.stuck > 0);
@@ -103,6 +127,7 @@ export class Shots {
       pierce,
       passed: [],
       powered,
+      volley,
       stuck: 0,
     };
     this.flying.push(shot);

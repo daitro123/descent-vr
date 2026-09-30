@@ -400,12 +400,15 @@ export const CONFIG = {
         powerShot: { level: 2, use: 'drawing', cost: 20, cooldown: 4, multiplier: 2, pierce: 1 },
         // A trap at your feet roots the first enemy to step on it within `lasts` s, for `root` s.
         snareTrap: { level: 3, use: 'ring', cost: 20, cooldown: 10, lasts: 30, root: 4 },
-        // The next arrow splits into `arrows` in a `fanDeg`° fan, each at `share`.
+        // The next arrow splits into `arrows` in a `fanDeg`° fan (level, across where it flies), each at `share`.
         volley: { level: 6, use: 'z', cost: 35, cooldown: 12, arrows: 5, fanDeg: 20, share: 0.6 },
-        // A gust knocks back and staggers every enemy within `radius` m in the `arcDeg`° in front of you.
-        scatter: { level: 8, use: 'v', cost: 25, cooldown: 15, radius: 3, arcDeg: 90, knockback: 6, stagger: 1.2 },
-        // The enemy you face (within `aimDeg`°) is marked for `time` s: it takes `bonus` more from you and shows through walls.
-        huntersMark: { level: 10, use: 's', cost: 20, cooldown: 1, time: 20, bonus: 0.15, aimDeg: 15 },
+        // A gust knocks back and staggers every enemy within `radius` m (of its body) in the `arcDeg`° in front
+        // of you (where you look). `knockback` m/s slides a grunt about an eighth of it in metres (1.5 m); a brute
+        // slides a third as far and the Warden a sixth, as any push (Enemy.knockbackScale). The Warden isn't staggered.
+        scatter: { level: 8, use: 'v', cost: 25, cooldown: 15, radius: 3, arcDeg: 90, knockback: 12, stagger: 1.2 },
+        // The enemy you face (within `aimDeg`° of where the right hand faces, else where you look; in sight and
+        // within `range` m) is marked for `time` s: it takes `bonus` more from you and its outline shows through walls.
+        huntersMark: { level: 10, use: 's', cost: 20, cooldown: 1, time: 20, bonus: 0.15, aimDeg: 15, range: 30 },
       },
     },
     mage: {

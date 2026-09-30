@@ -391,9 +391,18 @@ export class Combat implements ArrowResolver {
         this.fx.text.spawn('BLIZZARD', _a.copy(_p).setY(_p.y + 1.4), { color: '#e4f4ff', scale: 0.18 });
         break;
       case 'powerShot':
-      case 'snareTrap': {
-        if (!this.ranger) return 'unbuilt';
-        const used = ability === 'powerShot' ? this.ranger.powerShot() : this.ranger.snareTrap();
+      case 'snareTrap':
+      case 'volley':
+      case 'scatter':
+      case 'huntersMark': {
+        const { ranger } = this;
+        if (!ranger) return 'unbuilt';
+        let used: Use;
+        if (ability === 'powerShot') used = ranger.powerShot();
+        else if (ability === 'snareTrap') used = ranger.snareTrap();
+        else if (ability === 'volley') used = ranger.volley();
+        else if (ability === 'scatter') used = ranger.scatter(this.enemies, aim ? aim.gaze : player.camera.getWorldDirection(_to));
+        else used = aim ? ranger.huntersMark(aim, this.enemies, (a, b) => player.ground.lineOfSight(a, b)) : 'no target';
         if (used !== 'cast') return used;
         player.abilities.used(ability);
         break;
@@ -1032,7 +1041,8 @@ export class Combat implements ArrowResolver {
         return enemy;
       }
       _push.subVectors(pos, prev).setY(0).normalize().multiplyScalar(2);
-      const damage = Math.round(CONFIG.arrow.reflectDamage * this.player.stats.damage);
+      // Sent back by your parry or ward, it's your blow: Hunter's Mark adds to it.
+      const damage = Math.round(CONFIG.arrow.reflectDamage * this.player.stats.damage * (this.ranger?.mark.of(enemy) ?? 1));
       const killed = enemy.takeHit(damage, _push, { from: prev, ignorePoise: enemy.kind !== 'warden' });
       if (!killed) enemy.expose(enemy.def.exposedTime);
       this.fx.text.spawn(`${damage}!`, _hit.pointB, { color: '#7fd4ff', scale: 0.26 });
