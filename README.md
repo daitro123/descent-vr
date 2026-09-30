@@ -31,7 +31,7 @@ npm run dev          # http://localhost:5173
     - `?wave=N` starts the run at wave N (`?wave=7` goes straight to the boss).
     - `?duel` fights practice duelists one at a time: grunts that block about nine swings in ten. After each one falls, a banner shows how many of your hits it blocked.
     - `?showcase` pins the title-screen camera on the bestiary lineup, for reviewing models without a headset.
-    - `&class=ranger` is the ranger at level 1 with every base ability to level 10: the bow, the ward, Power Shot and Snare Trap (see [Controls (ranger)](#controls-ranger)); Volley, Scatter and Hunter's Mark say "not built yet" until ticket 22. `&variant=` no longer loads the prototype's variants here.
+    - `&class=ranger` is the ranger at level 1 with every base ability to level 10: the bow, the ward, Power Shot, Snare Trap, Volley, Scatter and Hunter's Mark (see [Controls (ranger)](#controls-ranger)). `&variant=` no longer loads the prototype's variants here.
     - `&class=ranger-prototype` is the throwaway prototype of the ranger the class was built from (`src/prototype/ranger/`, [How the ranger fights](.scratch/abilities/issues/05-how-the-ranger-fights.md)), kept to compare: a bow in the left hand over the warrior's arena. `&variant=` picks what the ranger does up close, and clicking the right stick cycles them: `ward` (the default and the one built: the left grip raises a short ward that stops arrows and, raised just in time, sends them back), `knife` (a knife in the draw hand, and swinging the bow parries a blow or swats an arrow back) or `kite` (two dashes and a longer step, but only 12 arrows, one back every 1.5 s).
     - `&class=mage` is the mage at level 1 with every base ability to level 10: Frost Nova on A/X, and Fireball, Frostbolt, Chain Lightning and Blizzard drawn on the ring, Z, V and S (see [Controls (mage)](#controls-mage)). The mage prototype's kits are gone from the flags (`&kit=`, `&cast=`, `&focus=`, `&move=`, `&mana=` do nothing now); its code stays in `src/prototype/mage/` to read.
     - `&class=warrior` (or no `&class=`) is the warrior at level 1 with every base ability to level 10: the War Cry, Earthshaker and the three gesture abilities, Heroic Throw, Shield Wall and Sweeping Strikes (see [Abilities by gesture](#abilities-by-gesture)). The arena keeps no save, so the first shape hangs in the air again on every visit until you draw it.
@@ -88,9 +88,14 @@ The level cap is 5 today, so in Oakvale these wait for a zone past it; the arena
 | Left grip squeezed | The **ward**: a disc past the bow hand for up to 1.2 s (back 2 s after), which stops enemy arrows and, in its first 0.35 s, sends them back at the archer. It doesn't stop blows. |
 | A / X while drawing | **Power Shot** (level 2): 20 focus, 4 s. The nocked arrow glows: double damage, and it passes through the first enemy to hit one behind. |
 | Right grip held, a ring drawn, let go | **Snare Trap** (level 3): 20 focus, 10 s. A trap at your feet; the first enemy to step on it within 30 s is rooted for 4 s (brutes 2, the Warden not at all). Drop it, dash back, shoot. No gesture reads while an arrow is nocked. |
+| Right grip held, a Z drawn, let go | **Volley** (level 6): 35 focus, 12 s. Your next arrow splits into five as it leaves the bow, in a level fan 20° across, each at 60% of the draw's blow. It waits until you loose, and not with Power Shot: one of the two goes on an arrow ("Power Shot: Volley is waiting"). |
+| Right grip held, a V drawn, let go | **Scatter** (level 8): 25 focus, 15 s. A gust from your hand knocks every enemy within 3 m in the 90° in front of you (where you look) about 1.5 m back and staggers it for 1.2 s, without hurting it. Brutes slide a third as far; the Warden barely budges and isn't staggered; a rooted enemy stays where the vines hold it. |
+| Right grip held, an S drawn, let go | **Hunter's Mark** (level 10): 20 focus, 1 s. The enemy the right hand faces (within 15°, else the one you look at; in sight, within 30 m) is marked for 20 s: it takes 15% more from you, and a red outline and chevron show it through walls. One at a time; it ends when the enemy dies. |
 | B / Y, sticks | The dash, moving and snap turn, as the warrior's. |
 
 The belt's right orb is **focus** in gold: 100, full from the start, refilling 10 a second, in a fight or out. Plain arrows never spend it.
+
+Volley, Scatter and Hunter's Mark come at levels 6, 8 and 10, past today's cap of 5, so in Oakvale they wait for a zone past it; the arena has them all.
 
 ## Controls (mage)
 
@@ -203,8 +208,9 @@ src/
     combat.ts        sword hits and crits, blocks and parries, bash, Earthshaker, War Cry, the gesture abilities, the mage's bolts and abilities, arrow outcomes
     abilities.ts     the gesture abilities' rules: cooldowns, Heroic Throw's aim, Shield Wall's blocks, Sweeping Strikes' reach (unit tested)
     thrownAxes.ts    Heroic Throw's axes in flight (instanced)
-    ranger.ts        the ranger's kit: the draw and loose, the ward, Power Shot and Snare Trap, landed through Combat
-    shots.ts         the ranger's arrows in flight: damage and speed by the draw, gravity, a Power Shot's pierce (instanced, unit tested)
+    ranger.ts        the ranger's kit: the draw and loose, the ward, Power Shot, Snare Trap, Volley, Scatter's gust and Hunter's Mark, landed through Combat (unit tested)
+    shots.ts         the ranger's arrows in flight: damage and speed by the draw, gravity, a Power Shot's pierce, a Volley's fan (instanced, unit tested)
+    mark.ts          Hunter's Mark: whom it's on, for how long, what it adds, and the outline shown through walls (unit tested)
     ward.ts          the ranger's ward: its hold, cooldown, and what it stops and sends back (unit tested)
     traps.ts         Snare Trap's traps: laid, sprung by the first enemy over one, rooting it (instanced, unit tested)
     mage.ts          the mage's rules: a throw's bolt, its damage, the ward's mana, the blink's way, who a burst reaches, whom Chain Lightning arcs to (unit tested)
