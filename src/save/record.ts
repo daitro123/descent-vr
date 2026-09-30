@@ -1,6 +1,7 @@
 import { type Progress, type QuestProgress, STAGES } from '../adventureState';
+import { type InventorySave, type Stack, startingInventory } from '../inventory';
+import { GEAR_SLOTS } from '../items';
 import type { Spot } from '../maps/types';
-import { SWORDS } from '../quests';
 
 // The save record: what the browser keeps of one character between visits,
 // and how a record an older build wrote is brought up to date. A record is
@@ -8,7 +9,7 @@ import { SWORDS } from '../quests';
 // build's record is left alone (.scratch/oakvale-starting-zone/spec.md, "Saving").
 
 /** The record's version: bump it, and add a migration from the one before, whenever its shape changes. */
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 /** Every building and the mine you can be inside. */
 export const INTERIORS = ['inn', 'house', 'mine'] as const;
@@ -46,8 +47,23 @@ export interface Migration {
   up(record: OlderRecord): OlderRecord;
 }
 
-/** Every migration, in order: each takes a record one version up. None yet, since version 1 is the first. */
-export const MIGRATIONS: readonly Migration[] = [];
+/**
+ * Every migration, in order: each takes a record one version up.
+ *
+ * 1 → 2, the inventory (.scratch/inventory/spec.md, "Saving"): the sword in
+ * your hand becomes the warrior's starting kit, wearing that sword (the plain
+ * one, or Hale's old longsword), with three minor healing potions on the belt
+ * and no coins. Nothing earned before is paid again.
+ */
+export const MIGRATIONS: readonly Migration[] = [
+  {
+    from: 1,
+    up: ({ sword, ...rest }) => ({
+      ...rest,
+      inventory: startingInventory('warrior', sword === 'hale' ? { mainHand: 'hale-longsword' } : {}),
+    }),
+  },
+];
 
 /** What was found where the save is kept. */
 export type Loaded =
@@ -83,10 +99,10 @@ function isCurrent(r: OlderRecord): r is OlderRecord & SaveRecord {
     isNumber(r.savedAt) &&
     Number.isInteger(r.level) &&
     isNumber(r.xp) &&
-    isOneOf(SWORDS, r.sword) &&
     isObject(r.quests) &&
     Object.values(r.quests).every(isQuest) &&
     typeof r.wardenBeaten === 'boolean' &&
+    isInventory(r.inventory) &&
     isObject(r.position) &&
     isNumber(r.position.x) &&
     isNumber(r.position.z) &&
@@ -94,6 +110,32 @@ function isCurrent(r: OlderRecord): r is OlderRecord & SaveRecord {
     (r.interior === null || isOneOf(INTERIORS, r.interior))
   );
 }
+
+/**
+ * Is it the inventory's shape? What it holds is checked on load
+ * (inventory.ts): an item the catalogue no longer knows is dropped there,
+ * not read as a broken save.
+ */
+function isInventory(v: unknown): v is InventorySave {
+  return (
+    isObject(v) &&
+    isSlots(v.bag) &&
+    Array.isArray(v.quest) &&
+    v.quest.every((id) => typeof id === 'string') &&
+    isGear(v.gear) &&
+    isSlots(v.belt) &&
+    isNumber(v.coins) &&
+    isSlots(v.stash) &&
+    Array.isArray(v.chests) &&
+    v.chests.every((id) => typeof id === 'string') &&
+    isNumber(v.cooldown)
+  );
+}
+
+const isGear = (v: unknown) => isObject(v) && GEAR_SLOTS.every((slot) => v[slot] === null || typeof v[slot] === 'string');
+
+const isSlots = (v: unknown): v is (Stack | null)[] =>
+  Array.isArray(v) && v.every((s) => s === null || (isObject(s) && typeof s.id === 'string' && isNumber(s.count)));
 
 function isQuest(q: unknown): q is QuestProgress {
   return isObject(q) && isOneOf(STAGES, q.stage) && Array.isArray(q.counts) && q.counts.every(isNumber);
