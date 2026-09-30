@@ -23,6 +23,7 @@ import { Hale } from './people/hale';
 import { Villagers } from './people/villagers';
 import { type AlchemyBench, type Herbalist, standInHouse } from './professions/bench';
 import { PROFESSION_NAMES } from './professions/professions';
+import { Belt } from './player/belt';
 import { Gestures } from './player/gestures/gestures';
 import { MageHands } from './player/mage';
 import { Player } from './player/player';
@@ -159,6 +160,8 @@ export class Adventure {
   readonly bag: Bag;
   /** What you've let go of off the bag's panel, lying on the ground. */
   readonly dropped: Dropped;
+  /** The potions at your hips: reach down for one and drink it at your mouth. */
+  readonly belt: Belt;
   /** A hand-in's pick on Hale's board, carried into the bag to hand the quest in. */
   private readonly picks: Shelf = {
     itemAt: (at) => this.board.pickAt(at, CONFIG.bag.touch),
@@ -254,7 +257,7 @@ export class Adventure {
     this.runVignette.warm(renderer, camera, scene);
     scene.add(this.zoneName.mesh);
     this.zoneName.warm(renderer, camera, scene);
-    // Your hands, closed on what they hold, and the bag over your shoulder.
+    // Your hands, closed on what they hold, the bag over your shoulder and the potions at your hips.
     this.player.showFists();
     this.dropped = new Dropped(this.world);
     const atlas = new IconAtlas();
@@ -264,9 +267,15 @@ export class Adventure {
         buzz: (hand, intensity, ms) => this.player.input.pulse(hand, intensity, ms),
         apply: (effects, at) => this.applyThings(effects, at),
         drop: (stack, at, velocity) => this.dropped.drop(stack, at, velocity),
+        beltAt: (at) => this.belt.slotNear(at),
       },
       atlas,
     );
+    this.belt = new Belt(this.player, {
+      inventory: this.state.inventory,
+      buzz: (hand, intensity, ms) => this.player.input.pulse(hand, intensity, ms),
+      apply: (effects, at) => this.applyThings(effects, at),
+    });
     // The wares open beside the bag's panel, hung from it as the stash's is.
     this.wares = new WaresBoard(this.state.inventory, atlas);
     this.bag.panel.root.add(this.wares.root);
@@ -274,8 +283,9 @@ export class Adventure {
     this.wares.warm(renderer, camera, scene);
     const { left, right } = this.player.input.hands;
     this.bagHands = { left: { grip: left.grip, tracked: false, squeeze: 0 }, right: { grip: right.grip, tracked: false, squeeze: 0 } };
-    scene.add(this.bag.root, this.dropped.root);
+    scene.add(this.bag.root, this.dropped.root, this.belt.root);
     this.bag.warm(renderer, camera, scene);
+    this.belt.warm(renderer, camera, scene);
     this.dropped.warm(renderer, camera, scene);
     // The stash's chest stands in the inn's room, drawn while it is; its panel opens beside the bag's.
     this.stash = new StashPanel(this.state.inventory, atlas);
@@ -308,7 +318,7 @@ export class Adventure {
       unlearned: () => this.state.unlearned,
       drawn: (shape) => this.apply({ kind: 'drawn', shape }, this.you.head),
       use: (ability, aim) => this.combat.use(ability, aim),
-      // Your hands are the bag's while it's open, and the bench's while you work at it.
+      // Your hands are the bag's while it's open, the bench's while you work at it, and a flask's while you hold one.
       held: () => this.handsHeld,
       busy: () => this.combat.busy || (this.mage?.charging('right') ?? false),
     });
@@ -453,6 +463,9 @@ export class Adventure {
     this.showCamps(outdoors);
     player.fighting = this.fighting;
     player.update(dt);
+    // The belt's cooldown runs down, and a hand at a hip may take a flask (and its weapon fades).
+    this.state.inventory.tick(dt);
+    this.belt.update(dt, this.bag.beltTarget);
     this.mage?.update(dt, this.handsHeld);
     this.runVignette.update(dt, player.running);
     updateListener(player.camera);
@@ -535,9 +548,9 @@ export class Adventure {
     return { line: arrow.line, turn: arrowTurn({ x: head.x, z: head.z, yaw }, to) };
   }
 
-  /** Are your hands the bag's (it's open) or the bench's (you work at it) now, not your weapons'? */
+  /** Are your hands the bag's (it's open), the bench's (you work at it) or a flask's (off the belt) now, not your weapons'? */
   private get handsHeld(): boolean {
-    return this.bag.isOpen || this.bench?.bare === true;
+    return this.bag.isOpen || this.bench?.bare === true || this.belt.holding('left') >= 0 || this.belt.holding('right') >= 0;
   }
 
   /** Is anything fighting you: a camp's (not walking home), or the Warden and what it raised? */
@@ -978,6 +991,9 @@ export class Adventure {
           break;
         case 'sold':
           this.wares.changed();
+          break;
+        case 'drank':
+          this.player.heal(this.player.maxHp * e.heal);
           break;
         case 'proficiency':
           // "+1 Alchemy", small and white where it was made, in the XP float's style.

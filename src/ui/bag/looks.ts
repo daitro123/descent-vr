@@ -122,8 +122,17 @@ export function lookOf(item: ItemDef): ItemLook {
   }
 }
 
-/** What an empty gear slot shows, faintly, so you know what goes there. */
-const GHOST: Readonly<Record<GearSlot, Look>> = { mainHand: 'sword', offHand: 'shield', head: 'helm', chest: 'chest', hands: 'gloves', legs: 'legs', feet: 'boots' };
+/** What an empty gear or belt slot shows, faintly, so you know what goes there. */
+const GHOST: Readonly<Record<GearSlot | 'belt', Look>> = {
+  mainHand: 'sword',
+  offHand: 'shield',
+  head: 'helm',
+  chest: 'chest',
+  hands: 'gloves',
+  legs: 'legs',
+  feet: 'boots',
+  belt: 'flask',
+};
 
 /** The atlas is CELLS × CELLS icons of CELL pixels. */
 const CELLS = 10;
@@ -134,7 +143,7 @@ export const EMPTY_CELL = 0;
 export const BLANK_CELL = 1;
 const DIGIT_CELL = 2;
 const GHOST_CELL = DIGIT_CELL + 10;
-const GHOST_SLOTS = Object.keys(GHOST) as GearSlot[];
+const GHOST_SLOTS = Object.keys(GHOST) as (GearSlot | 'belt')[];
 const FIRST_ITEM_CELL = GHOST_CELL + GHOST_SLOTS.length;
 /** How many looks the atlas has cells for; past that, a look shares its shape's first cell. */
 export const ITEM_CELLS = CELLS * CELLS - FIRST_ITEM_CELL;
@@ -197,8 +206,8 @@ export class IconAtlas {
     return cell;
   }
 
-  /** The cell of an empty gear slot's faint outline. */
-  ghostOf(slot: GearSlot): number {
+  /** The cell of an empty gear or belt slot's faint outline. */
+  ghostOf(slot: GearSlot | 'belt'): number {
     return GHOST_CELL + GHOST_SLOTS.indexOf(slot);
   }
 

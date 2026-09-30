@@ -1,7 +1,7 @@
 import { BufferGeometry, type Camera, Color, Group, Mesh, type Scene, Vector3, type WebGLRenderer } from 'three';
 import { CONFIG } from '../../config';
 import type { Inventory, Stack, Where } from '../../inventory';
-import { itemOf, type ItemId } from '../../items';
+import { itemOf, type ItemId, stackOf } from '../../items';
 import { ModelBuilder } from '../../models/kit';
 import { sharedModelMaterial } from '../../models/materials';
 import { Card, FONT, roundRect } from '../card';
@@ -97,11 +97,11 @@ export class BagPanel {
     this.board.mesh.position.set((BOARD.left + BOARD.right) / 2, (BOARD.top + BOARD.bottom) / 2, 0);
     this.root.add(this.board.mesh);
 
-    // Every slot's frame in one draw, and its icon (and the page's slots' counts) from one atlas in another.
+    // Every slot's frame in one draw, and its icon (and the page's and the belt's slots' counts) from one atlas in another.
     this.slots = new SlotMeshes(
       SPOTS.map((spot) => {
         const [x, y] = spotXY(spot);
-        return { x, y, counts: spot.in === 'grid' };
+        return { x, y, counts: spot.in !== 'gear' };
       }),
       SLOT,
       atlas,
@@ -199,6 +199,7 @@ export class BagPanel {
   where(spot: Spot): Where | null {
     if (spot.in === 'beside') return null;
     if (spot.in === 'gear') return { in: 'gear', slot: spot.slot };
+    if (spot.in === 'belt') return { in: 'belt', slot: spot.slot };
     if (this.page === 'bag') return { in: 'bag', slot: spot.i };
     if (this.page === 'quest') return { in: 'quest', slot: spot.i };
     return null;
@@ -235,8 +236,9 @@ export class BagPanel {
 
   /**
    * Where letting `id` go at `world` puts it: the slot it's over, its own gear
-   * slot when over the figure, or else the nearest slot within a few
-   * centimetres, since a carried item is aimed by eye, not by the hand.
+   * slot when over the figure (a potion: the figure's belt), or else the
+   * nearest slot within a few centimetres, since a carried item is aimed by
+   * eye, not by the hand.
    */
   targetAt(world: Vector3, id: ItemId, reach: Reach & { near: number }): BagSpot | null {
     if (!this.open) return null;
@@ -245,6 +247,7 @@ export class BagPanel {
     if (spot) return spot;
     const item = itemOf(id);
     if (item?.kind === 'gear' && figureAt(l, reach)) return { in: 'gear', slot: item.slot };
+    if (item?.kind === 'consumable' && figureAt(l, reach)) return { in: 'belt', slot: this.beltSlotFor(id) };
     return nearestSpot(l, reach, this.grid, reach.near);
   }
 
@@ -252,6 +255,19 @@ export class BagPanel {
   slotWorld(spot: BagSpot, out: Vector3, off = 0.02): Vector3 {
     const [x, y] = spotXY(spot);
     return this.root.localToWorld(out.set(x, y, FACE + off));
+  }
+
+  /**
+   * The belt slot a potion let go over the figure goes to: one holding the
+   * same potion with room, else an empty one, else the right hip.
+   */
+  private beltSlotFor(id: ItemId): number {
+    const belt = this.inventory.belt;
+    const item = itemOf(id);
+    const room = belt.findIndex((s) => s?.id === id && !!item && s.count < stackOf(item));
+    if (room >= 0) return room;
+    const empty = belt.findIndex((s) => !s);
+    return empty >= 0 ? empty : belt.length - 1;
   }
 
   /** The world point just off the figure's chest. */
@@ -296,7 +312,7 @@ export class BagPanel {
       const stack = sameSpot(spot, lifted) ? null : this.stackAt(spot);
       const item = stack && itemOf(stack.id);
       const grid = spot.in === 'grid';
-      this.slots.icon(i, item ? this.atlas.cellOf(item) : grid ? (this.grid ? EMPTY_CELL : BLANK_CELL) : this.atlas.ghostOf(spot.slot));
+      this.slots.icon(i, item ? this.atlas.cellOf(item) : grid ? (this.grid ? EMPTY_CELL : BLANK_CELL) : this.atlas.ghostOf(spot.in === 'belt' ? 'belt' : spot.slot));
       this.slots.count(i, stack?.count ?? 0);
     });
     this.slots.painted();
@@ -331,6 +347,12 @@ export class BagPanel {
     }
     const off = tint('offHand');
     if (off !== null) m.box(0.3, 0.44, 0.05, { at: [0.33, 1.05, 0.12], color: off });
+    // The belt at its waist, with a flask at each hip that has one (its left hip on your right).
+    m.box(0.44, 0.07, 0.26, { at: [0, 0.92, 0], color: 0x4a2e1c });
+    this.inventory.belt.forEach((s, i) => {
+      const potion = s && itemOf(s.id);
+      if (potion) m.box(0.09, 0.14, 0.09, { at: [(i === 0 ? 1 : -1) * 0.17, 0.86, 0.15], color: lookOf(potion).tint });
+    });
     this.figure.geometry.dispose();
     this.figure.geometry = m.build();
   }

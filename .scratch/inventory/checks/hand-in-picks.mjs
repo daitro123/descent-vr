@@ -304,10 +304,10 @@ await standBy(1.3);
   await fistAt('right', await slotAt(5));
   await step(0.1);
   const red = await page.evaluate(() => {
-    const { bag } = window.__descent;
+    const { bag, CONFIG } = window.__descent;
     const frames = bag.panel.slots.frames;
-    // The seven gear slots come first, then the page's sixteen.
-    const i = 7 + 5;
+    // The seven gear slots come first, then the belt's, then the page's sixteen.
+    const i = 7 + CONFIG.belt.slots + 5;
     const C = frames.material.color.constructor;
     const now = new C(frames.instanceColor.getX(i), frames.instanceColor.getY(i), frames.instanceColor.getZ(i));
     return { red: now.getHexString() === new C(0xd03030).getHexString(), is: `#${now.getHexString()}` };

@@ -103,10 +103,26 @@ export class Sword {
     this.blade.geometry = buildLongsword(bladeStart, bladeEnd, bladeHalfWidth, sword);
   }
 
+  /**
+   * Out of the hand for a moment (it holds a flask off the belt): not drawn,
+   * and nothing to hit with, from now until it's back.
+   */
+  get away(): boolean {
+    return !this.pivot.visible;
+  }
+
+  set away(away: boolean) {
+    this.pivot.visible = !away;
+    if (away) {
+      this.base.valid = this.tip.valid = this.hand.valid = this.tipValid = false;
+      this.swing.reset();
+    }
+  }
+
   update(rig: Object3D, dt: number): void {
     const grip = this.model.parent;
-    // With no sword in the hand (the main hand empty) there's nothing to hit with.
-    if (!grip?.visible || !this.model.visible) {
+    // With no sword in the hand (the main hand empty, or a flask in it) there's nothing to hit with.
+    if (!grip?.visible || !this.model.visible || this.away) {
       this.base.valid = this.tip.valid = this.hand.valid = this.tipValid = false;
       this.swing.reset();
       return;
@@ -194,6 +210,7 @@ export class Shield {
   readonly centre = new TrackedPoint();
   /** The block volume (a box of CONFIG.shield size); test against it in its local space. */
   readonly board = new Object3D();
+  private readonly pivot = new Group();
   private readonly material = createModelMaterial();
   private flashTimer = 0;
   private flashColor = new Color(1, 0.9, 0.5);
@@ -205,7 +222,7 @@ export class Shield {
 
   constructor() {
     const { width, height, depth, forwardOffset, pitchDeg } = CONFIG.shield;
-    const pivot = new Group();
+    const { pivot } = this;
     pivot.rotation.x = pitchDeg * DEG;
     this.model.add(pivot);
     // Centre-grip heater: the fist holds a bar behind the boss, so the board
@@ -215,9 +232,19 @@ export class Shield {
     pivot.add(this.board);
   }
 
+  /** Off the arm for a moment (the hand holds a flask off the belt): not drawn, and nothing to block with. */
+  get away(): boolean {
+    return !this.pivot.visible;
+  }
+
+  set away(away: boolean) {
+    this.pivot.visible = !away;
+    if (away) this.centre.valid = false;
+  }
+
   update(rig: Object3D, dt: number): void {
-    // With no shield on the arm (the off hand empty) there's nothing to block with.
-    if (!this.model.parent?.visible || !this.model.visible) {
+    // With no shield on the arm (the off hand empty, or a flask in the hand) there's nothing to block with.
+    if (!this.model.parent?.visible || !this.model.visible || this.away) {
       this.centre.valid = false;
       return;
     }
