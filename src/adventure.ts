@@ -1,5 +1,6 @@
 import { Euler, type Object3D, type PerspectiveCamera, Quaternion, type Scene, Vector3, type WebGLRenderer } from 'three';
 import { type Ability, type AdventureEvent, AdventureState, type Effect } from './adventureState';
+import { unlockLine } from './classes';
 import { Combat } from './combat/combat';
 import { CONFIG } from './config';
 import { type Camp, type CampHooks, Camps, type Member, type You } from './enemies/camps';
@@ -11,6 +12,7 @@ import { Particles } from './fx/particles';
 import { sfx, updateListener } from './fx/sfx';
 import { Shockwaves } from './fx/shockwave';
 import { SwordTrail } from './fx/trail';
+import { Vines } from './fx/vines';
 import { itemOf } from './items';
 import { lootSeed } from './loot';
 import { findMap } from './maps/registry';
@@ -62,12 +64,6 @@ const FULL_FLOAT: FloatStyle = { color: '#ff4a3a', scale: 0.12, life: CONFIG.loo
 function showInMine(mine: Mine, root: Object3D): void {
   for (const body of root.children) body.visible = mine.drawn[mine.partAt(body.position.x, body.position.z)];
 }
-
-/** What a level-up says about each ability it brings. */
-const UNLOCKED: Record<Ability, string> = {
-  warCry: 'War Cry: press A or X',
-  earthshaker: "Earthshaker: drive your sword's tip into the ground",
-};
 
 /**
  * The game at the plain URL: Oakvale, loaded into the World, with the
@@ -142,6 +138,7 @@ export class Adventure {
   private readonly particles: Particles;
   private readonly shockwaves: Shockwaves;
   private readonly shadows = new BlobShadows();
+  private readonly vines = new Vines();
   private readonly orbs = new Orbs();
   /** What kills drop, lying where they fell until touched. */
   readonly drops = new Drops();
@@ -194,7 +191,7 @@ export class Adventure {
     this.respawn = zone.respawns.village;
     this.player = new Player(camera, renderer, this.world);
     this.player.run = new Run();
-    scene.add(this.player.rig, this.orbs.root, this.drops.root, this.shadows.mesh);
+    scene.add(this.player.rig, this.orbs.root, this.drops.root, this.shadows.mesh, this.vines.mesh);
     this.drops.warm(renderer, camera, scene);
     this.trail = new SwordTrail(scene);
     this.text = new FloatingText(scene);
@@ -364,6 +361,7 @@ export class Adventure {
     this.updateDeath(dt);
 
     this.shadows.cast(you.feet, this.gatherFoes());
+    this.vines.place(this.foes); // as just gathered
     if (sword.tip.valid) {
       sword.segment(rig, _a, _b);
       this.trail.update(dt, _a, _b, sword.hot, player.frenzy > 0);
@@ -708,7 +706,7 @@ export class Adventure {
       sfx.levelUp();
       text.banner(player.camera, `LEVEL ${level}`, '#ffd23a', 0.34, 0.3, banner);
     }
-    unlocks.forEach((a, i) => text.banner(player.camera, UNLOCKED[a], '#f0e0b0', 0.09, 0.08 - i * 0.12, lines));
+    unlocks.forEach((a, i) => text.banner(player.camera, unlockLine(a), '#f0e0b0', 0.09, 0.08 - i * 0.12, lines));
   }
 
   /** Words floating up from `height` metres over `at`. */
