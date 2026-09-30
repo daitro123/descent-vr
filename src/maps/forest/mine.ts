@@ -2,7 +2,7 @@ import { Vector3 } from 'three';
 import type { Atmosphere } from '../../world/atmosphere';
 import { type Flame, type Frame, toFrame } from '../../world/interiors';
 import type { MinePlan, MineStanding, ThronePlan } from '../../world/mine';
-import type { CampPlan, PostPlan, Respawn } from '../types';
+import type { CampPlan, ChestPlan, PostPlan, Respawn } from '../types';
 import { CONFIG } from '../../config';
 import { BRAZIER_FIRE, torchLight } from '../../world/hall';
 import { Colliders, UNBOUNDED } from './colliders';
@@ -141,12 +141,15 @@ export const MINE = {
   /** The bandits' crooked props down their ramp, sunk into its walls: where each stands along it (x on the first leg, z on the second). */
   ramp: { post: 0.16, cap: 0.2, first: [-6.5, -2], second: [-39.5, -43.5] },
   /**
-   * What the bandits dropped in their dig: a strongbox of ore against its
-   * north wall, two picks and a torn cloak on the floor, their lantern on its
-   * side. The silver vein glints in its north and east walls.
+   * What the bandits dropped in their dig: their strongbox by its north wall
+   * (a step off it, so its lid swings clear of the rock's lumps), Oakvale's
+   * level-4 chest (world/chests.ts builds it, as wide and deep as this), with
+   * where what's inside comes out, beside it to the east; two
+   * picks and a torn cloak on the floor, their lantern on its side. The silver
+   * vein glints in its north and east walls.
    */
   dig: {
-    strongbox: { x0: 2.4, x1: 3.4, z0: -56.5, z1: -55.85 },
+    strongbox: { x0: 2.4, x1: 3.4, z0: -56.25, z1: -55.6, id: 'oakvale-strongbox', level: 4, drop: { x: 4.05, z: -55.45 } },
     picks: [
       [0.4, -52.2, 0.6],
       [5.6, -49.8, 2.4],
@@ -324,6 +327,15 @@ export function mineCamp(mouth: Frame): CampPlan {
     }),
     interior: 'mine',
   };
+}
+
+/** The bandits' strongbox in their dig, in the world: a chest facing out from the dig's north wall. */
+export function mineChest(mouth: Frame): ChestPlan {
+  const { x0, x1, z0, z1, id, level, drop } = MINE.dig.strongbox;
+  const y = mouth.y + minePiece('dig').floor;
+  const [x, z] = toWorld(mouth, (x0 + x1) / 2, (z0 + z1) / 2);
+  const [dx, dz] = toWorld(mouth, drop.x, drop.z);
+  return { id, level, look: 'strongbox', x, y, z, yaw: mouth.yaw, interior: 'mine', drop: { x: dx, y, z: dz } };
 }
 
 /** The mine opening at `mouth`. */
