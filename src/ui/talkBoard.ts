@@ -18,10 +18,24 @@ import { Card, FONT, parchment, wrap } from './card';
 // a fist or the sword's tip. A vendor's board has "Trade" beside the rest. At
 // a hand-in it lays out the pick instead of a button: each item in a frame of
 // its rarity's colour with its card under it, to carry into your bag
-// (.scratch/inventory/issues/12-quest-items-and-hand-in-picks.md).
+// (.scratch/inventory/issues/12-quest-items-and-hand-in-picks.md). A trainer's
+// has "Train", which turns the board into their list of lessons, a row each
+// with its price and the proficiency it needs, grey while you can't buy it
+// (.scratch/professions/issues/18-trainers-and-intro-quests.md).
 
-/** A button on a talk board: a giver's, or a vendor's "Trade". */
-export type TalkButton = Button | 'trade';
+/** A button on a talk board: a giver's, a vendor's "Trade", a trainer's "Train", and "Back" off the Train list. */
+export type TalkButton = Button | 'trade' | 'train' | 'back';
+
+/** One row of a trainer's Train list, as the board shows it. */
+export interface TrainRow {
+  /** The recipe a press on it buys. */
+  readonly recipe: string;
+  readonly name: string;
+  /** Its price and what it needs, or why it's grey ("Known"). */
+  readonly detail: string;
+  /** Can it be bought now? Grey if not. */
+  readonly lit: boolean;
+}
 
 /** What a talk board shows: a line, the buttons under it, and a hand-in's pick (empty but at one). */
 export interface TalkShows {
@@ -30,12 +44,23 @@ export interface TalkShows {
   readonly picks: readonly ItemId[];
 }
 
-const LABEL: Record<TalkButton, string> = { accept: 'Accept', notNow: 'Not now', handIn: 'Hand in', goodbye: 'Goodbye', trade: 'Trade' };
-/** The buttons that move the chain on are green; the ones that only end the talk (or trade) are brown. */
+const LABEL: Record<TalkButton, string> = {
+  accept: 'Accept',
+  notNow: 'Not now',
+  handIn: 'Hand in',
+  goodbye: 'Goodbye',
+  trade: 'Trade',
+  train: 'Train',
+  back: 'Back',
+};
+/** The buttons that move the chain on are green; the ones that only end the talk (or trade, train) are brown. */
 const MOVES_ON: readonly TalkButton[] = ['accept', 'handIn'];
-/** A button's size, in metres: two share a row, and three narrow to fit. */
+/** A button's size, in metres: two share a row, three narrow to fit, and four narrower still. */
 const KEY = { w: 0.24, h: 0.09, d: 0.04 };
 const NARROW = { w: 0.18, pitch: 0.2 };
+const NARROWER = { w: 0.14, pitch: 0.152 };
+/** The Train list's rows, in metres: one under another from `top`, `pitch` apart, over the parchment. */
+const ROW = { w: 0.56, h: 0.072, top: 0.15, pitch: 0.085 };
 const WOOD = 0x3a2716;
 const LIT = 0xf0c060;
 /** A pick's frame and its card under it, in metres: the card is the bag panel's card's size. */
@@ -47,18 +72,20 @@ export interface Probe {
   readonly hand: Handedness;
 }
 
-/** A button pressed, and by which hand (to buzz it). */
-export interface Press {
-  readonly button: TalkButton;
-  readonly hand: Handedness;
-}
+/** A button pressed, and by which hand (to buzz it): a row of the Train list is `lesson`, with its recipe. */
+export type Press =
+  | { readonly button: TalkButton; readonly hand: Handedness }
+  | { readonly button: 'lesson'; readonly recipe: string; readonly hand: Handedness };
 
 interface Key {
   readonly mesh: Mesh<BoxGeometry, MeshBasicMaterial>;
   readonly face: Card;
-  readonly button: TalkButton;
-  /** Its width, in metres. */
+  readonly button: TalkButton | 'lesson';
+  /** A Train list row's recipe. */
+  readonly recipe?: string;
+  /** Its width and height, in metres. */
   readonly w: number;
+  readonly h: number;
   /** Seconds left of looking pushed in. */
   pushed: number;
   /** Probes (by index) resting inside it, which must leave before they can press it. */
@@ -103,6 +130,8 @@ export class TalkBoard {
   /** What a pick's card says, for you: the Adventure's, from your class, level and gear. */
   describe: ((id: ItemId) => CardText | null) | null = null;
   private open = false;
+  /** Showing the Train list, not the talk. */
+  private training = false;
   /** The talk ended: it stays shut until you've walked away and come back. */
   private needLeave = false;
   /** Seconds before a button takes a press. */
@@ -122,6 +151,11 @@ export class TalkBoard {
 
   get isOpen(): boolean {
     return this.open;
+  }
+
+  /** Is it showing a trainer's Train list? */
+  get isTraining(): boolean {
+    return this.open && this.training;
   }
 
   /** The items of the pick laid out on it, while it's open. */
@@ -186,6 +220,7 @@ export class TalkBoard {
 
   /** Put new lines and buttons on it: the talk goes on (Hale offers the next quest after a hand-in). */
   show(shows: TalkShows): void {
+    this.training = false;
     this.text.paint(`${this.name}|${shows.line}|${shows.picks.length > 0}`, (c, w, h) => {
       parchment(c, w, h);
       c.fillStyle = '#5a3212';
@@ -205,6 +240,51 @@ export class TalkBoard {
     this.arming = Math.max(this.arming, CONFIG.talk.arming);
   }
 
+  /**
+   * Show a trainer's Train list in the board's frame: their name and "Train"
+   * over a row per lesson, each with its price and the proficiency it needs
+   * (grey while you can't buy it), and "Back" under them.
+   */
+  showTrain(rows: readonly TrainRow[]): void {
+    this.training = true;
+    this.text.paint(`${this.name}|train`, (c, w, h) => {
+      parchment(c, w, h);
+      c.fillStyle = '#5a3212';
+      c.font = `bold 44px ${FONT}`;
+      c.textBaseline = 'top';
+      c.fillText(`${this.name}: Train`, 34, 28);
+    });
+    this.layout(['back'], Math.min(-0.15, ROW.top - rows.length * ROW.pitch - 0.02));
+    rows.forEach((row, i) => this.addRow(row, ROW.top - i * ROW.pitch));
+    this.layPicks([]);
+    this.arming = Math.max(this.arming, CONFIG.talk.arming);
+  }
+
+  /** One row of the Train list, `y` m up the board: a wide key with the lesson's name, and its price and needs. */
+  private addRow(row: TrainRow, y: number): void {
+    const face = new Card(ROW.w, ROW.h, { ppm: 1400 });
+    face.paint(`${row.recipe}|${row.detail}|${row.lit}`, (c, w, h) => {
+      c.fillStyle = row.lit ? '#2f6a2a' : '#4a4640';
+      c.fillRect(0, 0, w, h);
+      c.textBaseline = 'middle';
+      c.fillStyle = row.lit ? '#e8f0d0' : '#a8a090';
+      c.font = `30px ${FONT}`;
+      c.textAlign = 'right';
+      c.fillText(row.detail, w - 24, h / 2 + 2);
+      c.fillStyle = row.lit ? '#f4ead0' : '#b8b0a0';
+      c.font = `bold 36px ${FONT}`;
+      c.textAlign = 'left';
+      c.fillText(row.name, 24, h / 2 + 2);
+    });
+    const mesh = new Mesh(new BoxGeometry(ROW.w, ROW.h, KEY.d), new MeshBasicMaterial({ color: WOOD }));
+    face.mesh.position.z = KEY.d / 2 + 0.001;
+    mesh.add(face.mesh);
+    mesh.position.set(0, y, KEY.d / 2);
+    this.root.add(mesh);
+    this.keys.push({ mesh, face, button: 'lesson', recipe: row.recipe, w: ROW.w, h: ROW.h, pushed: 0, blocked: new Set() });
+    this.root.updateMatrixWorld(true);
+  }
+
   /** The talk has ended: fold, and stay shut until you've walked away and come back. */
   fold(): void {
     this.open = false;
@@ -219,7 +299,7 @@ export class TalkBoard {
     this.show(shows);
   }
 
-  private layout(buttons: readonly TalkButton[]): void {
+  private layout(buttons: readonly TalkButton[], y = -0.15): void {
     for (const key of this.keys) {
       this.root.remove(key.mesh);
       key.face.dispose();
@@ -227,8 +307,8 @@ export class TalkBoard {
       key.mesh.material.dispose();
     }
     this.keys.length = 0;
-    const w = buttons.length > 2 ? NARROW.w : KEY.w;
-    const pitch = buttons.length > 2 ? NARROW.pitch : 0.3;
+    const size = buttons.length > 3 ? NARROWER : buttons.length > 2 ? NARROW : { w: KEY.w, pitch: 0.3 };
+    const { w, pitch } = size;
     buttons.forEach((button, i) => {
       const face = new Card(w, KEY.h, { ppm: 1400 });
       face.paint(button, (c, w, h) => {
@@ -244,9 +324,9 @@ export class TalkBoard {
       face.mesh.position.z = KEY.d / 2 + 0.001;
       mesh.add(face.mesh);
       const x = (i - (buttons.length - 1) / 2) * pitch;
-      mesh.position.set(x, -0.15, KEY.d / 2);
+      mesh.position.set(x, y, KEY.d / 2);
       this.root.add(mesh);
-      this.keys.push({ mesh, face, button, w, pushed: 0, blocked: new Set() });
+      this.keys.push({ mesh, face, button, w, h: KEY.h, pushed: 0, blocked: new Set() });
     });
     this.root.updateMatrixWorld(true);
   }
@@ -307,7 +387,7 @@ export class TalkBoard {
         if (!probe || !inside(key, probe.at)) key.blocked.delete(i);
         else if (!key.blocked.has(i)) {
           if (this.arming <= 0 && !pick) {
-            pick = { button: key.button, hand: probe.hand };
+            pick = key.button === 'lesson' ? { button: 'lesson', recipe: key.recipe!, hand: probe.hand } : { button: key.button, hand: probe.hand };
             key.pushed = 0.35;
           }
           key.blocked.add(i);
@@ -325,7 +405,7 @@ function inside(key: Key, at: Vector3): boolean {
   key.mesh.worldToLocal(_local.copy(at));
   return (
     Math.abs(_local.x) < key.w / 2 + reach.side &&
-    Math.abs(_local.y) < KEY.h / 2 + reach.side &&
+    Math.abs(_local.y) < key.h / 2 + reach.side &&
     _local.z < KEY.d / 2 + reach.front &&
     _local.z > -reach.back
   );

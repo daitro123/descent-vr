@@ -21,8 +21,9 @@ import { findMap } from './maps/registry';
 import type { Respawn, StartingZone, Zone } from './maps/types';
 import { Hale } from './people/hale';
 import { Villagers } from './people/villagers';
-import { type AlchemyBench, type Herbalist, standInHouse } from './professions/bench';
-import { PROFESSION_NAMES, type ProfessionsEffects } from './professions/professions';
+import { type AlchemyBench, standInHouse } from './professions/bench';
+import { PROFESSION_NAMES, type Profession, type ProfessionsEffects } from './professions/professions';
+import { lessonsFor, studies, type TrainerId } from './professions/trainers';
 import { Gathering } from './professions/gathering/gathering';
 import { Belt } from './player/belt';
 import { Gestures } from './player/gestures/gestures';
@@ -44,10 +45,11 @@ import { Bag, type BagHand, type Shelf } from './ui/bag/bag';
 import { cardText } from './ui/bag/cardLines';
 import { IconAtlas, lookOf } from './ui/bag/looks';
 import { StashPanel } from './ui/bag/stashPanel';
-import { placeBeside, type Probe, TalkBoard, type TalkButton } from './ui/talkBoard';
+import { coinsText } from './ui/bag/pieces';
+import { placeBeside, type Press, type Probe, TalkBoard, type TrainRow } from './ui/talkBoard';
 import { type VendorAt, WaresBoard } from './ui/wares/board';
 import { waresPlacement } from './ui/wares/layout';
-import { giverOf, isVendor, opensWith, type VendorId, vendorTalk } from './vendors';
+import { giverOf, isVendor, opensWith, trainerTalk, type VendorId, vendorTalk } from './vendors';
 import { PEOPLE } from './models/people';
 import type { GiverId } from './quests';
 import { Drops, type Touch } from './world/drops';
@@ -65,6 +67,7 @@ const _a = new Vector3();
 const _b = new Vector3();
 const _gaze = new Vector3();
 const _haleHead = new Vector3();
+const _herbalist = { feet: new Vector3(), head: new Vector3() };
 /** Where the wares board would stand beside a vendor. */
 const _spot = new Object3D();
 const _vendor: { -readonly [K in keyof VendorAt]: VendorAt[K] } = { id: 'smith', feet: new Vector3(), head: new Vector3() };
@@ -79,6 +82,8 @@ const KILL_XP_FLOAT: FloatStyle = { color: '#ffd23a', scale: 0.24, life: CONFIG.
 const HAND_IN_FLOAT: FloatStyle = { scale: 0.2, life: CONFIG.handIn.time, rise: 0.3 };
 /** The coins a pouch held, over it as it's taken. */
 const COINS_FLOAT: FloatStyle = { color: '#ffd23a', scale: 0.1, life: 1, rise: 0.3 };
+/** A lesson bought off a trainer's Train list, over their board. */
+const LEARNED_FLOAT: FloatStyle = { color: '#ffffff', scale: 0.1, life: 1.6, rise: 0.25 };
 /** A short word from what you're doing: "Cut lower" over a clump whose leaves you trimmed. */
 const HINT_FLOAT: FloatStyle = { color: '#ffffff', scale: 0.09, life: 1.2, rise: 0.2 };
 /** "Bag full" over an item a full bag leaves on the ground. */
@@ -140,15 +145,16 @@ export class Adventure {
   readonly hale: Hale;
   /** The innkeeper, the smith and the farmer, at work. */
   readonly villagers: Villagers;
-  /** The alchemy bench in the house by the well, and the herbalist at its end; null in a zone without the house. */
+  /** The alchemy bench in the house by the well; null in a zone without the house. The herbalist at its end is a villager. */
   readonly bench: AlchemyBench | null = null;
-  readonly herbalist: Herbalist | null = null;
   /** The wind, the birds in the trees and each place's sound where it is. */
   readonly ambience: Ambience;
   /** Hale's board, which unfolds as you walk up to them. */
   readonly board = new TalkBoard();
-  /** A vendor's talk board, while they have a quest to offer or take back: "Trade" sits beside its buttons. */
+  /** A vendor's talk board, while they have a quest to offer or take back or are your trainer: "Trade" sits beside its buttons. */
   readonly vendorBoard = new TalkBoard('');
+  /** The herbalist's talk board, which unfolds as you walk up to them in the house by the well: their quest, and "Train". */
+  readonly herbalistBoard = new TalkBoard(PEOPLE.herbalist.label);
   /** The smith's or the innkeeper's wares, unfolding beside them with the bag panel beside it. */
   readonly wares: WaresBoard;
   /** The quest you're on, top left of your view. */
@@ -224,8 +230,8 @@ export class Adventure {
   /** What can press the board's buttons: your left fist, your right fist and your sword's tip, in that order. */
   private readonly probes: (Probe | null)[] = [null, null, null];
   private readonly probePoints = [new Vector3(), new Vector3(), new Vector3()];
-  /** A level a hand-in landed, floating over Hale a moment after its XP. */
-  private handInLevel: { level: number; unlocks: readonly Ability[]; in: number } | null = null;
+  /** A level a hand-in landed, floating over its giver (`over`) a moment after its XP. */
+  private handInLevel: { level: number; unlocks: readonly Ability[]; in: number; over: Vector3 } | null = null;
   /** Where the save puts you: over the ground in world metres, facing as you look, and the building you're in. */
   private readonly standing: { x: number; z: number; yaw: number; interior: Interior | null } = { x: 0, z: 0, yaw: 0, interior: null };
 
@@ -275,6 +281,7 @@ export class Adventure {
     this.bag = new Bag(
       {
         inventory: this.state.inventory,
+        professions: this.state.professions,
         buzz: (hand, intensity, ms) => this.player.input.pulse(hand, intensity, ms),
         apply: (effects, at) => this.applyThings(effects, at),
         drop: (stack, at, velocity) => this.dropped.drop(stack, at, velocity),
@@ -321,6 +328,7 @@ export class Adventure {
     this.bag.panel.root.add(this.wares.root);
     scene.add(this.vendorBoard.root);
     this.wares.warm(renderer, camera, scene);
+    scene.add(this.herbalistBoard.root);
     const { left, right } = this.player.input.hands;
     this.bagHands = { left: { grip: left.grip, tracked: false, squeeze: 0 }, right: { grip: right.grip, tracked: false, squeeze: 0 } };
     scene.add(this.bag.root, this.dropped.root, this.belt.root);
@@ -409,7 +417,12 @@ export class Adventure {
     if (zone.mine) this.world.stageWith('mine', this.chests.mine);
 
     this.hale = new Hale(zone.hale, this.world, this.state.hale.marker, this.state.haleSwordAtHip);
-    this.arrowSpots = { places: zone.places, givers: { hale: zone.hale } };
+    // The arrow's givers: Hale at the crossroads, and the two trainers where they work.
+    const at = (id: GiverId) => {
+      const v = zone.villagers.find((s) => s.id === id);
+      return v ? { x: v.x, z: v.z } : undefined;
+    };
+    this.arrowSpots = { places: zone.places, givers: { hale: zone.hale, smith: at('smith'), herbalist: at('herbalist') } };
     this.world.addBody(this.hale.body);
     scene.add(this.hale.root, this.board.root, this.tracker.mesh);
     // The innkeeper hangs from the inn's room, drawn while it is; the others are drawn with the outdoors.
@@ -446,27 +459,19 @@ export class Adventure {
       : null;
     if (this.anvil) this.world.stageWith(null, this.anvil.frame);
 
-    // The alchemy bench and its herbalist hang from the house's room, drawn while it is.
+    // The alchemy bench hangs from the house's room, drawn while it is; its herbalist is one of the villagers.
     const house = zone.interiors.find((i) => i.id === 'house');
     if (house) {
-      const stood = standInHouse(
-        house,
-        {
-          player: this.player,
-          professions: this.state.professions,
-          inventory: this.state.inventory,
-          particles: this.particles,
-          apply: (effects, at) => this.applyMade(effects, at),
-          dress: () => this.dressHands(),
-          mouth: (out) => this.belt.mouth(out),
-        },
-        CONFIG.villagers.radius,
-      );
-      this.bench = stood.bench;
-      this.herbalist = stood.herbalist;
-      this.world.addBody(stood.body);
-      this.world.stageWith('house', stood.bench.root);
-      this.world.stageWith('house', stood.herbalist.root);
+      this.bench = standInHouse(house, {
+        player: this.player,
+        professions: this.state.professions,
+        inventory: this.state.inventory,
+        particles: this.particles,
+        apply: (effects, at) => this.applyMade(effects, at),
+        dress: () => this.dressHands(),
+        mouth: (out) => this.belt.mouth(out),
+      });
+      this.world.stageWith('house', this.bench.root);
     }
 
     // A new character (or one made on the page who hasn't played) at the zone's start, facing Hale; or where the save stood,
@@ -565,11 +570,12 @@ export class Adventure {
     this.loot(dt, outdoors);
     this.talk(dt);
     this.trade(dt);
+    this.teach(dt);
     this.updateAnvil(dt);
     this.updateBag(dt);
     this.villagers.update(dt, you.head, this.state);
-    this.herbalist?.update(dt, you.head);
-    this.bench?.update(dt, this.fighting);
+    // Talking to the herbalist holds the bench off: it takes your hands once the talk ends.
+    this.bench?.update(dt, this.fighting, this.herbalistBoard.isOpen);
     this.pickUp();
     this.openChests(dt);
     this.updateHandIn(dt);
@@ -766,6 +772,8 @@ export class Adventure {
     const vendor = this.vendorNear();
     const giver = giverOf(vendor.id);
     const shows = giver ? state.giver(giver) : null;
+    // A trainer you've learned from talks first, with "Train" beside "Trade".
+    const trains = vendor.id === 'smith' && studies('smith', state.professions);
     const eyes = { head: you.head, gaze: _gaze };
     const probes = this.touching();
     const d = Math.hypot(you.head.x - vendor.feet.x, you.head.z - vendor.feet.z);
@@ -777,12 +785,13 @@ export class Adventure {
     if (smithing) {
       if (wares.isOpen) bag.close('your hands went to the anvil');
       wares.hold();
+      if (vendorBoard.isOpen) vendorBoard.fold();
     }
-    const talkFirst = !smithing && !wares.isOpen && opensWith(shows) === 'talk';
+    const talkFirst = !smithing && !wares.isOpen && opensWith(shows, trains) === 'talk';
     if (talkFirst && !vendorBoard.isOpen) vendorBoard.name = PEOPLE[vendor.id].label;
-    const talk = shows ? vendorTalk(shows) : { line: '', buttons: ['trade'] as const, picks: [] };
+    const talk = shows ? vendorTalk(shows, trains) : { line: '', buttons: ['trade'] as const, picks: [] };
     const press = vendorBoard.update(dt, eyes, vendor, probes, talk, talkFirst);
-    if (press) this.vendorPress(press.button, press.hand, vendor, giver);
+    if (press) this.vendorPress(press, vendor, giver, trains);
     else if (!wares.isOpen && !wares.held && !talkFirst && !vendorBoard.isOpen && d < T.open) {
       const angle = (_gaze.angleTo(_b.subVectors(vendor.head, you.head)) * 180) / Math.PI;
       if (angle < T.facing) this.openWares(vendor, `walked up to ${PEOPLE[vendor.id].label.toLowerCase()}`);
@@ -810,12 +819,17 @@ export class Adventure {
     return _vendor;
   }
 
-  /** A press on a vendor's talk board: the quest's buttons go to the adventure state, and "Trade" unfolds the wares. */
-  private vendorPress(button: TalkButton, hand: 'left' | 'right', vendor: VendorAt, giver: GiverId | null): void {
+  /**
+   * A press on a vendor's talk board: the quest's buttons go to the adventure
+   * state, "Trade" unfolds the wares, and a trainer's "Train" shows their
+   * Train list, whose rows buy.
+   */
+  private vendorPress(press: Press, vendor: VendorAt, giver: GiverId | null, trains: boolean): void {
     const { intensity, ms } = CONFIG.talk.buzz;
-    this.player.input.pulse(hand, intensity, ms);
+    this.player.input.pulse(press.hand, intensity, ms);
     const { vendorBoard, wares } = this;
-    switch (button) {
+    const trainer = vendor.id === 'smith' ? 'smith' : null;
+    switch (press.button) {
       case 'trade':
         vendorBoard.fold();
         this.openWares(vendor, 'traded');
@@ -823,18 +837,104 @@ export class Adventure {
       case 'accept':
         vendorBoard.fold();
         wares.hold();
-        if (giver) this.apply({ kind: 'accept', giver }, vendor.feet);
+        if (giver) this.apply({ kind: 'accept', giver }, vendor.head);
         break;
       case 'handIn':
-        // The talk goes on: they offer their next quest, or trade.
+        // The talk goes on: they offer their next quest, or trade and train.
         if (giver) this.apply({ kind: 'handIn', giver }, vendor.head);
-        if (giver) vendorBoard.show(vendorTalk(this.state.giver(giver)));
+        if (giver) vendorBoard.show(vendorTalk(this.state.giver(giver), trainer !== null && studies(trainer, this.state.professions)));
+        break;
+      case 'train':
+        if (trainer) vendorBoard.showTrain(this.trainRows(trainer));
+        break;
+      case 'back':
+        if (giver) vendorBoard.show(vendorTalk(this.state.giver(giver), trains));
+        break;
+      case 'lesson':
+        if (trainer) this.buyLesson(vendorBoard, trainer, press.recipe, press.hand);
         break;
       case 'notNow':
       case 'goodbye':
         vendorBoard.fold();
         wares.hold();
     }
+  }
+
+  /**
+   * The herbalist in the house by the well: walk up to them, inside, looking
+   * their way, and their board unfolds with their quest (a gold "!" once
+   * Raiders in the Fields is handed in) and, once you've learned from them,
+   * "Train". It doesn't unfold while your hands are the bench's; while it's
+   * open, the bench waits for the talk to end.
+   */
+  private teach(dt: number): void {
+    const herbalist = this.villagers.get('herbalist');
+    const board = this.herbalistBoard;
+    if (!herbalist) return;
+    const { player, you, state } = this;
+    player.camera.getWorldDirection(_gaze);
+    herbalist.root.getWorldPosition(_herbalist.feet);
+    _herbalist.head.copy(_herbalist.feet).setY(_herbalist.feet.y + herbalist.headY);
+    const atBench = this.bench?.bare === true;
+    const trains = studies('herbalist', state.professions);
+    const talk = trainerTalk(state.giver('herbalist'), trains);
+    const approach = !atBench && herbalist.shown && this.world.interior === 'house';
+    const press = board.update(dt, { head: you.head, gaze: _gaze }, _herbalist, this.touching(), talk, approach);
+    if (!press) return;
+    const { intensity, ms } = CONFIG.talk.buzz;
+    player.input.pulse(press.hand, intensity, ms);
+    switch (press.button) {
+      case 'accept':
+        board.fold();
+        this.apply({ kind: 'accept', giver: 'herbalist' }, _herbalist.head);
+        break;
+      case 'handIn':
+        // The talk goes on: they see you off, with "Train".
+        this.apply({ kind: 'handIn', giver: 'herbalist' }, _herbalist.head);
+        board.show(trainerTalk(state.giver('herbalist'), studies('herbalist', state.professions)));
+        break;
+      case 'train':
+        board.showTrain(this.trainRows('herbalist'));
+        break;
+      case 'back':
+        board.show(talk);
+        break;
+      case 'lesson':
+        this.buyLesson(board, 'herbalist', press.recipe, press.hand);
+        break;
+      default:
+        board.fold();
+    }
+  }
+
+  /** `trainer`'s Train list as their board shows it: a row per lesson, with its price and the proficiency it needs, grey unless buying would go. */
+  private trainRows(trainer: TrainerId): TrainRow[] {
+    return lessonsFor(trainer, this.state.professions).map((l) => ({
+      recipe: l.recipe,
+      name: l.name,
+      lit: l.refused === null,
+      detail: l.refused === 'known' ? 'Known' : `${coinsText(l.price)}, ${PROFESSION_NAMES[l.profession]} ${l.needs}`,
+    }));
+  }
+
+  /**
+   * A row of `trainer`'s Train list pressed: bought through the professions
+   * module (coins out, the recipes known, saved) with "Learned: …" over the
+   * board and the list shown again; a grey one buys nothing and buzzes hard.
+   */
+  private buyLesson(board: TalkBoard, trainer: TrainerId, recipe: string, hand: 'left' | 'right'): void {
+    const T = CONFIG.talk.train;
+    const effects = this.state.professions.buy(recipe);
+    if (effects.some((e) => e.kind === 'refused')) {
+      this.player.input.pulse(hand, T.refused.intensity, T.refused.ms);
+      return;
+    }
+    this.player.input.pulse(hand, T.bought.intensity, T.bought.ms);
+    sfx.pickup();
+    this.applyThings(effects, board.root.position);
+    const name = lessonsFor(trainer, this.state.professions).find((l) => l.recipe === recipe)?.name ?? recipe;
+    this.floatOver(board.root.position, 0.32, `Learned: ${name}`, LEARNED_FLOAT);
+    board.showTrain(this.trainRows(trainer));
   }
 
   /**
@@ -1042,25 +1142,36 @@ export class Adventure {
     return refused?.kind === 'talentRefused' ? refused.reason : null;
   }
 
-  /** Something happened: into the adventure state, into the save if it earned anything, and show what it did at `at`. */
+  /**
+   * Something happened: into the adventure state, into the save if it earned
+   * anything, and show what it did at `at`. A hand-in's coins float under its XP.
+   */
   private apply(event: AdventureEvent, at: Vector3): void {
+    const coins = this.state.inventory.coins;
     const effects = this.state.apply(event);
     this.saves.onEffects(effects);
     this.show(effects, at, event.kind === 'handIn');
+    const gained = this.state.inventory.coins - coins;
+    if (event.kind === 'handIn' && gained > 0) this.floatOver(at, CONFIG.handIn.height - 0.15, `+${coinsText(gained)}`, { ...COINS_FLOAT, life: CONFIG.handIn.time });
   }
 
   /**
    * What the adventure state did. A kill's XP floats where it was earned, and
-   * a level reached is a moment. A hand-in's reward floats over Hale (`at`)
-   * with a fanfare: the XP, then the level a moment later. Taking a quest,
-   * progress and finishing flash the tracker. A kill that passes two levels
-   * at once shows the higher, with every ability both brought.
+   * a level reached is a moment. A hand-in's reward floats over its giver
+   * (`at`) with a fanfare: the XP, then the level a moment later. Taking a
+   * quest, progress and finishing flash the tracker. A kill that passes two
+   * levels at once shows the higher, with every ability both brought. A pair
+   * of professions learned (taking an intro quest) is said in view.
    */
   private show(effects: readonly Effect[], at: Vector3, handIn: boolean): void {
     const unlocks: Ability[] = [];
+    const learned: Profession[] = [];
     let reached = 0;
     for (const e of effects) {
       switch (e.kind) {
+        case 'learned':
+          if ('profession' in e) learned.push(e.profession);
+          break;
         case 'xp':
           if (handIn) this.floatOver(at, CONFIG.handIn.height, `+${e.amount} XP`, { color: '#ffd23a', ...HAND_IN_FLOAT });
           else this.floatOver(at, CONFIG.levels.xpFloat.height, `+${e.amount} XP`, KILL_XP_FLOAT);
@@ -1127,9 +1238,13 @@ export class Adventure {
           break;
       }
     }
+    if (learned.length) {
+      sfx.levelUp();
+      this.text.banner(this.player.camera, `${learned.map((p) => PROFESSION_NAMES[p]).join(' and ')} learned`, '#f0e0b0', 0.1, 0.08, CONFIG.levels.levelUp.lines);
+    }
     if (!reached) return;
     this.gainLevel();
-    if (handIn) this.handInLevel = { level: reached, unlocks, in: CONFIG.handIn.levelAfter };
+    if (handIn) this.handInLevel = { level: reached, unlocks, in: CONFIG.handIn.levelAfter, over: at.clone() };
     else this.announceLevel(reached, unlocks);
   }
 
@@ -1142,14 +1257,14 @@ export class Adventure {
 
   /**
    * "LEVEL N", and a line per ability it brings: in view with a sound after a
-   * kill, or over Hale after a hand-in (whose fanfare is its sound).
+   * kill, or over the giver's head (`over`) after a hand-in (whose fanfare is its sound).
    */
-  private announceLevel(level: number, unlocks: readonly Ability[], overHale = false): void {
+  private announceLevel(level: number, unlocks: readonly Ability[], over: Vector3 | null = null): void {
     const { player, text } = this;
     const { banner, lines } = CONFIG.levels.levelUp;
-    if (overHale) {
+    if (over) {
       const { height, levelHeight } = CONFIG.handIn;
-      this.floatOver(this.hale.head(_haleHead), height + levelHeight, `LEVEL ${level}`, { color: '#ffffff', ...HAND_IN_FLOAT });
+      this.floatOver(over, height + levelHeight, `LEVEL ${level}`, { color: '#ffffff', ...HAND_IN_FLOAT });
     }
     else {
       sfx.levelUp();
@@ -1166,12 +1281,12 @@ export class Adventure {
     this.text.spawn(words, _float.copy(at).setY(at.y + height), style);
   }
 
-  /** The level a hand-in landed floats over Hale a moment after its XP. */
+  /** The level a hand-in landed floats over its giver a moment after its XP. */
   private updateHandIn(dt: number): void {
     const pending = this.handInLevel;
     if (!pending || (pending.in -= dt) > 0) return;
     this.handInLevel = null;
-    this.announceLevel(pending.level, pending.unlocks, true);
+    this.announceLevel(pending.level, pending.unlocks, pending.over);
   }
 
   /** Out of a fight for a while, your health comes back. */

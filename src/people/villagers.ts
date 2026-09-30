@@ -5,19 +5,23 @@ import type { VillagerSpot } from '../maps/types';
 import { createModelMaterial } from '../models/materials';
 import { buildPerson, PEOPLE } from '../models/people';
 import { blendPoses, type Pose, type Rig } from '../models/rig';
-import type { VillagerId } from '../quests';
+import { GIVERS, type GiverId, type VillagerId } from '../quests';
 import { Card, FONT, parchment, wrap } from '../ui/card';
+import { QuestMarker } from '../ui/questMarker';
 import type { Ground } from '../world/ground';
 import { BarkRule } from './barks';
 import { friendlyPose } from './poses';
 import { strikesBetween, type WorkLoop, workLoop } from './work';
 
 // The village's people at work: the innkeeper behind the inn's bar, the smith
-// at the anvil and the farmer by the well (.scratch/oakvale-starting-zone/spec.md,
-// "Friendly characters"). Each plays their working loop (people/work.ts), turns
-// their head to follow you when you come near, stopping work while you're
-// there, and barks a line for where the chain stands on a small panel over
-// their head. Each is one draw call, and their bark one more while it shows.
+// at the anvil, the farmer by the well and the herbalist at the alchemy bench
+// in the house by the well (.scratch/oakvale-starting-zone/spec.md, "Friendly
+// characters"; .scratch/professions/spec.md, "Trainers and quests"). Each
+// plays their working loop (people/work.ts), turns their head to follow you
+// when you come near, stopping work while you're there, and barks a line for
+// where the chain stands and what you've learned on a small panel over their
+// head. The two trainers give quests too, with Hale's marker over their head.
+// Each is one draw call, and their bark one more while it shows.
 
 const _hand = new Vector3();
 const _at = new Vector3();
@@ -42,6 +46,8 @@ export interface Standing {
 /** Card size, metres, and how finely it's drawn. */
 const BARK = { w: 1.1, h: 0.33, ppm: 850 };
 
+const isGiver = (id: VillagerId): id is VillagerId & GiverId => (GIVERS as readonly string[]).includes(id);
+
 /** One villager at their spot. */
 export class Villager {
   readonly root = new Group();
@@ -58,6 +64,8 @@ export class Villager {
   readonly headY: number;
   /** Their line, on a panel over their head while it shows. */
   readonly bark = new Card(BARK.w, BARK.h, { ppm: BARK.ppm });
+  /** A quest giver's "!" or "?" over their head (the smith's, the herbalist's); null for the others. */
+  readonly marker: QuestMarker | null;
   readonly rig: Rig;
   readonly work: WorkLoop;
   /** Seconds into their work: it stands still while they attend to you. */
@@ -84,6 +92,12 @@ export class Villager {
     this.root.add(this.rig.mesh, this.bark.mesh);
     this.bark.mesh.name = `${id}-bark`;
     this.bark.mesh.visible = false;
+    this.marker = isGiver(id) ? new QuestMarker() : null;
+    if (this.marker) {
+      this.marker.sprite.name = `${id}-marker`;
+      this.root.add(this.marker.sprite);
+      this.marker.update(0, null, this.headY + CONFIG.hale.marker);
+    }
     this.body = this.solid = { x: spot.x, z: spot.z, r: CONFIG.villagers.radius };
     this.at = { x: spot.x, z: spot.z, yaw: spot.yaw };
     // Villagers each start at their own point in their loop, so the village doesn't move in step.
@@ -93,6 +107,21 @@ export class Villager {
 
   get id(): VillagerId {
     return this.spot.id;
+  }
+
+  /** The quest giver they are, if they give quests: the smith and the herbalist. */
+  get giver(): GiverId | null {
+    const { id } = this;
+    return isGiver(id) ? id : null;
+  }
+
+  /**
+   * Show `marker` over their head, bobbing: over the bark's panel while it
+   * shows, so the two don't overlap.
+   */
+  showMarker(dt: number, marker: Parameters<QuestMarker['update']>[1]): void {
+    const over = this.bark.mesh.visible ? CONFIG.villagers.bark.over + BARK.h / 2 + CONFIG.hale.marker / 2 : CONFIG.hale.marker;
+    this.marker?.update(dt, marker, this.headY + over);
   }
 
   /** Is the villager drawn? One indoors only while its room is. */
@@ -266,8 +295,8 @@ export class Villagers {
     return i >= 0 && this.rule.showing(i);
   }
 
-  /** One frame, with your head at `you` and the chain where `state` says. */
-  update(dt: number, you: Vector3, state: Pick<AdventureState, 'bark'>): void {
+  /** One frame, with your head at `you`, the chain where `state` says, and the givers' markers from it. */
+  update(dt: number, you: Vector3, state: Pick<AdventureState, 'bark' | 'giver'>): void {
     this.all.forEach((v, i) => {
       const blows = v.update(dt, you);
       if (blows && this.onStrike) this.onStrike(v.rig.bones.handR.getWorldPosition(_hand));
@@ -276,6 +305,8 @@ export class Villagers {
     for (const i of this.rule.update(dt, this.far)) this.all[i].say(state.bark(this.all[i].id));
     this.all.forEach((v, i) => {
       if (!this.rule.showing(i) && v.bark.mesh.visible) v.say(null);
+      const giver = v.giver;
+      if (giver) v.showMarker(dt, state.giver(giver).marker);
     });
   }
 }

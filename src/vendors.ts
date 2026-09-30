@@ -56,24 +56,42 @@ export function waresFor(vendor: VendorId, klass: ClassId): readonly ItemId[] {
   });
 }
 
-/** The quest giver a vendor also is, if they are one: the smith, once the trainers' chains come. */
+/** The quest giver a vendor also is, if they are one: the smith. */
 export function giverOf(vendor: VendorId): GiverId | null {
   return (GIVERS as readonly string[]).includes(vendor) ? (vendor as GiverId) : null;
 }
 
 /**
  * What walking up to a vendor unfolds: their talk board while they have a
- * quest to offer or to take back (a gold "!" or "?"), with "Trade" beside its
+ * quest to offer or to take back (a gold "!" or "?"), or while they're your
+ * trainer (`trains`: you've learned what they teach), with "Trade" beside its
  * buttons; otherwise their wares, straight away.
  */
-export function opensWith(giver: GiverShows | null): 'talk' | 'wares' {
-  return giver?.marker === 'offered' || giver?.marker === 'ready' ? 'talk' : 'wares';
+export function opensWith(giver: GiverShows | null, trains = false): 'talk' | 'wares' {
+  return trains || giver?.marker === 'offered' || giver?.marker === 'ready' ? 'talk' : 'wares';
 }
 
-/** A button on a vendor's talk board: the giver's, and "Trade". */
-export type VendorButton = Button | 'trade';
+/** A button on a vendor's talk board: the giver's, "Trade", and a trainer's "Train". */
+export type VendorButton = Button | 'trade' | 'train';
 
-/** A vendor's talk board: the giver's line and pick, and their buttons with "Trade" beside them. */
-export function vendorTalk(giver: GiverShows): { readonly line: string; readonly buttons: readonly VendorButton[]; readonly picks: readonly ItemId[] } {
-  return { line: giver.line, buttons: [...giver.buttons, 'trade'], picks: giver.picks };
+/**
+ * A vendor's talk board: the giver's line and pick, and their buttons with
+ * "Trade" beside them, and "Train" after it while they're your trainer.
+ */
+export function vendorTalk(
+  giver: GiverShows,
+  trains = false,
+): { readonly line: string; readonly buttons: readonly VendorButton[]; readonly picks: readonly ItemId[] } {
+  return { line: giver.line, buttons: [...giver.buttons, 'trade', ...(trains ? (['train'] as const) : [])], picks: giver.picks };
+}
+
+/**
+ * A trainer's talk board who doesn't trade (the herbalist): the giver's line
+ * and buttons, with "Train" after them while they're your trainer.
+ */
+export function trainerTalk(
+  giver: GiverShows,
+  trains: boolean,
+): { readonly line: string; readonly buttons: readonly VendorButton[]; readonly picks: readonly ItemId[] } {
+  return { line: giver.line, buttons: [...giver.buttons, ...(trains ? (['train'] as const) : [])], picks: giver.picks };
 }
