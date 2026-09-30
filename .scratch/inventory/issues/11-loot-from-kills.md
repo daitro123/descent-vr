@@ -33,7 +33,8 @@ Built on 2026-09-30 by Claude **on Tom's behalf** (he asked for the build ticket
 
 - `npm run typecheck`, `npm test` and `npm run build` pass. New tests: `tests/loot.test.ts` (20,000 seeded rolls per role land within tolerance; the Warden's blue and green; raised skeletons drop nothing; your class's gear at the enemy's level) and `tests/drops.test.ts` (touch, full-bag flashing, lifetime, the cap of 12).
 - `checks/loot.mjs`: all passed. A farm bandit dropped 3 coins, taken with the left fist. The lumber camp's leader dropped 18 coins, a blue Chain Leggings of the Bear (item level 2, with a beam) and torn cloth, all taken by walking over them. With the bag filled, the pouch's coins were still taken, while the item stayed flashing red under "Bag full" with a strong buzz, and was taken once there was room. The thugs happened to drop no items on this deterministic run, so the check lays one there for the full-bag step and says so.
-- Twelve drops with twelve beams in view: 224 draw calls against 128 without, both eyes, inside the 300 budget.
+- Twelve drops with twelve beams in view: 224 draw calls against 128 without, both eyes, inside the 300 budget (244k triangles against 235k).
+- The lumber camp's, the Warden's, saving's, finding the way's and the villagers' checks still pass; the last three build kill events by hand, so they now pass a family and a seed.
 
 **Calls made on Tom's behalf**
 
