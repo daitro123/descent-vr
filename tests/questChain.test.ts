@@ -6,7 +6,8 @@ import type { CampId } from '../src/maps/types';
 // hand in, kills, the orders picked up), and what a player would notice out:
 // what Hale shows (the marker over their head, the board's line and buttons),
 // the tracker, XP, levels and the sword, the Warden on its throne and Hale's
-// sword at their hip. Kills anywhere are events like any other.
+// sword at their hip. Kills anywhere are events like any other. A hand-in
+// with no pick named takes the first on offer (handInPicks.test.ts has the picks).
 
 const kill = (camp: CampId | null, level: number, role: Role = 'ordinary'): AdventureEvent => ({
   kind: 'kill',
@@ -42,6 +43,13 @@ const RAIDERS = [ACCEPT, ...times(3, FARM), HAND_IN];
 /** Take and finish The Lumber Camp, then hand it in. */
 const LUMBER = [ACCEPT, THUG, THUG, THUG, ARCHER, LEADER, ORDERS, HAND_IN];
 
+/** Each hand-in's picks for a warrior. */
+const PICKS = {
+  raiders: ['farmstead-gloves-strength', 'hedgerow-boots-strength'],
+  lumber: ['timberline-leggings-strength', 'marshals-cap-strength'],
+  below: ['hale-longsword', 'wardens-mantle-strength'],
+};
+
 const OFFERED = [
   'Bandits in red masks are raiding the farm east of the village. The farmer barely got out. Drive them off. Three of them down should send the rest a message.',
   'The same gang holds the lumber camp across the bridge. Clear them out, and bring me whatever their leader keeps in that tent.',
@@ -51,7 +59,7 @@ const OFFERED = [
 describe('a new character', () => {
   it('finds Hale offering Raiders in the Fields: a gold "!", their line, Accept and Not now', () => {
     const state = new AdventureState();
-    expect(state.hale).toEqual({ marker: 'offered', line: OFFERED[0], buttons: ['accept', 'notNow'] });
+    expect(state.hale).toEqual({ marker: 'offered', line: OFFERED[0], buttons: ['accept', 'notNow'], picks: [] });
   });
 
   it('has no quest to track', () => {
@@ -67,6 +75,7 @@ describe('Raiders in the Fields', () => {
       marker: 'active',
       line: "The farm's east along the road. Three of those bandits, then come back to me.",
       buttons: ['goodbye'],
+      picks: [],
     });
     expect(state.tracker).toEqual([{ title: 'Raiders in the Fields', lines: ['Bandits defeated at the farm: 0/3'] }]);
   });
@@ -89,7 +98,8 @@ describe('Raiders in the Fields', () => {
       { kind: 'progress', quest: 'raiders', objective: 0, count: 3 },
       { kind: 'quest', quest: 'raiders', stage: 'ready' },
     ]);
-    expect(state.hale).toEqual({ marker: 'ready', line: "The farm's quieter already. Well done.", buttons: ['handIn'] });
+    // The pick lies on Hale's board: carrying one into the bag hands the quest in, so there's no button.
+    expect(state.hale).toEqual({ marker: 'ready', line: "The farm's quieter already. Well done.", buttons: [], picks: PICKS.raiders });
     expect(state.tracker).toEqual([{ title: 'Raiders in the Fields', lines: ['Return to Marshal Hale'] }]);
   });
 
@@ -104,12 +114,13 @@ describe('Raiders in the Fields', () => {
     play(state, ACCEPT, FARM, FARM, FARM);
     expect(state.apply(HAND_IN)).toEqual([
       { kind: 'quest', quest: 'raiders', stage: 'handedIn' },
+      { kind: 'slot', where: { in: 'bag', slot: 0 }, stack: { id: PICKS.raiders[0], count: 1 } },
       { kind: 'xp', amount: 80 },
       { kind: 'level', level: 2, unlocks: ['warCry'] },
       { kind: 'quest', quest: 'lumber', stage: 'offered' },
     ]);
     expect(state.xp).toBe(110);
-    expect(state.hale).toEqual({ marker: 'offered', line: OFFERED[1], buttons: ['accept', 'notNow'] });
+    expect(state.hale).toEqual({ marker: 'offered', line: OFFERED[1], buttons: ['accept', 'notNow'], picks: [] });
     expect(state.tracker).toEqual([]);
   });
 });
@@ -162,6 +173,7 @@ describe('The Lumber Camp', () => {
       marker: 'active',
       line: 'The lumber camp is west off the north road, past the bridge. Mind their leader.',
       buttons: ['goodbye'],
+      picks: [],
     });
     expect(state.tracker).toEqual([{
       title: 'The Lumber Camp',
@@ -177,7 +189,10 @@ describe('The Lumber Camp', () => {
     play(state, FARM, FARM, FARM, HAND_IN);
     expect(state.apply(ORDERS)).toEqual([]);
     play(state, ACCEPT);
-    expect(state.apply(ORDERS)).toEqual([{ kind: 'progress', quest: 'lumber', objective: 1, count: 1 }]);
+    expect(state.apply(ORDERS)).toEqual([
+      { kind: 'progress', quest: 'lumber', objective: 1, count: 1 },
+      { kind: 'slot', where: { in: 'quest', slot: 0 }, stack: { id: 'leaders-orders', count: 1 } },
+    ]);
     expect(state.tracker[0]?.lines[1]).toBe("Leader's orders taken: 1/1");
   });
 
@@ -236,6 +251,7 @@ describe('The Lumber Camp', () => {
     expect(state.apply(ORDERS)).toEqual([
       { kind: 'progress', quest: 'lumber', objective: 1, count: 1 },
       { kind: 'quest', quest: 'lumber', stage: 'ready' },
+      { kind: 'slot', where: { in: 'quest', slot: 0 }, stack: { id: 'leaders-orders', count: 1 } },
     ]);
     expect(state.tracker[0]?.lines).toEqual(['Return to Marshal Hale']);
   });
@@ -251,7 +267,8 @@ describe('The Lumber Camp', () => {
     expect(state.hale).toEqual({
       marker: 'ready',
       line: "Orders... they're digging for silver in the old mine. Fools. That hill was left alone for a reason.",
-      buttons: ['handIn'],
+      buttons: [],
+      picks: PICKS.lumber,
     });
   });
 
@@ -260,11 +277,13 @@ describe('The Lumber Camp', () => {
     play(state, ...RAIDERS, ACCEPT, THUG, THUG, THUG, ARCHER, LEADER, ORDERS);
     expect(state.apply(HAND_IN)).toEqual([
       { kind: 'quest', quest: 'lumber', stage: 'handedIn' },
+      { kind: 'slot', where: { in: 'bag', slot: 1 }, stack: { id: PICKS.lumber[0], count: 1 } },
+      { kind: 'slot', where: { in: 'quest', slot: 0 }, stack: null },
       { kind: 'xp', amount: 120 },
       { kind: 'level', level: 3, unlocks: ['earthshaker'] },
       { kind: 'quest', quest: 'below', stage: 'offered' },
     ]);
-    expect(state.hale).toEqual({ marker: 'offered', line: OFFERED[2], buttons: ['accept', 'notNow'] });
+    expect(state.hale).toEqual({ marker: 'offered', line: OFFERED[2], buttons: ['accept', 'notNow'], picks: [] });
   });
 });
 
@@ -276,6 +295,7 @@ describe('What Lies Below', () => {
       marker: 'active',
       line: "The mine's at the end of the north road. Whatever's down there, end it.",
       buttons: ['goodbye'],
+      picks: [],
     });
     expect(state.tracker).toEqual([{ title: 'What Lies Below', lines: ['What woke the dead defeated: 0/1'] }]);
   });
@@ -289,8 +309,9 @@ describe('What Lies Below', () => {
     ]);
     expect(state.hale).toEqual({
       marker: 'ready',
-      line: "So it's done. Take my old sword. It served me well; it'll serve you better.",
-      buttons: ['handIn'],
+      line: "So it's done. Take what you like of my old kit. It served me well; it'll serve you better.",
+      buttons: [],
+      picks: PICKS.below,
     });
     expect(state.tracker).toEqual([{ title: 'What Lies Below', lines: ['Return to Marshal Hale'] }]);
   });
@@ -301,12 +322,12 @@ describe('What Lies Below', () => {
     expect(state.sword).toBe('plain');
     const effects = state.apply(HAND_IN);
     expect(effects[0]).toEqual({ kind: 'quest', quest: 'below', stage: 'handedIn' });
-    // Straight into your hand, as the main hand's item, with the plain sword going into the bag.
-    expect(effects).toContainEqual({ kind: 'slot', where: { in: 'gear', slot: 'mainHand' }, stack: { id: 'hale-longsword', count: 1 } });
+    // Into the bag, as any pick is: you wear it from there.
+    expect(effects).toContainEqual({ kind: 'slot', where: { in: 'bag', slot: 2 }, stack: { id: 'hale-longsword', count: 1 } });
+    expect(effects).toContainEqual({ kind: 'xp', amount: 300 });
     expect(effects.some((e) => e.kind === 'quest' && e.stage === 'offered')).toBe(false);
-    expect(state.sword).toBe('hale');
-    expect(state.inventory.gear.mainHand).toBe('hale-longsword');
-    expect(state.inventory.bag[0]).toEqual({ id: 'plain-sword', count: 1 });
+    expect(state.sword).toBe('plain');
+    expect(state.inventory.bag[2]).toEqual({ id: 'hale-longsword', count: 1 });
   });
 });
 
@@ -335,7 +356,7 @@ describe('the Warden on its throne, and the swords', () => {
       'below offered': [false, 'plain', true],
       'below under way': [true, 'plain', true],
       'Warden beaten': [false, 'plain', true],
-      'chain done': [false, 'hale', false],
+      'chain done': [false, 'plain', false],
     });
   });
 
@@ -345,7 +366,7 @@ describe('the Warden on its throne, and the swords', () => {
     const reloaded = new AdventureState(state.snapshot());
     expect(answers(reloaded)).toEqual([false, 'plain', true]);
     play(reloaded, HAND_IN);
-    expect(answers(new AdventureState(reloaded.snapshot()))).toEqual([false, 'hale', false]);
+    expect(answers(new AdventureState(reloaded.snapshot()))).toEqual([false, 'plain', false]);
   });
 
   it('keeps the Warden seated across a reload while the quest is under way', () => {
@@ -423,6 +444,7 @@ describe('after the chain', () => {
       marker: null,
       line: "Oakvale's safe, thanks to you. There's more of the world south through the pass: Brackenmoor, and the roads beyond it.",
       buttons: ['goodbye'],
+      picks: [],
     });
   });
 
@@ -504,6 +526,8 @@ describe('the plain route', () => {
       Warden: [910, 4],
       'last hand-in': [1000, 5],
     });
+    // Hale's old longsword, picked into the bag and worn from there.
+    state.inventory.move({ in: 'bag', slot: 2 }, { in: 'gear', slot: 'mainHand' });
     expect(state.sword).toBe('hale');
     expect(state.stats.damage).toBeCloseTo(2.0, 9);
   });

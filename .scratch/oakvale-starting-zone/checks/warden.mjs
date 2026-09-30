@@ -12,9 +12,10 @@
 //    antechamber and in the gate.
 // 2. Step through the gate and it rises; while it's up only two may swing at
 //    you. Walk back out and it walks back to its throne whole and sits again.
-// 3. Beat it: "Return to Marshal Hale". Hand in to Hale: 300 XP, level 5,
-//    Hale's longsword in your hand (2.0 damage), gone from Hale's hip, Hale
-//    pointing you to Brackenmoor with no marker.
+// 3. Beat it: "Return to Marshal Hale". Hand in to Hale, picking Hale's
+//    longsword into the bag (inventory ticket 12) and wearing it from there:
+//    300 XP, level 5, the longsword in your hand (2.0 damage), gone from
+//    Hale's hip, Hale pointing you to Brackenmoor with no marker.
 // 4. A reload: the longsword still in your hand, Hale without it, and in
 //    the hall an empty throne.
 //
@@ -124,7 +125,7 @@ const look = () =>
       melee: adventure.camps.meleeTokens.max,
       onThrone: state.wardenSeated,
       beaten: state.wardenBeaten,
-      tracker: state.tracker,
+      tracker: state.tracker.at(-1) ?? null,
       hale: state.hale,
       level: state.level,
       xp: state.xp,
@@ -260,7 +261,12 @@ await page.evaluate(() => {
 await step(1);
 check((await look()).atHip, "Hale's sword still at their hip before the hand-in");
 await shot('27-hale-before-the-hand-in');
-await page.evaluate(() => window.__descent.adventure.apply({ kind: 'handIn' }, window.__descent.adventure.hale.position));
+await page.evaluate(() => {
+  const { adventure, state } = window.__descent;
+  adventure.apply({ kind: 'handIn', pick: 'hale-longsword' }, adventure.hale.position);
+  const slot = state.inventory.bag.findIndex((s) => s?.id === 'hale-longsword');
+  adventure.applyThings(state.inventory.move({ in: 'bag', slot }, { in: 'gear', slot: 'mainHand' }), adventure.hale.position);
+});
 await step(0.5);
 s = await look();
 check(s.level === 5 && s.xp === 1000 && s.hale.marker === null, `300 XP: level 5, and no marker over Hale (${s.level}, ${s.xp})`);

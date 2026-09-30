@@ -42,7 +42,7 @@
 //     seated from the gate, rising as you step through it, fought until it
 //     falls; "Return to Marshal Hale", its arrow hidden in the mine.
 //  6. A reload: the Warden stays beaten (an empty throne in its hall).
-//  7. The hand-in: level 5 at 1,000 XP, the longsword in your hand, gone from
+//  7. The hand-in: level 5 at 1,000 XP, the longsword picked and worn, gone from
 //     Hale's hip, Hale pointing south to Brackenmoor, the tracker gone.
 //  8. The run south over the crest: the zone changes 2 m past it,
 //     "Brackenmoor" floats up and a save is written there; the road ends at
@@ -305,6 +305,17 @@ function install() {
     // Pressed if it did something: the board folded, or Hale moved the chain on.
     return `${adventure.board.isOpen} ${JSON.stringify(adventure.state.hale)}` !== was;
   };
+  /**
+   * A hand-in's pick `i` taken off Hale's board into the bag's first empty
+   * slot, as a carry lets it go there (the fist's carry itself is
+   * .scratch/inventory/checks/hand-in-picks.mjs's).
+   */
+  const pick = (i) => {
+    const { board } = adventure;
+    if (!board.isOpen || !board.picks[i]) return false;
+    const slot = adventure.state.inventory.bag.findIndex((b) => !b);
+    return adventure.picks.take(i, { in: 'bag', slot }) === null;
+  };
   /** A fist onto a point in the world. */
   const touch = (p, hand = 'left') => {
     for (let i = 0; i < 8; i++) {
@@ -343,7 +354,7 @@ function install() {
     writes.push({ z: record.position.z, interior: record.interior });
     return write(record);
   };
-  window.__play = { hold, tick, wait, face, fight, press, touch, turn, down, head, tally, drops, writes };
+  window.__play = { hold, tick, wait, face, fight, press, pick, touch, turn, down, head, tally, drops, writes };
 }
 
 /** Load the Adventure (`query` added), enter VR and pause it, with the script's hands on. */
@@ -440,6 +451,14 @@ async function talk(button, hand = 'right') {
   const pressed = await page.evaluate(([b, h]) => window.__play.press(b, h), [button, hand]);
   await page.evaluate(() => window.__play.wait(0.3));
   return pressed;
+}
+/** Walk up to Hale and carry pick `i` of the hand-in off their board into the bag. */
+async function handIn(i = 0) {
+  await byHale(5);
+  await byHale(1.9);
+  const taken = await page.evaluate((i) => window.__play.pick(i), i);
+  await page.evaluate(() => window.__play.wait(0.3));
+  return taken;
 }
 /** Stand at (lx, lz) in the mine mouth's frame (x across, z out of the hill), facing (tx, tz) in it. */
 async function inMine(lx, lz, tx, tz) {
@@ -612,7 +631,7 @@ let s = await look();
   check(s.hp === s.maxHp, `out of the fight, your health comes back (${Math.round(s.hp)}/${s.maxHp})`);
 
   const xpBefore = s.xp;
-  check(await talk('handIn'), '"Hand in" at Hale');
+  check(await handIn(), 'a pick carried off Hale\'s board hands it in');
   s = await look();
   const words = await floats();
   check(s.level === 2 && s.xp === xpBefore + 80, `handed in: +80 XP, level 2 at ${s.xp} XP`);
@@ -668,7 +687,7 @@ let s = await look();
   s = await look();
   check(s.tracker?.join(' | ') === 'The Lumber Camp | Return to Marshal Hale' && s.marker === 'ready', `the orders taken with the left fist: "Return to Marshal Hale" (${s.tracker?.join(' | ')})`);
   await page.evaluate(() => window.__play.wait(16));
-  check(await talk('handIn'), '"Hand in" at Hale');
+  check(await handIn(), 'a pick carried off Hale\'s board hands it in');
   s = await look();
   check(s.level === 3, `handed in: level 3 at ${s.xp} XP`);
   await page.evaluate(() => window.__play.wait(1)); // the board takes a press 0.4 s after it changes
@@ -827,7 +846,14 @@ let s = await look();
   await page.evaluate(() => window.__descent.world.settle(null));
   await byHale(4);
   check((await look()).atHip, "Hale's sword at their hip before the hand-in");
-  check(await talk('handIn'), '"Hand in" What Lies Below');
+  check(await handIn(0), "Hale's longsword carried off their board hands in What Lies Below");
+  // Worn from the bag.
+  await page.evaluate(() => {
+    const { adventure, state } = window.__descent;
+    const slot = state.inventory.bag.findIndex((b) => b?.id === 'hale-longsword');
+    adventure.applyThings(state.inventory.move({ in: 'bag', slot }, { in: 'gear', slot: 'mainHand' }), adventure.hale.position);
+    window.__play.wait(0.2);
+  });
   s = await look();
   check(s.level === 5 && s.xp === 1000 && s.sword === 'hale' && s.inHand === 'hale' && Math.abs(s.damage - 2) < 1e-9, `level 5 at 1,000 XP, Hale's longsword in your hand (${s.inHand}, ${s.damage.toFixed(2)} damage)`);
   check(!s.atHip && s.marker === null && s.line.includes('Brackenmoor') && s.line.includes('south'), `gone from Hale's hip; no marker; Hale points south to Brackenmoor`);
