@@ -105,12 +105,47 @@ class Caster {
   }
 }
 
-/** A wand or a staff, `length` m out of the fist, with a stone at its tip in the main hand's colour. */
-function buildWand(length: number): Mesh {
-  const staff = length > 0.5;
+/**
+ * How a wand or staff is drawn, by its item's model: one shaft, a wand's or
+ * a staff's length (`CONFIG.mage.tip`), in its own wood, with the stone at
+ * its tip in the main hand's colour. The Crypt-Warded Staff is bone-pale,
+ * ringed in dark iron, its stone caged.
+ */
+export interface WandLook {
+  readonly kind: 'wand' | 'staff';
+  readonly shaft: number;
+  /** Rings round the shaft, and the cage round the stone, if any. */
+  readonly iron?: number;
+}
+
+export const WAND_LOOKS: Readonly<Record<string, WandLook>> = {
+  // The mage's starting wand, as the mage prototype had it.
+  wand: { kind: 'wand', shaft: 0x3a2a20 },
+  staff: { kind: 'staff', shaft: 0x3a2a20 },
+  // Loot's, white, green and blue: pale birch, red rowan, blue-grey moonwood.
+  'birch-wand': { kind: 'wand', shaft: 0xd8d0c0 },
+  'rowan-staff': { kind: 'staff', shaft: 0x7a3a2a },
+  'moonwood-staff': { kind: 'staff', shaft: 0x4a5a8a, iron: 0xc8d0e0 },
+  // Hale's pick for a mage at What Lies Below.
+  'crypt-staff': { kind: 'staff', shaft: 0xd8d0b8, iron: 0x2a2a30 },
+};
+
+/** The look of a main-hand weapon of `model`: a model this table doesn't know draws as the starting wand. */
+export const wandLookOf = (model: string): WandLook => WAND_LOOKS[model] ?? WAND_LOOKS.wand;
+
+/** A wand or staff of `look`, `length` m out of the fist, with a stone at its tip in the main hand's colour. */
+function buildWand(look: WandLook, length: number): Mesh {
+  const staff = look.kind === 'staff';
   const kit = new ModelBuilder(7)
-    .cyl(staff ? 0.012 : 0.008, staff ? 0.016 : 0.012, length + (staff ? 0.3 : 0), 6, { at: [0, 0, -length / 2 + (staff ? 0.15 : 0.06)], rot: [Math.PI / 2, 0, 0], color: 0x3a2a20 })
+    .cyl(staff ? 0.012 : 0.008, staff ? 0.016 : 0.012, length + (staff ? 0.3 : 0), 6, { at: [0, 0, -length / 2 + (staff ? 0.15 : 0.06)], rot: [Math.PI / 2, 0, 0], color: look.shaft })
     .ball(staff ? 0.03 : 0.018, { at: [0, 0, -length], color: COLOUR.right, glow: 1 });
+  if (look.iron !== undefined) {
+    for (const z of [0.25, 0.55]) kit.cyl(0.02, 0.02, 0.025, 6, { at: [0, 0, -length * z], rot: [Math.PI / 2, 0, 0], color: look.iron });
+    for (const a of [0, 1, 2]) {
+      const t = (a * 2 * Math.PI) / 3;
+      kit.bar([0, 0, -length + 0.05], [Math.cos(t) * 0.038, Math.sin(t) * 0.038, -length - 0.01], 0.008, 0.008, { color: look.iron });
+    }
+  }
   return new Mesh(kit.build(), sharedModelMaterial());
 }
 
@@ -156,15 +191,15 @@ export class MageHands {
     this.dress('wand', true);
   }
 
-  /** What you wear: the main hand's weapon (its look: a wand, a staff; null for none) and whether a focus is in the off hand. */
-  dress(look: string | null, focus: boolean): void {
+  /** What you wear: the main hand's weapon (its item's model, looked up in WAND_LOOKS; null for none) and whether a focus is in the off hand. */
+  dress(model: string | null, focus: boolean): void {
     this.focusWorn = focus;
-    if (look === this.wandLook) return;
+    if (model === this.wandLook) return;
     this.wand?.removeFromParent();
-    this.wandLook = look;
-    const T = CONFIG.mage.tip;
-    const length = look === null ? 0 : look === 'staff' ? T.staff : T.wand;
-    this.wand = look === null ? null : buildWand(length);
+    this.wandLook = model;
+    const look = model === null ? null : wandLookOf(model);
+    const length = look === null ? 0 : CONFIG.mage.tip[look.kind];
+    this.wand = look === null ? null : buildWand(look, length);
     this.tip.set(0, 0, -length);
   }
 

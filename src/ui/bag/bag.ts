@@ -97,6 +97,8 @@ export interface BagWorld {
   drop(stack: Stack, at: Vector3, velocity: Vector3): void;
   /** Your talents and gesture slots, for the Talents tab's page; without them it says there are none. */
   readonly talents?: TalentActs;
+  /** The hip slot of the belt at `at`, if any: a potion let go there goes onto the belt. */
+  beltAt?(at: Vector3): number | null;
 }
 
 /**
@@ -224,6 +226,8 @@ export class Bag {
   private readonly track: Record<Handedness, HandTrack> = { left: newTrack(), right: newTrack() };
   /** What's carried, from where: `page` is the page it was on, of the panel it was on. */
   private carry: { from: From; page: Page | number; spot: Spot | null; stack: Stack; probe: number; hand: Handedness } | null = null;
+  /** The hip slot a carried item is over, off the panels, and whether it may go there: for the belt to light. */
+  beltTarget: { slot: number; fits: boolean } | null = null;
   private lastHover: Spot | null = null;
   /** The shelf's item touched last frame, to buzz only as a probe arrives on one. */
   private lastShelfHover: number | null = null;
@@ -323,6 +327,7 @@ export class Bag {
 
   private cancel(): void {
     this.carry = null;
+    this.beltTarget = null;
     this.held.visible = false;
   }
 
@@ -560,9 +565,10 @@ export class Bag {
     this.held.visible = true;
     const target = this.targetAt(probe.at, carry.stack.id);
     const { from, spot } = carry;
-    const lifted = spot && (spot.in === 'gear' || carry.page === this.pageOf(spot)) ? spot : null;
+    const lifted = spot && (spot.in === 'gear' || spot.in === 'belt' || carry.page === this.pageOf(spot)) ? spot : null;
     shows.lifted = lifted;
     shows.card = carry.stack;
+    this.beltTarget = null;
     const trade = this.beside?.trade;
     if (trade && from.in !== 'shelf') return this.trading(input, trade, from, target, lifted, shows);
     // A ware whose board has gone goes back there.
@@ -570,7 +576,12 @@ export class Bag {
       this.cancel();
       return shows;
     }
-    const to = target && this.where(target);
+    // Off the panels, over a hip: onto the belt (a pick on Hale's board goes only into the bag).
+    const R = CONFIG.bag.release;
+    const hip =
+      from.in !== 'shelf' && !target && !this.panel.over(probe.at, R) && !this.beside?.over(probe.at, R) ? (world.beltAt?.(probe.at) ?? null) : null;
+    const to: Where | null = target ? this.where(target) : hip !== null ? { in: 'belt', slot: hip } : null;
+    this.beltTarget = hip !== null && from.in !== 'shelf' ? { slot: hip, fits: inventory.check(from, { in: 'belt', slot: hip }) === null } : null;
     shows.cardOver = target ?? lifted;
     const refusal = (to: Where) => (from.in === 'shelf' ? shelf!.check(from.index, to) : inventory.check(from, to));
     shows.target = target && { spot: target, fits: !!to && refusal(to) === null };
@@ -770,5 +781,6 @@ const same = (a: Where, b: Where) => a.in === b.in && (a.in === 'ground' || (b.i
 function label(where: Where): string {
   if (where.in === 'ground') return 'the ground';
   if (where.in === 'gear') return where.slot;
+  if (where.in === 'belt') return where.slot === 0 ? 'the left hip' : 'the right hip';
   return `${where.in} ${where.slot + 1}`;
 }

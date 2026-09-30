@@ -381,8 +381,9 @@ export class AdventureState {
       if (!kept) continue;
       h.stage = kept.stage;
       h.taken = kept.taken ?? 0;
-      // A record from before hand-ins had picks was paid what the quest paid then (What Lies Below's longsword).
-      h.picked = typeof kept.picked === 'string' ? kept.picked : h.quest.paid;
+      // A warrior's record from before hand-ins had picks was paid what the quest paid then (What Lies Below's
+      // longsword); a ranger's or mage's took nothing that was theirs, so Hale keeps his sword at his hip.
+      h.picked = typeof kept.picked === 'string' ? kept.picked : this.class === 'warrior' ? h.quest.paid : undefined;
       h.quest.objectives.forEach((o, k) => (h.counts[k] = Math.max(0, Math.min(o.need, Math.floor(kept.counts[k] ?? 0)))));
     }
     // In the chains' order, so a chain opened by an earlier one's quest sees it as it now stands.

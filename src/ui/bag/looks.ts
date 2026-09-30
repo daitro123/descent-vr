@@ -15,6 +15,7 @@ export type Look =
   | 'sword'
   | 'bow'
   | 'wand'
+  | 'staff'
   | 'shield'
   | 'quiver'
   | 'focus'
@@ -58,7 +59,20 @@ const MODELS: Readonly<Record<string, ItemLook>> = {
   'marshals-cap': { look: 'helm', tint: 0x3a4a6a },
   'wardens-mantle': { look: 'chest', tint: 0x2a3a6a },
   'hunting-bow': { look: 'bow', tint: 0x4a2a18 },
-  'crypt-staff': { look: 'wand', tint: 0x3a6a8a },
+  'crypt-staff': { look: 'staff', tint: 0xd8d0b8 },
+  // The ranger's and mage's loot, white, green and blue (items.ts, LOOT_HANDS).
+  'ash-bow': { look: 'bow', tint: 0xc8a878 },
+  'yew-bow': { look: 'bow', tint: 0x9a4a2a },
+  'horn-bow': { look: 'bow', tint: 0x3a3440 },
+  'hide-quiver': { look: 'quiver', tint: 0x9a7a5a },
+  'tooled-quiver': { look: 'quiver', tint: 0x6a4020 },
+  'moonhide-quiver': { look: 'quiver', tint: 0x3a4460 },
+  'birch-wand': { look: 'wand', tint: 0xd8d0c0 },
+  'rowan-staff': { look: 'staff', tint: 0x7a3a2a },
+  'moonwood-staff': { look: 'staff', tint: 0x4a5a8a },
+  'quartz-focus': { look: 'focus', tint: 0xe0e8f0 },
+  'amethyst-focus': { look: 'focus', tint: 0x9a5ad0 },
+  'moonstone-focus': { look: 'focus', tint: 0x8ab0e8 },
   'flask-red': { look: 'flask', tint: 0xc02020 },
   scroll: { look: 'scroll', tint: 0xe8d8a8 },
   trinket: { look: 'trinket', tint: 0xc0a060 },
@@ -108,8 +122,17 @@ export function lookOf(item: ItemDef): ItemLook {
   }
 }
 
-/** What an empty gear slot shows, faintly, so you know what goes there. */
-const GHOST: Readonly<Record<GearSlot, Look>> = { mainHand: 'sword', offHand: 'shield', head: 'helm', chest: 'chest', hands: 'gloves', legs: 'legs', feet: 'boots' };
+/** What an empty gear or belt slot shows, faintly, so you know what goes there. */
+const GHOST: Readonly<Record<GearSlot | 'belt', Look>> = {
+  mainHand: 'sword',
+  offHand: 'shield',
+  head: 'helm',
+  chest: 'chest',
+  hands: 'gloves',
+  legs: 'legs',
+  feet: 'boots',
+  belt: 'flask',
+};
 
 /** The atlas is CELLS × CELLS icons of CELL pixels. */
 const CELLS = 10;
@@ -120,8 +143,10 @@ export const EMPTY_CELL = 0;
 export const BLANK_CELL = 1;
 const DIGIT_CELL = 2;
 const GHOST_CELL = DIGIT_CELL + 10;
-const GHOST_SLOTS = Object.keys(GHOST) as GearSlot[];
+const GHOST_SLOTS = Object.keys(GHOST) as (GearSlot | 'belt')[];
 const FIRST_ITEM_CELL = GHOST_CELL + GHOST_SLOTS.length;
+/** How many looks the atlas has cells for; past that, a look shares its shape's first cell. */
+export const ITEM_CELLS = CELLS * CELLS - FIRST_ITEM_CELL;
 
 function hex(c: number, k = 1): string {
   const r = Math.min(255, Math.round(((c >> 16) & 255) * k));
@@ -181,8 +206,8 @@ export class IconAtlas {
     return cell;
   }
 
-  /** The cell of an empty gear slot's faint outline. */
-  ghostOf(slot: GearSlot): number {
+  /** The cell of an empty gear or belt slot's faint outline. */
+  ghostOf(slot: GearSlot | 'belt'): number {
     return GHOST_CELL + GHOST_SLOTS.indexOf(slot);
   }
 
@@ -290,6 +315,15 @@ function drawIcon(c: CanvasRenderingContext2D, look: Look, tint: number): void {
       c.rotate(Math.PI / 4);
       fill(hex(tint), () => c.rect(-0.04, -0.34, 0.08, 0.72));
       fill('#9ae0ff', () => c.arc(0, -0.38, 0.09, 0, Math.PI * 2));
+      c.restore();
+      break;
+    case 'staff':
+      c.save();
+      c.translate(0.5, 0.5);
+      c.rotate(Math.PI / 4);
+      fill(hex(tint), () => c.rect(-0.035, -0.36, 0.07, 0.82));
+      fill(hex(tint, 0.6), () => c.rect(-0.07, -0.34, 0.14, 0.05));
+      fill('#9ae0ff', () => c.arc(0, -0.42, 0.08, 0, Math.PI * 2));
       c.restore();
       break;
     case 'shield':
@@ -531,6 +565,11 @@ function buildModel(look: Look, tint: number): BufferGeometry {
     case 'wand':
       m.cyl(0.025, 0.035, 0.7, 6, { at: [0, -0.05, 0], color: tint });
       m.ball(0.07, { at: [0, 0.34, 0], color: 0x9ae0ff, glow: 0.5 }, 1);
+      break;
+    case 'staff':
+      m.cyl(0.022, 0.03, 0.95, 6, { at: [0, -0.05, 0], color: tint });
+      m.cyl(0.04, 0.04, 0.05, 6, { at: [0, 0.38, 0], color: tint });
+      m.ball(0.06, { at: [0, 0.46, 0], color: 0x9ae0ff, glow: 0.5 }, 1);
       break;
     case 'shield':
       m.taper(0.36, 0.06, 0.72, 0.06, 0.4, { at: [0, -0.15, 0], color: tint });

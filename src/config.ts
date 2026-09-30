@@ -664,10 +664,28 @@ export const CONFIG = {
     },
   },
 
-  // The belt at your hips (inventory.ts).
+  // The belt at your hips (inventory.ts, player/belt.ts), promoted from the belt prototype's variant (a):
+  // the weapon in the hand that takes a flask fades out until the flask is drunk or put back.
   belt: {
     slots: 2, // the left hip's, then the right's
     cooldown: 60, // s every potion on the belt dims for after you drink any of them
+    // Where the belt hangs (player/beltZones.ts): from a neck point below and behind the eyes, so looking
+    // down doesn't move it, turning with you only once you've looked `yawDeadzone` (rad) away.
+    neck: { below: 0.1, behind: 0.08 }, // m
+    hip: { down: 0.6, side: 0.19, ahead: 0.12 }, // m from the neck to each hip slot
+    yawDeadzone: 0.5, // rad, about 30°
+    near: 0.12, // m: a hand this close to a slot makes it glow and tick, and its grip takes the flask
+    mouth: { below: 0.13, ahead: 0.1 }, // m from the eyes, turning and nodding with your head
+    mouthRadius: 0.15, // m: hold the flask this close to the mouth…
+    drinkTime: 0.7, // s …for this long to drink it…
+    maxHandSpeed: 1.0, // m/s …with the hand no faster than this: faster, the drink waits rather than cancels
+    fade: 0.15, // s the weapon takes to fade out of the hand, and back in
+    buzz: {
+      tick: { intensity: 0.3, ms: 20 }, // a hand arriving at a flask
+      take: { intensity: 0.5, ms: 40 },
+      drink: { intensity: 0.15, ms: 100, every: 0.09 }, // steady, while at the mouth
+      gulp: { intensity: 0.9, ms: 120 },
+    },
   },
 
   // What a kill drops (loot.ts) and how it lies on the ground (world/drops.ts)
