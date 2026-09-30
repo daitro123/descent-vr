@@ -1,6 +1,7 @@
 import { Group, type Object3D, type PerspectiveCamera, Vector3, type WebGLRenderer } from 'three';
 import { type Ability, type Stats, statsAt } from '../adventureState';
 import { abilitiesOf, type ClassId, type Resource } from '../classes';
+import { costWith, lastsWith } from '../talents';
 import { AbilityClock } from '../combat/abilities';
 import { CONFIG } from '../config';
 import { sfx } from '../fx/sfx';
@@ -154,9 +155,19 @@ export class Player {
     return this.stats.resource;
   }
 
-  /** Has your level brought it? */
+  /** Has your level (or a talent) brought it? */
   can(ability: Ability): boolean {
     return this.stats.abilities.includes(ability);
+  }
+
+  /** What `ability` costs you, with your talents. */
+  costOf(ability: Ability): number {
+    return costWith(ability, this.stats.talents);
+  }
+
+  /** How long `ability`, lasting `base` s, lasts for you, with your talents. */
+  lastsOf(ability: Ability, base: number): number {
+    return lastsWith(ability, base, this.stats.talents);
   }
 
   /** Head position in world space. */

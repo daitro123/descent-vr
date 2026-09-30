@@ -316,6 +316,65 @@ describe('the leash', () => {
   });
 });
 
+describe("Mortal Strike's wound", () => {
+  const hooks: CampHooks = { sweep: () => null, slam: () => {}, shoot: () => {}, nock: () => {}, telegraph: () => {} };
+  const farm: CampPlan = { id: 'farm', place: { x: 0, z: 0, r: 8 }, level: 1, posts: [{ behaviour: 'grunt', family: 'bandit', x: 0, z: 0, yaw: 0 }] };
+  const NO_HEAL = CONFIG.talents.trees.warrior.arms.mortalStrike.noHeal;
+
+  it('keeps an enemy from healing as it walks home, and it heals at its post once the wound ends', () => {
+    const camps = new Camps([farm], flatGround, hooks);
+    const you: You = { feet: new Vector3(0, 0, -5), head: new Vector3(0, 1.6, -5), sword: null, alive: true, interior: null };
+    const tick = () => camps.update(DT, you);
+    const member = camps.camps[0].members[0];
+    const enemy = member.enemy;
+    enemy.takeHit(enemy.maxHp / 2, new Vector3());
+    enemy.wound(NO_HEAL);
+    tick();
+    you.interior = 'inn';
+    let t = 0;
+    for (; t < 40 && member.mind !== 'idle'; t += DT) tick();
+    expect(member.mind).toBe('idle');
+    expect(t).toBeLessThan(NO_HEAL);
+    expect(enemy.hp).toBeLessThan(enemy.maxHp);
+    for (; t < NO_HEAL + 0.5; t += DT) tick();
+    expect(enemy.hp).toBe(enemy.maxHp);
+  });
+
+  it('heals one home whole as before, with no wound', () => {
+    const camps = new Camps([farm], flatGround, hooks);
+    const you: You = { feet: new Vector3(0, 0, -5), head: new Vector3(0, 1.6, -5), sword: null, alive: true, interior: null };
+    const member = camps.camps[0].members[0];
+    member.enemy.takeHit(member.enemy.maxHp / 2, new Vector3());
+    camps.update(DT, you);
+    you.interior = 'inn';
+    for (let t = 0; t < 40 && member.mind !== 'idle'; t += DT) camps.update(DT, you);
+    expect(member.enemy.hp).toBe(member.enemy.maxHp);
+  });
+});
+
+describe("Shield Slam's stun", () => {
+  it('holds even a brute fresh out of a stagger, which a plain blow no longer staggers, for 3 s', () => {
+    const ctx = context(1.2);
+    const e = ready('brute', ctx);
+    e.stagger(0.3);
+    step(ctx, [e], 0.4);
+    expect(e.state).not.toBe('stagger');
+    // Steady now: a heavy blow doesn't stagger it…
+    e.takeHit(e.def.poise + 1, new Vector3());
+    expect(e.state).not.toBe('stagger');
+    // …but the slam's stun does, and it's exposed while it lasts.
+    const { stun } = CONFIG.talents.trees.warrior.protection.shieldSlam;
+    e.stagger(stun);
+    e.expose(stun);
+    expect(e.state).toBe('stagger');
+    step(ctx, [e], stun - 0.2);
+    expect(e.state).toBe('stagger');
+    expect(e.exposed).toBeGreaterThan(0);
+    step(ctx, [e], 0.4);
+    expect(e.state).not.toBe('stagger');
+  });
+});
+
 describe('the looks', () => {
   it('tint a frozen or slowed enemy on its own material, adding nothing to draw', () => {
     const ctx = context(8);

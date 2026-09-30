@@ -14,7 +14,7 @@ import { GRADES, NO_PROFESSIONS, type ProfessionsSave } from '../professions/pro
 // "Characters and the save").
 
 /** A character's record's version: bump it, and add a migration from the one before, whenever its shape changes. */
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 
 /** Every building and the mine you can be inside. */
 export const INTERIORS = ['inn', 'house', 'mine'] as const;
@@ -83,6 +83,9 @@ export interface Migration {
  * 3 → 4, the roster (.scratch/abilities/spec.md, "Characters and the save"):
  * today's one character becomes the roster's first, a warrior named
  * "Warrior". The roster itself is its own record (`readRoster`).
+ *
+ * 4 → 5, talents (.scratch/abilities/issues/25-talents-and-the-warriors-trees.md):
+ * no points spent, so every point the levels brought is there to spend.
  */
 export const MIGRATIONS: readonly Migration[] = [
   {
@@ -94,6 +97,7 @@ export const MIGRATIONS: readonly Migration[] = [
   },
   { from: 2, up: (record) => ({ ...record, professions: NO_PROFESSIONS }) },
   { from: 3, up: (record) => ({ ...record, ...FIRST_CHARACTER }) },
+  { from: 4, up: (record) => ({ ...record, talents: {} }) },
 ];
 
 /** What was found where the save is kept. */
@@ -159,7 +163,12 @@ const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
 const isNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const isOneOf = <T>(list: readonly T[], v: unknown): v is T => list.includes(v as T);
 
-/** Does it hold everything a current record does, each of the right kind? Quests it doesn't hold start afresh. */
+/**
+ * Does it hold everything a current record does, each of the right kind?
+ * Quests it doesn't hold start afresh; talents and swaps are checked against
+ * the trees on load (adventureState.ts), so one this build doesn't know
+ * gives every point back rather than making the save unreadable.
+ */
 function isCurrent(r: OlderRecord): r is OlderRecord & SaveRecord {
   return (
     r.version === SAVE_VERSION &&
@@ -173,6 +182,9 @@ function isCurrent(r: OlderRecord): r is OlderRecord & SaveRecord {
     typeof r.wardenBeaten === 'boolean' &&
     isInventory(r.inventory) &&
     isProfessions(r.professions) &&
+    isObject(r.talents) &&
+    Object.values(r.talents).every(isNumber) &&
+    (r.placed === undefined || isObject(r.placed)) &&
     (r.position === null || (isObject(r.position) && isNumber(r.position.x) && isNumber(r.position.z))) &&
     isNumber(r.facing) &&
     (r.interior === null || isOneOf(INTERIORS, r.interior))

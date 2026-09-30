@@ -23,8 +23,12 @@ export type Route =
   | { kind: 'belt'; variant: BeltVariant; calm: boolean }
   /** `?bag` or `?bag=a|b|c`: PROTOTYPE of the bag and the gear panel, starting on that way to move items. */
   | { kind: 'bag'; variant: 'a' | 'b' | 'c' }
-  /** Anything else: Oakvale, with the save. `?newgame` asks to start over. */
-  | { kind: 'adventure'; newGame: boolean };
+  /**
+   * Anything else: Oakvale, with the save. `?newgame` asks to start over.
+   * `&cap=N` raises the top level to N (up to 20) for testing what comes past
+   * Oakvale's 5, talents' third tiers and the abilities at 6 to 10 among them.
+   */
+  | { kind: 'adventure'; newGame: boolean; cap?: number };
 
 /** PROTOTYPE: how the belt prototype takes a potion while both hands are full (see player/beltPrototype.ts). */
 export type BeltVariant = 'a' | 'b' | 'c';
@@ -83,5 +87,6 @@ function chooseRoute(params: URLSearchParams): Route {
     const v = params.get('bag')?.toLowerCase();
     return { kind: 'bag', variant: v === 'b' || v === 'c' ? v : 'a' };
   }
-  return { kind: 'adventure', newGame: params.has('newgame') };
+  const cap = Math.floor(Number(params.get('cap')));
+  return { kind: 'adventure', newGame: params.has('newgame'), ...(cap >= 1 ? { cap: Math.min(cap, CONFIG.levels.most) } : {}) };
 }

@@ -13,6 +13,11 @@ describe('reading the page from its URL', () => {
   it('asks to start the Adventure over at ?newgame, and nowhere else', () => {
     expect(readPage('?newgame').route).toEqual({ kind: 'adventure', newGame: true });
     expect(readPage('?newgame&perf').route).toEqual({ kind: 'adventure', newGame: true });
+    // `&cap=N` raises the top level for testing, up to 20.
+    expect(readPage('?cap=10').route).toEqual({ kind: 'adventure', newGame: false, cap: 10 });
+    expect(readPage('?cap=99').route).toEqual({ kind: 'adventure', newGame: false, cap: 20 });
+    expect(readPage('?cap=0').route).toEqual({ kind: 'adventure', newGame: false });
+    expect(readPage('?cap=x').route).toEqual({ kind: 'adventure', newGame: false });
     // The arena and walking a map never touch the save.
     expect(readPage('?arena&newgame').route).toMatchObject({ kind: 'arena' });
     expect(readPage('?map=forest&newgame').route).toEqual({ kind: 'walk', map: 'forest' });

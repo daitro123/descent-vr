@@ -31,6 +31,8 @@ import {
 } from './layout';
 import { BLANK_CELL, EMPTY_CELL, type IconAtlas, lookOf, RARITY_COLOUR } from './looks';
 import { cardKey, paintCard, SlotMeshes } from './pieces';
+import { buttonAt, buttonXY, pageKey, paintPage, type TalentActs, type TalentButton } from './talentPage';
+import type { Shape } from '../../classes';
 
 // The bag panel in the Adventure, promoted from the bag prototype's variant A
 // (ui/bag-prototype/panel.ts): it comes round when you reach for the bag.
@@ -57,9 +59,11 @@ export interface PanelShows {
   cardOver: Spot | null;
   /** The tab a fist or the tip is on. */
   tab: Page | null;
+  /** The talent page's button a fist or the tip is on. */
+  button: TalentButton | null;
 }
 
-export const nothingShown = (): PanelShows => ({ hover: null, lifted: null, target: null, card: null, cardOver: null, tab: null });
+export const nothingShown = (): PanelShows => ({ hover: null, lifted: null, target: null, card: null, cardOver: null, tab: null, button: null });
 
 const C = {
   empty: new Color(0x3a2a1a),
@@ -87,10 +91,14 @@ export class BagPanel {
   private drawnLifted: Spot | null = null;
   private drawnPage: Page | null = null;
   page: Page = 'bag';
+  /** The shape pressed first on the talent page, waiting for a second to swap with. */
+  picked: Shape | null = null;
 
   constructor(
     private readonly inventory: Inventory,
     private readonly atlas: IconAtlas,
+    /** Your talents and gesture slots, for the talent page: without them it says there are none. */
+    private readonly talents: TalentActs | null = null,
   ) {
     this.root.name = 'bag-panel';
     this.root.visible = false;
@@ -162,6 +170,7 @@ export class BagPanel {
   close(): void {
     this.open = false;
     this.root.visible = false;
+    this.picked = null;
   }
 
   /**
@@ -193,6 +202,12 @@ export class BagPanel {
 
   setPage(page: Page): void {
     this.page = page;
+    this.picked = null;
+  }
+
+  /** Is the talent page showing, with talents to show? It takes the whole board. */
+  private get talentPage(): TalentActs | null {
+    return this.page === 'talents' ? this.talents : null;
   }
 
   /** The place in your things a slot of the panel is: the talent page's grid is none. */
@@ -219,9 +234,21 @@ export class BagPanel {
     return this.page !== 'talents';
   }
 
-  /** The slot `world` touches, if any. */
+  /** The slot `world` touches, if any: none on the talent page. */
   spotAt(world: Vector3, reach: Reach): BagSpot | null {
-    return this.open ? spotAt(this.toLocal(world), reach, this.grid) : null;
+    return this.open && !this.talentPage ? spotAt(this.toLocal(world), reach, this.grid) : null;
+  }
+
+  /** The talent page's button `world` touches, if any. */
+  buttonAt(world: Vector3, reach: Reach): TalentButton | null {
+    const talents = this.open ? this.talentPage : null;
+    return talents ? buttonAt(this.toLocal(world), reach, talents.state.class) : null;
+  }
+
+  /** The world point just off a talent page button's face, or null for one the page doesn't have. */
+  buttonWorld(button: TalentButton, out: Vector3, off = 0.02): Vector3 | null {
+    const at = this.talents && buttonXY(button, this.talents.state.class);
+    return at ? this.root.localToWorld(out.set(at[0], at[1], off)) : null;
   }
 
   /** The tab `world` touches, if any. */
@@ -241,7 +268,7 @@ export class BagPanel {
    * eye, not by the hand.
    */
   targetAt(world: Vector3, id: ItemId, reach: Reach & { near: number }): BagSpot | null {
-    if (!this.open) return null;
+    if (!this.open || this.talentPage) return null;
     const l = this.toLocal(world);
     const spot = spotAt(l, reach, this.grid);
     if (spot) return spot;
@@ -297,8 +324,9 @@ export class BagPanel {
       this.slots.colour(i, _c);
     });
     this.slots.coloured();
-    this.slots.shown = this.grid ? SPOTS.length : SPOTS.length - CONFIG.bag.slots;
-    this.paintBoard(shows.tab);
+    this.slots.shown = this.talentPage ? 0 : this.grid ? SPOTS.length : SPOTS.length - CONFIG.bag.slots;
+    this.slots.icons.visible = this.figure.visible = !this.talentPage;
+    this.paintBoard(shows.tab, shows.button);
     this.showCard(shows.card, shows.cardOver);
     void dt;
   }
@@ -357,11 +385,14 @@ export class BagPanel {
     this.figure.geometry = m.build();
   }
 
-  /** The board: its ground, the page tabs (yours lit), your coins, and what the talent page says. */
-  private paintBoard(lit: Page | null): void {
+  /** The board: its ground, the page tabs (yours lit), and your coins, or the talent page. */
+  private paintBoard(lit: Page | null, button: TalentButton | null): void {
     const coins = this.inventory.coins;
     const { page } = this;
-    this.board.paint(`${page}|${lit}|${coins}`, (c, w, h) => {
+    const talents = this.talentPage;
+    const shows = talents && { lit: button, picked: this.picked, fighting: talents.fighting() };
+    const talentKey = talents && shows ? pageKey(talents.state, shows) : '';
+    this.board.paint(`${page}|${lit}|${coins}|${talentKey}`, (c, w, h) => {
       const k = w / (BOARD.right - BOARD.left);
       const px = (x: number) => (x - BOARD.left) * k;
       const py = (y: number) => (BOARD.top - y) * k;
@@ -384,6 +415,10 @@ export class BagPanel {
         c.fillStyle = p === page ? '#ffd23a' : '#d8ccb0';
         c.fillText(PAGE_NAME[p], px(TABS.x[i]), py(TABS.y) + 1);
       });
+      if (talents && shows) {
+        paintPage(c, px, py, k, talents.state, shows);
+        return;
+      }
       // Your coins, under the slots.
       c.font = `bold ${Math.round(0.024 * k)}px ${FONT}`;
       const text = `${coins} ${coins === 1 ? 'coin' : 'coins'}`;

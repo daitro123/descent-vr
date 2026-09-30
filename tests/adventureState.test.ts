@@ -225,6 +225,7 @@ describe("Hale's old longsword", () => {
       wardenBeaten: true,
       inventory: startingInventory('warrior', { mainHand: 'hale-longsword' }),
       professions: NO_PROFESSIONS,
+      talents: {},
     });
     expect(state.stats.damage).toBeCloseTo(2.0, 9);
     expect(state.sword).toBe('hale');
