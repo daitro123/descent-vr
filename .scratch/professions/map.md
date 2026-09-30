@@ -31,6 +31,8 @@ A written **spec for professions**, ready to hand off as build tickets: **Mining
 
 <!-- one line per resolved ticket: [title](link): gist -->
 
+- [How VR games do gathering and crafting](issues/01-how-vr-games-do-gathering-and-crafting.md): borrow from A Township Tale (pick swings count by momentum, sparks grade each anvil strike); a good hand buys speed, not a different item; keep each job to a few strikes at waist-to-chest height; no menus, no simulated metal or liquids. Medium confidence: page fetches were blocked.
+
 ## Not yet specified
 
 - **Prices and coins:** what materials and crafted goods sell for, and what a trainer's recipes cost, once Inventory settles its coin economy and what the innkeeper's potions cost.
