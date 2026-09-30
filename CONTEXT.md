@@ -49,7 +49,7 @@ A run of quests where handing one in unlocks the next.
 _Avoid_: storyline, questline
 
 **Quest arrow**:
-The small arrow beside the objective you're working on that points the way to where it is, as the crow flies.
+The small arrow beside the objective you're working on that points the way to where it is, as the crow flies. With several quests under way, it's on the one you took most recently.
 _Avoid_: waypoint, compass, marker (a marker is the "!" or "?" over a quest giver)
 
 **Map board**:
@@ -61,7 +61,7 @@ Returning a finished quest to its quest giver, which completes it and pays its r
 _Avoid_: turn in, complete
 
 **Objective**:
-One thing a quest asks before it can be handed in: defeat enemies at a place, or find something and pick it up by hand.
+One thing a quest asks before it can be handed in: defeat enemies at a place, find something and pick it up by hand, gather from a kind of spot, or make a recipe.
 _Avoid_: task, goal, requirement
 
 **Behaviour**:

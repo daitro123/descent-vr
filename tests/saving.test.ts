@@ -79,8 +79,8 @@ describe("the adventure state's snapshot", () => {
       inventory: startingInventory('warrior'),
       quests: {
         raiders: { stage: 'handedIn', counts: [3] },
-        // The Lumber Camp's second count is its orders: taken.
-        lumber: { stage: 'active', counts: [1, 1] },
+        // The Lumber Camp's second count is its orders: taken. It's the first (and only) quest under way.
+        lumber: { stage: 'active', counts: [1, 1], taken: 1 },
         below: { stage: 'locked', counts: [0] },
       },
       wardenBeaten: false,
@@ -117,13 +117,13 @@ describe("the adventure state's snapshot", () => {
       },
     });
     expect(restored.xp).toBe(0);
-    expect(restored.tracker).toEqual({ title: 'Raiders in the Fields', lines: ['Bandits defeated at the farm: 2/3'] });
+    expect(restored.tracker).toEqual([{ title: 'Raiders in the Fields', lines: ['Bandits defeated at the farm: 2/3'] }]);
     restored.apply(FARM);
     restored.apply(HAND_IN);
     // The Lumber Camp is offered afresh, as if the record had it locked.
     expect(restored.hale.marker).toBe('offered');
     restored.apply(ACCEPT);
-    expect(restored.tracker?.lines).toEqual(['Bandits defeated at the lumber camp: 0/5', "Leader's orders taken: 0/1"]);
+    expect(restored.tracker[0]?.lines).toEqual(['Bandits defeated at the lumber camp: 0/5', "Leader's orders taken: 0/1"]);
   });
 
   it('makes a quest ready whose objectives a new build asks less of', () => {

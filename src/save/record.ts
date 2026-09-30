@@ -159,5 +159,5 @@ const isSlots = (v: unknown): v is (Stack | null)[] =>
   Array.isArray(v) && v.every((s) => s === null || (isObject(s) && typeof s.id === 'string' && isNumber(s.count)));
 
 function isQuest(q: unknown): q is QuestProgress {
-  return isObject(q) && isOneOf(STAGES, q.stage) && Array.isArray(q.counts) && q.counts.every(isNumber);
+  return isObject(q) && isOneOf(STAGES, q.stage) && Array.isArray(q.counts) && q.counts.every(isNumber) && (q.taken === undefined || isNumber(q.taken));
 }
