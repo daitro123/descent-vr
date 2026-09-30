@@ -19,6 +19,8 @@ import { findMap } from './maps/registry';
 import type { Respawn, StartingZone, Zone } from './maps/types';
 import { Hale } from './people/hale';
 import { Villagers } from './people/villagers';
+import { type AlchemyBench, type Herbalist, standInHouse } from './professions/bench';
+import { PROFESSION_NAMES } from './professions/professions';
 import { Player } from './player/player';
 import { Run } from './player/run';
 import { SaveController } from './save/controller';
@@ -110,6 +112,9 @@ export class Adventure {
   readonly hale: Hale;
   /** The innkeeper, the smith and the farmer, at work. */
   readonly villagers: Villagers;
+  /** The alchemy bench in the house by the well, and the herbalist at its end; null in a zone without the house. */
+  readonly bench: AlchemyBench | null = null;
+  readonly herbalist: Herbalist | null = null;
   /** The wind, the birds in the trees and each place's sound where it is. */
   readonly ambience: Ambience;
   /** Hale's board, which unfolds as you walk up to them. */
@@ -297,6 +302,27 @@ export class Adventure {
     // The smith's hammer rings on the anvil with each blow of their work.
     this.ambience = new Ambience([zone, ...neighbours]);
     this.villagers.onStrike = () => this.ambience.strike('anvil');
+    // The alchemy bench and its herbalist hang from the house's room, drawn while it is.
+    const house = zone.interiors.find((i) => i.id === 'house');
+    if (house) {
+      const stood = standInHouse(
+        house,
+        {
+          player: this.player,
+          professions: this.state.professions,
+          inventory: this.state.inventory,
+          particles: this.particles,
+          apply: (effects, at) => this.applyMade(effects, at),
+          dress: () => this.dressHands(),
+        },
+        CONFIG.villagers.radius,
+      );
+      this.bench = stood.bench;
+      this.herbalist = stood.herbalist;
+      this.world.addBody(stood.body);
+      this.world.stageWith('house', stood.bench.root);
+      this.world.stageWith('house', stood.herbalist.root);
+    }
 
     // A new character at the zone's start, facing Hale; or where the save stood,
     // facing the same way, at full health and with no rage. A save made inside
@@ -371,6 +397,8 @@ export class Adventure {
     this.talk(dt);
     this.updateBag(dt);
     this.villagers.update(dt, you.head, this.state);
+    this.herbalist?.update(dt, you.head);
+    this.bench?.update(dt, this.fighting);
     this.pickUp();
     this.openChests(dt);
     this.updateHandIn(dt);
@@ -572,6 +600,12 @@ export class Adventure {
     this.show(effects, at, false);
   }
 
+  /** What a make at a station did: saved and shown at `at`, and what it made counted for your quests. */
+  private applyMade(effects: readonly Effect[], at: Vector3): void {
+    this.applyThings(effects, at);
+    for (const e of effects) if (e.kind === 'made') this.apply({ kind: 'made', recipe: e.recipe }, at);
+  }
+
   /**
    * Your hands show what you wear: the main hand's item is the sword you hold
    * (none, with it empty), the off hand's the shield on your arm, and gloves
@@ -675,6 +709,10 @@ export class Adventure {
           break;
         case 'coins':
           this.bag.changed();
+          break;
+        case 'proficiency':
+          // "+1 Alchemy", small and white where it was made, in the XP float's style.
+          this.floatOver(at, 0, `+${e.gained} ${PROFESSION_NAMES[e.profession]}`, { ...KILL_XP_FLOAT, color: '#ffffff', scale: 0.08, rise: 0.25 });
           break;
       }
     }

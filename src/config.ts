@@ -581,6 +581,27 @@ export const CONFIG = {
     },
   },
 
+  // The alchemy bench in the house by the well (professions/bench/), promoted
+  // from `?proto=brew` variant B: you drop the herbs, grind and stir; the bench
+  // tips the mortar and pours the pot. Its herbalist stands at its end.
+  alchemyBench: {
+    near: 1.3, // m from the bench's front (your head, over the floor), facing it and out of a fight: your hands go bare…
+    far: 2, // m: …until you step back past this, and your weapons come back
+    facing: 0.3, // how squarely you must face it to step up: the dot of your gaze with the way to it, over the floor
+    reach: 0.02, // m past a thing's own size a hand takes it from
+    back: 0.25, // s a thing you let go glides back to its place
+    drop: 0.1, // m from the mortar's mouth, over the floor, that a herb let go drops in
+    turns: { grind: 3, stir: 3 }, // full turns of the pestle, and of the spoon
+    pound: { fall: 0.6, share: 1 / 3 }, // m/s down onto the mortar's floor that counts as a pound, and the share of a turn it's worth
+    tip: 1.2, // s the bench takes to tip the mortar into the pot
+    pour: 2, // s it takes to pour the pot into the flask and cork it
+    stands: 3, // flask stands: brews wait corked on them until you take them or step away
+    herbs: 3, // of each herb laid out on the tray, as many as the bag holds
+    hip: { down: 0.7, aside: 0.2, within: 0.18 }, // a flask let go this near a hip (m below your head, m aside) goes on the belt there
+    buzz: { take: { intensity: 0.5, ms: 30 }, crunch: { intensity: 0.4, ms: 25 }, pound: { intensity: 0.8, ms: 40 }, stir: { intensity: 0.25, ms: 30 }, belt: { intensity: 0.6, ms: 50 }, nope: { intensity: 1, ms: 120 } },
+    herbalist: { reach: 1.2, tie: 2.4, hang: 1.4 }, // s: their work at the bench's end: reaching for a sprig, tying it into a bundle, holding it up to look
+  },
+
   // Marshal Hale at the crossroads (people/hale.ts).
   hale: {
     radius: 0.3, // m round them: they're solid, so you can't walk through them

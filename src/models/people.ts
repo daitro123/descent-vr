@@ -3,14 +3,14 @@ import { apron, BUILDS, body, cuffs, HUE, head, type Look, mail, pauldrons, roll
 import { PAL } from './palette';
 import { type DressContext, type Pose, Rig } from './rig';
 
-// Oakvale's friendly characters in the human body (human.ts): Marshal Hale and
-// the three villagers. Blue and gold are Hale's alone; villagers wear undyed
+// Oakvale's friendly characters in the human body (human.ts): Marshal Hale,
+// the three villagers and the herbalist at the alchemy bench. Blue and gold are Hale's alone; villagers wear undyed
 // linen, browns and ochre.
 
 const PI = Math.PI;
 
-/** Marshal Hale and the three villagers. */
-export type PersonId = 'hale' | 'innkeeper' | 'smith' | 'farmer';
+/** Marshal Hale, the three villagers and the herbalist. */
+export type PersonId = 'hale' | 'innkeeper' | 'smith' | 'farmer' | 'herbalist';
 
 export interface Person {
   label: string;
@@ -217,11 +217,61 @@ function dressFarmer(ctx: DressContext, l: Look): void {
   pitchfork(ctx);
 }
 
+const HERBALIST_LOOK: Look = {
+  build: 'average',
+  skin: HUE.skinFair,
+  hair: HUE.hairGrey,
+  hairStyle: 'tied',
+  shirt: HUE.linen,
+  forearm: 'skin',
+  trousers: HUE.linenDark,
+  boots: PAL.leatherDark,
+  belt: PAL.leather,
+};
+
+/** A bundle of Hearthleaf in the left hand, tied at the stems. */
+function herbs(ctx: DressContext): void {
+  ctx
+    .on('handL')
+    .box(0.02, 0.1, 0.02, { at: [0, -0.06, 0.02], color: HUE.strawDark })
+    .box(0.09, 0.08, 0.05, { at: [0, -0.14, 0.02], color: 0x5a9a3a, jitter: 0.12 })
+    .box(0.05, 0.05, 0.04, { at: [0.03, -0.18, 0.03], color: 0x4e8a34, jitter: 0.12 });
+}
+
+/**
+ * Grey hair tied back: undyed linen, rolled sleeves, a long apron stained green
+ * at the hem and a herb satchel on the right hip, a bundle of Hearthleaf in hand.
+ */
+function dressHerbalist(ctx: DressContext, l: Look): void {
+  body(ctx, l);
+  head(ctx, l);
+  rolledSleeves(ctx, l, HUE.linen);
+  apron(ctx, l, HUE.linenDark, true, 0.7);
+  // The apron's hem, green with the work.
+  ctx.on('hips').box(0.3, 0.12, 0.022, { at: [0, -0.6, 0.13], color: 0x5a7a3a, jitter: 0.1 });
+  // The satchel on its strap, from the left shoulder to the right hip.
+  const L = ctx.p.spine;
+  ctx.on('spine').box(0.04, L * 1.05, 0.02, { at: [0, L * 0.5, 0.125], rot: [0, 0, 0.55], color: PAL.leather });
+  ctx.on('hips').box(0.07, 0.16, 0.2, { at: [0.2, -0.08, 0.02], color: PAL.leather }).box(0.075, 0.06, 0.205, { at: [0.2, 0.02, 0.02], color: PAL.leatherDark });
+  herbs(ctx);
+}
+
+/** Holding a bundle of herbs up before the chest, the right hand at it. */
+const HERBS: Pose = {
+  ...STAND,
+  upperArmL: [-0.2, 0, 0.1],
+  forearmL: [-1.2, 0, 0],
+  handL: [0.3, 0, 0],
+  upperArmR: [-0.15, 0, -0.1],
+  forearmR: [-0.9, 0, 0],
+};
+
 export const PEOPLE: Record<PersonId, Person> = {
   hale: { label: 'Marshal Hale', look: HALE_LOOK, stand: HALE_STAND, dress: dressHale, seed: 5 },
   innkeeper: { label: 'Innkeeper', look: INNKEEPER_LOOK, stand: HOLDING, dress: dressInnkeeper, seed: 61 },
   smith: { label: 'Smith', look: SMITH_LOOK, stand: HOLDING, dress: dressSmith, seed: 62 },
   farmer: { label: 'Farmer', look: FARMER_LOOK, stand: FORK, dress: dressFarmer, seed: 63 },
+  herbalist: { label: 'Herbalist', look: HERBALIST_LOOK, stand: HERBS, dress: dressHerbalist, seed: 64 },
 };
 
 /** Hale's body, with their sword at the hip or, once `given` to you, without it. One draw call. */
