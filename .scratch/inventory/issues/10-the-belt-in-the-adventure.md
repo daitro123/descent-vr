@@ -28,9 +28,9 @@ Built on 2026-09-30 by Claude **on Tom's behalf** (he asked for the build ticket
 
 **Checks**
 
-- `npm run typecheck`, `npm test` (1040 passed after merging `main`, with the belt's zones and panel slots in `tests/belt.test.ts` and two new belt cases in `tests/inventory.test.ts`) and `npm run build` pass.
+- `npm run typecheck`, `npm test` (1057 passed after merging `main`, with the belt's zones and panel slots in `tests/belt.test.ts` and two new belt cases in `tests/inventory.test.ts`) and `npm run build` pass.
 - `checks/belt-adventure.mjs`, all 28 passed: three potions on a new character's right hip, both hips 70 cm below the eyes and 5 draws an eye; the hand at the hip glows it with one tick; the grip takes the flask, the sword fades out (0.42 opacity at 0.07 s, gone by 0.37 s) and can't hit, and nothing new compiles; pulled away after 0.3 s the drink is cancelled, and let go it goes back and the sword returns; against the lumber camp, fighting you, the drink lands at 0.71 s and health rises by exactly 40% of the maximum, with 7 steady buzzes and a strong one, and the right hip drunk empty refills with the bag's 4; every flask dims, a grip at one is refused, the ring redraws as it drains, and after 60 s they're bright; a reload keeps the belt and the cooldown's 30 s left; from the open bag, potions go onto the figure's left hip slot, more stack there when carried down to the real left hip, and a tunic carried there is refused.
-- `checks/belt.mjs` (the prototype), `checks/bag-adventure.mjs` and `checks/stash.mjs`: all passed. `oakvale-starting-zone/checks/saving.mjs` stops at step 4 reading the tracker's lines, on `main` too (before this build), since the quest givers' change reshaped the tracker; it isn't the belt's.
+- `checks/belt.mjs` (the prototype), `checks/bag-adventure.mjs`, `checks/stash.mjs` and `checks/hand-in-picks.mjs` (its frame index now counts the belt's two slots): all passed. `oakvale-starting-zone/checks/saving.mjs` stops at step 4 reading the tracker's lines, on `main` too (before this build), since the quest givers' change reshaped the tracker; it isn't the belt's.
 
 **Calls made on Tom's behalf**
 
