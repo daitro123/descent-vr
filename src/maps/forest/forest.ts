@@ -6,11 +6,13 @@ import { TreeCover } from '../../world/ambience';
 import type { Atmosphere } from '../../world/atmosphere';
 import type { Interior, InteriorPlan } from '../../world/interiors';
 import { Glows } from '../../world/glows';
+import { Smoke } from '../../world/smoke';
 import type { Zone } from '../types';
 import { buildFence, buildField, buildStructure } from './buildings';
 import { buildHouseInterior } from './houseModel';
 import { buildInnInterior } from './innModel';
 import { buildMine } from './mineModel';
+import { buildMapFace, buildSignNames } from './wayfinding';
 import { buildLayout, FOREST } from './layout';
 import { plantPrototypes } from './nature';
 import { LIGHT, SKY } from './palette';
@@ -99,7 +101,14 @@ export function buildForest(): Zone {
     chunks.at(s.x, s.z).stamp(geometry, place);
   }
 
-  root.add(...chunks.meshes(sharedModelMaterial()), ...spinners, glows.mesh);
+  // The signposts' names and the map board's painted face, each one texture; the smoke over them all.
+  const wayfinding = [
+    ...layout.structures.filter((s) => s.kind === 'signpost').map(buildSignNames),
+    ...layout.structures.filter((s) => s.kind === 'mapboard').map((s) => buildMapFace(s, layout)),
+  ];
+  const smoke = new Smoke(layout.smoke);
+
+  root.add(...chunks.meshes(sharedModelMaterial()), ...spinners, glows.mesh, ...wayfinding, smoke.mesh);
   const water = buildWater(layout);
   root.add(water.mesh);
 
@@ -120,6 +129,7 @@ export function buildForest(): Zone {
     }),
     mine: buildMine(layout.mine),
     hale: layout.hale,
+    places: layout.places,
     villagers: layout.villagers,
     pickups: layout.pickups,
     sounds: layout.sounds,
@@ -131,6 +141,7 @@ export function buildForest(): Zone {
     update(dt: number, camera: Camera) {
       time += dt;
       glows.update(time, camera);
+      smoke.update(time, camera);
       water.update(dt);
       for (const s of spinners) s.rotation.z -= dt * 0.35;
     },

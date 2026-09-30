@@ -20,7 +20,8 @@ import { type Interior, saveRecord } from './save/record';
 import type { Save } from './save/store';
 import { BeltHud } from './ui/beltHud';
 import { Fade } from './ui/fade';
-import { QuestTracker } from './ui/questTracker';
+import { arrowHides, arrowPoint, arrowTurn, type ArrowSpots } from './ui/questArrow';
+import { type ArrowShown, QuestTracker } from './ui/questTracker';
 import { type Probe, TalkBoard } from './ui/talkBoard';
 import { Orbs } from './world/orbs';
 import { Pickups } from './world/pickups';
@@ -98,6 +99,8 @@ export class Adventure {
   readonly tracker = new QuestTracker();
   /** What lies about for a quest, to pick up by hand: the leader's orders. */
   readonly pickups: Pickups;
+  /** Where the quest arrow's targets are: each quest's place, and Hale. */
+  private readonly arrowSpots: ArrowSpots;
   private readonly hud: BeltHud;
   private readonly trail: SwordTrail;
   private readonly text: FloatingText;
@@ -143,6 +146,9 @@ export class Adventure {
     this.saves = new SaveController(save.store, () => saveRecord(this.state.snapshot(), this.standing));
     this.world.attach(scene, camera);
     this.world.load(zone);
+    // Compile what the zone draws now, not when it first comes into view: the smoke over the
+    // village behind you at the start, and the signposts' names and the map board after a load elsewhere.
+    renderer.compile(zone.root, camera, scene);
     this.respawns = zone.respawns;
     this.respawn = zone.respawns.village;
     this.player = new Player(camera, renderer, this.world);
@@ -204,6 +210,7 @@ export class Adventure {
     scene.add(this.pickups.root);
 
     this.hale = new Hale(zone.hale, this.world, this.state.hale.marker, this.state.haleSwordAtHip);
+    this.arrowSpots = { places: zone.places, hale: zone.hale };
     this.world.addBody(this.hale.body);
     scene.add(this.hale.root, this.board.root, this.tracker.mesh);
     // The innkeeper hangs from the inn's room, drawn while it is; the others are drawn with the outdoors.
@@ -281,7 +288,7 @@ export class Adventure {
     this.villagers.update(dt, you.head, this.state);
     this.pickUp();
     this.updateHandIn(dt);
-    this.tracker.update(dt, player.camera, this.state.tracker);
+    this.tracker.update(dt, player.camera, this.state.tracker, this.questArrow());
     this.text.update(dt);
     this.particles.update(dt);
     this.shockwaves.update(dt);
@@ -290,6 +297,18 @@ export class Adventure {
     this.hud.update(dt);
     this.updateStanding();
     this.saves.update(dt);
+  }
+
+  /**
+   * The quest arrow, if it shows: beside the line you're working on, turned
+   * towards its place (or Hale) from where you stand and look.
+   */
+  private questArrow(): ArrowShown | null {
+    const arrow = this.state.arrow;
+    const { head } = this.you;
+    if (!arrow || arrowHides(arrow.target, { x: head.x, z: head.z, interior: this.world.interior }, this.arrowSpots)) return null;
+    const yaw = _turn.setFromQuaternion(this.player.camera.getWorldQuaternion(_look), 'YXZ').y;
+    return { line: arrow.line, turn: arrowTurn({ x: head.x, z: head.z, yaw }, arrowPoint(arrow.target, this.arrowSpots)) };
   }
 
   /** Every enemy there is to fight: the camps', then the Warden's hall's. */

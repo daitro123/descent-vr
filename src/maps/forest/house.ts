@@ -31,8 +31,8 @@ export const HOUSE = {
   steps: { width: 1.6, out: 1.0 },
   /** The hearth in the back right corner, against the right wall under the chimney: its middle along the wall (at the back wall), its width, how far it stands out, and its mouth. */
   hearth: { z: -2.0, width: 1.4, depth: 0.7, mouth: 1.05 },
-  /** The chimney over it, at the gable end: its middle across the front. */
-  chimney: { x: 3.1 },
+  /** The chimney over it, at the gable end: its middle across the front, and how far it rises over the eaves. */
+  chimney: { x: 3.1, rise: 3.1 },
   /** The bed along the left wall, its head against the back wall. */
   bed: { x: -2.65, z: -1.65, hw: 0.5, hd: 1.0 },
   /** The chest across the bed's foot. */

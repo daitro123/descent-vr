@@ -1,7 +1,7 @@
 import type { Camera, Object3D, Vector3 } from 'three';
 import type { Role } from '../adventureState';
 import type { RoadPoint } from '../enemies/patrol';
-import type { Item, VillagerId } from '../quests';
+import type { Item, Place, VillagerId } from '../quests';
 import type { EnemyKind, Family } from '../models/characters';
 import type { PlaceSound, TreeCover } from '../world/ambience';
 import type { Atmosphere } from '../world/atmosphere';
@@ -102,6 +102,16 @@ export interface Pickup extends Spot {
   readonly y: number;
 }
 
+/**
+ * Where a quest sends you, for the quest arrow: the spot it points at, and
+ * the clearing where you've arrived and it hides.
+ */
+export interface QuestPlace {
+  readonly x: number;
+  readonly z: number;
+  readonly clearing: { readonly x: number; readonly z: number; readonly r: number };
+}
+
 /** An outdoor region of the world, loaded into the World. */
 export interface Zone extends MapBase {
   readonly kind: 'zone';
@@ -123,6 +133,8 @@ export interface Zone extends MapBase {
   readonly villagers: readonly VillagerSpot[];
   /** What lies about to be picked up by hand, shown while the adventure state says it lies there. */
   readonly pickups: readonly Pickup[];
+  /** Where each quest sends you, for the quest arrow. */
+  readonly places: Readonly<Record<Place, QuestPlace>>;
   /** The places that sound where they are. */
   readonly sounds: readonly PlaceSound[];
   /** Its trees, which its birds call from. */

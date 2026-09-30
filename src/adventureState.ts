@@ -1,6 +1,6 @@
 import { CONFIG, type EnemyConfig } from './config';
 import type { CampId } from './maps/types';
-import { BARKS, CHAIN, CHAIN_DONE, type Item, type Objective, type QuestId, RETURN_TO_HALE, type Sword, type VillagerId } from './quests';
+import { BARKS, CHAIN, CHAIN_DONE, type Item, type Objective, type Place, type QuestId, RETURN_TO_HALE, type Sword, type VillagerId } from './quests';
 
 // The rules of progress in the Adventure, with no three.js in it: events in,
 // effects and answers out. The Adventure feeds it what happens in the world
@@ -94,6 +94,16 @@ export interface Tracker {
   readonly title: string;
   /** One per objective with its count, or just "Return to Marshal Hale" once they're all done. */
   readonly lines: readonly string[];
+}
+
+/** What the quest arrow points at: the place of the quest you're on, or Hale once it's ready to hand in. */
+export type ArrowTarget = Place | 'hale';
+
+/** The quest arrow, as the adventure state answers it. */
+export interface Arrow {
+  readonly target: ArrowTarget;
+  /** The tracker's line it sits beside: the first objective not yet done, or "Return to Marshal Hale". */
+  readonly line: number;
 }
 
 const BUTTONS: Record<ShownStage, readonly Button[]> = {
@@ -272,6 +282,20 @@ export class AdventureState {
     const quest = CHAIN[i];
     const lines = stage === 'ready' ? [RETURN_TO_HALE] : quest.objectives.map((o, k) => `${o.text}: ${this.counts[i][k]}/${o.need}`);
     return { title: quest.title, lines };
+  }
+
+  /**
+   * Where the quest arrow points, and beside which of the tracker's lines:
+   * the quest's place beside its first objective not yet done while it's
+   * under way, Hale once it's ready; nothing while you have no quest.
+   */
+  get arrow(): Arrow | null {
+    const i = this.current;
+    const stage = this.stages[i];
+    if (stage === 'ready') return { target: 'hale', line: 0 };
+    if (stage !== 'active') return null;
+    const line = CHAIN[i].objectives.findIndex((o, k) => this.counts[i][k] < o.need);
+    return { target: CHAIN[i].place, line };
   }
 
   /** The line `villager` barks as you pass, for where the chain stands. */

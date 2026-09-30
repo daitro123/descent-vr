@@ -27,6 +27,11 @@ export const INN = {
   door: { x: 0, width: 1.8, height: 2.1 },
   /** Down the steps outside the door, the floor meets the ground this far out. */
   steps: { width: 2.6, out: 1.25 },
+  /** Its chimneys on the roof, the larger over the hearth: their middles, and their tops over the ground. */
+  chimneys: [
+    { x: 4.4, z: -1.4, top: 9.6 },
+    { x: -4.6, z: 1.0, top: 9.0 },
+  ],
   /** The big hearth under the larger chimney, on the right wall: its middle along the wall, its width and how far it stands out. */
   hearth: { z: -0.8, width: 1.7, depth: 0.8 },
   /** The small fireplace under the other chimney, on the left wall. */

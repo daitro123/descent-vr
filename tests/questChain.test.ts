@@ -497,3 +497,62 @@ describe('the plain route', () => {
     expect(state.stats.damage).toBeCloseTo(2.0, 9);
   });
 });
+
+describe('the quest arrow', () => {
+  it('points at each quest\'s place while it\'s under way and at Hale once it\'s ready, beside the line you\'re working on, for every stage of the chain', () => {
+    const state = new AdventureState();
+    const seen: Record<string, unknown> = {};
+    const at = (name: string) => (seen[name] = state.arrow);
+    at('new');
+    play(state, ACCEPT);
+    at('raiders taken');
+    play(state, FARM, FARM);
+    at('raiders 2/3');
+    play(state, FARM);
+    at('raiders ready');
+    play(state, HAND_IN);
+    at('lumber offered');
+    play(state, ACCEPT);
+    at('lumber taken');
+    play(state, THUG, THUG, THUG, ARCHER, LEADER);
+    at('lumber bandits done');
+    play(state, ORDERS);
+    at('lumber ready');
+    play(state, HAND_IN);
+    at('below offered');
+    play(state, ACCEPT, ...times(5, MINE));
+    at('below under way');
+    play(state, WARDEN);
+    at('below ready');
+    play(state, HAND_IN);
+    at('chain done');
+    expect(seen).toEqual({
+      new: null,
+      'raiders taken': { target: 'farm', line: 0 },
+      'raiders 2/3': { target: 'farm', line: 0 },
+      'raiders ready': { target: 'hale', line: 0 },
+      'lumber offered': null,
+      'lumber taken': { target: 'lumberCamp', line: 0 },
+      'lumber bandits done': { target: 'lumberCamp', line: 1 },
+      'lumber ready': { target: 'hale', line: 0 },
+      'below offered': null,
+      'below under way': { target: 'mine', line: 0 },
+      'below ready': { target: 'hale', line: 0 },
+      'chain done': null,
+    });
+  });
+
+  it("stays beside the bandits' line when the orders are taken first", () => {
+    const state = new AdventureState();
+    play(state, ...RAIDERS, ACCEPT, ORDERS, THUG);
+    expect(state.arrow).toEqual({ target: 'lumberCamp', line: 0 });
+  });
+
+  it('comes back as it was across a reload', () => {
+    const state = new AdventureState();
+    play(state, ...RAIDERS, ACCEPT, THUG, THUG, THUG, ARCHER, LEADER);
+    expect(new AdventureState(state.snapshot()).arrow).toEqual({ target: 'lumberCamp', line: 1 });
+    play(state, ORDERS);
+    expect(new AdventureState(state.snapshot()).arrow).toEqual({ target: 'hale', line: 0 });
+  });
+});
