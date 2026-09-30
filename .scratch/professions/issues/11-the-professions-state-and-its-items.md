@@ -26,11 +26,12 @@ Built on 2026-09-30 by Claude **on Tom's behalf**: he asked for the build ticket
 - `src/inventory.ts`: `count(id)` (what the bag holds of an item) and `spend(stacks, coins)` (all or nothing, the last stacks first). The belt now refuses the whetstone.
 - `AdventureState.professions` works on `AdventureState.inventory`, and `Progress` carries `professions`. `ProfessionEffect` is part of the adventure's `Effect`, so the save controller writes on a profession learned, a recipe bought, proficiency gained and a grade reached.
 - The save is **version 3**. The migration from 2 adds no professions.
+- The bag's icon table (`src/ui/bag/looks.ts`) draws the new items by their models: tinted pouches for the materials, coloured flasks, gloves for the gauntlets.
 - The debug handle has `__descent.professions.learn(p?)` (a pair, or every profession with no argument), `.proficiency(p, n)` and `.fill(items?)` (a full stack of each material by default). Each one writes the save as play would.
 
 **Checks**
 
-- `npm run typecheck`, `npm test` (837 passed) and `npm run build` pass.
+- `npm run typecheck`, `npm test` (849 passed, after merging the bag build) and `npm run build` pass.
 - `tests/professions.test.ts` covers the module, `tests/professionItems.test.ts` the items and the inventory's spending, and `tests/saving.test.ts` version 3.
 - `.scratch/oakvale-starting-zone/checks/saving.mjs` now expects version 3, and a new step 10 drives the debug helpers and reads the record back from IndexedDB. It all passed in headless Chromium.
 
