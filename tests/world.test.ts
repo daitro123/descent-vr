@@ -24,7 +24,7 @@ import { INN } from '../src/maps/forest/inn';
 import { MINE } from '../src/maps/forest/mine';
 import { SMITHY } from '../src/maps/forest/smithy';
 import { buildLayout, type ForestLayout, localToWorld, worldToLocal } from '../src/maps/forest/layout';
-import type { Zone } from '../src/maps/types';
+import type { StartingZone } from '../src/maps/types';
 import { chunkDistance } from '../src/world/chunks';
 import { World } from '../src/world/world';
 
@@ -32,7 +32,7 @@ import { World } from '../src/world/world';
 // and it answers from the zone underfoot. Oakvale is built for real here, and
 // its plan (the layout) is the independent source of truth.
 
-let oakvale: Zone;
+let oakvale: StartingZone;
 let plan: ForestLayout;
 let world: World;
 beforeAll(() => {

@@ -5,6 +5,6 @@ export const map: MapInfo = {
   id: 'forest',
   label: 'Oakvale',
   origin: { x: 0, z: 0 },
-  neighbours: [],
+  neighbours: ['brackenmoor'],
   load: () => import('./forest').then((m) => m.buildForest()),
 };

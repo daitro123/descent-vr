@@ -147,6 +147,9 @@ export const CONFIG = {
       turns: [0.4, 0.8, 1.2, 1.6, 2.0], // rad either side that steering tries, nearest first
       propHeight: 3, // m: arrows fly over trunks, tents and walls above this
       arrowWidth: 0.02, // m: an arrow stops this close to the ground or to a trunk or wall
+      // m: each zone's walkable area reaches this far over a seam into its neighbour's,
+      // and within this of a zone's land the World asks it too (its trunks and rocks by the line)
+      seam: 1,
     },
   },
 

@@ -5,7 +5,8 @@ import { combatStats } from './combat/combat';
 import { CONFIG } from './config';
 import { startAmbience, unlockAudio } from './fx/sfx';
 import { Game } from './game';
-import { findMap } from './maps/registry';
+import { findMap, loadNeighbours } from './maps/registry';
+import { isStartingZone } from './maps/types';
 import { forgetNewGame, readPage, type Route } from './route';
 import { openSave, type Save } from './save/store';
 import { buildShowcase, pinShowcaseCamera } from './showcase';
@@ -103,8 +104,8 @@ async function startAdventure(
   // Let the intro paint before the (synchronous) build.
   await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
   const oakvale = await findMap('forest')!.load();
-  if (oakvale.kind !== 'zone') throw new Error('Oakvale should be a zone');
-  const adventure = new Adventure(scene, camera, renderer, oakvale, save);
+  if (oakvale.kind !== 'zone' || !isStartingZone(oakvale)) throw new Error('Oakvale should be a zone a character can start in');
+  const adventure = new Adventure(scene, camera, renderer, oakvale, save, await loadNeighbours(oakvale));
   if (perf) perf.chunks = () => adventure.world.chunkCounts;
   document.querySelector('#intro .loading')?.remove();
   // Keep where you stand when you go: the page hidden, VR ended, or the headset

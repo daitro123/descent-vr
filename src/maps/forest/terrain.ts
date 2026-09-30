@@ -1,5 +1,6 @@
 import { BufferAttribute, BufferGeometry, Color, Matrix4, Vector3 } from 'three';
 import { CONFIG } from '../../config';
+import type { HeightGrid } from '../heightGrid';
 import { FOREST, type ForestLayout, worldToLocal } from './layout';
 import { hash01, mulberry32, smoothstep, valueNoise } from './noise';
 import { EARTH, GREEN } from './palette';
@@ -247,10 +248,24 @@ export function addGround(raw: MeshBuffer, layout: ForestLayout, region: Region,
       }
     }
   }
-  if (!coarse) return;
+  if (coarse) addSkirt(raw, ground, [i0, i1, j0, j1], step, (x, z, y) => colourAt(x, z, y, 1, 0, Infinity, 0.5));
+}
 
-  // The skirt: down from each coarse edge by how far the full ground's midpoints stray from it.
+/**
+ * A stand-in's skirt round grid vertices i0..i1 by j0..j1 (`step` apart):
+ * down from each coarse edge by how far the full ground's midpoints stray
+ * from it, and CONFIG.streaming.standIn.skirt more, coloured by `colour` at
+ * each stretch's middle.
+ */
+export function addSkirt(
+  raw: MeshBuffer,
+  ground: HeightGrid,
+  [i0, i1, j0, j1]: readonly [number, number, number, number],
+  step: number,
+  colour: (x: number, z: number, y: number) => Color,
+): void {
   const drop = CONFIG.streaming.standIn.skirt;
+  const v = (i: number, j: number): [number, number, number] => [ground.x(i), ground.get(i, j), ground.z(j)];
   const sides: [number, number, number, number, number, number][] = [
     // Start (i, j), step along the edge (di, dj), and which way is out (ox, oz).
     [i0, j0, 1, 0, 0, -1],
@@ -273,16 +288,15 @@ export function addGround(raw: MeshBuffer, layout: ForestLayout, region: Region,
       const depth = stray + drop;
       const a1 = [a[0], a[1] - depth, a[2]];
       const b1 = [b[0], b[1] - depth, b[2]];
-      const mx = (a[0] + b[0]) / 2;
-      const mz = (a[2] + b[2]) / 2;
-      const col = colourAt(mx, mz, (a[1] + b[1]) / 2, 1, 0, Infinity, 0.5);
+      const col = colour((a[0] + b[0]) / 2, (a[2] + b[2]) / 2, (a[1] + b[1]) / 2);
       raw.wall(a, b, b1, ox, oz, col);
       raw.wall(a, b1, a1, ox, oz, col);
     }
   }
 }
 
-function faceUp(a: readonly number[], b: readonly number[], c: readonly number[]): number {
+/** How upright a triangle's face is: 1 flat, 0 a wall. */
+export function faceUp(a: readonly number[], b: readonly number[], c: readonly number[]): number {
   const ux = b[0] - a[0];
   const uy = b[1] - a[1];
   const uz = b[2] - a[2];
@@ -297,23 +311,37 @@ function faceUp(a: readonly number[], b: readonly number[], c: readonly number[]
 
 // ------------------------------------------------------------------ roads and bare ground
 
-/**
- * Each path is a ribbon laid a few centimetres above the ground: grassy
- * edges, darker wheel ruts on the wider roads, a lighter crown. A stretch
- * goes in the chunk its start is in.
- */
+/** Oakvale's paths, but over the bridge's deck, which is its own. */
 export function addPaths(raw: MeshBuffer, layout: ForestLayout, region: Region): void {
   const { ground, bridge } = layout;
-  const edge = new Color(EARTH.dirt).lerp(new Color(GREEN.grass), 0.2);
-  const rut = new Color(EARTH.dirt).lerp(new Color(EARTH.dirtDark), 0.7);
-  const crown = new Color(EARTH.dirt);
-  const light = new Color(EARTH.dirtLight);
-  const col = new Color();
   const onBridge = (x: number, z: number) => {
     const [lx, lz] = worldToLocal(bridge, x, z);
     return Math.abs(lx) < bridge.hw + 1 && Math.abs(lz) < bridge.hd - 0.2;
   };
-  layout.paths.forEach((path, pi) => {
+  addRoads(raw, ground, layout.paths, region, GREEN.grass, onBridge);
+}
+
+/**
+ * Each path is a ribbon laid a few centimetres above the ground: edges
+ * blending into the land's `verge` colour, darker wheel ruts on the wider
+ * roads, a lighter crown. A stretch goes in the chunk its start is in, but
+ * where `skip` says. A path's ends are cut square, so a road carried on over
+ * a seam meets its other half.
+ */
+export function addRoads(
+  raw: MeshBuffer,
+  ground: Pick<HeightGrid, 'at'>,
+  paths: readonly { readonly line: readonly (readonly [number, number])[]; readonly width: number }[],
+  region: Region,
+  verge: number,
+  skip: (x: number, z: number) => boolean = () => false,
+): void {
+  const edge = new Color(EARTH.dirt).lerp(new Color(verge), 0.2);
+  const rut = new Color(EARTH.dirt).lerp(new Color(EARTH.dirtDark), 0.7);
+  const crown = new Color(EARTH.dirt);
+  const light = new Color(EARTH.dirtLight);
+  const col = new Color();
+  paths.forEach((path, pi) => {
     const lift = 0.07 - pi * 0.006;
     const wide = path.width > 3;
     const across = wide ? [-0.5, -0.36, -0.25, 0.25, 0.36, 0.5] : [-0.5, -0.3, 0.3, 0.5];
@@ -326,7 +354,8 @@ export function addPaths(raw: MeshBuffer, layout: ForestLayout, region: Region):
       const sx = -(nz - pz) / len;
       const sz = (nx - px) / len;
       return across.map((f, k) => {
-        const ragged = k === 0 || k === across.length - 1 ? hash01(pi * 4096 + i, k, 5) * 0.35 : 0;
+        const end = i === 0 || i === path.line.length - 1;
+        const ragged = !end && (k === 0 || k === across.length - 1) ? hash01(pi * 4096 + i, k, 5) * 0.35 : 0;
         const off = f * path.width + Math.sign(f) * ragged;
         const vx = x + sx * off;
         const vz = z + sz * off;
@@ -336,7 +365,7 @@ export function addPaths(raw: MeshBuffer, layout: ForestLayout, region: Region):
     for (let i = 0; i < path.line.length - 1; i++) {
       const [x, z] = path.line[i];
       if (!region.owns(x, z)) continue;
-      if (onBridge(x, z) || onBridge(...path.line[i + 1])) continue;
+      if (skip(x, z) || skip(...path.line[i + 1])) continue;
       const [here, next] = [row(i), row(i + 1)];
       for (let k = 0; k < strips.length; k++) {
         col.copy(strips[k]);

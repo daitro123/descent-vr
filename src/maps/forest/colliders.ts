@@ -45,6 +45,12 @@ export class Colliders {
 
   /** Push a floor point out of every shape, then back inside the walkable area. True if it moved. */
   resolve(p: Vector3, radius: number): boolean {
+    const moved = this.pushOut(p, radius);
+    return this.walkable.keepInside(p, radius) || moved;
+  }
+
+  /** Push a floor point out of every shape, leaving where it may walk to whoever asks (the World, across zones). True if it moved. */
+  pushOut(p: Vector3, radius: number): boolean {
     let moved = false;
     const bucket = this.buckets.get(key(Math.floor(p.x / CELL), Math.floor(p.z / CELL)));
     if (bucket) {
@@ -61,7 +67,6 @@ export class Colliders {
       }
       for (const b of bucket.boxes) if (pushOutOfBox(p, b, radius)) moved = true;
     }
-    if (this.walkable.keepInside(p, radius)) moved = true;
     return moved;
   }
 

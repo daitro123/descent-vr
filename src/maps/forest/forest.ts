@@ -5,14 +5,14 @@ import { TreeCover } from '../../world/ambience';
 import type { Interior, InteriorPlan } from '../../world/interiors';
 import { Glows } from '../../world/glows';
 import { Smoke } from '../../world/smoke';
-import type { Zone } from '../types';
+import type { StartingZone } from '../types';
 import { buildStructure } from './buildings';
 import { buildOakvaleChunk, oakvaleChunks } from './chunks';
 import { buildHouseInterior } from './houseModel';
 import { buildInnInterior } from './innModel';
 import { buildMine } from './mineModel';
 import { buildMapFace, buildSignNames } from './wayfinding';
-import { buildLayout, type ForestLayout } from './layout';
+import { FOREST, type ForestLayout, planOakvale } from './layout';
 import { buildWater } from './water';
 
 /** Each interior's meshes, by its id. */
@@ -29,8 +29,8 @@ const INTERIOR_MODELS: Partial<Record<InteriorId, (plan: InteriorPlan) => Interi
  * board. Its interiors and the mine are built with it, hidden. The World
  * lights it, gives it its sky, and streams its chunks in round you.
  */
-export function buildForest(given?: ForestLayout): Zone {
-  const plan = given ?? buildLayout();
+export function buildForest(given?: ForestLayout): StartingZone {
+  const plan = given ?? planOakvale();
   const root = new Group();
   root.name = 'forest';
 
@@ -76,6 +76,7 @@ export function buildForest(given?: ForestLayout): Zone {
       worker: given ? undefined : () => new Worker(new URL('./chunkWorker.ts', import.meta.url), { type: 'module', name: 'oakvale-chunks' }),
     },
     walkable: plan.walkable,
+    land: { minX: -FOREST.half, maxX: FOREST.half, minZ: -FOREST.half, maxZ: FOREST.half },
     seams: plan.seams,
     atmosphere: plan.atmosphere,
     spawn: plan.spawn,
@@ -97,6 +98,7 @@ export function buildForest(given?: ForestLayout): Zone {
     landmarks: plan.landmarks,
     heightAt: plan.heightAt,
     resolve: (p, radius) => plan.colliders.resolve(p, radius),
+    collide: (p, radius) => plan.colliders.pushOut(p, radius),
     update(dt: number, camera: Camera) {
       time += dt;
       glows.update(time, camera);

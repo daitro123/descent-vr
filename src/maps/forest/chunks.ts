@@ -2,7 +2,7 @@ import { type BufferGeometry, Matrix4, Quaternion, Vector3 } from 'three';
 import { ModelBuilder } from '../../models/kit';
 import { type ChunkData, type ChunkKey, chunkBounds, chunkCoord, chunkIndex, chunkKey, type Detail, sphereAround } from '../../world/chunks';
 import { buildFence, buildField, buildStructure } from './buildings';
-import { buildLayout, FOREST, type ForestLayout, type PlantKind } from './layout';
+import { FOREST, type ForestLayout, type PlantKind, planOakvale } from './layout';
 import { plantPrototypes, type Prototypes } from './nature';
 import { addGround, addPaths, addPatches, MeshBuffer, type Region } from './terrain';
 
@@ -19,6 +19,9 @@ const UP = new Vector3(0, 1, 0);
 
 /** Too small to see from a stand-in's distance. */
 const UNDERGROWTH: ReadonlySet<PlantKind> = new Set(['grass', 'flower', 'mushroom', 'log', 'stump', 'reed', 'lily']);
+
+/** Trees farther than this (m) from where you can walk are the mountains': the cheaper ones. */
+const FAR_TREES = 6;
 
 /** The chunk grid's reach over Oakvale's terrain, ±FOREST.half: 7 by 7 chunks. */
 const REACH = chunkCoord(FOREST.half - 1e-6);
@@ -54,9 +57,9 @@ function once(plan: ForestLayout, thing: object, build: () => BufferGeometry): B
   return g;
 }
 
-/** Oakvale's builder over a plan of its own, made now: what its worker runs. */
+/** Oakvale's builder over its plan, made now if it isn't yet: what its worker runs. */
 export function oakvaleBuilder(): (key: ChunkKey, detail: Detail) => ChunkData {
-  const plan = buildLayout();
+  const plan = planOakvale();
   return (key, detail) => buildOakvaleChunk(plan, key, detail);
 }
 
@@ -73,15 +76,14 @@ export function buildOakvaleChunk(plan: ForestLayout, key: ChunkKey, detail: Det
     addPatches(raw, plan, region);
   }
 
-  // Plants are stamped from prototypes; the mountains past the play area, and every stand-in, get cheaper trees.
+  // Plants are stamped from prototypes; the mountains past where you can walk, and every stand-in, get cheaper trees.
   const { near, far } = plants();
-  const { play } = FOREST;
   const m = new Matrix4();
   const q = new Quaternion();
   for (const p of plan.plants) {
     if (!region.owns(p.x, p.z)) continue;
     if (!full && UNDERGROWTH.has(p.kind)) continue;
-    const outside = Math.abs(p.x) > play + 6 || Math.abs(p.z) > play + 6;
+    const outside = plan.walkable.distance(p.x, p.z) > FAR_TREES;
     const variants = (outside || !full ? far : near)[p.kind];
     m.compose(new Vector3(p.x, p.y, p.z), q.setFromAxisAngle(UP, p.yaw), new Vector3(p.scale, p.scale, p.scale));
     raw.stamp(variants[p.seed % variants.length], m.clone(), 0.92 + ((p.seed >> 4) % 17) / 100);
