@@ -31,8 +31,8 @@ export function askNewGame(saved: SaveRecord | null): Promise<boolean> {
   );
 }
 
-/** ", on <the quest you're on>," or nothing while you have none. */
+/** ", on <the quest you took last>," or nothing while you have none. */
 function underWay(saved: SaveRecord): string {
-  const quest = new AdventureState(saved).tracker?.title;
+  const quest = new AdventureState(saved).tracker.at(-1)?.title;
   return quest ? `, on ${quest},` : '';
 }

@@ -14,7 +14,7 @@ const WAY: ArrowSpots = {
     // The mine's arrow points at its mouth; it hides from its front on.
     mine: place(-14, -72, 7, { x: -14, z: -78 }),
   },
-  hale: { x: 1.5, z: 4.8 },
+  givers: { hale: { x: 1.5, z: 4.8 } },
 };
 const outdoors = (x: number, z: number) => ({ x, z, interior: null });
 
@@ -44,11 +44,20 @@ describe('the quest arrow hiding', () => {
   });
 
   it('hides within 10 m of Hale when it points at them, not when it points elsewhere', () => {
-    const near = CONFIG.tracker.arrow.nearHale;
+    const near = CONFIG.tracker.arrow.nearGiver;
     expect(near).toBe(10);
     expect(arrowHides('hale', outdoors(1.5, 4.8 - (near - 0.1)), WAY)).toBe(true);
     expect(arrowHides('hale', outdoors(1.5, 4.8 - (near + 0.1)), WAY)).toBe(false);
     expect(arrowHides('farm', outdoors(1.5, 3), WAY)).toBe(false);
+  });
+
+  it("points at any giver standing in the zone, hides near them, and always for one who isn't there", () => {
+    const way: ArrowSpots = { ...WAY, givers: { ...WAY.givers, smith: { x: -20, z: 10 } } };
+    expect(arrowPoint('smith', way)).toEqual({ x: -20, z: 10 });
+    expect(arrowHides('smith', outdoors(-20, 10 + 9.9), way)).toBe(true);
+    expect(arrowHides('smith', outdoors(-20, 10 + 10.1), way)).toBe(false);
+    expect(arrowPoint('herbalist', way)).toBeNull();
+    expect(arrowHides('herbalist', outdoors(50, 50), way)).toBe(true);
   });
 
   it('hides indoors, whatever it points at, and comes back as you step out', () => {

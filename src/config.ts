@@ -444,7 +444,7 @@ export const CONFIG = {
     // The quest arrow at the left of the objective you're working on, pointing its way as the crow flies.
     arrow: {
       size: 0.022, // m across, on the tracker
-      nearHale: 10, // m: it hides this close to Hale, when it points at them (their gold "?" shows the way)
+      nearGiver: 10, // m: it hides this close to Hale (or any quest giver), when it points at them (their gold "?" shows the way)
     },
   },
 
