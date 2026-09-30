@@ -5,7 +5,7 @@ import type { Atmosphere } from '../../world/atmosphere';
 import type { InteriorPlan } from '../../world/interiors';
 import type { MinePlan } from '../../world/mine';
 import type { Place } from '../../quests';
-import type { CampId, CampPlan, ChestPlan, Pickup, PostPlan, QuestPlace, Respawn, Seam, Spot, VillagerSpot } from '../types';
+import type { CampId, CampPlan, ChestPlan, Pickup, PostPlan, QuestPlace, Respawn, Seam, Spot, StashSpot, VillagerSpot } from '../types';
 import { HeightGrid } from '../heightGrid';
 import { Walkable } from '../walkable';
 import { Colliders } from './colliders';
@@ -507,6 +507,8 @@ export interface ForestLayout {
   spawn: { x: number; z: number; yaw: number };
   /** Where you wake after a death (yaw as `spawn`'s): the village's is by the inn's hearth, the mine's outside its mouth. */
   respawns: { village: Respawn; mine: Respawn };
+  /** The stash's chest, by the inn's hearth. */
+  stash: StashSpot;
   /** The buildings you walk into: the inn, then the house by the well. */
   interiors: InteriorPlan[];
   /** The old mine, which you walk into by its mouth. */
@@ -742,6 +744,7 @@ export function buildLayout(): ForestLayout {
   // After a death outside the mine you wake by the inn's hearth, inside with the door shut;
   // inside the mine, on the rail bed outside its mouth.
   const respawns = { village: { ...interiors[0].respawn!, interior: interiors[0].id }, mine: mineRespawn(mouth) };
+  const stash = placeStash(at('inn'));
   const hale = { ...HALE, yaw: facing(HALE.x, HALE.z, 0, 0) };
   const villagers = placeVillagers(at('inn'), at('smithy'));
   const clearing = (id: string) => {
@@ -827,6 +830,7 @@ export function buildLayout(): ForestLayout {
     roadDistance,
     spawn,
     respawns,
+    stash,
     interiors,
     mine: planMine(mouth),
     hale,
@@ -906,6 +910,13 @@ function placeSmoke(structures: Structure[]): Plume[] {
     if (s.kind === 'campfire') add(s, 0, 0, 0.6, true);
   }
   return plumes;
+}
+
+/** The stash's chest against the inn's right wall, its front facing into the room (−X in the inn's frame). */
+function placeStash(inn: Structure): StashSpot {
+  const { room, floor, stash } = INN;
+  const [x, z] = localToWorld(inn, room.hw - stash.depth / 2, stash.z);
+  return { x, z, y: inn.y + floor, yaw: inn.yaw - Math.PI / 2, interior: 'inn' };
 }
 
 /**
