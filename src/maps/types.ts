@@ -143,7 +143,7 @@ export interface ChestPlan {
 
 /**
  * A gathering spot in a zone (.scratch/professions/spec.md, "Gathering spots
- * and the tool loop"): a copper vein today, and the herbs' clumps later. What
+ * and the tool loop"): a copper vein, or a clump of Hearthleaf or Duskcap. What
  * state it's in (full, being worked, taken, refilling) is the world's, not
  * the save's.
  */
@@ -221,7 +221,7 @@ export interface Zone extends MapBase {
   readonly pickups: readonly Pickup[];
   /** Its chests, each opened once per character. */
   readonly chests: readonly ChestPlan[];
-  /** Its gathering spots: the copper veins. */
+  /** Its gathering spots: the copper veins, then the clumps of herbs. */
   readonly spots: readonly SpotPlan[];
   /** The places that sound where they are. */
   readonly sounds: readonly PlaceSound[];

@@ -78,6 +78,8 @@ const KILL_XP_FLOAT: FloatStyle = { color: '#ffd23a', scale: 0.24, life: CONFIG.
 const HAND_IN_FLOAT: FloatStyle = { scale: 0.2, life: CONFIG.handIn.time, rise: 0.3 };
 /** The coins a pouch held, over it as it's taken. */
 const COINS_FLOAT: FloatStyle = { color: '#ffd23a', scale: 0.1, life: 1, rise: 0.3 };
+/** A short word from what you're doing: "Cut lower" over a clump whose leaves you trimmed. */
+const HINT_FLOAT: FloatStyle = { color: '#ffffff', scale: 0.09, life: 1.2, rise: 0.2 };
 /** "Bag full" over an item a full bag leaves on the ground. */
 const FULL_FLOAT: FloatStyle = { color: '#ff4a3a', scale: 0.12, life: CONFIG.loot.full.float, rise: 0.25 };
 
@@ -300,17 +302,13 @@ export class Adventure {
       particles: this.particles,
       buzz: (hand, intensity, ms) => this.player.input.pulse(hand, intensity, ms),
       apply: (effects, at) => this.applyGathered(effects, at),
+      say: (words, at) => this.floatOver(at, 0.12, words, HINT_FLOAT),
       handBusy: () => this.belt.holding('right') >= 0,
     });
     this.gathering.addTo(scene);
-    const { veins } = this.gathering;
-    if (veins.outdoors) {
-      scene.add(veins.outdoors);
-      this.world.stageWith(null, veins.outdoors);
-    }
-    if (veins.mine) {
-      scene.add(veins.mine);
-      this.world.stageWith('mine', veins.mine);
+    for (const { mesh, interior } of this.gathering.meshes) {
+      scene.add(mesh);
+      this.world.stageWith(interior, mesh);
     }
     this.gathering.warm(renderer, camera, scene);
     // The wares open beside the bag's panel, hung from it as the stash's is.
@@ -498,7 +496,7 @@ export class Adventure {
     // With a door shut behind you, what stands outside isn't drawn either.
     const outdoors = this.world.outdoorsShown;
     this.pickups.root.visible = this.hale.root.visible = this.villagers.root.visible = this.chests.outdoors.visible = outdoors;
-    if (this.gathering.veins.outdoors) this.gathering.veins.outdoors.visible = outdoors;
+    for (const { mesh, interior } of this.gathering.meshes) if (interior === null) mesh.visible = outdoors;
     if (this.anvil) this.anvil.frame.visible = outdoors;
     this.showCamps(outdoors);
     player.fighting = this.fighting;
@@ -633,8 +631,9 @@ export class Adventure {
   private showCamps(outdoors: boolean): void {
     const mine = this.world.mine;
     if (mine) showInMine(mine, this.chests.mine);
-    const veins = this.gathering.veins;
-    if (veins.mine) veins.mine.visible = !!mine && veins.veins.some((v) => v.plan.interior === 'mine' && mine.drawn[mine.partAt(v.plan.x, v.plan.z)]);
+    for (const { mesh, interior, spots } of this.gathering.meshes) {
+      if (interior === 'mine') mesh.visible = !!mine && spots.some((s) => mine.drawn[mine.partAt(s.x, s.z)]);
+    }
     for (const camp of this.camps.camps) {
       if (camp.plan.interior !== 'mine' || !mine) camp.root.visible = outdoors;
       else showInMine(mine, camp.root);

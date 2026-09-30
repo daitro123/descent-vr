@@ -167,6 +167,16 @@ export const MINE = {
     [-18.3, -21.5, Math.PI / 2],
     [-18.3, -27.5, Math.PI / 2],
   ] as readonly (readonly [number, number, number])[],
+  /**
+   * The Duskcap in the gallery (.scratch/professions/issues/10-…): two old
+   * stumps of pit props, one against its west wall between the veins and one
+   * against its east wall past the scaffolding, dark caps glowing faintly on
+   * each. Each is x, z.
+   */
+  duskcap: [
+    [-18.4, -24.5],
+    [-12.7, -20.3],
+  ] as readonly (readonly [number, number])[],
   /** The crypt's outer wall, laid bare round the breach on the dig's side: along the dig's east wall, and how high. */
   masonry: { z0: -56.5, z1: -50.5, height: 3.2, thick: 0.25 },
   /** The antechamber's two braziers, flush with its north wall either side of the gate. */
@@ -266,7 +276,7 @@ export function mineFlames(): readonly { x: number; y: number; z: number; part: 
 
 /** What stands in the mine that you bump into, in the mouth's frame. Every prop is flush with a wall, or a body's width clear. */
 export function mineColliders(): Shapes {
-  const { carts, winch, brazier, crates, props, propRadius, scaffold, dig, braziers, braziersRadius, hall, veins } = MINE;
+  const { carts, winch, brazier, crates, props, propRadius, scaffold, dig, braziers, braziersRadius, hall, veins, duskcap } = MINE;
   const box = (r: { x0: number; x1: number; z0: number; z1: number }) => [(r.x0 + r.x1) / 2, (r.z0 + r.z1) / 2, (r.x1 - r.x0) / 2, (r.z1 - r.z0) / 2] as const;
   const { halfSize, gate, choked, pillars, obstacles } = CONFIG.arena;
   return {
@@ -284,6 +294,7 @@ export function mineColliders(): Shapes {
       ...props.map(([x, z]) => [x, z, propRadius] as const),
       ...braziers.map(([x, z]) => [x, z, braziersRadius] as const),
       ...veins.map(([x, z]) => [x, z, CONFIG.professions.vein.body] as const),
+      ...duskcap.map(([x, z]) => [x, z, CONFIG.professions.clump.body] as const),
       // The hall's pillars, throne, braziers and crates, as in the arena.
       ...[...pillars, ...obstacles].map((o) => [hall.x + o.x, hall.z + o.z, o.r] as const),
     ],
@@ -354,6 +365,15 @@ export function mineVeins(mouth: Frame): SpotPlan[] {
   return MINE.veins.map(([lx, lz, face], i) => {
     const [x, z] = toWorld(mouth, lx, lz);
     return { id: `mine-gallery-${i + 1}`, kind: 'copperVein', x, y, z, yaw: face + mouth.yaw, interior: 'mine' };
+  });
+}
+
+/** The Duskcap in the gallery (MINE.duskcap), in the world, on its floor. */
+export function mineClumps(mouth: Frame): SpotPlan[] {
+  const y = mouth.y + minePiece('gallery').floor;
+  return MINE.duskcap.map(([lx, lz], i) => {
+    const [x, z] = toWorld(mouth, lx, lz);
+    return { id: `duskcap-mine-gallery-${i + 1}`, kind: 'duskcap', x, y, z, yaw: mouth.yaw + i * 2.4, interior: 'mine' };
   });
 }
 

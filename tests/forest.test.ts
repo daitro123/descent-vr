@@ -1,7 +1,7 @@
 import { Vector3 } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
-import { buildLayout, CHESTS, FOREST, type ForestLayout, HALE, localToWorld, MAP_BOARD, SIGNPOSTS, type StructureKind, TENT, VEINS, worldToLocal } from '../src/maps/forest/layout';
+import { buildLayout, CHESTS, FOREST, type ForestLayout, HALE, HERBS, localToWorld, MAP_BOARD, POND, SIGNPOSTS, type StructureKind, TENT, VEINS, worldToLocal } from '../src/maps/forest/layout';
 import { MINE, minePiece } from '../src/maps/forest/mine';
 import type { CampPlan, ChestPlan } from '../src/maps/types';
 import { nearestOnPolyline } from '../src/maps/forest/noise';
@@ -507,7 +507,7 @@ describe("Oakvale's copper veins", () => {
 
   it('stand where you can walk up to their ore, clear of trees, rocks and bushes', () => {
     const r = CONFIG.player.bodyRadius;
-    for (const v of layout.spots) {
+    for (const v of layout.spots.filter((s) => s.kind === 'copperVein')) {
       const [sx, sz] = standBefore(v);
       if (v.interior === 'mine') {
         expect(layout.mine.groundAt(sx, sz), v.id).not.toBeNull();
@@ -521,6 +521,64 @@ describe("Oakvale's copper veins", () => {
       expect(layout.colliders.resolve(new Vector3(v.x + 0.3, 0, v.z), r), `${v.id}: its rock`).toBe(true);
       const growing = layout.plants.filter((p) => p.kind !== 'grass' && p.kind !== 'flower' && away(v, p) < VEINS.clear.plant);
       expect(growing.map((p) => p.kind), v.id).toEqual([]);
+    }
+  });
+});
+
+describe("Oakvale's clumps of herbs", () => {
+  const at = (kind: StructureKind) => layout.structures.find((s) => s.kind === kind)!;
+  const away = (v: { x: number; z: number }, p: { x: number; z: number }) => Math.hypot(v.x - p.x, v.z - p.z);
+  const C = CONFIG.professions.clump;
+  const of = (kind: 'hearthleaf' | 'duskcap') => layout.spots.filter((s) => s.kind === kind);
+
+  it('are 8 Hearthleaf and 6 Duskcap, where the gathering spots ticket put them', () => {
+    const [west, north, cabbages, road, bridge, pondEast, pondWest, stones] = of('hearthleaf');
+    expect(of('hearthleaf').map((c) => `${c.id}, ${c.interior ?? 'outdoors'}`)).toEqual(HERBS.hearthleaf.map((h) => `hearthleaf-${h.id}, outdoors`));
+    expect(of('duskcap').map((c) => `${c.id}, ${c.interior ?? 'outdoors'}`)).toEqual([
+      ...HERBS.duskcap.map((h) => `duskcap-${h.id}, outdoors`),
+      'duskcap-mine-gallery-1, mine',
+      'duskcap-mine-gallery-2, mine',
+    ]);
+    // Three by the farm's fields, among its raiders until they're cleared.
+    const raiders = layout.camps.find((c) => c.id === 'farm')!.posts;
+    for (const c of [west, north, cabbages]) expect(away(c, { x: 56, z: 36 }), c.id).toBeLessThan(30);
+    expect(Math.min(...raiders.map((p) => away(north, p)))).toBeLessThan(8);
+    // By the road south, by the bridge, on the pond's shore, and in the meadow by the stones.
+    const main = layout.paths.find((p) => p.id === 'main')!;
+    expect(Math.min(...main.line.filter(([, z]) => z > 50).map(([x, z]) => away(road, { x, z })))).toBeLessThan(6);
+    expect(away(bridge, layout.bridge)).toBeLessThan(8);
+    for (const c of [pondEast, pondWest]) expect(away(c, POND), c.id).toBeLessThan(POND.r + 5);
+    expect(away(stones, at('stones'))).toBeLessThan(11);
+    // Duskcap in the woods west of the main road, round the lumber camp, and in the mine's gallery.
+    const [woodsNorth, woodsSouth, campWest, campNorth, g1, g2] = of('duskcap');
+    for (const c of [woodsNorth, woodsSouth]) expect(c.x, c.id).toBeLessThan(-25);
+    for (const c of [campWest, campNorth]) expect(away(c, at('campfire')), c.id).toBeLessThan(18);
+    for (const c of [g1, g2]) {
+      expect(layout.mine.partAt(c.x, c.z)).toBe(MINE.parts.indexOf('gallery'));
+      expect(c.y).toBeCloseTo(layout.mine.mouth.y + minePiece('gallery').floor);
+    }
+  });
+
+  it('each stand on dry ground you can walk up to, clear of trees and bushes, and you bump into its rise', () => {
+    const r = CONFIG.player.bodyRadius;
+    for (const c of [...of('hearthleaf'), ...of('duskcap')]) {
+      // Somewhere round it a body's width off its rise, you can stand to cut it.
+      const round = Array.from({ length: 12 }, (_, k) => {
+        const a = (k / 12) * Math.PI * 2;
+        const d = C.body + r + 0.15;
+        return [c.x + Math.sin(a) * d, c.z + Math.cos(a) * d] as const;
+      });
+      if (c.interior === 'mine') {
+        expect(round.some(([x, z]) => layout.mine.groundAt(x, z) !== null && !layout.mine.resolve(new Vector3(x, 0, z), r)), c.id).toBe(true);
+        expect(layout.mine.resolve(new Vector3(c.x + 0.2, 0, c.z), r), c.id).toBe(true);
+        continue;
+      }
+      expect(c.y, c.id).toBeCloseTo(layout.heightAt(c.x, c.z));
+      expect(c.y - FOREST.water, `${c.id}: out of the water`).toBeGreaterThan(0.5);
+      expect(round.filter(([x, z]) => !layout.colliders.resolve(new Vector3(x, 0, z), r) && onFoot(x, z)).length, c.id).toBeGreaterThanOrEqual(6);
+      expect(layout.colliders.resolve(new Vector3(c.x + 0.2, 0, c.z), r), `${c.id}: its rise`).toBe(true);
+      const growing = layout.plants.filter((p) => p.kind !== 'grass' && p.kind !== 'flower' && away(c, p) < C.clear.plant);
+      expect(growing.map((p) => p.kind), c.id).toEqual([]);
     }
   });
 });
