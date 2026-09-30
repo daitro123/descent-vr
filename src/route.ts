@@ -11,8 +11,11 @@ export type Route =
   | { kind: 'fly'; map: string }
   /** `?map=<id>`: walk a map with no enemies and no save. */
   | { kind: 'walk'; map: string }
-  /** `?arena`: the wave game. `?duel`, `?wave=N` and `?showcase` alone open it too. */
-  | { kind: 'arena'; firstWave: number; duel: boolean; showcase: boolean; cls?: string }
+  /**
+   * `?arena`: the wave game. `?duel`, `?wave=N` and `?showcase` alone open it too.
+   * `&class=<name>` swaps the warrior for a class prototype (`src/prototype/`), when one exists.
+   */
+  | { kind: 'arena'; firstWave: number; duel: boolean; showcase: boolean; playerClass?: string }
   /** `?proto=<name>`: a throwaway professions prototype (src/professions/prototypes). */
   | { kind: 'proto'; name: string }
   /** `?belt=a|b|c`: PROTOTYPE, inventory ticket 04's belt, fighting duelists (`&calm`: only a drain on health). */
@@ -71,8 +74,7 @@ function chooseRoute(params: URLSearchParams): Route {
       firstWave: Math.max(1, Math.min(waves, Math.floor(Number(params.get('wave'))) || 1)),
       duel: params.has('duel'),
       showcase: params.has('showcase'),
-      // ?class=mage: a class prototype's kit in place of the warrior's (src/prototype/).
-      cls: params.get('class') || undefined,
+      playerClass: params.get('class') || undefined,
     };
   }
   if (params.has('bag')) {

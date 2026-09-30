@@ -25,11 +25,12 @@ import { statsAt } from '../../adventureState';
 import { combatStats } from '../../combat/combat';
 import { CONFIG } from '../../config';
 import { sfx } from '../../fx/sfx';
-import type { ArenaKit, Game } from '../../game';
+import type { Game } from '../../game';
 import { ModelBuilder } from '../../models/kit';
 import { sharedModelMaterial } from '../../models/materials';
 import type { Handedness, HandState } from '../../player/input';
 import { TextPanel } from '../../ui/panel';
+import type { ClassPrototype } from '../classPrototypes';
 import { assist, MageBolts } from './mageBolts.prototype';
 import { MAGE } from './mageNumbers.prototype';
 import { describe, type MageVariant, nextKit, readMageVariant } from './mageVariants.prototype';
@@ -124,7 +125,7 @@ class Caster {
   }
 }
 
-export class MageKit implements ArenaKit {
+export class MageKit implements ClassPrototype {
   variant: MageVariant;
   mana: number = MAGE.mana.max;
   blinkCooldown = 0;
@@ -452,7 +453,7 @@ export class MageKit implements ArenaKit {
   }
 }
 
-/** The kit for `?arena&class=mage`, read from the page's query string. */
-export function mageKit(search: string): (game: Game) => MageKit {
-  return (game) => new MageKit(game, readMageVariant(search));
+/** `?arena&class=mage` (src/prototype/classPrototypes.ts): the kit, its variant read from the page's query string. */
+export function startMagePrototype(game: Game): MageKit {
+  return new MageKit(game, readMageVariant(location.search));
 }

@@ -5,8 +5,9 @@
 //   node .scratch/abilities/checks/mage.mjs [http://localhost:5173] [shots/]
 //
 // The arena at `?arena&class=mage`, paused and stepped a frame at a time by
-// `__descent.game.update`, the grips held where a player's hands would be and
-// the triggers, grips and B pressed through the emulated controllers.
+// `__descent.game.update` and then the kit's (`__descent.classKit`), the grips
+// held where a player's hands would be and the triggers, grips and B pressed
+// through the emulated controllers.
 //
 // 1. The mage holds no sword, has no rage or War Cry, and starts on kit A.
 // 2. Kit A: bolts charged on the trigger and thrown kill wave 1's grunts:
@@ -68,6 +69,7 @@ async function button(hand, name, value) {
 async function open(query) {
   await page.goto(`${base}/?${query}&emulate&nodevui`);
   await page.waitForFunction(() => window.__descent?.game, null, { timeout: 120000 });
+  if (query.includes('class=')) await page.waitForFunction(() => window.__descent.classKit, null, { timeout: 60000 });
   await page.click('#VRButton');
   await page.waitForFunction(() => window.__descent.renderer.xr.isPresenting, null, { timeout: 60000 });
   await xrFrames(3);
@@ -79,7 +81,7 @@ async function open(query) {
     const V = player.rig.position.constructor;
     const Q = player.rig.quaternion.constructor;
     const { hands } = player.input;
-    const kit = game.kit;
+    const kit = d.classKit;
     // Every buzz the kit asks for.
     window.__buzzes = [];
     if (kit) kit.onPulse = (hand, intensity, ms) => window.__buzzes.push({ hand, intensity, ms });
@@ -97,6 +99,7 @@ async function open(query) {
     const tick = (dt = 1 / 72) => {
       player.rig.updateMatrixWorld(true);
       game.update(dt);
+      kit?.update(dt);
     };
     const head = () => player.camera.getWorldPosition(new V());
     /** Stand where you are, facing (x, z). */
