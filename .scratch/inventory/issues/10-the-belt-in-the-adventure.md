@@ -28,9 +28,9 @@ Built on 2026-09-30 by Claude **on Tom's behalf** (he asked for the build ticket
 
 **Checks**
 
-- `npm run typecheck`, `npm test` (1080 passed after merging `main`, with the belt's zones and panel slots in `tests/belt.test.ts` and two new belt cases in `tests/inventory.test.ts`) and `npm run build` pass.
+- `npm run typecheck`, `npm test` (1122 passed after merging `main`, with the belt's zones and panel slots in `tests/belt.test.ts` and two new belt cases in `tests/inventory.test.ts`) and `npm run build` pass.
 - `checks/belt-adventure.mjs`, all 28 passed: three potions on a new character's right hip, both hips 70 cm below the eyes and 5 draws an eye; the hand at the hip glows it with one tick; the grip takes the flask, the sword fades out (0.42 opacity at 0.07 s, gone by 0.37 s) and can't hit, and nothing new compiles; pulled away after 0.3 s the drink is cancelled, and let go it goes back and the sword returns; against the lumber camp, fighting you, the drink lands at 0.71 s and health rises by exactly 40% of the maximum, with 7 steady buzzes and a strong one, and the right hip drunk empty refills with the bag's 4; every flask dims, a grip at one is refused, the ring redraws as it drains, and after 60 s they're bright; a reload keeps the belt and the cooldown's 30 s left; from the open bag, potions go onto the figure's left hip slot, more stack there when carried down to the real left hip, and a tunic carried there is refused.
-- `checks/belt.mjs` (the prototype), `checks/bag-adventure.mjs`, `checks/stash.mjs` and `checks/hand-in-picks.mjs` (its frame index now counts the belt's two slots): all passed. `oakvale-starting-zone/checks/saving.mjs` stops at step 4 reading the tracker's lines, on `main` too (before this build), since the quest givers' change reshaped the tracker; it isn't the belt's.
+- `checks/belt.mjs` (the prototype), `checks/bag-adventure.mjs`, `checks/stash.mjs`, `checks/vendors.mjs` and `checks/hand-in-picks.mjs` (its frame index now counts the belt's two slots): all passed. `oakvale-starting-zone/checks/saving.mjs` stops at step 4 reading the tracker's lines, on `main` too (before this build), since the quest givers' change reshaped the tracker; it isn't the belt's.
 
 **Calls made on Tom's behalf**
 
@@ -46,7 +46,7 @@ Built on 2026-09-30 by Claude **on Tom's behalf** (he asked for the build ticket
 - The alchemy bench (`professions/bench/bench.ts`) finds the hips with its own numbers (`CONFIG.alchemyBench.hip`, 70 cm below the head and 20 cm aside). It could ask `adventure.belt.slotNear(at)` instead, so a flask let go at the bench lands where the belt's slots really hang.
 - Gestures and the mage: a flask in either hand counts as the hands being held (`Adventure.handsHeld`), so gestures don't arm and the mage's hands don't cast while you drink. `CONFIG.gestures.taken` keeps its own copy of where the hips hang (0.7 m below and 4 cm ahead of the eyes, 19 cm aside), which matches the belt's numbers today; if `CONFIG.belt.hip` or `neck` changes, change it too.
 - The Abilities build: the belt fades whichever model `weaponModel` returns for a hand (the sword or the shield today); a ranger's bow or a mage's focus needs its own model there, with an `away` like the sword's.
-- 14 (vendors): the bag panel's `BagSpot` now has a `belt` kind beside `grid` and `gear`, and letting a carried item go off every panel checks `BagWorld.beltAt` for a hip before it drops. A wares board beside the bag can ignore both.
+- Vendors: the bag panel's `BagSpot` now has a `belt` kind beside `grid` and `gear`, and letting a carried item go off every panel checks `BagWorld.beltAt` for a hip before it drops. While a wares board is open, carrying goes through `Bag.trading` and a hip isn't a target; buying a potion straight onto the belt would be a small addition there.
 
 **On the headset** (plain URL, a new or existing character):
 

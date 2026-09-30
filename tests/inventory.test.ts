@@ -376,6 +376,41 @@ describe('vendors', () => {
     expect(inv.bag.slice(0, 4)).toEqual([null, potions(2), null, { id: 'worn-tunic', count: 1 }]);
     expect(inv.sellJunk()).toEqual([]);
   });
+
+  it("says before you let go whether a purchase, a buyback or a sale would go, and why not", () => {
+    const inv = carrying([{ id: 'torn-cloth-1', count: 3 }, potions(9)]);
+    expect(inv.checkBuy('minor-healing-potion', 1, bag(1))).toBe('coins');
+    inv.take([], 20);
+    expect(inv.checkBuy('minor-healing-potion', 1, bag(1))).toBeNull();
+    expect(inv.checkBuy('minor-healing-potion', 2, bag(1))).toBe('full');
+    expect(inv.checkBuy('iron-longsword-1', 1, bag(0))).toBe('full');
+    expect(inv.checkBuy('iron-longsword-1', 1, MAIN)).toBe('slot');
+    expect(inv.checkBuy('iron-longsword-1', 1, bag(2))).toBeNull();
+    expect(inv.checkBuy('leaders-orders', 1, bag(2))).toBe('slot');
+    expect(inv.coins).toBe(20);
+
+    expect(inv.checkSell(bag(0))).toBeNull();
+    expect(inv.checkSell(bag(5))).toBe('empty');
+    expect(inv.checkSell(GROUND)).toBe('slot');
+    inv.take([{ id: 'leaders-orders', count: 1 }]);
+    expect(inv.checkSell({ in: 'quest', slot: 0 })).toBe('quest');
+    expect(refusals(inv.sell({ in: 'quest', slot: 0 }))).toEqual(['quest']);
+    expect(inv.quest).toEqual(['leaders-orders']);
+
+    expect(inv.checkBuyBack(0, bag(2))).toBe('empty');
+    inv.sell(bag(0));
+    expect(inv.checkBuyBack(0, bag(0))).toBeNull();
+    expect(inv.checkBuyBack(0, bag(1))).toBe('full');
+    inv.spend([], inv.coins);
+    expect(inv.checkBuyBack(0, bag(0))).toBe('coins');
+  });
+
+  it('sells what you wear, carried off the figure', () => {
+    const inv = new Inventory(warrior());
+    expect(inv.sell(CHEST)).toContainEqual({ kind: 'coins', coins: 3 });
+    expect(inv.gear.chest).toBeNull();
+    expect(inv.sold[0]).toEqual({ id: 'worn-tunic', count: 1, price: 3 });
+  });
 });
 
 describe('the stash', () => {

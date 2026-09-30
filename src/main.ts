@@ -150,6 +150,7 @@ async function startAdventure(
     characters,
     state: adventure.state,
     bag: adventure.bag,
+    wares: adventure.wares,
     world: adventure.world,
     player: adventure.player,
     camps: adventure.camps,
@@ -222,7 +223,8 @@ function startArena(
 
   // ?wave=N starts the run at wave N (7 is the Warden) for testing.
   // ?duel fights one practice duelist after another (CONFIG.duelist) instead.
-  // &class= plays a built class; one that isn't built yet is its prototype over the warrior.
+  // &class= plays a built class; one that isn't built yet is its prototype over the warrior
+  // (the ranger's is kept at &class=ranger-prototype).
   const built = playable(playerClass);
   const game = new Game(scene, camera, renderer, firstWave, duel, built ? playerClass : 'warrior');
   const showcase = buildShowcase();
@@ -246,7 +248,7 @@ function startArena(
   // The gesture prototype takes the right grip for its own modes: the game's gestures stand aside.
   if (gestures) game.gestures.enabled = false;
   const prototype = built ? undefined : playerClass;
-  if (prototype || gestures) void loadClassPrototype(prototype, game, scene, gestures, playerClass).then((kit) => (debug.classKit = kit));
+  if (prototype || gestures) void loadClassPrototype(prototype, game, scene, gestures, playerClass?.replace(/-prototype$/, '')).then((kit) => (debug.classKit = kit));
 
   const timer = new Timer();
   renderer.setAnimationLoop((time) => {

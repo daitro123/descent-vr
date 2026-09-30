@@ -12,8 +12,13 @@ export const ABILITY_COLOUR: Readonly<Partial<Record<Ability, number>>> = {
   heroicThrow: 0x80e0ff, // a pale spectral blue: the axe
   shieldWall: 0xffc84a, // gold: the shield's glow
   sweepingStrikes: 0xff5a40, // red: the second blow's embers
+  powerShot: 0xffe07a, // a hot gold-white: the nocked arrow's glow
+  snareTrap: 0x8fd060, // a leaf green: the trap set down and the root it springs
   frostNova: 0xbfe8ff, // a pale ice blue: the frost that bursts from you
   fireball: 0xff7a20, // orange: the burning bolt and its burst
+  frostbolt: 0x4fb8ff, // a deep ice blue: the frost bolt and the frost it leaves
+  chainLightning: 0xc8b0ff, // a pale violet-white: the bolt and its arcs
+  blizzard: 0xe4f4ff, // snow white: the circle and the ice that falls in it
 };
 
 /** Why an ability can't be used now: still cooling down, or not enough of the class's resource. */
@@ -22,7 +27,7 @@ export type Refusal = 'cooling' | 'poor';
 /**
  * Each ability's cooldown, how long the ones that last (Shield Wall, Sweeping
  * Strikes) have left, and which of those that change your next attack
- * (Fireball's next bolt) are waiting on it.
+ * (Fireball's, Frostbolt's and Chain Lightning's next bolt) are waiting on it.
  */
 export class AbilityClock {
   private readonly cooling = new Map<Ability, number>();
@@ -65,6 +70,12 @@ export class AbilityClock {
   /** Is `ability` waiting on your next attack? */
   primed(ability: Ability): boolean {
     return this.waiting.has(ability);
+  }
+
+  /** Which ability (of `among`, or any) is waiting on your next attack: null for none. */
+  waitingOn(among?: readonly Ability[]): Ability | null {
+    for (const a of this.waiting) if (!among || among.includes(a)) return a;
+    return null;
   }
 
   /** Your next attack spends `ability`, if it was waiting on it: true if it was. */

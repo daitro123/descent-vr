@@ -125,7 +125,7 @@ export class Game {
       },
       drawn: (shape) => this.learned.add(shape),
       use: (ability, aim) => this.combat.use(ability, aim),
-      busy: () => this.mage?.charging('right') ?? false,
+      busy: () => this.combat.busy || (this.mage?.charging('right') ?? false),
     });
 
     this.ctx = {
@@ -339,9 +339,7 @@ export class Game {
     this.orbs.clear();
     this.text.clear();
     this.particles.clear();
-    this.combat.projectiles.clear();
-    this.combat.axes.clear();
-    this.combat.bolts.clear();
+    this.combat.clear();
     this.mage?.clear();
     this.player.reset();
     this.wave = this.firstWave - 1;

@@ -419,8 +419,10 @@ export const CONFIG = {
         frostbolt: { level: 6, use: 'z', cost: 15, cooldown: 0, slow: 0.4, time: 5 },
         // The next bolt arcs on to `jumps` more enemies within `reach` m, at `share` each.
         chainLightning: { level: 8, use: 'v', cost: 30, cooldown: 8, jumps: 2, reach: 4, share: 0.7 },
-        // Ice falls for `time` s over a `radius` m circle where you point: `damage` every `every` s and a `slow` slow.
-        blizzard: { level: 10, use: 's', cost: 40, cooldown: 30, time: 5, radius: 4, damage: 6, every: 0.5, slow: 0.5, aimDeg: 15 },
+        // Ice falls for `time` s over a `radius` m circle where you point: `damage` every `every` s and a `slow` slow,
+        // which lingers `linger` s after the last tick that caught it. The circle centres on the nearest enemy within
+        // `aimDeg`° of where the right hand faces and `range` m, or else where the hand's line meets the floor (at most `range` m off).
+        blizzard: { level: 10, use: 's', cost: 40, cooldown: 30, time: 5, radius: 4, damage: 6, every: 0.5, slow: 0.5, linger: 1, aimDeg: 15, range: 15 },
       },
     },
   },
@@ -435,6 +437,30 @@ export const CONFIG = {
     // Mana starts full; the pool is `size` plus `perIntellect` for every point of Intellect over `from`, and
     // refills `fighting` a second while anything fights you and `calm` once nothing does.
     mana: { size: 100, perIntellect: 2, from: 10, start: 1, refill: { fighting: 2, calm: 30 } },
+  },
+
+  // The ranger's plain kit (player/bow.ts, combat/ranger.ts; .scratch/abilities/spec.md, "The ranger"),
+  // promoted from the prototype's kept variant (issues/05): the bow in the left hand, drawn with the right.
+  ranger: {
+    // The bow, in metres: grip to each limb's tip, how far behind the grip the string sits at rest, the pull
+    // from the arrow rest to the nock at full draw, the rest over the fist, how near the string the draw hand
+    // nocks (its middle half), and the least draw that looses an arrow (less puts it away).
+    bow: { limb: 0.66, brace: 0.16, fullDraw: 0.62, rest: 0.05, nockReach: 0.13, minDraw: 0.15 },
+    // An arrow's damage (level-1 terms, times your damage) and speed rise in step with the draw, from the least
+    // to full; it falls under `gravity`, lives `life` s in flight and `stick` s stuck in a wall or the ground.
+    // A head hit takes the enemy's own multiplier, an exposed one the sword's; a raised guard stops it.
+    arrow: { minDamage: 6, maxDamage: 30, minSpeed: 14, maxSpeed: 42, gravity: 9.8, life: 3, stick: 4, radius: 0.03 },
+    // Squeeze the bow hand's grip: a disc `radius` m across, `reach` m past the bow hand, up while held for at most
+    // `hold` s, back `cooldown` s after it drops. It stops enemy arrows, and sends them back in its first
+    // `reflect` s (the warrior's reflect); `margin` m of slack round its rim. It doesn't stop blows.
+    ward: { radius: 0.3, reach: 0.16, hold: 1.2, cooldown: 2, reflect: 0.35, margin: 0.05, squeeze: 0.6 },
+    // Nock with the trigger past `nock`, loose under `loose`. Haptics: a tick every `tick` s through the draw,
+    // growing with the bend in both hands, a click at full draw and a sharp pulse on release.
+    trigger: { nock: 0.5, loose: 0.3 },
+    haptics: { tick: 0.05, nock: 0.5, full: 0.9, release: { draw: 1, bow: 0.6 } },
+    // Snare Trap's trap: `radius` m across on the ground, sprung by an enemy whose body reaches over it; at
+    // most `alive` lie about at once (another ends the oldest).
+    trap: { radius: 0.35, alive: 3 },
   },
 
   // Abilities by gesture (player/gestures/; .scratch/abilities/spec.md, "Gestures"): hold the right
@@ -570,6 +596,27 @@ export const CONFIG = {
       lid: 105, // ° its lid swings up while the stash is open…
       swing: 0.35, // …over this many s
       buzz: { intensity: 0.6, ms: 50 }, // the lid touched
+    },
+  },
+
+  // The smith's and the innkeeper's wares (vendors.ts, ui/wares/)
+  // (.scratch/inventory/issues/06-vendors-and-the-stash.md, 14-vendors.md).
+  vendors: {
+    // The smith's white stock: each class's weapon and off hand at these item levels, and armour for every slot at these.
+    smith: { hands: [1, 3, 5], armour: [2, 4] },
+    // The wares board stands where Hale's talk board would, opening as `talk` says when: m from the
+    // vendor towards you, to your right, and its middle's height. The bag panel opens pinned on its
+    // right, the board hanging on the bag's left and turned in, as the stash's does.
+    board: { out: 0.6, side: 0.55, height: 1.35 },
+    // "Sell junk" is pressed like the talk board's buttons: m round its face, in front of it and behind
+    // it that still touch it, and s after the board unfolds, and after a press, before it takes one.
+    button: { margin: 0.025, front: 0.03, back: 0.08 },
+    arming: 0.4,
+    rearm: 0.6,
+    buzz: {
+      trade: { intensity: 0.8, ms: 60 }, // bought or sold
+      button: { intensity: 0.8, ms: 50 },
+      nothing: { intensity: 0.3, ms: 30 }, // "Sell junk" with no junk in the bag
     },
   },
 
