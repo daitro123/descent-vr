@@ -178,7 +178,8 @@ function install() {
   let legs = 0;
   const tick = (dt = 1 / 72) => {
     player.rig.updateMatrixWorld(true);
-    adventure.update(dt);
+    // The Adventure takes at most 1/30 s a frame: a longer step is several.
+    for (let left = dt; left > 1e-9; left -= 1 / 30) adventure.update(Math.min(left, 1 / 30));
     clock += dt;
     legs = Math.min(legs + d.CONFIG.player.moveSpeed * dt, 4);
   };
@@ -1476,6 +1477,7 @@ let s = await look();
     await inMine(22, -40, 22, -52);
     // Fought inside the hall: backing out through its gate sends the Warden back to its throne whole.
     const r = await fightUntil({ done: '() => window.__descent.state.wardenBeaten', near: 16, inside: '(x, z) => !window.__descent.adventure.throne.plan.outside(x, z)' }, 60);
+    if (r !== 'done') note(`the Warden, try ${tries + 1}: ${r}, ${await page.evaluate(() => { const { throne } = window.__descent.adventure; const w = throne.body; const me = window.__play.head(); return `the throne ${throne.state}${w ? `, the Warden ${Math.round(w.hp)}/${w.maxHp} ${w.state} ${Math.round(Math.hypot(w.position.x - me.x, w.position.z - me.z))} m off` : ''}, you ${Math.round(window.__descent.player.hp)} hp${throne.plan.outside(me.x, me.z) ? ', out through the gate' : ''}`; })}`);
     if (r === 'dead') {
       wardenDeaths++;
       fights.deaths.push('warden');
