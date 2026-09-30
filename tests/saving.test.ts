@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { type AdventureEvent, AdventureState, type Effect, type Progress, xpToReach } from '../src/adventureState';
 import { CONFIG } from '../src/config';
-import { SaveController } from '../src/save/controller';
+import { type RecordWriter, SaveController } from '../src/save/controller';
 import { startingInventory } from '../src/inventory';
 import { NO_PROFESSIONS } from '../src/professions/professions';
-import { type Migration, MIGRATIONS, readSave, SAVE_VERSION, type SaveRecord, saveRecord } from '../src/save/record';
-import { MemoryStore, openSave, type SaveStore } from '../src/save/store';
+import { type Migration, MIGRATIONS, readSave, ROSTER_VERSION, SAVE_VERSION, type SaveRecord, saveRecord, type Who } from '../src/save/record';
+import { CHAINS } from '../src/quests';
+import { Characters, FIRST, MemoryStore, NAMES, newRecord, openCharacters, ROSTER } from '../src/save/store';
 
 // Saving, at the save store's port: the record the adventure state snapshots
 // to and restores from, older records upgrading through their migrations, a
@@ -46,6 +47,21 @@ const answers = (s: AdventureState) => ({
 
 /** Through storage and back, as a structured clone (what IndexedDB keeps) would. */
 const stored = <T>(value: T): T => structuredClone(value);
+
+/** A character as version 3 wrote it, before the roster: coins, a potion stack in the bag, Mining learned. */
+const V3 = {
+  version: 3,
+  savedAt: 11,
+  level: 4,
+  xp: 700,
+  quests: { raiders: { stage: 'handedIn', counts: [3] }, lumber: { stage: 'handedIn', counts: [5, 1] }, below: { stage: 'active', counts: [0], taken: 1 } },
+  wardenBeaten: false,
+  inventory: { ...startingInventory('warrior'), coins: 42, bag: [{ id: 'minor-healing-potion', count: 4 }, ...startingInventory('warrior').bag.slice(1)] },
+  professions: { learned: { mining: { proficiency: 6, grade: 'apprentice' } }, recipes: ['copper-bar', 'whetstone'] },
+  position: { x: 30, z: -12 },
+  facing: 2,
+  interior: null,
+};
 
 /** A record for a character with `progress`, standing at the start. */
 const recordOf = (progress: Progress, savedAt = 1): SaveRecord => saveRecord(progress, { x: 0.2, z: 1.5, yaw: 0 }, savedAt);
@@ -171,6 +187,10 @@ describe('the save record', () => {
     expect(readSave({ ...current, professions: { learned: { mining: { proficiency: 3, grade: 'grandmaster' } }, recipes: [] } })).toEqual({ kind: 'unreadable' });
     expect(readSave({ ...current, professions: { learned: {}, recipes: [7] } })).toEqual({ kind: 'unreadable' });
     expect(readSave({ ...current, position: { x: Number.NaN, z: 0 } })).toEqual({ kind: 'unreadable' });
+    expect(readSave({ ...current, class: 'bard' })).toEqual({ kind: 'unreadable' });
+    const { name: ____, ...noName } = current;
+    expect(readSave(noName)).toEqual({ kind: 'unreadable' });
+    for (const name of ['', ' Wren', 'A'.repeat(CONFIG.save.name + 1), 7]) expect(readSave({ ...current, name })).toEqual({ kind: 'unreadable' });
   });
 
   it("leaves a newer build's record alone, so an old cached page can't overwrite it", () => {
@@ -208,6 +228,8 @@ describe('the save record', () => {
       facing: 1.5,
       interior: null,
     },
+    // Before the roster: one character, with no class or name.
+    3: V3,
   };
 
   it('upgrades a record of every older version to the current one', () => {
@@ -259,7 +281,7 @@ describe('the save record', () => {
     const read = readSave(stored(OLDER[2]));
     if (read.kind !== 'saved') throw new Error(read.kind);
     expect(read.record.professions).toEqual(NO_PROFESSIONS);
-    const { version: _, professions: __, ...kept } = read.record;
+    const { version: _, professions: __, class: ___c, name: ___n, ...kept } = read.record;
     const { version: ___, ...before } = OLDER[2] as SaveRecord;
     expect(kept).toEqual(before);
     const state = new AdventureState(read.record);
@@ -316,8 +338,8 @@ describe('the in-memory store', () => {
     [ACCEPT, FARM, FARM].forEach((e) => state.apply(e));
     const record = { ...recordOf(state.snapshot(), 1234), position: { x: 12.5, z: -30 }, facing: 2.1 };
     const store = new MemoryStore();
-    await store.write(record);
-    const read = readSave(await store.read());
+    await store.write(FIRST, record);
+    const read = readSave(await store.read(FIRST));
     expect(read).toEqual({ kind: 'saved', record });
     if (read.kind !== 'saved') return;
     expect(answers(new AdventureState(read.record))).toEqual(answers(state));
@@ -336,8 +358,8 @@ describe('the in-memory store', () => {
     inventory.openChest('watchtower', [{ id: 'worn-boots', count: 1 }], 10);
     const record = recordOf(state.snapshot(), 55);
     const store = new MemoryStore();
-    await store.write(record);
-    const read = readSave(await store.read());
+    await store.write(FIRST, record);
+    const read = readSave(await store.read(FIRST));
     expect(read).toEqual({ kind: 'saved', record });
     if (read.kind !== 'saved') return;
     const restored = new AdventureState(read.record);
@@ -363,8 +385,8 @@ describe('the in-memory store', () => {
     state.professions.train('herbalism', 'journeyman');
     const record = recordOf(state.snapshot(), 77);
     const store = new MemoryStore();
-    await store.write(record);
-    const read = readSave(await store.read());
+    await store.write(FIRST, record);
+    const read = readSave(await store.read(FIRST));
     expect(read).toEqual({ kind: 'saved', record });
     if (read.kind !== 'saved') return;
     const restored = new AdventureState(read.record);
@@ -385,8 +407,8 @@ describe('the in-memory store', () => {
     const record = saveRecord(state.snapshot(), { x: 16.05, z: -13.29, yaw: 1.78, interior: 'inn' }, 99);
     expect(record.interior).toBe('inn');
     const store = new MemoryStore();
-    await store.write(record);
-    const read = readSave(await store.read());
+    await store.write(FIRST, record);
+    const read = readSave(await store.read(FIRST));
     expect(read).toEqual({ kind: 'saved', record });
     // Outdoors, a record has no interior; one naming a building that isn't one is unreadable.
     expect(recordOf(state.snapshot()).interior).toBe(null);
@@ -396,8 +418,8 @@ describe('the in-memory store', () => {
   it('round-trips a save made inside the house by the well, with the house as its interior', async () => {
     const record = saveRecord(new AdventureState().snapshot(), { x: -12.4, z: -11.6, yaw: 0.9, interior: 'house' }, 99);
     const store = new MemoryStore();
-    await store.write(record);
-    expect(readSave(await store.read())).toEqual({ kind: 'saved', record });
+    await store.write(FIRST, record);
+    expect(readSave(await store.read(FIRST))).toEqual({ kind: 'saved', record });
   });
 
   it('round-trips a save made in the old mine, with the mine as its interior', async () => {
@@ -405,93 +427,274 @@ describe('the in-memory store', () => {
     const record = saveRecord(new AdventureState().snapshot(), { x: -29.5, z: -105, yaw: 0.2, interior: 'mine' }, 99);
     expect(record.interior).toBe('mine');
     const store = new MemoryStore();
-    await store.write(record);
-    expect(readSave(await store.read())).toEqual({ kind: 'saved', record });
+    await store.write(FIRST, record);
+    expect(readSave(await store.read(FIRST))).toEqual({ kind: 'saved', record });
   });
 
   it('keeps what was written, not the object it was given', async () => {
     const record = recordOf(new AdventureState().snapshot());
     const store = new MemoryStore();
-    await store.write(record);
+    await store.write(FIRST, record);
     (record.position as { x: number }).x = 99;
-    expect(await store.read()).toMatchObject({ position: { x: 0.2 } });
+    expect(await store.read(FIRST)).toMatchObject({ position: { x: 0.2 } });
   });
 
-  it('holds nothing once cleared', async () => {
+  it('holds nothing once a key is removed', async () => {
     const store = new MemoryStore();
-    await store.write(recordOf(new AdventureState().snapshot()));
-    await store.clear();
-    expect(readSave(await store.read())).toEqual({ kind: 'none' });
+    await store.write(FIRST, recordOf(new AdventureState().snapshot()));
+    await store.remove(FIRST);
+    expect(readSave(await store.read(FIRST))).toEqual({ kind: 'none' });
   });
 });
 
-describe('opening the save', () => {
-  /** The browser's store, holding `inside`. */
-  const browser = (inside?: unknown) => new MemoryStore(inside);
-  const character = () => recordOf(new AdventureState().snapshot());
+describe('your characters', () => {
+  /** The record `who` would write after `events`, standing at (x, z). */
+  const played = (record: SaveRecord | null, who: Who, events: AdventureEvent[] = [], x = 1, z = 2) => {
+    const state = new AdventureState(record ?? undefined, CHAINS, { class: who.class });
+    events.forEach((e) => state.apply(e));
+    return { state, record: saveRecord(state.snapshot(), { x, z, yaw: 0.5 }, 99, who) };
+  };
+  const saved = (c: Characters) => c.slots.map((s) => (s.kind === 'saved' ? `${s.key}: ${s.record.name}, level ${s.record.level}` : `${s.key}: ${s.kind}`));
 
-  it('loads the record the browser keeps, and says nothing on the page', async () => {
-    const record = character();
-    const kept = browser(record);
-    const save = await openSave(async () => kept);
-    expect(save).toMatchObject({ store: kept, record, held: true, note: null });
+  it("makes today's one record the first character, a warrior named Warrior, with their things and everything else they had", async () => {
+    const store = new MemoryStore({ [FIRST]: V3 });
+    const characters = await Characters.read(store);
+    expect(saved(characters)).toEqual(['character: Warrior, level 4']);
+    const slot = characters.slots[0];
+    if (slot.kind !== 'saved') throw new Error(slot.kind);
+    const { version: _, class: klass, name, ...kept } = slot.record;
+    expect({ klass, name }).toEqual({ klass: 'warrior', name: 'Warrior' });
+    const { version: __, ...before } = V3;
+    expect(kept).toEqual(before);
+    expect(characters.picked).toBe(FIRST);
+    const you = characters.play();
+    expect(you).toMatchObject({ key: FIRST, record: slot.record, who: { class: 'warrior', name: 'Warrior' } });
+    const state = new AdventureState(you.record!, CHAINS, { class: you.who.class });
+    expect(state.inventory.coins).toBe(42);
+    expect(state.inventory.bag[0]).toEqual({ id: 'minor-healing-potion', count: 4 });
+    expect(state.professions.learned).toEqual(['mining']);
+    // Nothing is written just by opening it: a page left before VR never overwrites another tab's save.
+    expect(store.keys()).toEqual([FIRST]);
+    expect(await store.read(FIRST)).toEqual(V3);
+    // The first write keeps the character under today's key, and writes the roster.
+    await you.write(played(you.record, you.who).record);
+    expect(await store.read(ROSTER)).toEqual({ version: ROSTER_VERSION, characters: [FIRST], last: FIRST });
+    expect(readSave(await store.read(FIRST))).toMatchObject({ kind: 'saved', record: { version: SAVE_VERSION, name: 'Warrior', inventory: V3.inventory } });
+    expect(saved(await Characters.read(store))).toEqual(['character: Warrior, level 4']);
   });
 
-  it('starts a new character where nothing is saved, saving it in the browser', async () => {
-    const kept = browser();
-    const save = await openSave(async () => kept);
-    expect(save).toMatchObject({ store: kept, record: null, held: false, note: null });
+  it('brings a record of any older version into the roster the same way', async () => {
+    const characters = await Characters.read(new MemoryStore({ [FIRST]: { version: 1, savedAt: 7, level: 5, xp: 1000, sword: 'hale', quests: {}, wardenBeaten: true, position: { x: 1, z: 2 }, facing: 0, interior: null } }));
+    expect(characters.slots[0]).toMatchObject({ kind: 'saved', record: { class: 'warrior', name: 'Warrior', level: 5, inventory: { gear: { mainHand: 'hale-longsword' } } } });
   });
 
-  it("plays unsaved where the browser won't store data, and says so", async () => {
-    const save = await openSave(async () => {
-      throw new Error('IndexedDB is not available');
+  it('has none where nothing is saved: Enter VR plays a new warrior with a suggested name, saved with its first write', async () => {
+    const store = new MemoryStore();
+    const characters = await Characters.read(store);
+    expect(characters.slots).toEqual([]);
+    expect(characters.picked).toBeNull();
+    const you = characters.play();
+    expect(you).toMatchObject({ key: FIRST, record: null, who: { class: 'warrior' } });
+    expect(NAMES).toContain(you.who.name);
+    expect(characters.play()).toBe(you);
+    expect(store.keys()).toEqual([]);
+    await you.write(played(null, you.who, [ACCEPT]).record);
+    expect(await store.read(ROSTER)).toEqual({ version: ROSTER_VERSION, characters: [FIRST], last: FIRST });
+    expect(saved(await Characters.read(store))).toEqual([`character: ${you.who.name}, level 1`]);
+  });
+
+  it("makes a character of a class at level 1 in that class's kit, standing at the start", async () => {
+    const store = new MemoryStore();
+    const characters = await Characters.read(store);
+    expect(await characters.make('ranger', 'Wren', 3)).toBe(FIRST);
+    const read = readSave(await store.read(FIRST));
+    expect(read).toEqual({ kind: 'saved', record: newRecord({ class: 'ranger', name: 'Wren' }, 3) });
+    if (read.kind !== 'saved') return;
+    expect(read.record).toMatchObject({ level: 1, xp: 0, position: null, interior: null, inventory: startingInventory('ranger') });
+    expect(new AdventureState(read.record, CHAINS, { class: 'ranger' }).hale.marker).toBe('offered');
+  });
+
+  it('round-trips characters through the in-memory store, each played on its own and kept apart', async () => {
+    const store = new MemoryStore();
+    const first = await Characters.read(store);
+    await first.make('warrior', 'Aldric', 1);
+    expect(await first.make('warrior', 'Brenna', 2)).toBe('character-2');
+    expect(first.picked).toBe('character-2');
+
+    // Brenna, picked when she was made, plays a while.
+    const second = await Characters.read(store);
+    const brenna = second.play();
+    expect(brenna).toMatchObject({ key: 'character-2', record: { name: 'Brenna', level: 1, position: null } });
+    const { state, record } = played(brenna.record, brenna.who, ROUTE.slice(0, 5), 3, 4);
+    await brenna.write(record);
+
+    const third = await Characters.read(store);
+    expect(saved(third)).toEqual(['character: Aldric, level 1', 'character-2: Brenna, level 2']);
+    expect(third.slots[0]).toEqual({ key: FIRST, kind: 'saved', record: newRecord({ class: 'warrior', name: 'Aldric' }, 1) });
+    const back = third.slots[1];
+    if (back.kind !== 'saved') throw new Error(back.kind);
+    expect(back.record).toEqual(record);
+    expect(answers(new AdventureState(back.record, CHAINS, { class: back.record.class }))).toEqual(answers(state));
+
+    // Picking Aldric plays him next time, as he was made.
+    await third.pick(FIRST);
+    const fourth = await Characters.read(store);
+    expect(fourth.picked).toBe(FIRST);
+    expect(fourth.play().record).toEqual(newRecord({ class: 'warrior', name: 'Aldric' }, 1));
+  });
+
+  it("keeps the shapes each character has drawn: today's record's through the migration, and each character's apart", async () => {
+    const store = new MemoryStore({ [FIRST]: { ...V3, drawn: ['ring'] } });
+    const characters = await Characters.read(store);
+    const you = characters.play();
+    expect(you.record?.drawn).toEqual(['ring']);
+    await you.write(played(you.record, you.who).record);
+    await characters.make('warrior', 'Garrick', 5);
+    const again = await Characters.read(store);
+    expect(again.slots.map((s) => (s.kind === 'saved' ? s.record.drawn : 'none'))).toEqual([['ring'], undefined]);
+  });
+
+  it('keeps at most three', async () => {
+    const characters = await Characters.read(new MemoryStore());
+    for (const name of ['Aldric', 'Brenna', 'Corwin']) expect(await characters.make('warrior', name)).not.toBeNull();
+    expect(characters.full).toBe(true);
+    expect(await characters.make('warrior', 'Dara')).toBeNull();
+    expect(characters.slots).toHaveLength(CONFIG.save.characters);
+  });
+
+  it('deletes a character for good, freeing its slot, and picks another', async () => {
+    const store = new MemoryStore();
+    const characters = await Characters.read(store);
+    await characters.make('warrior', 'Aldric', 1);
+    await characters.make('warrior', 'Brenna', 2);
+    await characters.remove('character-2');
+    expect(await store.read('character-2')).toBeUndefined();
+    expect(await store.read(ROSTER)).toEqual({ version: ROSTER_VERSION, characters: [FIRST], last: null });
+    const again = await Characters.read(store);
+    expect(saved(again)).toEqual(['character: Aldric, level 1']);
+    expect(again.picked).toBe(FIRST);
+    await again.remove(FIRST);
+    const none = await Characters.read(store);
+    expect(none.slots).toEqual([]);
+    expect(store.keys()).toEqual([ROSTER]);
+    expect(none.play().record).toBeNull();
+  });
+
+  it("deletes today's one record for good once the roster is written, rather than bringing it back", async () => {
+    const store = new MemoryStore({ [FIRST]: V3 });
+    await (await Characters.read(store)).remove(FIRST);
+    expect((await Characters.read(store)).slots).toEqual([]);
+    expect(store.keys()).toEqual([ROSTER]);
+  });
+
+  it('renames a character at once, and the one being played keeps the new name in every write', async () => {
+    const store = new MemoryStore();
+    await (await Characters.read(store)).make('warrior', 'Aldric', 1);
+    const characters = await Characters.read(store);
+    const you = characters.play();
+    await characters.rename(FIRST, 'Corwin');
+    expect(await store.read(FIRST)).toMatchObject({ name: 'Corwin', level: 1 });
+    expect(you.who.name).toBe('Corwin');
+    await you.write(played(you.record, you.who, [ACCEPT]).record);
+    expect(await store.read(FIRST)).toMatchObject({ name: 'Corwin', quests: { raiders: { stage: 'active' } } });
+    // A name must have letters, at most 16, with nothing round them.
+    for (const bad of ['', ' Corwin', 'Corwin ', 'A'.repeat(CONFIG.save.name + 1)]) await characters.rename(FIRST, bad);
+    expect(await store.read(FIRST)).toMatchObject({ name: 'Corwin' });
+    expect(await characters.make('warrior', '')).toBeNull();
+  });
+
+  it("renames a new character before it's saved, writing nothing until it plays", async () => {
+    const store = new MemoryStore();
+    const characters = await Characters.read(store);
+    const you = characters.play();
+    await characters.rename(you.key, 'Dara');
+    expect(you.who.name).toBe('Dara');
+    expect(store.keys()).toEqual([]);
+    await you.write(played(null, you.who, [ACCEPT]).record);
+    expect(await store.read(FIRST)).toMatchObject({ name: 'Dara' });
+  });
+
+  it("leaves a newer build's character alone: shown, never played or written over, but it can be deleted", async () => {
+    const newer = { ...played(null, { class: 'mage', name: 'Sable' }).record, version: SAVE_VERSION + 1 };
+    const store = new MemoryStore({
+      [ROSTER]: { version: ROSTER_VERSION, characters: [FIRST, 'character-2'], last: FIRST },
+      [FIRST]: newer,
+      'character-2': newRecord({ class: 'warrior', name: 'Ivo' }, 4),
     });
-    expect(save).toMatchObject({ record: null, held: false });
-    expect(save.store).toBeInstanceOf(MemoryStore);
-    expect(save.note).toMatch(/won't be kept/);
+    const characters = await Characters.read(store);
+    expect(saved(characters)).toEqual(['character: newer', 'character-2: Ivo, level 1']);
+    expect(characters.picked).toBe('character-2');
+    const you = characters.play();
+    await you.write(played(you.record, you.who, [ACCEPT]).record);
+    expect(await store.read(FIRST)).toEqual(newer);
+    await characters.remove(FIRST);
+    expect(await store.read(FIRST)).toBeUndefined();
   });
 
-  it("plays unsaved over a newer build's record, leaving it alone, and says so", async () => {
-    const newer = { ...character(), version: SAVE_VERSION + 1 };
-    const kept = browser(newer);
-    const save = await openSave(async () => kept);
-    expect(save).toMatchObject({ record: null, held: true });
-    expect(save.note).toMatch(/newer/);
-    await save.store.write(character());
-    expect(await kept.read()).toEqual(newer);
-  });
-
-  it('plays unsaved over a record it cannot read, leaving it alone, and says so', async () => {
+  it("shows a character it can't read, to delete, and plays a new one beside it", async () => {
     const unreadable = { version: SAVE_VERSION, level: 'five' };
-    const kept = browser(unreadable);
-    const save = await openSave(async () => kept);
-    expect(save).toMatchObject({ record: null, held: true });
-    expect(save.note).toMatch(/couldn't be read/);
-    await save.store.write(character());
-    expect(await kept.read()).toEqual(unreadable);
+    const store = new MemoryStore({ [FIRST]: unreadable });
+    const characters = await Characters.read(store);
+    expect(saved(characters)).toEqual(['character: unreadable']);
+    const you = characters.play();
+    expect(you).toMatchObject({ key: 'character-2', record: null });
+    await you.write(played(null, you.who, [ACCEPT]).record);
+    expect(await store.read(FIRST)).toEqual(unreadable);
+    expect(await store.read(ROSTER)).toEqual({ version: ROSTER_VERSION, characters: [FIRST, 'character-2'], last: 'character-2' });
   });
 
-  it('starts over by deleting what the browser holds, and saves the new character there', async () => {
-    for (const inside of [character(), { ...character(), version: SAVE_VERSION + 1 }, { version: SAVE_VERSION }]) {
-      const kept = browser(inside);
-      const save = await (await openSave(async () => kept)).startOver();
-      expect(save).toMatchObject({ store: kept, record: null, held: false, note: null });
-      expect(await kept.read()).toBeUndefined();
+  it("leaves a newer build's roster, or its one record from before the roster, alone and plays unsaved, saying so", async () => {
+    const insides = [
+      { [ROSTER]: { version: ROSTER_VERSION + 1, characters: [] }, [FIRST]: newRecord({ class: 'warrior', name: 'Osric' }) },
+      { [FIRST]: { ...V3, version: SAVE_VERSION + 1 } },
+    ];
+    for (const inside of insides) {
+      const store = new MemoryStore(inside);
+      const characters = await Characters.read(store);
+      expect(characters.note).toMatch(/newer/);
+      expect(characters.slots).toEqual([]);
+      const you = characters.play();
+      await you.write(played(null, you.who, [ACCEPT]).record);
+      await characters.make('warrior', 'Rowan');
+      for (const [key, value] of Object.entries(inside)) expect(await store.read(key)).toEqual(value);
     }
   });
-});
 
+  it("plays unsaved over a roster it can't read, leaving it alone, and says so", async () => {
+    const store = new MemoryStore({ [ROSTER]: { version: ROSTER_VERSION, characters: 'all of them' } });
+    const characters = await Characters.read(store);
+    expect(characters.note).toMatch(/couldn't be read/);
+    await characters.play().write(played(null, characters.play().who, [ACCEPT]).record);
+    expect(store.keys()).toEqual([ROSTER]);
+  });
+
+  it("opens the browser's store, or plays unsaved where the browser won't store data, and says so", async () => {
+    const kept = new MemoryStore({ [FIRST]: V3 });
+    const opened = await openCharacters(async () => kept);
+    expect(opened.note).toBeNull();
+    expect(saved(opened)).toEqual(['character: Warrior, level 4']);
+    const unsaved = await openCharacters(async () => {
+      throw new Error('IndexedDB is not available');
+    });
+    expect(unsaved.note).toMatch(/won't be kept/);
+    expect(unsaved.slots).toEqual([]);
+    expect(unsaved.play().record).toBeNull();
+  });
+
+  it('suggests a name none of your characters has', async () => {
+    const characters = await Characters.read(new MemoryStore());
+    await characters.make('warrior', NAMES[0]);
+    await characters.make('warrior', NAMES[1]);
+    expect(characters.suggestName(() => 0)).toBe(NAMES[2]);
+    expect(characters.suggestName(() => 0.999)).toBe(NAMES.at(-1));
+  });
+});
 /** A store whose writes finish only when told to, counting how many are in flight at once. */
-class SlowStore implements SaveStore {
+class SlowStore implements RecordWriter {
   readonly writes: SaveRecord[] = [];
   private readonly waiting: (() => void)[] = [];
   inFlight = 0;
   mostInFlight = 0;
-
-  read(): Promise<unknown> {
-    return Promise.resolve(this.writes.at(-1));
-  }
 
   write(record: SaveRecord): Promise<void> {
     this.writes.push(structuredClone(record));
@@ -502,10 +705,6 @@ class SlowStore implements SaveStore {
         done();
       }),
     );
-  }
-
-  clear(): Promise<void> {
-    return Promise.resolve();
   }
 
   /** Let the oldest write in flight finish, and whatever it sets off start. */
@@ -630,8 +829,7 @@ describe('the save controller', () => {
   });
 
   it('carries on after a write fails', async () => {
-    const store = new SlowStore();
-    const failing: SaveStore = { read: store.read, clear: store.clear, write: () => Promise.reject(new Error('quota')) };
+    const failing: RecordWriter = { write: () => Promise.reject(new Error('quota')) };
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const controller = new SaveController(failing, () => recordOf(new AdventureState().snapshot()));
     controller.update(CONFIG.save.every);

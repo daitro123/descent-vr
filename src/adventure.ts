@@ -1,6 +1,7 @@
 import { Euler, Object3D, type PerspectiveCamera, Quaternion, type Scene, Vector3, type WebGLRenderer } from 'three';
 import { type Ability, type AdventureEvent, AdventureState, type Effect } from './adventureState';
 import { unlockLine } from './classes';
+import { CHAINS } from './quests';
 import { Combat } from './combat/combat';
 import { CONFIG } from './config';
 import { type Camp, type CampHooks, Camps, type Member, type You } from './enemies/camps';
@@ -21,11 +22,13 @@ import { Hale } from './people/hale';
 import { Villagers } from './people/villagers';
 import { type AlchemyBench, type Herbalist, standInHouse } from './professions/bench';
 import { PROFESSION_NAMES } from './professions/professions';
+import { Gestures } from './player/gestures/gestures';
 import { Player } from './player/player';
 import { Run } from './player/run';
+import { Anvil } from './professions/anvil/anvil';
 import { SaveController } from './save/controller';
 import { type Interior, saveRecord } from './save/record';
-import type { Save } from './save/store';
+import type { Played } from './save/store';
 import { BeltHud } from './ui/beltHud';
 import { Fade } from './ui/fade';
 import { arrowHides, arrowPoint, arrowTurn, type ArrowSpots } from './ui/questArrow';
@@ -118,6 +121,8 @@ export class Adventure {
   /** The Warden on its throne at the mine's foot, and what it raises; null in a zone without the mine. */
   readonly throne: Throne | null;
   readonly combat: Combat;
+  /** Abilities by gesture: the shapes your slots hold, once your level brings one. */
+  readonly gestures: Gestures;
   /** Marshal Hale, the quest giver, at the crossroads. */
   readonly hale: Hale;
   /** The innkeeper, the smith and the farmer, at work. */
@@ -147,6 +152,8 @@ export class Adventure {
   readonly bag: Bag;
   /** What you've let go of off the bag's panel, lying on the ground. */
   readonly dropped: Dropped;
+  /** The smith's anvil: step up to it with Smithing learned, and make things with the hammer and tongs. Null in a zone without a smith. */
+  readonly anvil: Anvil | null;
   /** The stash's chest by the inn's hearth: touch its lid and the stash panel opens beside the bag's. */
   readonly stashChest: StashChest;
   readonly stash: StashPanel;
@@ -198,14 +205,14 @@ export class Adventure {
     renderer: WebGLRenderer,
     /** Where a new character starts: Oakvale. */
     zone: StartingZone,
-    /** The character to load, if any, and where to keep it. */
-    save: Pick<Save, 'store' | 'record'>,
+    /** The character to play (their record, or none for a new one), who they are, and where their progress goes. */
+    played: Pick<Played, 'key' | 'record' | 'who' | 'write'>,
     /** The zones over its seams (Brackenmoor), walked into with nothing in them. */
     neighbours: readonly Zone[] = [],
   ) {
-    const { record } = save;
-    this.state = new AdventureState(record ?? undefined);
-    this.saves = new SaveController(save.store, () => saveRecord(this.state.snapshot(), this.standing));
+    const { key, record, who } = played;
+    this.state = new AdventureState(record ?? undefined, CHAINS, { class: who.class, character: key });
+    this.saves = new SaveController(played, () => saveRecord(this.state.snapshot(), this.standing, Date.now(), who));
     this.world.attach(scene, camera, renderer);
     for (const n of neighbours) this.world.add(n);
     this.world.load(zone);
@@ -272,6 +279,17 @@ export class Adventure {
       },
       scene,
     );
+    this.gestures = new Gestures({
+      player: this.player,
+      text: this.text,
+      particles: this.particles,
+      slots: () => this.state.slots,
+      unlearned: () => this.state.unlearned,
+      drawn: (shape) => this.apply({ kind: 'drawn', shape }, this.you.head),
+      use: (ability, aim) => this.combat.use(ability, aim),
+      // Your hands are the bag's while it's open, and the bench's while you work at it.
+      held: () => this.bag.isOpen || this.bench?.bare === true,
+    });
     // The mine's undead stand on the mine's own ground, whether or not you've come in.
     const below = this.world.mineGround;
     const hooks: CampHooks = {
@@ -333,6 +351,26 @@ export class Adventure {
     // The smith's hammer rings on the anvil with each blow of their work.
     this.ambience = new Ambience([zone, ...neighbours]);
     this.villagers.onStrike = () => this.ambience.strike('anvil');
+    // The smith's anvil, drawn with the outdoors.
+    const smith = zone.villagers.find((v) => v.id === 'smith');
+    this.anvil = smith
+      ? new Anvil(
+          scene,
+          this.world,
+          smith,
+          {
+            professions: this.state.professions,
+            inventory: this.state.inventory,
+            hands: (tools) => this.player.holdTools(tools),
+            buzz: (hand, intensity, ms) => this.player.input.pulse(hand, intensity, ms),
+            apply: (effects, at) => this.applyMade(effects, at),
+            smithAside: (to) => this.villagers.get('smith')?.stepAside(to),
+          },
+          { particles: this.particles, text: this.text },
+        )
+      : null;
+    if (this.anvil) this.world.stageWith(null, this.anvil.frame);
+
     // The alchemy bench and its herbalist hang from the house's room, drawn while it is.
     const house = zone.interiors.find((i) => i.id === 'house');
     if (house) {
@@ -355,11 +393,11 @@ export class Adventure {
       this.world.stageWith('house', stood.herbalist.root);
     }
 
-    // A new character at the zone's start, facing Hale; or where the save stood,
+    // A new character (or one made on the page who hasn't played) at the zone's start, facing Hale; or where the save stood,
     // facing the same way, at full health and with no rage. A save made inside
     // the inn loads inside it, with the door shut and the room lit; one made in
     // the mine loads in it, standing on its floor (so it settles first).
-    Object.assign(this.standing, record ? { ...record.position, yaw: record.facing, interior: record.interior } : { ...zone.spawn, interior: null });
+    Object.assign(this.standing, record?.position ? { ...record.position, yaw: record.facing, interior: record.interior } : { ...zone.spawn, interior: null });
     const { x, z, yaw, interior } = this.standing;
     this.dressHands();
     this.world.settle(interior);
@@ -388,6 +426,7 @@ export class Adventure {
     // With a door shut behind you, what stands outside isn't drawn either.
     const outdoors = this.world.outdoorsShown;
     this.pickups.root.visible = this.hale.root.visible = this.villagers.root.visible = this.chests.outdoors.visible = outdoors;
+    if (this.anvil) this.anvil.frame.visible = outdoors;
     this.showCamps(outdoors);
     player.fighting = this.fighting;
     player.update(dt);
@@ -413,6 +452,7 @@ export class Adventure {
     } else you.sword = null;
 
     this.combat.update(dt, foes);
+    this.gestures.update(dt);
     this.camps.update(enemyDt, you);
     this.throne?.update(enemyDt, you, this.state.wardenSeated);
     // The ambience's mix follows the light's cues, and dips while anything fights you.
@@ -431,6 +471,7 @@ export class Adventure {
     this.loot(dt, outdoors);
     this.talk(dt);
     this.trade(dt);
+    this.updateAnvil(dt);
     this.updateBag(dt);
     this.villagers.update(dt, you.head, this.state);
     this.herbalist?.update(dt, you.head);
@@ -622,7 +663,13 @@ export class Adventure {
     // Walked off (or another vendor's nearer): the wares close, and the bag's panel with them.
     if (wares.isOpen && (d > T.close || wares.vendor !== vendor.id)) bag.close(`walked away from ${wares.name}`);
     if (d > T.close) wares.walkedAway();
-    const talkFirst = !wares.isOpen && opensWith(shows) === 'talk';
+    // The anvil has your hands: the smith's wares shut, and stay shut until you've walked away and back.
+    const smithing = this.anvil?.tools ?? false;
+    if (smithing) {
+      if (wares.isOpen) bag.close('your hands went to the anvil');
+      wares.hold();
+    }
+    const talkFirst = !smithing && !wares.isOpen && opensWith(shows) === 'talk';
     if (talkFirst && !vendorBoard.isOpen) vendorBoard.name = PEOPLE[vendor.id].label;
     const talk = shows ? vendorTalk(shows) : { line: '', buttons: ['trade'] as const };
     const press = vendorBoard.update(dt, eyes, vendor, probes, talk, talkFirst);
@@ -740,6 +787,24 @@ export class Adventure {
     const { intensity, ms } = CONFIG.bag.buzz.takeBack;
     player.input.pulse(taken.hand === 0 ? 'left' : 'right', intensity, ms);
     sfx.pickup();
+  }
+
+  /** The anvil: your hands on it while you stand at it, and the work under way. */
+  private updateAnvil(dt: number): void {
+    const { anvil, player, you } = this;
+    if (!anvil) return;
+    const [left, right, tip] = this.touching();
+    player.camera.getWorldDirection(_gaze);
+    anvil.update({
+      dt,
+      head: you.head,
+      gaze: _gaze,
+      fighting: this.fighting,
+      alive: player.alive,
+      squeeze: player.input.hands.left.squeeze,
+      fists: [left?.at ?? null, right?.at ?? null],
+      tip: tip?.at ?? null,
+    });
   }
 
   /** What an operation on your things did: saved, and shown at `at`. */
@@ -953,6 +1018,7 @@ export class Adventure {
     this.world.fill(x, z);
     this.lastHp = this.player.hp;
     this.combat.projectiles.clear();
+    this.combat.axes.clear();
     this.deadFor = null;
     this.wakingFor = 0;
   }

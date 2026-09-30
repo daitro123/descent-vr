@@ -116,6 +116,10 @@ _Avoid_: rank, tier, difficulty
 One saved hero of a class, with a name, a level and their progress. A player keeps up to three.
 _Avoid_: hero, profile, save slot (a slot is where a character shows on the page), toon
 
+**Roster**:
+Your characters, in the order of the page's slots, with the one you played last. The page before VR shows it; Enter VR plays the picked character.
+_Avoid_: account, character list, save file
+
 **Class**:
 What kind of fighter a character is: a warrior, a ranger or a mage. It decides the character's abilities and talent trees.
 _Avoid_: role, archetype, job, spec

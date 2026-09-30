@@ -32,14 +32,28 @@ const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v
 /** The shorter way from `from` to `to`, in radians. */
 const towards = (from: number, to: number) => Math.atan2(Math.sin(to - from), Math.cos(to - from));
 
+/** Where a villager stands on the ground, and which way they face (rad, as `rotation.y`). */
+export interface Standing {
+  readonly x: number;
+  readonly z: number;
+  readonly yaw: number;
+}
+
 /** Card size, metres, and how finely it's drawn. */
 const BARK = { w: 1.1, h: 0.33, ppm: 850 };
 
 /** One villager at their spot. */
 export class Villager {
   readonly root = new Group();
-  /** The circle nothing walks through: stand it in the World. */
+  /** The circle nothing walks through: stand it in the World. It goes where they go. */
   readonly body: { readonly x: number; readonly z: number; readonly r: number };
+  private readonly solid: { x: number; z: number; r: number };
+  /** Where they stand now: their spot, or on the way to or from where they stepped aside. */
+  private readonly at: { x: number; z: number; yaw: number };
+  /** Where they've stepped aside to, while you work at their place; null at their spot. */
+  private aside: Standing | null = null;
+  /** Seconds until they go back to their spot, once you've left it. */
+  private backIn = 0;
   /** Head centre above their feet. */
   readonly headY: number;
   /** Their line, on a panel over their head while it shows. */
@@ -56,7 +70,7 @@ export class Villager {
 
   constructor(
     readonly spot: VillagerSpot,
-    ground: Ground,
+    private readonly ground: Ground,
     material: Material,
   ) {
     const { id } = spot;
@@ -70,7 +84,8 @@ export class Villager {
     this.root.add(this.rig.mesh, this.bark.mesh);
     this.bark.mesh.name = `${id}-bark`;
     this.bark.mesh.visible = false;
-    this.body = { x: spot.x, z: spot.z, r: CONFIG.villagers.radius };
+    this.body = this.solid = { x: spot.x, z: spot.z, r: CONFIG.villagers.radius };
+    this.at = { x: spot.x, z: spot.z, yaw: spot.yaw };
     // Villagers each start at their own point in their loop, so the village doesn't move in step.
     this.clock = (this.work.duration * (PEOPLE[id].seed % 7)) / 7;
     this.pose(0);
@@ -85,6 +100,48 @@ export class Villager {
     return drawn(this.root);
   }
 
+  /** Away from their spot: stepped aside, or on the way. */
+  get away(): boolean {
+    return this.aside !== null || this.at.x !== this.spot.x || this.at.z !== this.spot.z;
+  }
+
+  /**
+   * Step aside to `to` while you work at their place (the smith, from the
+   * anvil), or go back to it (null) a moment after you've left. They stop
+   * work and watch while they're away.
+   */
+  stepAside(to: Standing | null): void {
+    if (to) {
+      this.aside = to;
+      this.backIn = 0;
+    } else if (this.aside && this.backIn <= 0) this.backIn = CONFIG.villagers.smith.aside.back;
+  }
+
+  /** Walk towards where they should stand, facing the way they go and then the way it faces. */
+  private walk(dt: number): void {
+    if (this.backIn > 0 && (this.backIn -= dt) <= 0) this.aside = null;
+    const to = this.aside ?? this.spot;
+    const dx = to.x - this.at.x;
+    const dz = to.z - this.at.z;
+    const d = Math.hypot(dx, dz);
+    if (d === 0 && this.at.yaw === to.yaw) return;
+    const step = CONFIG.villagers.smith.aside.speed * dt;
+    let yaw = to.yaw;
+    if (d > step) {
+      this.at.x += (dx / d) * step;
+      this.at.z += (dz / d) * step;
+      yaw = Math.atan2(dx, dz);
+    } else {
+      this.at.x = to.x;
+      this.at.z = to.z;
+    }
+    const turn = towards(this.at.yaw, yaw);
+    this.at.yaw = d <= step && Math.abs(turn) < 1e-3 ? to.yaw : this.at.yaw + turn * Math.min(1, dt * 6);
+    this.solid.x = this.at.x;
+    this.solid.z = this.at.z;
+    this.root.position.set(this.at.x, this.ground.heightAt(this.at.x, this.at.z), this.at.z);
+  }
+
   /** How far your head is from them, on the floor plane. */
   far(you: Vector3): number {
     return Math.hypot(you.x - this.root.position.x, you.z - this.root.position.z);
@@ -96,8 +153,10 @@ export class Villager {
    */
   update(dt: number, you: Vector3): number {
     const V = CONFIG.villagers;
+    this.walk(dt);
     const far = this.shown ? this.far(you) : Infinity;
-    const near = far < V.notice;
+    // Stepped aside, they stand and watch you work.
+    const near = far < V.notice || this.away;
     this.attend = clamp(this.attend + (near ? 1 : -1) * V.attend * dt, 0, 1);
     const was = this.clock;
     this.clock += dt * (1 - this.attend);
@@ -108,7 +167,7 @@ export class Villager {
     // Where you are, round from where they face at their work.
     const dx = you.x - this.root.position.x;
     const dz = you.z - this.root.position.z;
-    const want = near ? clamp(towards(this.spot.yaw, Math.atan2(dx, dz)), -V.look.head - V.look.chest, V.look.head + V.look.chest) : 0;
+    const want = near ? clamp(towards(this.at.yaw, Math.atan2(dx, dz)), -V.look.head - V.look.chest, V.look.head + V.look.chest) : 0;
     this.look += (want - this.look) * Math.min(1, dt * V.look.rate);
     this.pose(far, you.y - this.root.position.y - this.headY);
     this.faceBark(you);
@@ -133,7 +192,7 @@ export class Villager {
     if (Number.isFinite(far) && far > 0.1) h[0] = h[0] * (1 - a) + a * clamp(-Math.atan2(up, far), -0.3, 0.3);
     this.rig.apply(pose as Pose);
     this.rig.setHipOffset(working.hip[0] * (1 - a), working.hip[1] * (1 - a), working.hip[2] * (1 - a));
-    this.root.rotation.y = this.spot.yaw + working.turn * (1 - a);
+    this.root.rotation.y = this.at.yaw + working.turn * (1 - a);
   }
 
   /** The bark's panel over their head, turned to you. */

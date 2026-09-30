@@ -24,6 +24,10 @@ export const SMITHY = {
   bellows: { x: -0.875, z: -1.65, hw: 0.425, hd: 0.22, handle: { x: -0.5, z: -1.45, y: 1.0 } },
   /** Where the smith stands at the anvil (ticket 29), facing it and the open front, with the bellows' handle behind them on their right. */
   smith: { x: -0.2, z: -0.95 },
+  /** Where the smith steps aside to while you work the anvil, out of the way to the forge. */
+  aside: { x: 1.3, z: -1.9 },
+  /** The quench bucket beside the anvil (the anvil's station builds it): the barrel is across the room. */
+  bucket: { x: 0.45, z: -0.5, r: 0.17, water: 0.56 },
   /** The quench barrel. */
   barrel: { x: 2.3, z: 1.8, r: 0.34 },
   /** The grindstone in its frame, the wheel turning across X. */

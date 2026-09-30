@@ -1,13 +1,14 @@
 import { Vector3 } from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import { AdventureState, type Effect } from '../src/adventureState';
+import { CHAINS } from '../src/quests';
 import { CONFIG } from '../src/config';
 import { CLASS_MAIN, type GearItem, itemOf } from '../src/items';
 import { chestSeed, type Loot, rollChest, seeded } from '../src/loot';
 import type { ChestPlan } from '../src/maps/types';
 import { SaveController } from '../src/save/controller';
 import { readSave, saveRecord } from '../src/save/record';
-import { MemoryStore } from '../src/save/store';
+import { Characters, FIRST, MemoryStore } from '../src/save/store';
 import type { Probe } from '../src/ui/talkBoard';
 import { Chests } from '../src/world/chests';
 
@@ -67,22 +68,25 @@ describe('opening a chest', () => {
     expect(state.inventory.chests).toEqual(['oakvale-watchtower']);
   });
 
-  it('rolls once: a second touch does nothing, and a new character of the same class rolls the same (no roster yet)', () => {
-    const state = new AdventureState();
+  it('rolls once: a second touch does nothing, the same character rolls the same, and another character its own', () => {
+    const state = new AdventureState(undefined, CHAINS, { character: FIRST });
     const first = lootOf(open(state));
     expect(open(state)).toEqual([]);
-    expect(lootOf(open(new AdventureState()))).toEqual(first);
+    expect(lootOf(open(new AdventureState(undefined, CHAINS, { character: FIRST })))).toEqual(first);
+    const others = ['character-2', 'character-3'].map((character) => lootOf(open(new AdventureState(undefined, CHAINS, { character }))));
+    expect(others.some((l) => JSON.stringify(l) !== JSON.stringify(first))).toBe(true);
   });
 
   it('is written to the save at once, and after a round trip it is still open, with nothing more to give', async () => {
     const state = new AdventureState();
     const store = new MemoryStore();
-    const saves = new SaveController(store, () => saveRecord(state.snapshot(), { x: 0, z: 0, yaw: 0 }));
-    const write = vi.spyOn(store, 'write');
+    const played = (await Characters.read(store)).play();
+    const saves = new SaveController(played, () => saveRecord(state.snapshot(), { x: 0, z: 0, yaw: 0 }, Date.now(), played.who));
+    const write = vi.spyOn(played, 'write');
     saves.onEffects(open(state, 'oakvale-strongbox', 4));
     expect(write).toHaveBeenCalledTimes(1);
     await saves.settled();
-    const read = readSave(await store.read());
+    const read = readSave(await store.read(FIRST));
     expect(read.kind).toBe('saved');
     if (read.kind !== 'saved') return;
     expect(read.record.inventory.chests).toEqual(['oakvale-strongbox']);

@@ -25,18 +25,19 @@ npm run dev          # http://localhost:5173
   - `npm run dev:quest`, then open `https://<your-LAN-IP>:5173` in the Quest browser and accept the self-signed certificate.
   - Or connect over USB with `adb reverse tcp:5173 tcp:5173` and open `http://localhost:5173` on the headset.
 - URL flags ([`src/route.ts`](src/route.ts) reads them):
-  - The plain URL is Oakvale. Before VR the page shows it from where you'll start (or where your save stands), slowly turning behind the intro.
-  - `?newgame` starts Oakvale over. If there's a save, a dialog on the page asks first: **Start over** deletes it and starts a new character at level 1, **Carry on** loads it as usual. Either way the flag drops from the address, so a reload doesn't ask again.
+  - The plain URL is Oakvale. Before VR the page lists your characters (up to three) and shows Oakvale from where the picked one stands, slowly turning behind the intro; **Enter VR** plays the picked one (see [Characters](#characters)).
+  - `?newgame` opens the new-character form on the page (with three characters already, it says so and points at Delete); nothing is deleted. **Cancel** plays the picked character as usual. Either way the flag drops from the address, so a reload doesn't ask again.
   - `?arena` is the wave game in the crypt hall. Its flags work alone too, so older links still open it:
     - `?wave=N` starts the run at wave N (`?wave=7` goes straight to the boss).
     - `?duel` fights practice duelists one at a time: grunts that block about nine swings in ten. After each one falls, a banner shows how many of your hits it blocked.
     - `?showcase` pins the title-screen camera on the bestiary lineup, for reviewing models without a headset.
     - `&class=ranger` is a throwaway prototype of the ranger (`src/prototype/ranger/`, [How the ranger fights](.scratch/abilities/issues/05-how-the-ranger-fights.md)): a bow in the left hand instead of the sword and shield. Touch the string with your right hand and hold the trigger to nock an arrow, pull back and let go; a fuller draw hits harder and flies flatter, and a head shot crits. `&variant=` picks what the ranger does up close, and clicking the right stick cycles them: `ward` (the default: the left grip raises a short ward that stops arrows and, raised just in time, sends them back), `knife` (a knife in the draw hand, and swinging the bow parries a blow or swats an arrow back) or `kite` (two dashes and a longer step, but only 12 arrows, one back every 1.5 s).
     - `?class=mage` fights the waves as the mage, a prototype (`src/prototype/mage/`, [ticket](.scratch/abilities/issues/06-how-the-mage-fights.md)): hold a trigger to charge a bolt in that hand and let go mid-throw to cast it (a hard throw makes a small fast bolt, a gentle toss a big slow one); hold the left grip to raise a ward that blocks like the shield, spending mana; B/Y blinks 3.5 m. The right stick's click steps through three kits (`?kit=A`, the pick, `B` a wand, `C` a palm push with two casting hands), named on a panel over your left hand; `?cast=throw|wand|push`, `?focus=ward|wardOnly|caster`, `?move=blink|dash` and `?mana=free|spend` change one thing at a time.
-    - `&gestures` adds a throwaway prototype of abilities by gesture (`src/prototype/gestures/`, [ticket](.scratch/abilities/issues/07-using-abilities-by-gesture.md)) over the class, the warrior's too (`?arena&class=warrior&gestures`, or no `&class=`). Hold the **right** grip, draw a shape in the air in front of you, let go: a ring (from the top, clockwise), a Z, a V, a triangle (from the top, down to the right first) and, for the ranger and the mage, an S each cast a placeholder ability, a coloured burst paid for in rage, focus or mana; the ranger and the mage also have one on A/X. A grip squeezed at a shoulder, a hip or the tool loop never arms. A panel low on your left counts what was read. Clicking the right stick steps through its modes: FIGHT, DRILL (the fight holds still and the panel asks for each gesture in turn, counting how many were read right), JUNK (it asks for sword swings, bow draws or bolt throws with the grip held, and counts how many fired a gesture by mistake) and RECORD (what you draw becomes that gesture's template, kept in this browser; the left stick's click skips, A/X forgets). Clicking the left stick steps the gesture set (`&vocab=C`, shapes, is the pick; `A` mixes two flicks in, `B` is all flicks).
+    - `&class=warrior` (or no `&class=`) is the warrior at level 1 with every base ability to level 10: the War Cry, Earthshaker and the three gesture abilities, Heroic Throw, Shield Wall and Sweeping Strikes (see [Abilities by gesture](#abilities-by-gesture)). The arena keeps no save, so the first shape hangs in the air again on every visit until you draw it.
+    - `&gestures` swaps the game's gestures for the throwaway prototype of them (`src/prototype/gestures/`, [ticket](.scratch/abilities/issues/07-using-abilities-by-gesture.md)) over the class, the warrior's too (`?arena&gestures`): it stays for the ranger and the mage until they're built, and for recording templates. Hold the **right** grip, draw a shape in the air in front of you, let go: a ring (from the top, clockwise), a Z, a V, a triangle (from the top, down to the right first) and, for the ranger and the mage, an S each cast a placeholder ability, a coloured burst paid for in rage, focus or mana; the ranger and the mage also have one on A/X. A grip squeezed at a shoulder, a hip or the tool loop never arms. A panel low on your left counts what was read. Clicking the right stick steps through its modes: FIGHT, DRILL (the fight holds still and the panel asks for each gesture in turn, counting how many were read right), JUNK (it asks for sword swings, bow draws or bolt throws with the grip held, and counts how many fired a gesture by mistake) and RECORD (what you draw becomes that gesture's template, kept in this browser and logged to the console, for pasting into `src/player/gestures/recorded.ts`; the left stick's click skips, A/X forgets). Clicking the left stick steps the gesture set (`&vocab=C`, shapes, is the pick; `A` mixes two flicks in, `B` is all flicks).
   - `?bag` is a **prototype** of the bag and the gear panel (inventory ticket 03), in a quiet yard with a training dummy: reach over either shoulder and squeeze the grip to bring the bag round. `?bag=a` (touch an item with a fist or the sword's tip and hold the grip to carry it, the pick), `?bag=b` (press an item, then press where it goes) and `?bag=c` (grab it with your hand) are the three ways to move items; in the headset a click of the left stick switches between them, and the right stick swaps the slots' icons for small 3D models (`&models` starts with them). Nothing in it reaches the Adventure or the save.
   - `?perf` adds a readout of the frame rate, draw calls, triangles (both eyes), shader programs, the most bytes uploaded to the GPU in a frame and, in Oakvale, the chunks loaded at full detail and as far stand-ins, low on the left of your view, over Oakvale or the arena.
-  - `?emulate` forces the emulator even when a real headset is present, and `?noemulate` rules it out (the page's desktop camera, for screenshots). `?emulate&nodevui` runs it without the DevUI, so controller poses are driven only by code (for scripted tests). `window.__descent` is the debug handle; in Oakvale it has `adventure`, `world`, `player`, `camps`, `state` (your level and XP, and what Hale, the tracker and the quest arrow show), `device` (the emulator's), `saved()` (resolves once no save write is in flight), `paused` (stops VR frames stepping the game), `teleport(x, z, yaw)` and `step(seconds)`, which runs the game without waiting for frames. The scripted checks in `.scratch/oakvale-starting-zone/checks/` drive it, `play-through.mjs` from `?newgame` to Brackenmoor.
+  - `?emulate` forces the emulator even when a real headset is present, and `?noemulate` rules it out (the page's desktop camera, for screenshots). `?emulate&nodevui` runs it without the DevUI, so controller poses are driven only by code (for scripted tests). `window.__descent` is the debug handle; in Oakvale it has `adventure`, `characters` (the roster: `slots`, `picked`, `play()`), `world`, `player`, `camps`, `state` (your level and XP, and what Hale, the tracker and the quest arrow show), `device` (the emulator's), `saved()` (resolves once no save write is in flight), `paused` (stops VR frames stepping the game), `teleport(x, z, yaw)` and `step(seconds)`, which runs the game without waiting for frames. The scripted checks in `.scratch/oakvale-starting-zone/checks/` drive it, `play-through.mjs` from `?newgame` to Brackenmoor.
   - `?fly` opens the map viewer: fly freely through any map (Oakvale, Brackenmoor and the crypt hall), with no enemies and no walls in the way. `?fly=crypt` opens one map (`?fly=forest` is Oakvale, `?fly=brackenmoor` the moor). Walk mode drops you to eye height with the player's collision. R (desktop) or Y (headset) steps through the map's start, its landmarks and an overview from above. On the desktop, click to look around, WASD to move, Q/E for down and up, shift to go fast, M for the next map, G to walk, F for fog. In the headset, the left stick moves where you look, the right stick turns and rises, grip goes fast, A is the next map, B walks or flies, and X toggles fog. The readout floats over your left controller. On a phone or tablet, a stick (bottom left) moves, dragging anywhere else looks around, ▲ ▼ go up and down, and buttons under the readout switch map, walk, fog, fast and spot.
   - `?belt` is a PROTOTYPE of the belt (inventory ticket 04): two potion slots at your hips while practice duelists fight you and a light drain eats your health (`&calm` keeps only the drain). Squeeze the grip at a slot to take a flask and hold it at your mouth to drink. `?belt=a|b|c` picks how the weapon in that hand gets out of the way (a: it fades, b: it swings to the hip, c: it stays and you touch the slot then lift that hand to your mouth); a click of either stick cycles them in the headset.
   - `?proto=brew` is a throwaway prototype for the professions map's "Brewing at the alchemy table" ticket: three ways to brew a minor healing potion at a bench in the house by the well (`?proto=brew&variant=A`, `B` or `C` to start on one). In the headset, squeeze the grip to take things and click the left stick to switch; the page lists the desktop keys. It goes once a variant is rebuilt properly.
@@ -58,9 +59,22 @@ Other commands: `npm test` runs the unit tests, `npm run typecheck`, `npm run bu
 | B / Y | **Dash**: a quick step in the stick's direction, or backwards if the stick is neutral. You can't be hit for a moment. |
 | A / X | **War Cry**: 50 rage for an area knockback and stagger, then 8 s of **frenzy** (the blade burns, +35% damage). |
 | Sword tip driven into the floor | **Earthshaker**: 35 rage for a shockwave where the tip lands |
+| Right grip held, a shape drawn, let go | An ability by gesture, from level 6 (in the arena, from the start): see below |
 | Hand or feet | Touch a red orb to heal a quarter of your health |
 
-The belt HUD (look down) shows health on the left orb and rage on the right orb, with pips for Earthshaker and War Cry beneath it. Between the orbs is the dash cooldown, and in the arena the wave and the enemies left. Rage builds from hits, blocks, parries and bashes.
+The belt HUD (look down) shows health on the left orb and rage on the right orb, with a pip beneath it for each ability your level has brought, lit while it's ready and you have the rage for it. Between the orbs is the dash cooldown, and in the arena the wave and the enemies left. Rage builds from hits, blocks, parries and bashes.
+
+### Abilities by gesture
+
+Hold the **right** grip, draw a shape in the air in front of you, and let go: the stroke is read once, on release. The grip ticks as it arms and a faint trail follows your hand. A shape read flashes the trail in its ability's colour, a burst leaves your hand with its own sound and a strong buzz, and the ability's name floats up with its cost. A stroke that reads as nothing is a grey puff, a "?" and two ticks, and costs nothing; so does a shape read when you haven't the rage ("not enough rage") or it isn't ready yet. The sword still cuts while the grip is held, and no swing, thrust or block reads as a shape. A grip squeezed over a shoulder (the bag), at a hip (a potion) or in the tool loop behind the right hip never arms, nor does a stroke held over 1.6 s. The first time a shape holds an ability, it hangs faintly in the air ahead of you, bright where it starts, until you've drawn it once.
+
+| Shape | Level | Ability | Rage | Cooldown | What it does |
+|---|---|---|---|---|---|
+| Ring (from the top, clockwise) | 6 | **Heroic Throw** | 15 | 6 s | A spectral axe flies up to 20 m at the nearest enemy within 15° of where your right hand faces (or, with none there, of where you look): 20 damage and a stagger. |
+| Z (across, down to the left, across) | 8 | **Shield Wall** | 25 | 30 s | For 6 s the shield glows gold, and a block takes no damage from any blow, the brute's heavy swing included, and doesn't numb the arm. The slam still can't be blocked. |
+| V (down, back up to the right) | 10 | **Sweeping Strikes** | 30 | 20 s | For 8 s every sword hit also strikes the nearest other enemy within 1.5 m of the one you hit, for 60%. |
+
+The level cap is 5 today, so in Oakvale these wait for a zone past it; the arena has them all.
 
 ## Playing Oakvale
 
@@ -84,11 +98,15 @@ Only kills of the quest's own camp, made while it's active, count. Every kill pa
 
 **Brackenmoor**: the road climbs south out of Oakvale to the crest of a pass. Walk over it and the light, the haze and the wind blend into the moor's, "Brackenmoor" floats up and the game saves, all without a loading screen. Its road ends at a rockfall in the far hills, the way on to a later zone. Nothing lives there yet.
 
+### Characters
+
+You keep up to three characters, of any classes (two warriors are fine), each with a name. The page before VR lists them in three slots, each showing the name, class, level and zone; the one you played last is picked (marked ▶), and **Enter VR** plays it. Press another slot to pick it (the page loads again, showing Oakvale from where that one stands). **New character** in an empty slot opens the form: a card for each class that's built (only the warrior so far) and a name, up to 16 letters, with a suggestion filled in; **Make** makes them at level 1 by Marshal Hale, in the class's starting kit, and picks them. Each character has **Rename** and **Delete**, which asks first, naming them. With no characters yet, the first slot is a new warrior with a suggested name, saved (and added to the roster) as soon as it earns anything, as a new character always was.
+
 ### Saving
 
-Oakvale saves itself in the browser's IndexedDB (one database, `descent-vr`, holding one record). It writes at once when you take a quest, a count goes up, a quest is ready or handed in, you level up or get a new sword, and when you cross into another zone. It also writes every 30 s of play, when the page is hidden, when VR ends and when the headset is put down. Loading puts you where you stood, facing the way you faced, with your level, XP, sword and quests, at full health, with no rage and every camp full. Health, rage, the camps and the talk board aren't saved.
+Oakvale saves itself in the browser's IndexedDB (one database, `descent-vr`, holding a record for each character and a roster listing them in slot order with the one played last). It writes at once when you take a quest, a count goes up, a quest is ready or handed in, you level up or get a new sword, and when you cross into another zone. It also writes every 30 s of play, when the page is hidden, when VR ends and when the headset is put down. Loading puts you where you stood, facing the way you faced, with your level, XP, sword and quests, at full health, with no rage and every camp full. Health, rage, the camps and the talk board aren't saved.
 
-The record carries a version. A new build that changes its shape bumps the version and adds a migration (`src/save/record.ts`), so older saves upgrade and a deploy never wipes a character. A page from an older build (a stale cache) that finds a newer record leaves it alone and plays unsaved, and so does a page that can't make sense of the record; `?newgame` deletes it after asking. Where the browser won't store data (some private windows), the game plays anyway, keeping progress in memory, and the page says it won't be kept. `?newgame` starts over; the arena and `?map=` never read or write the save.
+Each record carries a version. A new build that changes its shape bumps the version and adds a migration (`src/save/record.ts`), so older saves upgrade and a deploy never wipes a character. The save from before the roster (one character, version 3 or earlier) becomes your first character, a warrior named "Warrior", with everything it had; nothing is written until it plays. A page from an older build (a stale cache) that finds a newer roster or record leaves it alone and plays unsaved, saying so; a character this build can't read (or one a newer build wrote) shows in its slot, never played or written over, and **Delete** frees the slot. Where the browser won't store data (some private windows), the game plays anyway, keeping progress in memory, and the page says it won't be kept. The arena and `?map=` never read or write the save.
 
 ### Reading enemies
 
@@ -118,7 +136,7 @@ src/
   classes.ts         each class's main attribute, resource (rage, focus, mana) and base abilities by level, as data (unit tested)
   save/
     record.ts        the save record, its version and the migrations that bring older ones up (unit tested)
-    store.ts         the save store port, its in-memory adapter, and opening the save with its fallback (unit tested)
+    store.ts         the save store port and its in-memory adapter; your characters (the roster: pick, make, delete, rename) (unit tested)
     indexedDb.ts     the browser's adapter: IndexedDB, one strict transaction per write
     controller.ts    when to write: what's earned, zone changes, every 30 s, leaving; one write in flight (unit tested)
   quests.ts          the quest chain as data: objectives, rewards and what Hale says
@@ -127,6 +145,7 @@ src/
   prototype/         throwaway prototypes kept for trying on the headset, each behind its URL flag
     mage/            ?arena&class=mage: the mage's bolts, ward, blink and mana, in three kits
     ranger/          ?arena&class=ranger: the ranger's bow, with a ward, a knife or kiting
+    gestures/        ?arena&gestures: abilities by gesture over any class, with its drill, junk and record modes
   viewer/
     mapViewer.ts     ?fly: free flight through every map in maps/
     touchControls.ts on-screen stick, look and buttons for the viewer on phones
@@ -141,10 +160,15 @@ src/
     input.ts         XR controllers → left/right hands, sticks, buttons, haptics
     player.ts        rig, locomotion, snap turn, dash, collision, HP/rage/frenzy, body volumes
     weapons.ts       sword + shield; velocity tracking in rig space
+    gestures/        abilities by gesture: the recogniser (matcher.ts, recorder.ts; unit tested), the five shapes and
+                     their templates, and gestures.ts, which arms it on the right grip, shows the trail, the read and
+                     the shape not yet drawn, and uses the ability in the shape's slot
   combat/
     geometry.ts      segment–segment, segment–box, circle push-out (unit tested)
     strike.ts        an enemy weapon's swing swept against shield, sword and body (unit tested)
-    combat.ts        sword hits and crits, blocks and parries, bash, Earthshaker, War Cry, arrow outcomes
+    combat.ts        sword hits and crits, blocks and parries, bash, Earthshaker, War Cry, the gesture abilities, arrow outcomes
+    abilities.ts     the gesture abilities' rules: cooldowns, Heroic Throw's aim, Shield Wall's blocks, Sweeping Strikes' reach (unit tested)
+    thrownAxes.ts    Heroic Throw's axes in flight (instanced)
     projectiles.ts   arrows: flight, sticking, reflecting (instanced)
   enemies/
     enemy.ts         shared machinery: rising, steering, attack timeline, stagger/expose/kneel, deaths
@@ -167,7 +191,7 @@ src/
     brackenmoor/     Brackenmoor, the moor over the southern pass: its plan and chunk builder
   fx/                particles, sword trail, shockwaves, floating text, spatial synthesised SFX and ambience
   ui/                belt HUD and vignettes, enemy health bars, Hale's talk board, the quest tracker and arrow,
-                     the zone's name, debug text panel, ?perf readout, ?newgame's dialog
+                     the zone's name, debug text panel, ?perf readout; the page before VR's characters and forms
 ```
 
 ## How the combat works

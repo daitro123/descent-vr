@@ -11,10 +11,10 @@ import { isStartingZone } from './maps/types';
 import { professionsDebug } from './professions/debug';
 import { type ClassPrototype, loadClassPrototype } from './prototype/classPrototypes';
 import { forgetNewGame, readPage, type Route } from './route';
-import { openSave, type Save } from './save/store';
+import { type Characters, openCharacters } from './save/store';
 import { buildShowcase, pinShowcaseCamera } from './showcase';
 import './style.css';
-import { askNewGame } from './ui/newGameDialog';
+import { askNewCharacter, showRoster } from './ui/characterPage';
 import { PerfReadout } from './ui/perfReadout';
 import { useRadialFog } from './world/radialFog';
 
@@ -101,7 +101,7 @@ function onEnterVR(renderer: WebGLRenderer, then?: () => void): void {
   addEventListener('pointerdown', unlockAudio, { once: true });
 }
 
-/** The plain URL: Oakvale, loaded from the save (`?newgame` asks to start over). */
+/** The plain URL: Oakvale, with the picked character from the save (`?newgame` opens the new-character form first). */
 async function startAdventure(
   renderer: WebGLRenderer,
   scene: Scene,
@@ -110,14 +110,27 @@ async function startAdventure(
   perf: PerfReadout | null,
   { newGame }: Extract<Route, { kind: 'adventure' }>,
 ): Promise<void> {
-  const save = await openCharacter(newGame);
+  const characters = await openCharacter(newGame);
+  const played = characters.play();
+  if (characters.note) {
+    const note = Object.assign(document.createElement('p'), { className: 'save-note', textContent: characters.note });
+    document.querySelector('#intro .loading')?.before(note);
+  }
   // Let the intro paint before the (synchronous) build.
   await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
   const oakvale = await findMap('forest')!.load();
   if (oakvale.kind !== 'zone' || !isStartingZone(oakvale)) throw new Error('Oakvale should be a zone a character can start in');
-  const adventure = new Adventure(scene, camera, renderer, oakvale, save, await loadNeighbours(oakvale));
+  const adventure = new Adventure(scene, camera, renderer, oakvale, played, await loadNeighbours(oakvale));
   if (perf) perf.chunks = () => adventure.world.chunkCounts;
   document.querySelector('#intro .loading')?.remove();
+  // The page before VR: your characters, the one Enter VR plays picked.
+  const host = document.querySelector<HTMLElement>('#intro section[data-game=adventure]');
+  if (host) {
+    showRoster(host, characters, {
+      zoneOf: (r) => (r.position ? adventure.world.zoneAt(r.position.x, r.position.z)?.label : null) ?? oakvale.label,
+      replay: () => location.reload(),
+    });
+  }
   // Keep where you stand when you go: the page hidden, VR ended, or the headset
   // put down or its menu opened (the session no longer visible).
   const { saves } = adventure;
@@ -132,6 +145,8 @@ async function startAdventure(
   // `paused` stops XR frames stepping the game, so `step` alone moves it on.
   const debug = {
     adventure,
+    /** Your characters: the roster and the page's acts on it (`characters.slots`, `.picked`, `.play()`). */
+    characters,
     state: adventure.state,
     bag: adventure.bag,
     wares: adventure.wares,
@@ -178,21 +193,17 @@ async function startAdventure(
 }
 
 /**
- * The character to load: the save's, with a note on the page if it can't be
- * kept. At `?newgame`, a saved character is deleted once you say yes, and the
- * flag leaves the address, so a reload carries on rather than asking again.
+ * Your characters, from the save. At `?newgame`, the new-character form opens
+ * first (with every slot taken, it says so), and the flag leaves the address,
+ * so a reload carries on rather than asking again.
  */
-async function openCharacter(newGame: boolean): Promise<Save> {
-  let save = await openSave();
+async function openCharacter(newGame: boolean): Promise<Characters> {
+  const characters = await openCharacters();
   if (newGame) {
-    if (save.held && (await askNewGame(save.record))) save = await save.startOver();
+    await askNewCharacter(characters);
     history.replaceState(null, '', `${location.pathname}${forgetNewGame(location.search)}${location.hash}`);
   }
-  if (save.note) {
-    const note = Object.assign(document.createElement('p'), { className: 'save-note', textContent: save.note });
-    document.querySelector('#intro .loading')?.before(note);
-  }
-  return save;
+  return characters;
 }
 
 /** `?arena`: the wave game in the crypt hall, as the plain URL played before Oakvale. */
@@ -228,6 +239,8 @@ function startArena(
   );
   const debug = { game, device, renderer, combatStats, CONFIG, showcase, enemies, paused: false, classKit: null as ClassPrototype | null };
   Object.assign(window, { __descent: debug });
+  // The gesture prototype takes the right grip for its own modes: the game's gestures stand aside.
+  if (gestures) game.gestures.enabled = false;
   if (playerClass || gestures) void loadClassPrototype(playerClass, game, scene, gestures).then((kit) => (debug.classKit = kit));
 
   const timer = new Timer();

@@ -19,7 +19,8 @@
 //    slots empty, and the Sold row fills.
 // 4. The spare tunic carried onto the board is sold; carried back off the
 //    Sold row into the bag it's bought back at what it fetched.
-// 5. Walking off folds the board and the bag with it.
+// 5. Walking off folds the board and the bag with it. At the anvil, with its
+//    hammer and tongs in your hands, the wares stay shut.
 // 6. At the innkeeper's, the minor healing potion is bought by carrying it
 //    into a bag slot, for 8 coins.
 // 7. Leaving the zone empties the Sold row; a reload keeps coins and the bag.
@@ -351,6 +352,25 @@ await stepUp();
   await step(0.5);
   const s = await state();
   check(!s.waresOpen && !s.waresShown && !s.bagOpen, `walking off folds the board and the bag with it (${s.lines.at(-1)})`);
+}
+
+// 5b. At the anvil: its hammer and tongs in your hands, the smith's wares stay shut.
+{
+  await page.evaluate(() => {
+    const x = window.__descent;
+    x.professions.learn('mining'); // Mining and Smithing are learned together
+    // Where the smith stands at the anvil, facing it.
+    const { x: ex, z: ez, yaw } = x.adventure.anvil.stand;
+    x.teleport(ex, ez, yaw);
+    Object.assign(x.device.quaternion, { x: Math.sin(-0.2), y: 0, z: 0, w: Math.cos(-0.2) });
+  });
+  await xrFrames(2);
+  await step(1);
+  const s = await state();
+  const tools = await page.evaluate(() => window.__descent.adventure.anvil.tools);
+  check(tools && !s.waresOpen && !s.bagOpen, `at the anvil, hammer in hand, the smith's wares stay shut (tools ${tools}, wares ${s.waresOpen})`);
+  await standBy('smith', 4.5);
+  await step(0.3);
 }
 
 // 6. The innkeeper's potion.

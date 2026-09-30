@@ -342,8 +342,9 @@ export const CONFIG = {
       abilities: {
         warCry: { level: 2, use: 'button' }, // its cost and numbers are warCry's, below
         earthshaker: { level: 3, use: 'earthshaker' }, // its cost, cooldown and numbers are groundSlam's, below
-        // A spectral axe flies up to `range` m to the enemy you face.
-        heroicThrow: { level: 6, use: 'ring', cost: 15, cooldown: 6, damage: 20, range: 20, stagger: 1 },
+        // A spectral axe flies at `speed` m/s up to `range` m to the nearest enemy within `aimDeg`° of where the right hand
+        // faces as the gesture ends (or, with none there, of where you look), and in sight: `damage` and `stagger` s.
+        heroicThrow: { level: 6, use: 'ring', cost: 15, cooldown: 6, damage: 20, range: 20, stagger: 1, aimDeg: 15, speed: 16 },
         // For `time` s a block takes no damage from any blow (the slam still can't be blocked) and doesn't numb the arm.
         shieldWall: { level: 8, use: 'z', cost: 25, cooldown: 30, time: 6 },
         // For `time` s every sword hit also strikes the nearest other enemy within `reach` m, for `share` of it.
@@ -392,6 +393,37 @@ export const CONFIG = {
     // Mana starts full; the pool is `size` plus `perIntellect` for every point of Intellect over `from`, and
     // refills `fighting` a second while anything fights you and `calm` once nothing does.
     mana: { size: 100, perIntellect: 2, from: 10, start: 1, refill: { fighting: 2, calm: 30 } },
+  },
+
+  // Abilities by gesture (player/gestures/; .scratch/abilities/spec.md, "Gestures"): hold the right
+  // grip, draw a shape, let go. The stroke is read once, on release, against each shape's templates.
+  gestures: {
+    // The grip arms past `down` and lets go under `up`; a stroke held longer than `maxDuration` s is dropped.
+    arm: { down: 0.8, up: 0.5, maxDuration: 1.6 },
+    // A stroke is read as a shape scoring at most `threshold` (lower is closer), unless the runner-up
+    // scores under `margin` times the winner's (too close to call); shorter than `minLength` m reads as nothing.
+    read: { threshold: 0.3, margin: 1.2, minLength: 0.3 },
+    // Where a grip belongs to something else and never arms, from the eyes (x right, y up, z forward; m):
+    // the bag over either shoulder, a potion at either hip, and the tool loop behind the right hip.
+    taken: [
+      { name: 'the bag', at: [0.2, -0.14, -0.12], radius: 0.18 },
+      { name: 'the bag', at: [-0.2, -0.14, -0.12], radius: 0.18 },
+      { name: 'a potion', at: [0.19, -0.7, 0.04], radius: 0.12 },
+      { name: 'a potion', at: [-0.19, -0.7, 0.04], radius: 0.12 },
+      { name: 'the tool loop', at: [0.19, -0.66, -0.16], radius: 0.12 },
+    ],
+    // In the right hand: a tick as the grip arms, a strong buzz on a read, two ticks `gap` ms apart on a miss,
+    // and a dull buzz when it can't be paid for or isn't ready.
+    buzz: {
+      armed: { intensity: 0.25, ms: 20 },
+      read: { intensity: 0.9, ms: 80 },
+      miss: { intensity: 0.3, ms: 30, gap: 90 },
+      dull: { intensity: 0.15, ms: 60 },
+    },
+    trail: { opacity: 0.6, fade: 0.5 }, // the faint line behind the hand while you draw, and s it takes to fade once read
+    // A gesture not yet drawn hangs `ahead` m in front of you at `drop` m below the eyes, `size` m across,
+    // until you've drawn it once; it turns with you once you look `follow` rad away.
+    hint: { ahead: 1, drop: 0.35, size: 0.4, opacity: 0.35, follow: 0.6 },
   },
 
   // Marshal Hale's quest chain (quests.ts): what each quest asks and pays.
@@ -613,6 +645,25 @@ export const CONFIG = {
       whetstone: { price: 2, damage: 0.05, seconds: 10 * 60 }, // rubbed along a blade or arrowheads; never on the belt
       copperGauntlets: { level: 5, rarity: 'green' }, // as good as a green drop at level 5, each version with Stamina
     },
+    // One rule for hands at a station: step within `near` m of it, looking within `facing` rad of
+    // it and out of a fight, and both hands become the station's; past `far` m they're yours again.
+    station: { near: 1.3, far: 2, facing: Math.PI / 3 },
+    // The smith's anvil (professions/anvil/), promoted from ?proto=anvil variant A.
+    anvil: {
+      tapSpeed: 1.2, // m/s the hammer's face comes down under which a strike is only a tap…
+      greatSpeed: 2.2, // …and from which it's great, working a mark at once (a good one works it halfway)
+      minTravel: 0.08, // m the face must come down onto the work for a strike to count
+      rearm: 0.04, // m it must lift off again before the next strike
+      markReach: 0.04, // m from a mark a strike must land to work it
+      heatUp: 1.5, // s in the fire from cold to full heat…
+      coolDown: 14, // …and out of it from full heat to cold: over `workingHeat` for about 10 s
+      workingHeat: 0.3, // hot enough to work (0 cold to 1 fresh from the fire)
+      smelt: 3, // s two ore take in the crucible to become a bar
+      flight: 0.35, // s what's made takes to fly to your bag…
+      settle: { made: 0.5, smelted: 0.9 }, // …after resting this long in the tongs or on the anvil, or on the mould
+      retry: 1, // s between tries to bag a thing left waiting on the anvil with the bag full
+      tongs: { grab: 0.6, release: 0.35, reach: 0.15 }, // squeeze to close the tongs and to let go; m from a piece they take it
+    },
   },
 
   // The alchemy bench in the house by the well (professions/bench/), promoted
@@ -670,6 +721,7 @@ export const CONFIG = {
       face: 0.8, // s turning to the bellows after the last burst, and back
       pumps: 3, // pulls on the bellows' handle…
       pump: 1.2, // …each this long
+      aside: { speed: 0.9, back: 2 }, // m/s they step aside from the anvil while you work at it; s after you leave before they go back
     },
     // The innkeeper's loop: wiping the bar, polishing a tankard, setting it down and picking up another.
     innkeeper: { wipe: 5, polish: 5, setDown: 1.4, pickUp: 1.6, rubs: 1.6 }, // s each; rubs per s of the rag
@@ -803,6 +855,8 @@ export const CONFIG = {
   save: {
     every: 30, // s of play between writes when nothing else has written (where you stand is kept too)
     openTimeout: 5, // s to wait for the browser's storage to open before playing unsaved
+    characters: 3, // characters a player keeps (the page before VR's slots)
+    name: 16, // letters at most in a character's name
   },
 
   enemies: {
