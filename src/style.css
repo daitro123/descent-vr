@@ -136,6 +136,20 @@ canvas {
   border-color: #b05a3a;
 }
 
+/* The first visit's new-character form, open under the new character (ui/characterPage.ts). */
+#first-character {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border: 1px solid #5a4a30;
+  background: rgb(20 16 12 / 0.6);
+}
+
+#first-character .buttons {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
 /* The new-character form, renaming and deleting (ui/characterPage.ts); ?newgame opens the form. */
 .page-dialog {
   max-width: min(400px, calc(100vw - 32px));
@@ -171,18 +185,18 @@ canvas {
   margin-left: auto;
 }
 
-.page-dialog fieldset {
+:is(.page-dialog, #first-character) fieldset {
   margin: 0;
   padding: 0;
   border: 0;
 }
 
-.page-dialog legend,
-.page-dialog label.name {
+:is(.page-dialog, #first-character) legend,
+:is(.page-dialog, #first-character) label.name {
   color: #b8ab90;
 }
 
-.page-dialog .class-card {
+:is(.page-dialog, #first-character) .class-card {
   display: block;
   margin-top: 6px;
   padding: 8px 10px;
@@ -190,26 +204,26 @@ canvas {
   cursor: pointer;
 }
 
-.page-dialog .class-card:has(input:checked) {
+:is(.page-dialog, #first-character) .class-card:has(input:checked) {
   background: #3a2e1e;
   border-color: #e0b060;
 }
 
-.page-dialog .class-card input {
+:is(.page-dialog, #first-character) .class-card input {
   margin: 0 6px 0 0;
 }
 
-.page-dialog .class-card span {
+:is(.page-dialog, #first-character) .class-card span {
   display: block;
   color: #b8ab90;
 }
 
-.page-dialog label.name {
+:is(.page-dialog, #first-character) label.name {
   display: block;
   margin-top: 10px;
 }
 
-.page-dialog input[name='name'] {
+:is(.page-dialog, #first-character) input[name='name'] {
   display: block;
   width: 100%;
   box-sizing: border-box;

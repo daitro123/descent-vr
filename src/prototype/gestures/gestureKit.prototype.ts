@@ -142,7 +142,7 @@ export class GestureKit implements ClassPrototype {
 
   get resource(): number {
     if (this.cls === 'warrior') return this.game.player.rage;
-    if (this.cls === 'mage') return this.inner?.mana ?? 0;
+    if (this.cls === 'mage') return this.inner?.mana ?? this.game.player.resource; // the built mage's own mana
     return this.focus;
   }
 
@@ -150,6 +150,7 @@ export class GestureKit implements ClassPrototype {
     if (this.resource < cost) return false;
     if (this.cls === 'warrior') this.game.player.rage -= cost;
     else if (this.cls === 'mage' && this.inner) this.inner.mana = (this.inner.mana ?? 0) - cost;
+    else if (this.cls === 'mage') this.game.player.resource -= cost;
     else this.focus -= cost;
     return true;
   }

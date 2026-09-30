@@ -24,6 +24,7 @@ import { Villagers } from './people/villagers';
 import { type AlchemyBench, type Herbalist, standInHouse } from './professions/bench';
 import { PROFESSION_NAMES } from './professions/professions';
 import { Gestures } from './player/gestures/gestures';
+import { MageHands } from './player/mage';
 import { Player } from './player/player';
 import { Run } from './player/run';
 import { Anvil } from './professions/anvil/anvil';
@@ -127,6 +128,8 @@ export class Adventure {
   readonly combat: Combat;
   /** Abilities by gesture: the shapes your slots hold, once your level brings one. */
   readonly gestures: Gestures;
+  /** The mage's hands (bolts, the ward and the blink), when you play a mage. */
+  readonly mage: MageHands | null;
   /** Marshal Hale, the quest giver, at the crossroads. */
   readonly hale: Hale;
   /** The innkeeper, the smith and the farmer, at work. */
@@ -235,7 +238,7 @@ export class Adventure {
     this.world.load(zone);
     this.respawns = zone.respawns;
     this.respawn = zone.respawns.village;
-    this.player = new Player(camera, renderer, this.world);
+    this.player = new Player(camera, renderer, this.world, who.class);
     this.player.run = new Run();
     scene.add(this.player.rig, this.orbs.root, this.drops.root, this.shadows.mesh, this.vines.mesh);
     this.drops.warm(renderer, camera, scene);
@@ -296,6 +299,7 @@ export class Adventure {
       },
       scene,
     );
+    this.mage = who.class === 'mage' ? new MageHands(this.player, this.combat, this.particles) : null;
     this.gestures = new Gestures({
       player: this.player,
       text: this.text,
@@ -305,7 +309,8 @@ export class Adventure {
       drawn: (shape) => this.apply({ kind: 'drawn', shape }, this.you.head),
       use: (ability, aim) => this.combat.use(ability, aim),
       // Your hands are the bag's while it's open, and the bench's while you work at it.
-      held: () => this.bag.isOpen || this.bench?.bare === true,
+      held: () => this.handsHeld,
+      busy: () => this.mage?.charging('right') ?? false,
     });
     // The mine's undead stand on the mine's own ground, whether or not you've come in.
     const below = this.world.mineGround;
@@ -447,11 +452,12 @@ export class Adventure {
     this.showCamps(outdoors);
     player.fighting = this.fighting;
     player.update(dt);
+    this.mage?.update(dt, this.handsHeld);
     this.runVignette.update(dt, player.running);
     updateListener(player.camera);
     const { hands } = player.input;
     const foes = this.gatherFoes();
-    if (hands.left.primaryPressed || hands.right.primaryPressed) this.combat.warCry(foes);
+    if (hands.left.primaryPressed || hands.right.primaryPressed) this.combat.press(foes);
 
     // Hit-stop freezes enemies (not you) for a few frames on impact.
     const enemyDt = this.hitStop > 0 ? 0 : dt;
@@ -526,6 +532,11 @@ export class Adventure {
     if (!arrow || !to || arrowHides(arrow.target, { x: head.x, z: head.z, interior: this.world.interior }, this.arrowSpots)) return null;
     const yaw = _turn.setFromQuaternion(this.player.camera.getWorldQuaternion(_look), 'YXZ').y;
     return { line: arrow.line, turn: arrowTurn({ x: head.x, z: head.z, yaw }, to) };
+  }
+
+  /** Are your hands the bag's (it's open) or the bench's (you work at it) now, not your weapons'? */
+  private get handsHeld(): boolean {
+    return this.bag.isOpen || this.bench?.bare === true;
   }
 
   /** Is anything fighting you: a camp's (not walking home), or the Warden and what it raised? */
@@ -863,6 +874,7 @@ export class Adventure {
     player.sword.sword = state.sword ?? 'plain';
     player.sword.model.visible = gear.mainHand !== null;
     player.shield.model.visible = gear.offHand !== null;
+    this.mage?.wear(itemOf(gear.mainHand ?? ''), itemOf(gear.offHand ?? ''));
     const gloves = itemOf(gear.hands ?? '');
     const tint = gloves ? lookOf(gloves).tint : null;
     for (const fist of Object.values(player.fists ?? {})) fist.tint(tint);
@@ -1055,6 +1067,8 @@ export class Adventure {
     this.lastHp = this.player.hp;
     this.combat.projectiles.clear();
     this.combat.axes.clear();
+    this.combat.bolts.clear();
+    this.mage?.clear();
     this.deadFor = null;
     this.wakingFor = 0;
   }
