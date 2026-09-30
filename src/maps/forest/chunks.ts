@@ -1,4 +1,5 @@
 import { type BufferGeometry, Matrix4, Quaternion, Vector3 } from 'three';
+import { CONFIG } from '../../config';
 import { ModelBuilder } from '../../models/kit';
 import { type ChunkData, type ChunkKey, chunkBounds, chunkCoord, chunkIndex, chunkKey, type Detail, sphereAround } from '../../world/chunks';
 import { buildFence, buildField, buildStructure } from './buildings';
@@ -14,6 +15,9 @@ import { addGround, addPaths, addPatches, MeshBuffer, type Region } from './terr
 // A stand-in is for far off, past CONFIG.streaming.full: coarse ground with
 // the roads coloured in, the cheaper trees the mountains use, the buildings
 // and fields as they are, and none of the undergrowth, fences or worn earth.
+// At full detail the cheaper trees stand on the mountains and deep in the
+// woods, and the chunks round the zone's edge have their mountains' trees
+// thinned (the triangle budget's cuts, CONFIG.streaming.trees).
 
 const UP = new Vector3(0, 1, 0);
 
@@ -22,6 +26,16 @@ const UNDERGROWTH: ReadonlySet<PlantKind> = new Set(['grass', 'flower', 'mushroo
 
 /** Trees farther than this (m) from where you can walk are the mountains': the cheaper ones. */
 const FAR_TREES = 6;
+
+/**
+ * Deep in the woods: off every road's verge (the plan's road distances reach
+ * only that far) and clear of every clearing, where you only ever see a tree
+ * past others, so the cheaper trees go unnoticed.
+ */
+function deepInWoods(plan: ForestLayout, x: number, z: number): boolean {
+  const margin = CONFIG.streaming.trees.clearing;
+  return !Number.isFinite(plan.roadDistance.at(x, z)) && plan.clearings.every((c) => Math.hypot(x - c.x, z - c.z) >= c.r + margin);
+}
 
 /** The chunk grid's reach over Oakvale's terrain, ±FOREST.half: 7 by 7 chunks. */
 const REACH = chunkCoord(FOREST.half - 1e-6);
@@ -68,6 +82,8 @@ export function buildOakvaleChunk(plan: ForestLayout, key: ChunkKey, detail: Det
   const [ci, cj] = chunkIndex(key);
   if (Math.abs(ci) > REACH || Math.abs(cj) > REACH) throw new Error(`Chunk ${key} isn't Oakvale's`);
   const full = detail === 'full';
+  /** One of the ring of chunks round the zone's edge, mountains mostly. */
+  const edge = Math.abs(ci) === REACH || Math.abs(cj) === REACH;
   const region: Region = { ...chunkBounds(key), owns: (x, z) => ownerOf(x, z) === key };
   const raw = new MeshBuffer();
   addGround(raw, plan, region, !full);
@@ -76,7 +92,8 @@ export function buildOakvaleChunk(plan: ForestLayout, key: ChunkKey, detail: Det
     addPatches(raw, plan, region);
   }
 
-  // Plants are stamped from prototypes; the mountains past where you can walk, and every stand-in, get cheaper trees.
+  // Plants are stamped from prototypes; the mountains past where you can walk, deep in the woods and
+  // every stand-in get cheaper trees, and the mountains round the edge are thinned.
   const { near, far } = plants();
   const m = new Matrix4();
   const q = new Quaternion();
@@ -84,7 +101,8 @@ export function buildOakvaleChunk(plan: ForestLayout, key: ChunkKey, detail: Det
     if (!region.owns(p.x, p.z)) continue;
     if (!full && UNDERGROWTH.has(p.kind)) continue;
     const outside = plan.walkable.distance(p.x, p.z) > FAR_TREES;
-    const variants = (outside || !full ? far : near)[p.kind];
+    if (edge && outside && p.seed % CONFIG.streaming.trees.thin !== 0) continue;
+    const variants = (outside || !full || deepInWoods(plan, p.x, p.z) ? far : near)[p.kind];
     m.compose(new Vector3(p.x, p.y, p.z), q.setFromAxisAngle(UP, p.yaw), new Vector3(p.scale, p.scale, p.scale));
     raw.stamp(variants[p.seed % variants.length], m.clone(), 0.92 + ((p.seed >> 4) % 17) / 100);
   }
