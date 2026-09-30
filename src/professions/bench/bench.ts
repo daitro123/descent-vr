@@ -807,6 +807,8 @@ export class AlchemyBench {
       o.quaternion.slerpQuaternions(over.turn, home.turn, e);
       if (e >= 1) {
         this.settleObj(o, home);
+        // Its flask kept till now: with every stand full, the pot would wait mid-air for one.
+        this.target = null;
         this.advance('load');
         this.resetIn = 0.3;
       }
@@ -829,7 +831,6 @@ export class AlchemyBench {
     f.left = made?.kind === 'made' && made.left;
     this.ctx.apply(effects, mouth.setY(mouth.y + 0.1));
     this.recipe = null;
-    this.target = null;
   }
 
   private mouthOf(f: Flask, out: Vector3): Vector3 {

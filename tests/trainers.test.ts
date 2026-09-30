@@ -211,8 +211,8 @@ describe('the Train list', () => {
     const state = new AdventureState();
     const rows = lessonsFor('herbalist', state.professions);
     expect(rows.map((r) => [r.name, r.price, r.needs, r.refused])).toEqual([
-      ['Rage Draught', 10, 5, 'unlearned'],
-      ['Minor Mana Potion', 10, 5, 'unlearned'],
+      ['Rage Draught', 10, 3, 'unlearned'],
+      ['Minor Mana Potion', 10, 3, 'unlearned'],
       ['Elixir of the Keen Eye', 10, 10, 'unlearned'],
     ]);
   });

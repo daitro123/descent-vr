@@ -412,8 +412,8 @@ describe('the Apprentice recipes', () => {
       expect(row(`copper-gauntlets-of-${main}`)).toEqual(['smithing', 'anvil', { 'copper-bar': 4 }, `copper-gauntlets-of-${main}`, 15, 3, 25]);
     }
     expect(row('minor-healing-potion')).toEqual(['alchemy', 'bench', { hearthleaf: 2 }, 'minor-healing-potion', 0, 1, null]);
-    expect(row('rage-draught')).toEqual(['alchemy', 'bench', { duskcap: 2 }, 'rage-draught', 5, 1, 10]);
-    expect(row('minor-mana-potion')).toEqual(['alchemy', 'bench', { hearthleaf: 1, duskcap: 1 }, 'minor-mana-potion', 5, 1, 10]);
+    expect(row('rage-draught')).toEqual(['alchemy', 'bench', { duskcap: 2 }, 'rage-draught', 3, 1, 10]);
+    expect(row('minor-mana-potion')).toEqual(['alchemy', 'bench', { hearthleaf: 1, duskcap: 1 }, 'minor-mana-potion', 3, 1, 10]);
     expect(row('elixir-of-the-keen-eye')).toEqual(['alchemy', 'bench', { hearthleaf: 2, duskcap: 1 }, 'elixir-of-the-keen-eye', 10, 1, 10]);
   });
 
