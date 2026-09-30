@@ -49,6 +49,14 @@ describe('reading the page from its URL', () => {
     expect(readPage('?map=forest&arena').route).toEqual({ kind: 'walk', map: 'forest' });
   });
 
+  it('opens a prototype at ?proto=<name>, after the tools', () => {
+    expect(readPage('?proto=anvil').route).toEqual({ kind: 'proto', name: 'anvil' });
+    expect(readPage('?proto=anvil&v=B&emulate')).toMatchObject({ route: { kind: 'proto', name: 'anvil' }, emulate: 'yes' });
+    expect(readPage('?proto').route).toEqual({ kind: 'proto', name: '' });
+    expect(readPage('?proto=anvil&arena').route).toEqual({ kind: 'proto', name: 'anvil' });
+    expect(readPage('?map=forest&proto=anvil').route).toEqual({ kind: 'walk', map: 'forest' });
+  });
+
   it('forgets ?newgame once answered, keeping every other flag as it was written', () => {
     expect(forgetNewGame('?newgame')).toBe('');
     expect(forgetNewGame('?newgame&emulate&nodevui')).toBe('?emulate&nodevui');

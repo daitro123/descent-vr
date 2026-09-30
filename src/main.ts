@@ -69,6 +69,8 @@ async function start(): Promise<void> {
       return startMapViewer(renderer, scene, camera, device, r.map);
     case 'walk':
       return (await import('./maps/walk')).startWalk(renderer, scene, camera, r.map);
+    case 'proto':
+      return startPrototype(renderer, scene, camera, device, r.name);
     case 'arena':
       return startArena(renderer, scene, camera, device, perf, r);
     case 'adventure':
@@ -219,6 +221,16 @@ function startArena(
     renderer.render(scene, camera);
     perf?.update(dt);
   });
+}
+
+/** `?proto=<name>`: a throwaway prototype, loaded only when asked for. */
+async function startPrototype(renderer: WebGLRenderer, scene: Scene, camera: PerspectiveCamera, device: unknown, name: string): Promise<void> {
+  switch (name) {
+    case 'anvil':
+      return (await import('./professions/prototypes/anvil')).startAnvilPrototype(renderer, scene, camera, device);
+    default:
+      throw new Error(`No prototype called "${name}"`);
+  }
 }
 
 async function startInspector(renderer: WebGLRenderer, scene: Scene, camera: PerspectiveCamera): Promise<void> {
