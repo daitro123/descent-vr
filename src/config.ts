@@ -575,6 +575,27 @@ export const CONFIG = {
     },
   },
 
+  // The smith's and the innkeeper's wares (vendors.ts, ui/wares/)
+  // (.scratch/inventory/issues/06-vendors-and-the-stash.md, 14-vendors.md).
+  vendors: {
+    // The smith's white stock: each class's weapon and off hand at these item levels, and armour for every slot at these.
+    smith: { hands: [1, 3, 5], armour: [2, 4] },
+    // The wares board stands where Hale's talk board would, opening as `talk` says when: m from the
+    // vendor towards you, to your right, and its middle's height. The bag panel opens pinned on its
+    // right, the board hanging on the bag's left and turned in, as the stash's does.
+    board: { out: 0.6, side: 0.55, height: 1.35 },
+    // "Sell junk" is pressed like the talk board's buttons: m round its face, in front of it and behind
+    // it that still touch it, and s after the board unfolds, and after a press, before it takes one.
+    button: { margin: 0.025, front: 0.03, back: 0.08 },
+    arming: 0.4,
+    rearm: 0.6,
+    buzz: {
+      trade: { intensity: 0.8, ms: 60 }, // bought or sold
+      button: { intensity: 0.8, ms: 50 },
+      nothing: { intensity: 0.3, ms: 30 }, // "Sell junk" with no junk in the bag
+    },
+  },
+
   // The belt at your hips (inventory.ts).
   belt: {
     slots: 2, // the left hip's, then the right's

@@ -27,12 +27,15 @@ const _p = new Vector3();
 /**
  * Slots' frames and icons at `points`, each `size` square: two draws however
  * many there are. Colour a frame, point an icon at its atlas cell, and set a
- * count; then say it's `painted`.
+ * count; then say it's `painted`. With `dims`, an icon and its count can be
+ * drawn darker (a ware you can't afford).
  */
 export class SlotMeshes {
   readonly frames: InstancedMesh;
   readonly icons: Mesh<BufferGeometry, MeshBasicMaterial>;
   private readonly uv: BufferAttribute;
+  /** Each quad's brightness, with `dims`. */
+  private readonly tint: BufferAttribute | null = null;
   /** Each slot's first digit's quad, or −1 for a slot without a count. */
   private readonly digits: number[] = [];
 
@@ -40,6 +43,7 @@ export class SlotMeshes {
     points: readonly SlotPoint[],
     size: number,
     private readonly atlas: IconAtlas,
+    dims = false,
   ) {
     this.frames = new InstancedMesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial({ fog: false }), points.length);
     points.forEach(({ x, y }, i) => this.frames.setMatrixAt(i, _m.compose(_p.set(x, y, FACE / 2), _q.identity(), _s.set(size, size, FACE))));
@@ -64,8 +68,12 @@ export class SlotMeshes {
     geometry.setAttribute('position', new BufferAttribute(pos, 3));
     this.uv = new BufferAttribute(new Float32Array(quads * 4 * 2), 2);
     geometry.setAttribute('uv', this.uv);
+    if (dims) {
+      this.tint = new BufferAttribute(new Float32Array(quads * 4 * 3).fill(1), 3);
+      geometry.setAttribute('color', this.tint);
+    }
     geometry.setIndex(index);
-    this.icons = new Mesh(geometry, new MeshBasicMaterial({ map: atlas.texture, transparent: true, alphaTest: 0.05, fog: false }));
+    this.icons = new Mesh(geometry, new MeshBasicMaterial({ map: atlas.texture, transparent: true, alphaTest: 0.05, fog: false, vertexColors: dims }));
     this.icons.frustumCulled = false;
   }
 
@@ -97,9 +105,19 @@ export class SlotMeshes {
     this.cell(q + 1, n > 1 ? this.atlas.digit(n % 10) : BLANK_CELL);
   }
 
+  /** Slot `i`'s icon and count drawn at brightness `k` (1 as they are), with `dims`. */
+  dim(i: number, k: number): void {
+    if (!this.tint) return;
+    const a = this.tint.array as Float32Array;
+    a.fill(k, i * 12, i * 12 + 12);
+    const q = this.digits[i];
+    if (q >= 0) a.fill(k, q * 12, q * 12 + 24);
+  }
+
   /** The icons and counts are all set. */
   painted(): void {
     this.uv.needsUpdate = true;
+    if (this.tint) this.tint.needsUpdate = true;
   }
 
   private cell(q: number, cell: number): void {
@@ -108,9 +126,23 @@ export class SlotMeshes {
   }
 }
 
-/** Paint an item's card: its name in its rarity's colour, what it is, its lock and level, its numbers against what's worn, and what a vendor pays. */
-export function paintCard(card: Card, text: CardText, key: string): void {
-  card.paint(key, (c, w, h) => {
+/** The line along a card's foot: what a vendor pays for it, or what it costs. */
+export interface CardFooter {
+  readonly text: string;
+  readonly colour: string;
+}
+
+/** "1 coin", "12 coins". */
+export const coinsText = (n: number): string => `${n} ${n === 1 ? 'coin' : 'coins'}`;
+
+/**
+ * Paint an item's card: its name in its rarity's colour, what it is, its lock
+ * and level, its numbers against what's worn, and along its foot what a vendor
+ * pays, or `footer` in its place (a ware's price).
+ */
+export function paintCard(card: Card, text: CardText, key: string, footer?: CardFooter): void {
+  const foot = footer ?? (text.sells ? { text: `Sells for ${coinsText(text.sells)}`, colour: '#a89c80' } : null);
+  card.paint(`${key}|${foot?.text}|${foot?.colour}`, (c, w, h) => {
     const colour = RARITY_COLOUR[text.rarity];
     c.fillStyle = 'rgba(12, 10, 16, 0.94)';
     roundRect(c, 0, 0, w, h, 18);
@@ -155,11 +187,11 @@ export function paintCard(card: Card, text: CardText, key: string): void {
       c.fillStyle = '#ece6d6';
       c.fillText(text.note, 20, y, w - 40);
     }
-    if (text.sells) {
-      c.fillStyle = '#a89c80';
+    if (foot) {
+      c.fillStyle = foot.colour;
       c.font = `20px ${FONT}`;
       c.textAlign = 'right';
-      c.fillText(`Sells for ${text.sells} ${text.sells === 1 ? 'coin' : 'coins'}`, w - 20, h - 32);
+      c.fillText(foot.text, w - 20, h - 32);
       c.textAlign = 'left';
     }
   });

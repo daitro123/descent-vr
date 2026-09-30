@@ -150,6 +150,7 @@ async function startAdventure(
     characters,
     state: adventure.state,
     bag: adventure.bag,
+    wares: adventure.wares,
     world: adventure.world,
     player: adventure.player,
     camps: adventure.camps,
