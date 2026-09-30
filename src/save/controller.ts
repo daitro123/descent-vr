@@ -4,8 +4,9 @@ import type { SaveRecord } from './record';
 import type { SaveStore } from './store';
 
 /**
- * When the Adventure writes its save: at once for anything earned (a quest
- * taken, a count going up, a quest ready or handed in, a level, a new sword)
+ * When the Adventure writes its save: at once for anything earned or changed
+ * (a quest taken, a count going up, a quest ready or handed in, a level, and
+ * anything done with your things: an equip, a move, loot, a sale, a chest)
  * and for a change of current zone; every so often in play, so where you stand is
  * kept too (`CONFIG.save.every`); and when the page is hidden or VR ends. One write is in flight at
  * a time: asking again meanwhile writes once more when it lands, with the
@@ -26,9 +27,9 @@ export class SaveController {
     private readonly snapshot: () => SaveRecord,
   ) {}
 
-  /** What the adventure state did: anything but XP alone is written at once. */
+  /** What the adventure state or the inventory did: anything but XP alone, or a refusal, is written at once. */
   onEffects(effects: readonly Effect[]): void {
-    if (effects.some((e) => e.kind !== 'xp')) this.write();
+    if (effects.some((e) => e.kind !== 'xp' && e.kind !== 'refused')) this.write();
   }
 
   /** The current zone, each frame: written when it changes. */

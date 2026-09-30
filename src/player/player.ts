@@ -32,6 +32,8 @@ export class Player {
   /** Seconds of War Cry frenzy left (bonus damage, burning blade). */
   frenzy = 0;
   dashCooldown = 0;
+  /** B / Y dash; a class prototype (src/prototype/) may take the buttons for its own move. */
+  dashes = true;
   private dashTime = 0;
   private dodgeTime = 0;
   private readonly dashVel = new Vector3();
@@ -127,7 +129,7 @@ export class Player {
   private dash(dt: number): void {
     const D = CONFIG.dash;
     const { left, right } = this.input.hands;
-    if ((left.secondaryPressed || right.secondaryPressed) && this.dashCooldown <= 0) {
+    if (this.dashes && (left.secondaryPressed || right.secondaryPressed) && this.dashCooldown <= 0) {
       this.camera.getWorldDirection(_fwd);
       _fwd.y = 0;
       if (_fwd.lengthSq() > 1e-6) {

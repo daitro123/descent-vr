@@ -3,7 +3,7 @@
 
 import type { Ability, Role } from './adventureState';
 import type { EnemyKind } from './models/characters';
-import type { Sword } from './quests';
+import type { GearSlot, Rarity } from './items';
 
 /** Which keyframe pair (enemies/poses.ts) an attack animates between. */
 export type AttackPoseName = 'chop' | 'slashR' | 'slashL' | 'slam' | 'draw' | 'summon';
@@ -321,7 +321,6 @@ export const CONFIG = {
     xp: [100, 300, 600, 1000], // XP in all to reach levels 2, 3, 4 and 5, the cap; XP past it is dropped
     health: 20, // your maximum health (player.maxHp at level 1) grows this much per level above 1
     step: 0.2, // your damage, and an enemy's health and damage, times 1 + this per level above 1
-    swords: { plain: 0, hale: 0.2 } satisfies Record<Sword, number>, // your damage multiplier's extra with each sword: Hale's old longsword is worth one level
     killXp: 10, // a kill pays this per enemy level…
     roles: { ordinary: 1, leader: 3, deepBrute: 3, warden: 3, raised: 0 } satisfies Record<Role, number>, // …times this, by what it was
     unlocks: { warCry: 2, earthshaker: 3 } satisfies Record<Ability, number>, // the level each ability arrives at; rage comes with the War Cry
@@ -335,6 +334,50 @@ export const CONFIG = {
     raiders: { bandits: 3, xp: 80 }, // Raiders in the Fields: defeat this many of the farm's camp
     lumber: { bandits: 5, xp: 120 }, // The Lumber Camp: this many of the lumber camp's camp, and the leader's orders
     below: { xp: 300 }, // What Lies Below: the Warden, for this and Hale's old longsword
+  },
+
+  // Items and their numbers (items.ts). No item's numbers are hand-tuned: its
+  // item level and rarity give them by this one rule
+  // (.scratch/inventory/spec.md, "The item catalogue and the rule").
+  items: {
+    // How far each kind stacks in one slot: gear and quest items never do.
+    stack: { consumable: 10, material: 20, junk: 10 },
+    // Every number a piece carries is times this, by its rarity: a green set of your level
+    // cuts about 15% of the damage you take where a white set cuts 10%, and a blue is 1.5 times a green.
+    rarity: { grey: 0, white: 1, green: 1.6, blue: 2.4 } satisfies Record<Rarity, number>,
+    // A white weapon's damage rating per item level, added to your damage multiplier:
+    // Hale's old longsword, a blue of item level 5, adds 0.2 (one level's step, as it always has).
+    weapon: 0.2 / (5 * 2.4),
+    // A white set's armour per item level, shared over the pieces by `share`.
+    armour: 30,
+    // Armour cuts damage taken by armour / (armour + this × the attacker's level): a set of your level
+    // cuts the same share at any level (white 10%, green 15%, blue 21%).
+    armourVsLevel: 270,
+    // A green set of your level adds this share of the level's own attributes (the Abilities map's
+    // budget, about 8 Stamina and 8 of the main attribute by level 10); a white carries none.
+    attributes: 1 / 3,
+    // Each armour slot's share of a set's armour and attributes. A weapon carries only its damage rating.
+    share: { offHand: 0.15, head: 0.15, chest: 0.25, hands: 0.125, legs: 0.2, feet: 0.125 } satisfies Record<Exclude<GearSlot, 'mainHand'>, number>,
+    // The attributes the Abilities map sets: a level-1 character's own, what each level adds, and
+    // what a point is worth (these match levels.health and levels.step).
+    attribute: { atLevel1: 10, perLevel: 2, health: 10, damage: 0.1 },
+    // Coins a vendor pays per item level, by rarity; consumables and materials have their own price.
+    sell: { grey: 2, white: 3, green: 8, blue: 20 } satisfies Record<Rarity, number>,
+    buy: 4, // a vendor sells at this many times what they'd pay
+    minorHealingPotion: { price: 2, heal: 0.4 }, // coins, and the share of your maximum health it heals
+  },
+
+  // The bag, the stash and the sold row (inventory.ts).
+  bag: {
+    slots: 16,
+    stash: 32, // slots, in two pages of 16, the same from every inn
+    buyback: 6, // the last things sold, bought back at the price you got until you leave the zone
+  },
+
+  // The belt at your hips (inventory.ts).
+  belt: {
+    slots: 2, // the left hip's, then the right's
+    cooldown: 60, // s every potion on the belt dims for after you drink any of them
   },
 
   // Marshal Hale at the crossroads (people/hale.ts).
@@ -472,13 +515,18 @@ export const CONFIG = {
   // out to the fog's far edge. Distances are from you to a chunk's nearest point.
   streaming: {
     chunk: 40, // m: one grid of square chunks over every zone, centred on multiples of this
-    full: 120, // m: chunks this near are at full detail
+    full: 100, // m: chunks this near are at full detail (120 until the triangle budget's first cut, ticket 38)
     hysteresis: 40, // m (a chunk): a chunk is fetched this much early and dropped this much late, at each radius
     perFrame: 1, // chunks uploaded a frame while you walk (and built, where there's no worker)
     inFlight: 2, // chunks a zone's worker is asked for at once, nearest first: enough to keep it busy, few enough to follow you
     // A stand-in's ground: one height every `cell` m, and a skirt hung round its
     // edge `skirt` m below where its coarse edge strays from the full ground beside it.
     standIn: { cell: 4, skirt: 0.4 },
+    // The triangle budget's other cuts (the spec's order, ticket 38). Deep in the
+    // woods, off every road's verge and `clearing` m clear of every clearing, a
+    // full chunk's trees are the far set too. Past where you can walk, in the ring
+    // of chunks round the zone's edge, one tree in `thin` is kept.
+    trees: { clearing: 6, thin: 2 },
   },
 
   // The old mine (world/mine.ts): you're in it once you walk in through its

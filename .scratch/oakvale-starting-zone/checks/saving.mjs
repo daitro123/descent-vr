@@ -13,8 +13,9 @@
 // 1. A new character, with nothing saved: level 1 at the start, no note on the
 //    page, and nothing written before VR, even when the page is hidden.
 // 2. In VR: taking Raiders in the Fields, each of three kills and the hand-in
-//    write at once; the record has level 2, the quests, the sword and the
-//    Warden, and `navigator.storage.persist()`'s answer is logged.
+//    write at once; the record has level 2, the quests, the Warden and your
+//    things (the warrior's starting kit, potions on the belt), and
+//    `navigator.storage.persist()`'s answer is logged.
 // 3. Taking The Lumber Camp, then standing somewhere else for 30 s of play:
 //    the record has where you stand and the way you face.
 // 4. A reload: before VR the page shows Oakvale from the save; you're level 2
@@ -28,6 +29,9 @@
 // 8. Where IndexedDB won't open, the game plays and the page says progress
 //    won't be kept. A newer build's record, and one this build can't read,
 //    are left alone, and the page says so; `?newgame` asks, then deletes it.
+// 9. A record from before the inventory (version 1) loads as a warrior in the
+//    starting kit wearing the sword it had: Hale's old longsword in your hand,
+//    2.0 damage, Hale without it; the next write is version 2.
 //
 // Playwright is the global install; Chromium is the pre-installed one.
 
@@ -173,7 +177,7 @@ await enterVR();
 {
   await board('accept');
   let r = await saved();
-  check(r?.version === 1 && r.quests.raiders.stage === 'active', `taking Raiders in the Fields writes it (${r?.quests.raiders.stage})`);
+  check(r?.version === 2 && r.quests.raiders.stage === 'active', `taking Raiders in the Fields writes it (${r?.quests.raiders.stage})`);
   await step(4); // the camps finish rising out of the ground
   await standAt(54.5, 26, Math.atan2(-(60 - 54.5), -(33 - 26)));
   const counts = [];
@@ -195,7 +199,12 @@ await enterVR();
     r.level === 2 && r.xp === 110 && r.quests.raiders.stage === 'handedIn' && r.quests.lumber.stage === 'offered',
     `the hand-in writes level ${r.level}, ${r.xp} XP, Raiders ${r.quests.raiders.stage}, The Lumber Camp ${r.quests.lumber.stage}`,
   );
-  check(r.sword === 'plain' && r.wardenBeaten === false && r.interior === null, `the sword (${r.sword}), the Warden (beaten: ${r.wardenBeaten}), no interior (${r.interior})`);
+  const inv = r.inventory;
+  check(
+    inv?.gear.mainHand === 'plain-sword' && inv.gear.offHand === 'round-shield' && inv.belt[1]?.count === 3 && inv.coins === 0,
+    `your things: ${inv?.gear.mainHand} and ${inv?.gear.offHand}, ${inv?.belt[1]?.count} potions on the belt, ${inv?.coins} coins`,
+  );
+  check(!('sword' in r) && r.wardenBeaten === false && r.interior === null, `no sword field, the Warden (beaten: ${r.wardenBeaten}), no interior (${r.interior})`);
   check(logs.some((l) => l.startsWith('Storage persisted:')), `persist()'s answer is logged (${logs.find((l) => l.startsWith('Storage persisted:'))})`);
 }
 
@@ -318,7 +327,7 @@ await open('?emulate&nodevui');
   await page.evaluate(() => window.__descent.saved());
   check((await record())?.version === 99, 'and the newer record is left as it was');
 
-  const unreadable = { version: 1, level: 'five' };
+  const unreadable = { version: 2, level: 'five' };
   await put(unreadable);
   await open('?emulate&nodevui');
   const said = await page.locator('.save-note').innerText();
@@ -353,6 +362,37 @@ await open('?emulate&nodevui');
   check(/won't be kept/.test(offline) && level === 1, `where IndexedDB won't open, the game plays (level ${level}) and the page says "${offline}"`);
   if (shots) await other.screenshot({ path: `${shots}/05-unsaved-note.png` });
   await locked.close();
+}
+
+// 9. A record from before the inventory.
+{
+  const quests = { raiders: { stage: 'handedIn', counts: [3] }, lumber: { stage: 'handedIn', counts: [5, 1] }, below: { stage: 'handedIn', counts: [1] } };
+  const v1 = { version: 1, savedAt: 1, level: 5, xp: 1000, sword: 'hale', quests, wardenBeaten: true, position: { x: 0.2, z: 1.5 }, facing: 0, interior: null };
+  await put(v1);
+  await open('?emulate&nodevui');
+  const s = await page.evaluate(() => {
+    const { state, player, adventure } = window.__descent;
+    return {
+      note: document.querySelectorAll('.save-note').length,
+      level: state.level,
+      sword: state.sword,
+      inHand: player.sword.sword,
+      damage: player.stats.damage,
+      atHip: adventure.hale.swordAtHip,
+      gear: state.inventory.gear,
+      belt: state.inventory.belt,
+    };
+  });
+  check(s.note === 0 && s.level === 5, `a version-1 record loads (level ${s.level}), with no note on the page`);
+  check(
+    s.sword === 'hale' && s.inHand === 'hale' && Math.abs(s.damage - 2) < 1e-9 && !s.atHip,
+    `Hale's longsword in your hand, ${s.damage} damage, Hale without it (at hip ${s.atHip})`,
+  );
+  check(s.gear.offHand === 'round-shield' && s.gear.chest === 'worn-tunic' && s.belt[1]?.count === 3, `the starting kit and three potions on the belt`);
+  await enterVR();
+  await hidePage();
+  const r = await saved();
+  check(r?.version === 2 && r.inventory.gear.mainHand === 'hale-longsword' && !('sword' in r), `the next write is version ${r?.version}, wearing ${r?.inventory.gear.mainHand}`);
 }
 
 const pageErrors = errors.filter((e) => !/WebGL|GPU stall/.test(e));

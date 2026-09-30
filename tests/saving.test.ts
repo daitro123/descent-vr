@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { type AdventureEvent, AdventureState, type Effect, type Progress } from '../src/adventureState';
 import { CONFIG } from '../src/config';
 import { SaveController } from '../src/save/controller';
-import { type Migration, readSave, SAVE_VERSION, type SaveRecord, saveRecord } from '../src/save/record';
+import { startingInventory } from '../src/inventory';
+import { type Migration, MIGRATIONS, readSave, SAVE_VERSION, type SaveRecord, saveRecord } from '../src/save/record';
 import { MemoryStore, openSave, type SaveStore } from '../src/save/store';
 
 // Saving, at the save store's port: the record the adventure state snapshots
@@ -35,6 +36,7 @@ const answers = (s: AdventureState) => ({
   progress: s.progress,
   stats: s.stats,
   sword: s.sword,
+  inventory: s.inventory.snapshot(),
   hale: s.hale,
   tracker: s.tracker,
   wardenBeaten: s.wardenBeaten,
@@ -66,13 +68,13 @@ describe("the adventure state's snapshot", () => {
     }
   });
 
-  it('holds level and XP, the sword, each quest with its counts, and whether the Warden is beaten', () => {
+  it('holds level and XP, each quest with its counts, whether the Warden is beaten, and your things', () => {
     const state = new AdventureState();
     [ACCEPT, FARM, FARM, FARM, HAND_IN, ACCEPT, LUMBER, ORDERS].forEach((e) => state.apply(e));
     expect(state.snapshot()).toEqual({
       level: 2,
       xp: 130,
-      sword: 'plain',
+      inventory: startingInventory('warrior'),
       quests: {
         raiders: { stage: 'handedIn', counts: [3] },
         // The Lumber Camp's second count is its orders: taken.
@@ -86,7 +88,11 @@ describe("the adventure state's snapshot", () => {
   it("knows the Warden is beaten and Hale's sword is yours after the chain", () => {
     const state = new AdventureState();
     ROUTE.forEach((e) => state.apply(e));
-    expect(state.snapshot()).toMatchObject({ sword: 'hale', wardenBeaten: true, quests: { below: { stage: 'handedIn', counts: [1] } } });
+    expect(state.snapshot()).toMatchObject({
+      inventory: { gear: { mainHand: 'hale-longsword' } },
+      wardenBeaten: true,
+      quests: { below: { stage: 'handedIn', counts: [1] } },
+    });
   });
 
   it("never loses a level it recorded, even if a new build's levels need more XP", () => {
@@ -152,7 +158,10 @@ describe('the save record', () => {
     expect(readSave('level 5')).toEqual({ kind: 'unreadable' });
     expect(readSave({ version: SAVE_VERSION })).toEqual({ kind: 'unreadable' });
     expect(readSave({ ...current, xp: 'lots' })).toEqual({ kind: 'unreadable' });
-    expect(readSave({ ...current, sword: 'axe' })).toEqual({ kind: 'unreadable' });
+    const { inventory: _, ...noThings } = current;
+    expect(readSave(noThings)).toEqual({ kind: 'unreadable' });
+    expect(readSave({ ...current, inventory: { ...current.inventory, bag: 'full' } })).toEqual({ kind: 'unreadable' });
+    expect(readSave({ ...current, inventory: { ...current.inventory, gear: { ...current.inventory.gear, head: 7 } } })).toEqual({ kind: 'unreadable' });
     expect(readSave({ ...current, quests: { raiders: { stage: 'maybe', counts: [0] } } })).toEqual({ kind: 'unreadable' });
     expect(readSave({ ...current, position: { x: Number.NaN, z: 0 } })).toEqual({ kind: 'unreadable' });
   });
@@ -165,7 +174,21 @@ describe('the save record', () => {
    * One record as each older version wrote it, for every version before the
    * current one: a new version adds its predecessor's here with its migration.
    */
-  const OLDER: Record<number, object> = {};
+  const OLDER: Record<number, object> = {
+    // Before the inventory: the sword in your hand was all you owned.
+    1: {
+      version: 1,
+      savedAt: 7,
+      level: 5,
+      xp: 1000,
+      sword: 'hale',
+      quests: { raiders: { stage: 'handedIn', counts: [3] }, lumber: { stage: 'handedIn', counts: [5, 1] }, below: { stage: 'handedIn', counts: [1] } },
+      wardenBeaten: true,
+      position: { x: 1, z: 2 },
+      facing: 0.5,
+      interior: 'inn',
+    },
+  };
 
   it('upgrades a record of every older version to the current one', () => {
     for (let version = 1; version < SAVE_VERSION; version++) {
@@ -173,6 +196,43 @@ describe('the save record', () => {
       const read = readSave(stored(OLDER[version]));
       expect(read.kind, `version ${version}`).toBe('saved');
     }
+  });
+
+  it("makes a version-1 character a warrior in the starting kit, wearing Hale's old longsword if they had it", () => {
+    const read = readSave(stored(OLDER[1]));
+    if (read.kind !== 'saved') throw new Error(read.kind);
+    expect(read.record).not.toHaveProperty('sword');
+    expect(read.record.inventory).toEqual(startingInventory('warrior', { mainHand: 'hale-longsword' }));
+    expect(read.record).toMatchObject({ level: 5, xp: 1000, wardenBeaten: true, position: { x: 1, z: 2 }, interior: 'inn' });
+    const state = new AdventureState(read.record);
+    expect(state.sword).toBe('hale');
+    expect(state.haleSwordAtHip).toBe(false);
+    expect(state.stats.damage).toBeCloseTo(2.0, 9);
+    expect(state.inventory.belt).toEqual([null, { id: 'minor-healing-potion', count: 3 }]);
+    expect(state.inventory.coins).toBe(0);
+    // Nothing earned before is paid again: the bag starts empty.
+    expect(state.inventory.bag.every((s) => s === null)).toBe(true);
+  });
+
+  it('makes a version-1 character with the plain sword a warrior in the starting kit', () => {
+    const read = readSave(stored({ ...OLDER[1], sword: 'plain', level: 2, xp: 130, wardenBeaten: false, quests: {} }));
+    if (read.kind !== 'saved') throw new Error(read.kind);
+    expect(read.record.inventory).toEqual(startingInventory('warrior'));
+    const state = new AdventureState(read.record);
+    expect(state.sword).toBe('plain');
+    expect(state.haleSwordAtHip).toBe(true);
+    expect(state.stats).toEqual(new AdventureState({ ...new AdventureState().snapshot(), level: 2, xp: 130 }).stats);
+  });
+
+  it("drops an item the catalogue doesn't know on load, rather than failing the read", () => {
+    const record = recordOf(new AdventureState().snapshot());
+    const bag = [{ id: 'axe-of-legends', count: 1 }, { id: 'torn-cloth', count: 2 }, ...record.inventory.bag.slice(2)];
+    const odd = { ...record, inventory: { ...record.inventory, bag, gear: { ...record.inventory.gear, head: 'crown-of-nowhere' } } };
+    const read = readSave(stored(odd));
+    if (read.kind !== 'saved') throw new Error(read.kind);
+    const state = new AdventureState(read.record);
+    expect(state.inventory.bag.slice(0, 2)).toEqual([null, { id: 'torn-cloth', count: 2 }]);
+    expect(state.inventory.gear.head).toBeNull();
   });
 
   // A made-up version 0, written before there were quest stages, to prove the chain.
@@ -198,7 +258,7 @@ describe('the save record', () => {
   };
 
   it('upgrades an older record through its migrations, in order, to the current version', () => {
-    const read = readSave(stored(V0), [UP_FROM_0]);
+    const read = readSave(stored(V0), [UP_FROM_0, ...MIGRATIONS]);
     expect(read).toMatchObject({ kind: 'saved', record: { version: SAVE_VERSION, xp: 120, position: { x: 3, z: -4 }, facing: 1 } });
     if (read.kind !== 'saved') return;
     expect(new AdventureState(read.record).hale.marker).toBe('offered');
@@ -221,6 +281,35 @@ describe('the in-memory store', () => {
     expect(read).toEqual({ kind: 'saved', record });
     if (read.kind !== 'saved') return;
     expect(answers(new AdventureState(read.record))).toEqual(answers(state));
+  });
+
+  it('round-trips everything you own: bag, quest page, gear, belt, coins, stash, chests and the cooldown', async () => {
+    const state = new AdventureState();
+    ROUTE.forEach((e) => state.apply(e));
+    const { inventory } = state;
+    inventory.take([{ id: 'torn-cloth', count: 3 }, { id: 'minor-healing-potion', count: 12 }, { id: 'leaders-orders', count: 1 }], 42);
+    // The plain sword Hale's replaced is in the bag's first slot, the cloth in its second.
+    inventory.move({ in: 'bag', slot: 3 }, { in: 'stash', slot: 20 });
+    inventory.move({ in: 'bag', slot: 2 }, { in: 'belt', slot: 0 });
+    inventory.drink(1);
+    inventory.tick(15);
+    inventory.openChest('watchtower', [{ id: 'worn-boots', count: 1 }], 10);
+    const record = recordOf(state.snapshot(), 55);
+    const store = new MemoryStore();
+    await store.write(record);
+    const read = readSave(await store.read());
+    expect(read).toEqual({ kind: 'saved', record });
+    if (read.kind !== 'saved') return;
+    const restored = new AdventureState(read.record);
+    expect(answers(restored)).toEqual(answers(state));
+    expect(restored.inventory.snapshot()).toMatchObject({
+      coins: 52,
+      chests: ['watchtower'],
+      cooldown: 45,
+      quest: ['leaders-orders'],
+      gear: { mainHand: 'hale-longsword' },
+    });
+    expect(restored.inventory.stash[20]).toEqual({ id: 'minor-healing-potion', count: 2 });
   });
 
   it('round-trips a save made inside the inn, with the inn as its interior', async () => {
@@ -377,7 +466,10 @@ describe('the save controller', () => {
     'a quest becoming ready': [{ kind: 'quest', quest: 'raiders', stage: 'ready' }],
     'a hand-in': [{ kind: 'quest', quest: 'raiders', stage: 'handedIn' }, { kind: 'xp', amount: 80 }],
     'a level-up': [{ kind: 'xp', amount: 10 }, { kind: 'level', level: 2, unlocks: ['warCry'] }],
-    'a new sword': [{ kind: 'sword', sword: 'hale' }],
+    'a reward worn at once': [{ kind: 'slot', where: { in: 'gear', slot: 'mainHand' }, stack: { id: 'hale-longsword', count: 1 } }],
+    'loot taken': [{ kind: 'coins', coins: 5 }, { kind: 'slot', where: { in: 'bag', slot: 0 }, stack: { id: 'torn-cloth', count: 1 } }],
+    'a potion drunk': [{ kind: 'drank', id: 'minor-healing-potion', heal: 0.4 }],
+    'a chest opened': [{ kind: 'chest', chest: 'watchtower' }],
   };
 
   for (const [what, list] of Object.entries(effects)) {
@@ -388,9 +480,10 @@ describe('the save controller', () => {
     });
   }
 
-  it("doesn't write for XP alone, or for nothing", () => {
+  it("doesn't write for XP alone, a refusal, or nothing", () => {
     const { store, controller } = saving();
     controller.onEffects([{ kind: 'xp', amount: 10 }]);
+    controller.onEffects([{ kind: 'refused', reason: 'level' }]);
     controller.onEffects([]);
     expect(store.writes).toHaveLength(0);
   });
