@@ -54,7 +54,32 @@ export interface ConsumableItem extends Common {
   readonly price: number;
   /** The share of your maximum health drinking one heals. */
   readonly heal: number;
+  /** Rage drinking one gives. */
+  readonly rage?: number;
+  /** The share of your maximum mana drinking one gives back. */
+  readonly mana?: number;
+  /**
+   * A timed buff: not a potion, so off the belt's shared cooldown. One of each
+   * kind is on you at a time, and a new one replaces the old.
+   */
+  readonly buff?: Buff;
+  /** Never goes on the belt (the whetstone, rubbed along your blade from the bag). */
+  readonly belt?: false;
 }
+
+/** A timed buff a consumable puts on you. */
+export interface Buff {
+  /** One of each kind at a time. */
+  readonly kind: 'whetstone' | 'elixir';
+  /** Added to your damage multiplier while it lasts. */
+  readonly damage: number;
+  readonly seconds: number;
+  /** The classes it's for; anyone's if missing. */
+  readonly for?: readonly ClassId[];
+}
+
+/** Is it a potion, on the belt's shared cooldown? Every consumable but a buff is. */
+export const isPotion = (item: ItemDef): boolean => item.kind === 'consumable' && !item.buff;
 
 export interface MaterialItem extends Common {
   readonly kind: 'material';
@@ -85,8 +110,26 @@ const gear = (id: ItemId, name: string, slot: GearSlot, level: number, rarity: R
 const junk = (id: ItemId, name: string, model: string): JunkItem => ({ id, name, kind: 'junk', level: 1, rarity: 'grey', model });
 
 const potion = CONFIG.items.minorHealingPotion;
+const made = CONFIG.professions.items;
 
-/** Every item the game knows, by id. Later tickets add Oakvale's picks, the smith's stock, loot and Professions' items. */
+const material = (id: ItemId, name: string, model: string, price: number): MaterialItem => ({ id, name, kind: 'material', level: 1, rarity: 'white', model, price });
+
+const consumable = (id: ItemId, name: string, model: string, more: Omit<ConsumableItem, keyof Common | 'kind' | 'heal'>): ConsumableItem => ({
+  id,
+  name,
+  kind: 'consumable',
+  level: 1,
+  rarity: 'white',
+  model,
+  heal: 0,
+  ...more,
+});
+
+/** Copper gauntlets in one version: armour anyone can wear, carrying Stamina and `main`. */
+const gauntlets = (main: MainAttribute, of: string): GearItem =>
+  gear(`copper-gauntlets-of-${main}`, `Copper Gauntlets of ${of}`, 'hands', made.copperGauntlets.level, made.copperGauntlets.rarity, 'copper-gauntlets', { main });
+
+/** Every item the game knows, by id. Later tickets add Oakvale's picks, the smith's stock and loot. */
 export const CATALOGUE: Readonly<Record<ItemId, ItemDef>> = Object.fromEntries(
   ([
     // The warrior's starting kit, as today: the plain sword and the round shield.
@@ -108,6 +151,27 @@ export const CATALOGUE: Readonly<Record<ItemId, ItemDef>> = Object.fromEntries(
     junk('torn-cloth', 'Torn Cloth', 'cloth'),
     junk('bone-charm', 'Bone Charm', 'charm'),
     junk('grave-dust', 'Grave Dust', 'dust'),
+    // Professions' materials, gathered and smelted in Oakvale.
+    material('copper-ore', 'Copper Ore', 'ore-copper', made.copperOre.price),
+    material('rough-stone', 'Rough Stone', 'stone-rough', made.roughStone.price),
+    material('copper-bar', 'Copper Bar', 'bar-copper', made.copperBar.price),
+    material('hearthleaf', 'Hearthleaf', 'herb-hearthleaf', made.hearthleaf.price),
+    material('duskcap', 'Duskcap', 'herb-duskcap', made.duskcap.price),
+    // What Alchemy and Smithing make (the minor healing potion is the innkeeper's, above).
+    consumable('rage-draught', 'Rage Draught', 'flask-orange', { price: made.rageDraught.price, rage: made.rageDraught.rage }),
+    consumable('minor-mana-potion', 'Minor Mana Potion', 'flask-blue', { price: made.minorManaPotion.price, mana: made.minorManaPotion.mana }),
+    consumable('elixir-of-the-keen-eye', 'Elixir of the Keen Eye', 'flask-green', {
+      price: made.elixirOfTheKeenEye.price,
+      buff: { kind: 'elixir', damage: made.elixirOfTheKeenEye.damage, seconds: made.elixirOfTheKeenEye.seconds },
+    }),
+    consumable('whetstone', 'Whetstone', 'whetstone', {
+      price: made.whetstone.price,
+      buff: { kind: 'whetstone', damage: made.whetstone.damage, seconds: made.whetstone.seconds, for: ['warrior', 'ranger'] },
+      belt: false,
+    }),
+    gauntlets('strength', 'Strength'),
+    gauntlets('agility', 'Agility'),
+    gauntlets('intellect', 'Intellect'),
   ] satisfies ItemDef[]).map((item) => [item.id, item]),
 );
 

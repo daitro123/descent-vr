@@ -1,5 +1,6 @@
 import { CONFIG, type EnemyConfig } from './config';
 import { Inventory, type InventoryEffect, type InventorySave } from './inventory';
+import { type ProfessionEffect, Professions, type ProfessionsSave } from './professions/professions';
 import { type ClassId, itemOf, type Worn, WORN_NOTHING } from './items';
 import type { CampId } from './maps/types';
 import { BARKS, CHAIN, CHAIN_DONE, type Item, type Objective, type Place, type QuestId, RETURN_TO_HALE, type Sword, SWORDS, type VillagerId } from './quests';
@@ -42,6 +43,8 @@ export interface Progress {
   readonly wardenBeaten: boolean;
   /** The bag, gear, belt, coins, stash and chests opened. */
   readonly inventory: InventorySave;
+  /** The professions learned, with their proficiency and grade, and the recipes known. */
+  readonly professions: ProfessionsSave;
 }
 
 /** Something that happened in the world that progress may care about. */
@@ -71,7 +74,9 @@ export type Effect =
   /** One of a quest's objectives counted one more: `count` of its need. */
   | { readonly kind: 'progress'; readonly quest: QuestId; readonly objective: number; readonly count: number }
   /** What happened to your things: a reward put straight into your hand, say. */
-  | InventoryEffect;
+  | InventoryEffect
+  /** What happened to your professions: one learned, proficiency gained, a recipe known. */
+  | ProfessionEffect;
 
 /** A button on Hale's board: Accept, Not now, Hand in, Goodbye. */
 export type Button = 'accept' | 'notNow' | 'handIn' | 'goodbye';
@@ -174,12 +179,15 @@ export class AdventureState {
   private beaten = false;
   /** Your things. Every character is a warrior until the Abilities map's roster brings classes. */
   readonly inventory: Inventory;
+  /** Your professions, working on your things. */
+  readonly professions: Professions;
 
   /** A new character, or one restored from a snapshot. */
   constructor(saved?: Progress) {
     const you = this;
     const wearer = { class: 'warrior' as ClassId, get level() { return you.level; } };
     this.inventory = new Inventory(wearer, saved?.inventory);
+    this.professions = new Professions(this.inventory, saved?.professions);
     if (saved) this.restore(saved);
   }
 
@@ -187,7 +195,14 @@ export class AdventureState {
   snapshot(): Progress {
     const quests = {} as Record<QuestId, QuestProgress>;
     CHAIN.forEach((q, i) => (quests[q.id] = { stage: this.stages[i], counts: [...this.counts[i]] }));
-    return { level: this.level, xp: this.total, quests, wardenBeaten: this.beaten, inventory: this.inventory.snapshot() };
+    return {
+      level: this.level,
+      xp: this.total,
+      quests,
+      wardenBeaten: this.beaten,
+      inventory: this.inventory.snapshot(),
+      professions: this.professions.snapshot(),
+    };
   }
 
   /**
