@@ -13,6 +13,10 @@ import { SPOT_KINDS, type SpotKind } from '../professions';
 // the rock for nothing. One on the ore counts 1, and one in the glint 2.25,
 // so the vein's 4.5 breaks in 2 good swings or 5 plain ones, cracking at a
 // third and two thirds of the way.
+//
+// A cut with the knife counts on its own lighter gate. One hot pass through a
+// clump's stems, the bottom 10 cm, takes it whole; one through its leaves
+// only trims a leaf; a slower touch brushes them.
 
 /** What a strike was: a tap (too slow), stone (hot, but off the ore), good (on the ore) or glint (in it). */
 export type StrikeKind = 'tap' | 'stone' | 'good' | 'glint';
@@ -50,6 +54,40 @@ export function scoreStrike(s: StrikeIn): Strike {
   return s.inGlint ? { kind: 'glint', speed: s.speed, power, value: V.glint } : { kind: 'good', speed: s.speed, power, value: V.plain };
 }
 
+/** Where on a clump a point is: in its stems (the bottom band) or its leaves (above them). */
+export type ClumpBand = 'stems' | 'leaves';
+
+/** Which band of a clump the point (x, y, z) m from its foot is in, or null outside both. */
+export function bandAt(x: number, y: number, z: number): ClumpBand | null {
+  const C = CONFIG.professions.clump;
+  const r = Math.hypot(x, z);
+  if (r < C.stemRadius && y > -0.01 && y < C.stemTop) return 'stems';
+  if (r < C.leafRadius && y >= C.stemTop && y < C.leafTop) return 'leaves';
+  return null;
+}
+
+/** What a pass of the knife through a clump does: takes it (through the stems), trims a leaf, or only brushes it (too slow). */
+export type CutKind = 'take' | 'trim' | 'brush';
+
+/** A pass of the knife through a clump, for `scoreCut`. */
+export interface CutIn {
+  /** The swing passed the knife's gate: enough hand travel one way at speed. */
+  readonly committed: boolean;
+  /** The tip's speed (m/s). */
+  readonly speed: number;
+  /** Some of the edge went through the stems' band… */
+  readonly stems: boolean;
+  /** …or the leaves'. */
+  readonly leaves: boolean;
+}
+
+/** Score a pass of the knife: null if it touched nothing. A hot pass through the stems takes the clump, even if it caught leaves too. */
+export function scoreCut(c: CutIn): CutKind | null {
+  if (!c.stems && !c.leaves) return null;
+  if (!c.committed || c.speed < CONFIG.professions.knife.minSpeed) return 'brush';
+  return c.stems ? 'take' : 'trim';
+}
+
 /** A spot's state: full (perhaps being worked) or taken. */
 export type SpotPhase = 'full' | 'worked' | 'taken';
 
@@ -70,9 +108,21 @@ export interface Struck {
   readonly stage: number;
 }
 
+/** What a cut did to a clump. */
+export interface Cut {
+  /** It counted: one a swing, and none on a taken clump or for a brush. */
+  readonly counted: boolean;
+  /** It took the clump: now's the time to gather it. */
+  readonly took: boolean;
+}
+
 interface State {
   progress: number;
   strikes: number;
+  /** Leaves trimmed from a clump since it last grew. */
+  trims: number;
+  /** The swing that last counted on it: each counts once. */
+  swing: number;
   taken: boolean;
   /** Seconds since it was taken. */
   since: number;
@@ -80,10 +130,9 @@ interface State {
 
 export class SpotStates {
   private readonly states: State[];
-  private lastSwing = -1;
 
   constructor(private readonly spots: readonly SpotAt[]) {
-    this.states = spots.map(() => ({ progress: 0, strikes: 0, taken: false, since: 0 }));
+    this.states = spots.map(() => ({ progress: 0, strikes: 0, trims: 0, swing: -1, taken: false, since: 0 }));
   }
 
   get count(): number {
@@ -117,13 +166,35 @@ export class SpotStates {
    */
   strike(i: number, strike: Strike, swing: number): Struck {
     const s = this.states[i];
-    if (s.taken || strike.value <= 0 || swing === this.lastSwing) return { counted: false, broke: false, stage: this.stage(i) };
-    this.lastSwing = swing;
+    if (s.taken || strike.value <= 0 || swing === s.swing) return { counted: false, broke: false, stage: this.stage(i) };
+    s.swing = swing;
     s.progress += strike.value;
     s.strikes++;
     const broke = s.progress >= CONFIG.professions.vein.need - 1e-6;
     if (broke) this.take(i);
     return { counted: true, broke, stage: this.stage(i) };
+  }
+
+  /** Leaves trimmed from clump `i` since it last grew. */
+  trims(i: number): number {
+    return this.states[i].trims;
+  }
+
+  /**
+   * A cut through clump `i` during swing number `swing`: counted once per
+   * swing, and nothing on a taken clump or for a brush. Through the stems it
+   * takes the clump; through the leaves it trims one.
+   */
+  cut(i: number, cut: CutKind, swing: number): Cut {
+    const s = this.states[i];
+    if (s.taken || cut === 'brush' || swing === s.swing) return { counted: false, took: false };
+    s.swing = swing;
+    if (cut === 'trim') {
+      s.trims++;
+      return { counted: true, took: false };
+    }
+    this.take(i);
+    return { counted: true, took: true };
   }
 
   /** Take spot `i` (broken, or cut): it's dark until it refills. */
@@ -148,6 +219,7 @@ export class SpotStates {
       s.taken = false;
       s.progress = 0;
       s.strikes = 0;
+      s.trims = 0;
       refilled.push(i);
     });
     return refilled;

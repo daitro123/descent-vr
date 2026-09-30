@@ -4,20 +4,23 @@ import { CONFIG } from '../src/config';
 import { Inventory } from '../src/inventory';
 import { BeltFrame, HIPS, TOOL_LOOP } from '../src/player/beltZones';
 import { GestureRecorder, type HandFrame } from '../src/player/gestures/recorder';
-import { inLoop, loopGrip, loopOpen, type LoopNow, putBack } from '../src/professions/gathering/loop';
-import { scoreStrike, SpotStates, type Strike } from '../src/professions/gathering/spots';
+import { inLoop, loopGrip, loopOpen, type LoopNow, putBack, TOOL_OF, toolFor } from '../src/professions/gathering/loop';
+import { bandAt, scoreCut, scoreStrike, SpotStates, type Strike } from '../src/professions/gathering/spots';
 import { Professions } from '../src/professions/professions';
 
 // Gathering at the seams that don't need a headset
-// (.scratch/professions/issues/13-the-tool-loop-and-mining.md): the tool
-// loop's zone and its rules, a strike's score, and a vein's state from full
-// through worked and taken to refilled. How the swings feel, the loop's reach
-// and the veins in Oakvale are the check script's, in the browser
-// (.scratch/professions/checks/mining.mjs).
+// (.scratch/professions/issues/13-the-tool-loop-and-mining.md, 14-herbalism.md):
+// the tool loop's zone and its rules, which tool it draws, a strike's score
+// and a cut's, and a spot's state from full through worked and taken to
+// refilled. How the swings feel, the loop's reach and the spots in Oakvale are
+// the check scripts', in the browser (.scratch/professions/checks/mining.mjs,
+// herbalism.mjs).
 
 const L = CONFIG.professions.toolLoop;
 const V = CONFIG.professions.vein;
 const P = CONFIG.professions.pick;
+const C = CONFIG.professions.clump;
+const K = CONFIG.professions.knife;
 
 /** A head at eye height `y`, over (x, z), looking along heading `yaw` (0 looks down −Z). */
 function head(x: number, y: number, z: number, yaw = 0): Object3D {
@@ -207,5 +210,91 @@ describe("a vein's state", () => {
     expect(inventory.count('copper-ore')).toBe(3);
     expect(inventory.count('rough-stone')).toBe(1);
     expect(professions.proficiency('mining')).toBe(1);
+  });
+});
+
+describe('which tool the loop draws', () => {
+  it('gives the pick for a vein and the knife for a clump of either herb', () => {
+    expect(TOOL_OF).toEqual({ copperVein: 'pick', hearthleaf: 'knife', duskcap: 'knife' });
+  });
+
+  it('draws the tool whose nearest full spot is closer, within reach', () => {
+    expect(toolFor({ pick: 1.5, knife: 2.5 })).toBe('pick');
+    expect(toolFor({ pick: 2.5, knife: 1.5 })).toBe('knife');
+    expect(toolFor({ pick: Infinity, knife: 2 })).toBe('knife'); // Mining not learned, or no vein here
+    expect(toolFor({ pick: 2, knife: 2 })).toBe('pick');
+    expect(toolFor({ pick: L.draw + 0.1, knife: Infinity })).toBeNull();
+  });
+});
+
+describe('a cut with the knife', () => {
+  it('finds the stems in the bottom 10 cm of the clump and the leaves above them', () => {
+    expect(bandAt(0, 0.05, 0.03)).toBe('stems');
+    expect(bandAt(C.stemRadius - 0.01, C.stemTop - 0.01, 0)).toBe('stems');
+    expect(bandAt(0.05, C.stemTop + 0.05, 0)).toBe('leaves');
+    expect(bandAt(0, C.leafTop - 0.01, C.leafRadius - 0.01)).toBe('leaves');
+    expect(bandAt(0, C.leafTop + 0.02, 0)).toBeNull(); // over it
+    expect(bandAt(C.stemRadius + 0.02, 0.05, 0)).toBeNull(); // beside the stems
+    expect(bandAt(0, -0.05, 0)).toBeNull(); // into the bank
+  });
+
+  it('takes the clump through the stems, trims a leaf through the leaves, and only brushes it too slow', () => {
+    const hot = { committed: true, speed: K.minSpeed + 0.2 };
+    expect(scoreCut({ ...hot, stems: true, leaves: false })).toBe('take');
+    expect(scoreCut({ ...hot, stems: true, leaves: true })).toBe('take'); // a slanting cut that also caught leaves
+    expect(scoreCut({ ...hot, stems: false, leaves: true })).toBe('trim');
+    expect(scoreCut({ committed: true, speed: K.minSpeed - 0.2, stems: true, leaves: false })).toBe('brush');
+    expect(scoreCut({ committed: false, speed: 3, stems: true, leaves: false })).toBe('brush');
+    expect(scoreCut({ ...hot, stems: false, leaves: false })).toBeNull();
+  });
+});
+
+describe("a clump's state", () => {
+  const CLUMP = { kind: 'hearthleaf' as const, x: 0, z: 0 };
+  const refill = CONFIG.professions.spots.hearthleaf.refill;
+
+  it('is taken by one cut through the stems', () => {
+    const s = new SpotStates([CLUMP]);
+    expect(s.cut(0, 'take', 1)).toEqual({ counted: true, took: true });
+    expect(s.phase(0)).toBe('taken');
+    expect(s.cut(0, 'take', 2).counted).toBe(false);
+  });
+
+  it('only loses a leaf to a cut through the leaves, one a swing, and nothing to a brush', () => {
+    const s = new SpotStates([CLUMP]);
+    expect(s.cut(0, 'trim', 1)).toEqual({ counted: true, took: false });
+    expect(s.cut(0, 'take', 1).counted).toBe(false); // the same swing, lower down the edge: still that swing
+    expect(s.cut(0, 'brush', 2).counted).toBe(false);
+    expect(s.trims(0)).toBe(1);
+    expect(s.phase(0)).toBe('full');
+    expect(s.cut(0, 'take', 3).took).toBe(true);
+  });
+
+  it('counts each spot’s swings on their own, so one tool’s count never hides another’s', () => {
+    const s = new SpotStates([{ kind: 'copperVein', x: 0, z: 5 }, CLUMP]);
+    s.strike(0, scoreStrike({ committed: true, speed: 3, onOre: true, inGlint: false }), 4);
+    expect(s.cut(1, 'take', 4).took).toBe(true);
+  });
+
+  it('grows back 180 s after it was taken, once you are 30 m off, with its leaves whole', () => {
+    const s = new SpotStates([CLUMP]);
+    s.cut(0, 'trim', 1);
+    s.cut(0, 'take', 2);
+    expect(s.update(refill.after + 1, { x: 1, z: 0 })).toEqual([]);
+    expect(s.update(0.1, { x: refill.away, z: 0 })).toEqual([0]);
+    expect(s.phase(0)).toBe('full');
+    expect(s.trims(0)).toBe(0);
+  });
+
+  it('gives 2 herbs and a point of Herbalism once cut, through the professions module', () => {
+    const inventory = new Inventory({ class: 'warrior', level: 1 });
+    const professions = new Professions(inventory);
+    professions.learn('herbalism');
+    for (const kind of ['hearthleaf', 'duskcap'] as const) {
+      const effects = professions.gather(kind);
+      expect(effects).toContainEqual({ kind: 'gathered', spot: kind });
+      expect(inventory.count(kind)).toBe(2);
+    }
+    expect(professions.proficiency('herbalism')).toBe(2);
   });
 });
