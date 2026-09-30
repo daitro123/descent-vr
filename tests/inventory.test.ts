@@ -61,8 +61,8 @@ describe('a new character', () => {
 
 describe('stacking and splitting', () => {
   it('stacks potions and junk to 10 a slot as they come in', () => {
-    const inv = carrying([potions(25), { id: 'torn-cloth', count: 4 }]);
-    expect(inv.bag.slice(0, 5)).toEqual([potions(10), potions(10), potions(5), { id: 'torn-cloth', count: 4 }, null]);
+    const inv = carrying([potions(25), { id: 'torn-cloth-1', count: 4 }]);
+    expect(inv.bag.slice(0, 5)).toEqual([potions(10), potions(10), potions(5), { id: 'torn-cloth-1', count: 4 }, null]);
   });
 
   it('tops up a stack that has room before using an empty slot', () => {
@@ -93,7 +93,7 @@ describe('stacking and splitting', () => {
   });
 
   it("won't split a stack onto another item", () => {
-    const inv = carrying([potions(6), { id: 'torn-cloth', count: 2 }]);
+    const inv = carrying([potions(6), { id: 'torn-cloth-1', count: 2 }]);
     expect(refusals(inv.move(bag(0), bag(1), 2))).toEqual(['slot']);
     expect(inv.at(bag(0))).toEqual(potions(6));
   });
@@ -139,7 +139,7 @@ describe('wearing gear', () => {
   });
 
   it('refuses a slot of the wrong kind', () => {
-    const inv = carrying([{ id: 'worn-tunic', count: 1 }, potions(2), { id: 'torn-cloth', count: 1 }]);
+    const inv = carrying([{ id: 'worn-tunic', count: 1 }, potions(2), { id: 'torn-cloth-1', count: 1 }]);
     expect(refusals(inv.move(bag(0), FEET))).toEqual(['slot']);
     expect(refusals(inv.move(bag(1), CHEST))).toEqual(['slot']);
     expect(refusals(inv.move(bag(0), LEFT_HIP))).toEqual(['slot']);
@@ -193,7 +193,7 @@ describe('the belt', () => {
   });
 
   it('refills a slot drunk empty from the bag', () => {
-    const inv = carrying([{ id: 'torn-cloth', count: 1 }, potions(5)]);
+    const inv = carrying([{ id: 'torn-cloth-1', count: 1 }, potions(5)]);
     for (let i = 0; i < 2; i++) {
       inv.drink(1);
       inv.tick(60);
@@ -220,11 +220,11 @@ describe('taking loot in', () => {
   it('always takes the coins, and puts quest items on their page, taking no slot', () => {
     const inv = new Inventory(warrior());
     fullBag(inv);
-    const effects = inv.take([{ id: 'leaders-orders', count: 1 }, { id: 'torn-cloth', count: 2 }], 7);
+    const effects = inv.take([{ id: 'leaders-orders', count: 1 }, { id: 'torn-cloth-1', count: 2 }], 7);
     expect(inv.coins).toBe(7);
     expect(inv.quest).toEqual(['leaders-orders']);
     expect(effects).toContainEqual({ kind: 'coins', coins: 7 });
-    expect(effects).toContainEqual({ kind: 'left', stack: { id: 'torn-cloth', count: 2 } });
+    expect(effects).toContainEqual({ kind: 'left', stack: { id: 'torn-cloth-1', count: 2 } });
   });
 
   it("reports what didn't fit, having filled what it could", () => {
@@ -284,7 +284,7 @@ describe('dropping', () => {
 
 describe('vendors', () => {
   it('sell at the rule, and buy at 4 times it', () => {
-    const inv = carrying([{ id: 'torn-cloth', count: 3 }]);
+    const inv = carrying([{ id: 'torn-cloth-1', count: 3 }]);
     expect(inv.sell(bag(0))).toContainEqual({ kind: 'coins', coins: 6 });
     expect(inv.buy('minor-healing-potion')).toEqual([{ kind: 'refused', reason: 'coins' }]);
     expect(inv.coins).toBe(6);
@@ -329,13 +329,13 @@ describe('vendors', () => {
   });
 
   it('refuses a buyback you can\'t afford, and clears the Sold row when you leave the zone', () => {
-    const inv = carrying([{ id: 'torn-cloth', count: 5 }]);
+    const inv = carrying([{ id: 'torn-cloth-1', count: 5 }]);
     inv.sell(bag(0), 2);
-    expect(inv.at(bag(0))).toEqual({ id: 'torn-cloth', count: 3 });
+    expect(inv.at(bag(0))).toEqual({ id: 'torn-cloth-1', count: 3 });
     inv.sell(FEET);
     expect(inv.sold).toEqual([
       { id: 'worn-boots', count: 1, price: 3 },
-      { id: 'torn-cloth', count: 2, price: 4 },
+      { id: 'torn-cloth-1', count: 2, price: 4 },
     ]);
     inv.take([], 1);
     inv.buy('minor-healing-potion');
@@ -348,7 +348,7 @@ describe('vendors', () => {
   });
 
   it('sells every grey in the bag at once, and nothing else', () => {
-    const inv = carrying([{ id: 'torn-cloth', count: 3 }, potions(2), { id: 'bone-charm', count: 1 }, { id: 'worn-tunic', count: 1 }]);
+    const inv = carrying([{ id: 'torn-cloth-1', count: 3 }, potions(2), { id: 'bone-charm-1', count: 1 }, { id: 'worn-tunic', count: 1 }]);
     inv.sellJunk();
     expect(inv.coins).toBe(8);
     expect(inv.bag.slice(0, 4)).toEqual([null, potions(2), null, { id: 'worn-tunic', count: 1 }]);
@@ -375,7 +375,7 @@ describe('the stash', () => {
 
 describe('its snapshot', () => {
   it('restores to the same things', () => {
-    const inv = carrying([potions(12), { id: 'torn-cloth', count: 2 }, { id: 'leaders-orders', count: 1 }]);
+    const inv = carrying([potions(12), { id: 'torn-cloth-1', count: 2 }, { id: 'leaders-orders', count: 1 }]);
     inv.take([], 33);
     inv.move(bag(1), stash(17));
     inv.drink(1);

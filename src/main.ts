@@ -3,6 +3,7 @@ import { VRButton } from 'three/addons/webxr/VRButton.js';
 import { Adventure } from './adventure';
 import { combatStats } from './combat/combat';
 import { CONFIG } from './config';
+import { enemiesDebug } from './enemies/debug';
 import { startAmbience, unlockAudio } from './fx/sfx';
 import { Game } from './game';
 import { findMap, loadNeighbours } from './maps/registry';
@@ -152,6 +153,11 @@ async function startAdventure(
     },
     /** Teach a profession, set proficiency and fill the bag: `professions.learn('mining')`, `professions.fill()`. */
     professions: professionsDebug(adventure.state, (effects) => adventure.saves.onEffects(effects)),
+    /** Root, freeze or slow the enemy nearest you: `enemies.root(4)`, `enemies.slow(4, 0.5)`. */
+    enemies: enemiesDebug(
+      () => [...adventure.camps.enemies, ...(adventure.throne?.enemies ?? [])],
+      (out) => adventure.player.feetPosition(out),
+    ),
   };
   Object.assign(window, { __descent: debug });
 
@@ -214,7 +220,12 @@ function startArena(
   // Handle for poking at the game from the console / automated smoke tests.
   // `paused` freezes gameplay (rendering continues) to inspect a moment.
   // `classKit`: a class prototype's (`&class=`), once it has loaded.
-  const debug = { game, device, renderer, combatStats, CONFIG, showcase, paused: false, classKit: null as ClassPrototype | null };
+  // `enemies`: root, freeze or slow the enemy nearest you.
+  const enemies = enemiesDebug(
+    () => game.enemies,
+    (out) => game.player.feetPosition(out),
+  );
+  const debug = { game, device, renderer, combatStats, CONFIG, showcase, enemies, paused: false, classKit: null as ClassPrototype | null };
   Object.assign(window, { __descent: debug });
   if (playerClass || gestures) void loadClassPrototype(playerClass, game, scene, gestures).then((kit) => (debug.classKit = kit));
 
