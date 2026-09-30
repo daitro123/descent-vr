@@ -179,7 +179,8 @@ const cost = await page.evaluate(() => {
   const { interior } = window.__descent.world.interiors[0];
   const meshes = [];
   // The innkeeper hangs from the room too: they're the villagers' check's (villagers.mjs), one draw call.
-  interior.root.traverse((o) => o.isMesh && o.visible && o.name !== 'innkeeper-bark' && !o.isSkinnedMesh && meshes.push(o));
+  // So does the stash's chest, two draws: the stash's (inventory/checks/stash.mjs).
+  interior.root.traverse((o) => o.isMesh && o.visible && o.name !== 'innkeeper-bark' && !o.isSkinnedMesh && !o.name.startsWith('stash-chest') && meshes.push(o));
   const room = meshes.find((m) => m.name === 'inn-room');
   const leaves = meshes.filter((m) => m.name === 'inn-door');
   const tris = (g) => (g.index ? g.index.count : g.attributes.position.count) / 3;

@@ -484,6 +484,19 @@ export const CONFIG = {
       take: 0.25, // m from a hand to take it back, the orb's pickup radius
       settle: 0.6, // s after it's let go before a hand can take it back
     },
+    // The stash panel (ui/bag/stashPanel.ts): opened with the bag's by touching the stash chest's lid,
+    // on the bag panel's left, turned in towards you. It closes with the bag's.
+    stashPanel: {
+      gap: 0.03, // m between its edge and the bag panel's
+      turn: 25, // ° turned in towards you
+    },
+    // The stash's chest by the inn's hearth (world/stashChest.ts).
+    stashChest: {
+      touch: 0.05, // m round its lid a fist or the weapon's tip counts as touching it
+      lid: 105, // ° its lid swings up while the stash is open…
+      swing: 0.35, // …over this many s
+      buzz: { intensity: 0.6, ms: 50 }, // the lid touched
+    },
   },
 
   // The belt at your hips (inventory.ts).
