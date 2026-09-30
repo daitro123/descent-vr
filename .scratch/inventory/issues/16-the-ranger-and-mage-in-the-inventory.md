@@ -35,14 +35,14 @@ Built on 2026-09-30 by Claude **on Tom's behalf** (he asked for the build ticket
 
 **Checks**
 
-- `npm run typecheck` and `npm test` pass (1129 tests). `tests/classItems.test.ts` has 16 new tests covering each class's kit, the loot weapons and off hands at every level and rarity, drops for each class holding its weapons and never another class's, the class refusal in both hands, each class's smith stock, What Lies Below's picks, the old-record case, and every bow and wand having its own look. `vendors.test.ts` and `loot.test.ts` were updated for the new stock and drops.
+- `npm run typecheck` and `npm test` pass (1145 tests with main merged). `tests/classItems.test.ts` has 16 new tests covering each class's kit, the loot weapons and off hands at every level and rarity, drops for each class holding its weapons and never another class's, the class refusal in both hands, each class's smith stock, What Lies Below's picks, the old-record case, and every bow and wand having its own look. `vendors.test.ts` and `loot.test.ts` were updated for the new stock and drops.
 - `checks/classes.mjs` passed all 42 checks, for a ranger and then a mage, each made on the first-visit form:
   - The kit is worn, and the short bow or the wand is in hand.
   - A farm bandit drops the class's white weapon, found with the game's own roll. Walking over it takes it, and worn from the bag it draws as the Ash Longbow or the Birch Wand.
   - The smith's weapon for the other class is refused with "class".
   - Raiders in the Fields hands in with the gloves carried off the board.
   - What Lies Below offers Hale's Old Hunting Bow or the Crypt-Warded Staff beside the Warden's Mantle. Worn at level 5, each draws its own look, and Hale keeps his sword.
-- Still passing: `checks/hand-in-picks.mjs`, `checks/vendors.mjs`, and the Abilities map's `checks/ranger.mjs` and `checks/mage.mjs` (results below).
+- Still passing: `checks/hand-in-picks.mjs` (all 31), `checks/vendors.mjs`, and, with main merged (the ranger's abilities, Abilities 22), the Abilities map's `checks/ranger.mjs` (18) and `checks/mage.mjs` (26). `classes.mjs` was re-run on the merge too.
 
 **Calls made on Tom's behalf**
 

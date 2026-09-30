@@ -127,7 +127,7 @@ for (const klass of ['ranger', 'mage']) {
         gear: { ...state.inventory.gear },
         belt: state.inventory.belt.map((s) => (s ? `${s.id}×${s.count}` : null)),
         bag: state.inventory.bag.map((s) => s?.id ?? null),
-        bow: bow ? { shown: bow.root.visible, limb: bow.topTip.distanceTo(bow.grip), model: Object.entries(window.__looks.BOW_LOOKS).find(([, l]) => l === bow.look)?.[0] ?? null } : null,
+        bow: bow ? { shown: bow.root.visible, limb: bow.topTip.distanceTo(bow.grip), model: Object.entries(window.__looks.BOW_LOOKS).find(([, l]) => JSON.stringify(l) === JSON.stringify(bow.look))?.[0] ?? null } : null,
         wand: mage ? { model: mage.wandLook, tip: -mage.tip.z, shown: !!mage.wand?.parent } : null,
         stages: Object.fromEntries(Object.entries(state.snapshot().quests).map(([k, q]) => [k, q.stage])),
         swordAtHip: adventure.hale.swordAtHip,
