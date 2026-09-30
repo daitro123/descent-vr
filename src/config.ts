@@ -714,7 +714,8 @@ export const CONFIG = {
         band: [210, 300], // Hz: each side's band's middle, lower than the woods'
         gust: [0.09, 0.14], // Hz: its gusts come and go a little quicker…
         depth: 0.75, // …and swing it further
-        rumble: 0.35, // the rumble under it (1 as loud as a side's band)
+        // The rumble under it: noise below `cutoff` Hz, `level` as loud as a side's band, swelling at `gust` Hz by `depth` of that.
+        rumble: { cutoff: 110, level: 0.35, gust: 0.045, depth: 0.5 },
       },
       call: {
         every: [9, 24], // s between calls (random in range)

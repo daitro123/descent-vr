@@ -96,7 +96,8 @@ const LOOPS = {
   /** Brackenmoor's wind over the open moor: lower, stronger and gustier than Oakvale's, over a low rumble. */
   moorWind(kit, into) {
     const rules = CONFIG.sound.moor.wind;
-    return [...gusts(kit, into, rules), ...band(kit, into, 'lowpass', 110, 0.8, 0.32 * rules.rumble, rules.gust[0] * 0.5, 0.32 * rules.rumble * 0.5)];
+    const { cutoff, level, gust, depth } = rules.rumble;
+    return [...gusts(kit, into, rules), ...band(kit, into, 'lowpass', cutoff, 0.8, 0.32 * level, gust, 0.32 * level * depth)];
   },
   /** The stream running under the bridge: a broad rush, a low burble and a glinting top. */
   stream(kit, into) {

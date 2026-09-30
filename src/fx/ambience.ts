@@ -69,10 +69,23 @@ interface Voice {
   dying: number | null;
 }
 
+interface AirKind {
+  readonly wind: LoopName;
+  readonly level: number;
+  calls(zone: ZoneSounds): BirdSong | LoneCall;
+  readonly bird: { readonly level: number; readonly ref: number; readonly last: number };
+}
+
+/** Each zone's own air, by kind: the wind that blows in it, how loud, who calls in it and how their calls carry. */
+const AIRS: Record<ZoneAmbience, AirKind> = {
+  woods: { wind: 'wind', level: CONFIG.sound.wind.level, calls: (zone) => new BirdSong(zone.trees), bird: CONFIG.sound.birds },
+  moor: { wind: 'moorWind', level: CONFIG.sound.moor.wind.level, calls: () => new LoneCall(), bird: CONFIG.sound.moor.call },
+};
+
 /** A zone as the ambience plays it: its own ambience, its places and its trees. */
 export type ZoneSounds = Pick<Zone, 'id' | 'ambience' | 'sounds' | 'trees'>;
 
-/** A zone's own air within the outdoors: its wind and its birds, at its share of the air where you stand. */
+/** A zone's own air within the outdoors: its wind and its birds, at its share of the air where you stand (its places sound where they are). */
 interface ZoneAir {
   readonly id: string;
   readonly kind: ZoneAmbience;
@@ -119,8 +132,6 @@ export class Ambience {
   private dip = 1;
   /** Every zone's places that sound where they are. */
   private readonly places: PlaceSound[] = [];
-  /** Which zone's air each place sounds in, by its index in `places`. */
-  private readonly placeAir: number[] = [];
   /** Each place's voice while it plays, by its index in `places`. */
   private readonly voices: (Voice | null)[] = [];
   private readonly birds: Bird[] = [];
@@ -138,12 +149,10 @@ export class Ambience {
   /** Play `zone`'s ambience too (once): a neighbour loaded as you went. */
   add(zone: ZoneSounds): void {
     if (this.airs.some((a) => a.id === zone.id)) return;
-    const calls = zone.ambience === 'moor' ? new LoneCall() : new BirdSong(zone.trees);
-    const air: ZoneAir = { id: zone.id, kind: zone.ambience, calls, gain: null, level: 0 };
+    const air: ZoneAir = { id: zone.id, kind: zone.ambience, calls: AIRS[zone.ambience].calls(zone), gain: null, level: 0 };
     this.airs.push(air);
     for (const p of zone.sounds) {
       this.places.push(p);
-      this.placeAir.push(this.airs.length - 1);
       this.voices.push(null);
       this.placed.push({ x: p.x, z: p.z, place: true });
       if (this.kit && p.interior && !this.rooms.has(p.interior)) this.rooms.set(p.interior, this.part());
@@ -263,9 +272,9 @@ export class Ambience {
     a.gain.gain.value = 0;
     a.gain.connect(this.outdoors!.gain);
     const w = kit.ctx.createGain();
-    w.gain.value = a.kind === 'moor' ? CONFIG.sound.moor.wind.level : CONFIG.sound.wind.level;
+    w.gain.value = AIRS[a.kind].level;
     w.connect(a.gain);
-    startLoop(a.kind === 'moor' ? 'moorWind' : 'wind', kit, w);
+    startLoop(AIRS[a.kind].wind, kit, w);
   }
 
   /** A part of the mix, into the bus. */
@@ -391,14 +400,15 @@ export class Ambience {
     const { level, ref, ...rest } = CONFIG.sound.places[p.id];
     const every = 'every' in rest ? rest.every : null;
     const loop = PLACES[p.id].loop;
-    const into = p.interior ? this.rooms.get(p.interior)!.gain : this.airs[this.placeAir[i]].gain!;
+    // A place sounds where it is, whichever zone's air you're in: it fades with distance alone.
+    const into = (p.interior ? this.rooms.get(p.interior)! : this.outdoors!).gain;
     const v = this.voice(p.x, p.y, p.z, voicing, level, ref, loop ?? null, into);
     if (every) v.next = between(every) * Math.random();
     return v;
   }
 
   private startBird(call: Birdcall, source: AmbientSource, air: ZoneAir): void {
-    const { level, ref, last } = air.kind === 'moor' ? CONFIG.sound.moor.call : CONFIG.sound.birds;
+    const { level, ref, last } = AIRS[air.kind].bird;
     const voice = this.voice(call.x, call.y, call.z, 'cheap', level, ref, null, air.gain!);
     sfx[call.call](voice.input);
     this.birds.push({ source, voice, left: last });

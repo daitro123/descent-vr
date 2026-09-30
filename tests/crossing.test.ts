@@ -152,6 +152,16 @@ describe('the air over the seam', () => {
     }
   });
 
+  it('blends into one atmosphere reused as you walk, the same as a fresh blend', () => {
+    const into = structuredClone(OAKVALE_ATMOSPHERE);
+    for (const t of [0.2, 0.5, 0.9]) {
+      expect(blendAtmospheres(OAKVALE_ATMOSPHERE, MOOR_ATMOSPHERE, t, into)).toBe(into);
+      expect(into).toEqual(blendAtmospheres(OAKVALE_ATMOSPHERE, MOOR_ATMOSPHERE, t));
+    }
+    // Neither zone's own is written into.
+    expect(blendAtmospheres(OAKVALE_ATMOSPHERE, MOOR_ATMOSPHERE, 0, into)).toBe(OAKVALE_ATMOSPHERE);
+  });
+
   it('changes only values: the same lights, fog, sky and meshes whichever way you face or stand', () => {
     const { w, walk } = crossable();
     /** Everything in the World but the chunks streamed in and out. */

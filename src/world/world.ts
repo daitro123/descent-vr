@@ -37,7 +37,7 @@ const _standing = { x: 0, z: 0, within: false };
 const _underground: MineStanding = { ahead: 0, inMouth: false, past: 0, crypt: 0, fromMouth: 0 };
 
 /** What compiles shader programs ahead of the render that needs them: the renderer. */
-export type Compiler = Pick<WebGLRenderer, 'compile'>;
+export type Compiler = Pick<WebGLRenderer, 'compile'> & Partial<Pick<WebGLRenderer, 'compileAsync'>>;
 
 /** One of the pool's point lights: the flame it sits on, if any, and how far it has faded up on it. */
 interface PoolLight {
@@ -118,8 +118,12 @@ export class World implements Ground {
   private meets: Crossing[] = [];
   /** The zone you're in, as its name, the save and the sound have it; null until one is loaded. */
   private current: Zone | null = null;
-  /** The zones' air where you stand: whose, and how far over a seam it has blended. */
-  private air: Air | null = null;
+  /** The zones' air where you stand, as last applied: whose, and how far over a seam it had blended. */
+  private readonly air: Air = { from: null!, to: null!, t: 0 };
+  /** Where you stand this frame, worked out into here. */
+  private readonly here: Air = { from: null!, to: null!, t: 0 };
+  /** The atmosphere blended over a seam, written into afresh as you walk (no garbage). */
+  private blended: Atmosphere | null = null;
   /** Each loaded zone's share of the air where you stand, in load order. */
   private readonly airShares: number[] = [];
   /** Zones being fetched as neighbours, by id. */
@@ -230,7 +234,9 @@ export class World implements Ground {
     // The one already loaded by its id, if it was fetched as a neighbour.
     const held = this.zones.find((z) => z.id === zone.id)!;
     this.current = held;
-    this.breathe({ from: held, to: held, t: 0 });
+    this.here.from = this.here.to = held;
+    this.here.t = 0;
+    this.breathe(this.here);
     this.fetchNeighbours(held);
   }
 
@@ -374,7 +380,7 @@ export class World implements Ground {
     // Arriving is no crossing: the zone underfoot is current at once, its air as it is here.
     const under = zoneUnder(this.zones, x, z);
     if (under) this.become(under);
-    this.breathe(airAt(this.zones, this.meets, x, z));
+    this.breathe(airAt(this.zones, this.meets, x, z, undefined, this.here));
     this.streamer.fill(x, z, this.reach);
     // All of it uploaded at the next render, in view or not, so turning round uploads nothing.
     for (const zone of this.zones) {
@@ -395,8 +401,10 @@ export class World implements Ground {
     const { compiler, camera, scene } = this;
     if (!compiler || !camera || !scene || this.warmed.has(zone)) return;
     this.warmed.add(zone);
-    compiler.compile(zone.root, camera, scene);
-    compiler.compile(this.chunkRoots.get(zone)!, camera, scene);
+    // In play (a neighbour fetched as you went), off the frame: the Quest budget compiles nothing mid-frame.
+    const compile = !this.filling && compiler.compileAsync ? compiler.compileAsync.bind(compiler) : compiler.compile.bind(compiler);
+    void compile(zone.root, camera, scene);
+    void compile(this.chunkRoots.get(zone)!, camera, scene);
   }
 
   /**
@@ -530,7 +538,7 @@ export class World implements Ground {
   /** Where you stand at (x, z): the current zone, once you're far enough over a seam, and the air blended by where you are. */
   private cross(x: number, z: number): void {
     if (this.current) this.become(currentZone(this.current, this.zones, x, z));
-    this.breathe(airAt(this.zones, this.meets, x, z));
+    this.breathe(airAt(this.zones, this.meets, x, z, undefined, this.here));
   }
 
   /** `zone` is current now: if that's a change, say so, and fetch its neighbours early. */
@@ -546,9 +554,10 @@ export class World implements Ground {
     shares(this.zones, air, this.airShares);
     this.heard.zones.forEach((z, i) => (z.share = this.airShares[i]));
     const was = this.air;
-    if (!air || (was && was.from === air.from && was.to === air.to && was.t === air.t)) return;
-    this.air = air;
-    this.apply(blendAtmospheres(air.from.atmosphere, air.to.atmosphere, air.t));
+    if (!air || (was.from === air.from && was.to === air.to && was.t === air.t)) return;
+    Object.assign(was, air);
+    this.blended ??= structuredClone(air.from.atmosphere);
+    this.apply(blendAtmospheres(air.from.atmosphere, air.to.atmosphere, air.t, this.blended));
   }
 
   /** Upload a building's room, or the mine, unseen, the first time you come within CONFIG.interiors.stage of its door or mouth. */

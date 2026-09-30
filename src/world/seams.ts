@@ -77,16 +77,17 @@ export function crossings<Z extends Pick<Zone, 'land' | 'seams'>>(zones: readonl
 
 /** How the air is where you stand: `from`'s, blended `t` of the way to `to`'s (the same zone, 0, away from any seam). */
 export interface Air<Z = Zone> {
-  readonly from: Z;
-  readonly to: Z;
-  readonly t: number;
+  from: Z;
+  to: Z;
+  t: number;
 }
 
 /**
  * The air at (x, z): within `band` m either side of a crossing's line, its
  * north zone's blended towards its south's by how far across the band you
  * are, eased at both edges (halfway on the line); elsewhere the zone
- * underfoot's own.
+ * underfoot's own. Written into `into` if given (reused each frame), else a
+ * new one; null with no zones.
  */
 export function airAt<Z extends Pick<Zone, 'land' | 'walkable'>>(
   zones: readonly Z[],
@@ -94,14 +95,22 @@ export function airAt<Z extends Pick<Zone, 'land' | 'walkable'>>(
   x: number,
   z: number,
   band: number = CONFIG.world.crossing.band,
+  into?: Air<Z>,
 ): Air<Z> | null {
+  const set = (from: Z, to: Z, t: number): Air<Z> => {
+    if (!into) return { from, to, t };
+    into.from = from;
+    into.to = to;
+    into.t = t;
+    return into;
+  };
   for (const c of crossings) {
     if (x < c.minX || x > c.maxX || Math.abs(z - c.z) >= band) continue;
     const u = (z - c.z + band) / (2 * band);
-    return { from: c.north, to: c.south, t: u * u * (3 - 2 * u) };
+    return set(c.north, c.south, u * u * (3 - 2 * u));
   }
   const under = zoneUnder(zones, x, z);
-  return under ? { from: under, to: under, t: 0 } : null;
+  return under ? set(under, under, 0) : null;
 }
 
 /** Each of `zones`' share of `air`, in their order: 0 to 1, summing to 1. */
