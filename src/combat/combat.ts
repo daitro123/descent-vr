@@ -1,4 +1,5 @@
 import { Matrix4, type Object3D, Vector3 } from 'three';
+import { ABILITY, type Ability } from '../classes';
 import { type AttackConfig, CONFIG } from '../config';
 import type { Enemy, StrikeOutcome } from '../enemies/enemy';
 import type { FloatingText } from '../fx/floatingText';
@@ -9,12 +10,28 @@ import { armourCut } from '../items';
 import type { Player } from '../player/player';
 import { clamp01, closestPointOnSegment, closestSegmentSegment, segmentIntersectsBox, type SegmentHit } from './geometry';
 import { type Arrow, type ArrowContact, type ArrowResolver, Projectiles } from './projectiles';
+import { ABILITY_COLOUR, blocked, type Refusal, sweptTo, throwTarget } from './abilities';
 import { type BladeResult, bladeTarget, type Defender, sweepBlade, sweepStrike, type SweepResult } from './strike';
+import { ThrownAxes } from './thrownAxes';
 
 export interface CombatEvents {
   onEnemyHit(enemy: Enemy, killed: boolean): void;
   onPlayerHurt(): void;
   hitStop(seconds: number): void;
+}
+
+/**
+ * What came of using an ability: cast, or why not (still cooling down, not
+ * enough rage, nobody in reach to throw at, or an ability not built yet), in
+ * which case nothing was spent.
+ */
+export type Use = 'cast' | Refusal | 'no target' | 'unbuilt';
+
+/** Where an ability is used from: the right hand, where it faces as the gesture ends, and where you look. */
+export interface Aim {
+  readonly from: Vector3;
+  readonly hand: Vector3;
+  readonly gaze: Vector3;
 }
 
 export interface CombatFx {
@@ -61,6 +78,12 @@ export const combatStats = {
   /** Your swings an enemy's guard stopped. */
   guarded: 0,
   guardBreaks: 0,
+  /** Heroic Throw's axes that landed. */
+  throws: 0,
+  /** Heavy blows Shield Wall held. */
+  walled: 0,
+  /** Second enemies Sweeping Strikes hit. */
+  swept: 0,
 };
 
 export function resetCombatStats(): void {
@@ -81,6 +104,8 @@ export function swingDamage(tipSpeed: number): { damage: number; power: number }
  */
 export class Combat implements ArrowResolver {
   readonly projectiles: Projectiles;
+  /** Heroic Throw's axes in flight. */
+  readonly axes: ThrownAxes;
   private swinging = false;
   private slamCooldown = 0;
   private readonly defender: Defender;
@@ -95,6 +120,7 @@ export class Combat implements ArrowResolver {
     parent: Object3D,
   ) {
     this.projectiles = new Projectiles(parent, player.ground);
+    this.axes = new ThrownAxes(parent);
     const B = CONFIG.player.body;
     const S = CONFIG.shield;
     this.defender = {
@@ -119,6 +145,7 @@ export class Combat implements ArrowResolver {
     this.updateBash(enemies);
     this.updateGroundSlam(enemies);
     this.projectiles.update(dt, this);
+    this.axes.update(dt, (enemy, at, dir, from) => this.axeLands(enemy, at, dir, from));
   }
 
   /** Snapshot the player's hurt volumes, shield and blade for this frame's enemy blows. */
@@ -209,7 +236,79 @@ export class Combat implements ArrowResolver {
       this.events.hitStop(CONFIG.feel.hitStop * (0.5 + power) * (crit ? 1.5 : 1));
       this.events.onEnemyHit(enemy, killed);
       if (killed) this.onKill(enemy);
+      if (this.player.abilities.left('sweepingStrikes') > 0) this.sweepOn(enemy, damage, _push, enemies);
     }
+  }
+
+  /** Sweeping Strikes: the blow that landed on `hit` also strikes the nearest other enemy beside it, for a share of it. */
+  private sweepOn(hit: Enemy, damage: number, push: Vector3, enemies: Enemy[]): void {
+    const S = CONFIG.classes.warrior.abilities.sweepingStrikes;
+    const other = sweptTo(hit, enemies, S.reach);
+    if (!other) return;
+    const dealt = Math.max(1, Math.round(damage * S.share));
+    this.player.headPosition(_a);
+    other.capsule(_capA, _capB);
+    const at = _capA.lerp(_capB, 0.6);
+    const killed = other.takeHit(dealt, push, { from: _a });
+    combatStats.swept++;
+    this.impactFx(other, at, push, false);
+    this.fx.particles.burst('embers', at, 8, undefined, ABILITY_COLOUR.sweepingStrikes);
+    this.fx.text.spawn(`${dealt}`, at, { color: '#ff9070', scale: 0.2 });
+    this.events.onEnemyHit(other, killed);
+    if (killed) this.onKill(other);
+  }
+
+  /**
+   * Use a gesture ability, aimed from the right hand: spend its cost and
+   * start its cooldown, or say why not and spend nothing.
+   */
+  use(ability: Ability, aim: Aim): Use {
+    const { player } = this;
+    const refused = player.abilities.refuses(ability, player.rage);
+    if (refused) return refused;
+    const W = CONFIG.classes.warrior.abilities;
+    switch (ability) {
+      case 'heroicThrow': {
+        const target = throwTarget(aim.from, [aim.hand, aim.gaze], this.enemies, (a, b) => player.ground.lineOfSight(a, b), W.heroicThrow);
+        if (!target) return 'no target';
+        this.axes.throw(aim.from, target);
+        sfx.heroicThrow(aim.from);
+        player.abilities.used(ability);
+        break;
+      }
+      case 'shieldWall':
+        player.abilities.used(ability, W.shieldWall.time);
+        player.shield.flash(ABILITY_COLOUR.shieldWall);
+        sfx.shieldWall();
+        player.input.pulse('left', 0.8, 120);
+        break;
+      case 'sweepingStrikes':
+        player.abilities.used(ability, W.sweepingStrikes.time);
+        sfx.sweepingStrikes();
+        break;
+      default:
+        return 'unbuilt';
+    }
+    player.rage -= ABILITY[ability].cost;
+    return 'cast';
+  }
+
+  /** Heroic Throw's axe reaches the enemy it was thrown at: a blow, and a stagger. */
+  private axeLands(enemy: Enemy, at: Vector3, dir: Vector3, from: Vector3): void {
+    const T = CONFIG.classes.warrior.abilities.heroicThrow;
+    const damage = Math.round(T.damage * this.player.stats.damage * (this.player.frenzy > 0 ? CONFIG.sword.frenzyMultiplier : 1));
+    _push.copy(dir).setY(0);
+    if (_push.lengthSq() > 1e-6) _push.normalize().multiplyScalar(2);
+    const killed = enemy.takeHit(damage, _push, { from, ignorePoise: enemy.kind !== 'warden' });
+    if (!killed) enemy.stagger(T.stagger);
+    combatStats.throws++;
+    this.impactFx(enemy, at, _push, true);
+    this.fx.particles.burst('magic', at, 16, undefined, ABILITY_COLOUR.heroicThrow);
+    this.fx.text.spawn(`${damage}`, at.clone().setY(at.y + 0.2), { color: '#80e0ff', scale: 0.24 });
+    sfx.hit(false, at);
+    this.events.hitStop(0.05);
+    this.events.onEnemyHit(enemy, killed);
+    if (killed) this.onKill(enemy);
   }
 
   /** Your blade met a raised guard: no damage, a clash on its weapon, and the guard gives a little. */
@@ -447,17 +546,26 @@ export class Combat implements ArrowResolver {
     player.addRage(CONFIG.rage.perBlock);
     const h = CONFIG.feel.hapticBlock;
     player.input.pulse(onShield ? 'left' : 'right', h.intensity, h.ms);
-    if (attack.guardBreak) {
+    const walled = player.abilities.left('shieldWall') > 0;
+    const held = blocked(attack, walled);
+    if (held.breaks) {
       // A heavy blow: blocking beats taking it full, but it still hurts and numbs the arm.
-      const chip = Math.round(attack.damage * CONFIG.shield.guardBreakChip);
       this.fx.text.spawn('GUARD BREAK', at.clone().setY(at.y + 0.25), { color: '#ff8040', scale: 0.17 });
       sfx.guardBreak();
       if (onShield) {
         player.shield.numb = CONFIG.shield.numbTime;
         player.shield.flash(0xff6030);
       }
-      this.hurtPlayer(chip, enemy, false);
+      this.hurtPlayer(held.chip, enemy, false);
       return 'hit';
+    }
+    if (walled && attack.guardBreak) {
+      // Shield Wall holds even a heavy blow: nothing through, and the arm stays up.
+      combatStats.walled++;
+      this.fx.text.spawn('SHIELD WALL', at.clone().setY(at.y + 0.25), { color: '#ffc84a', scale: 0.17 });
+      if (onShield) player.shield.flash(ABILITY_COLOUR.shieldWall);
+      sfx.block(at);
+      return 'blocked';
     }
     this.fx.text.spawn('block', at.clone().setY(at.y + 0.2), { color: '#c0c0c0', scale: 0.15 });
     if (onShield) {

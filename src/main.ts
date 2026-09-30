@@ -227,6 +227,8 @@ function startArena(
   );
   const debug = { game, device, renderer, combatStats, CONFIG, showcase, enemies, paused: false, classKit: null as ClassPrototype | null };
   Object.assign(window, { __descent: debug });
+  // The gesture prototype takes the right grip for its own modes: the game's gestures stand aside.
+  if (gestures) game.gestures.enabled = false;
   if (playerClass || gestures) void loadClassPrototype(playerClass, game, scene, gestures).then((kit) => (debug.classKit = kit));
 
   const timer = new Timer();
