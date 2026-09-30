@@ -14,7 +14,7 @@ Read [the spec](../spec.md) and [Oakvale's items](07-oakvales-items.md).
 
 ## Answer
 
-Built on 2026-09-30 by Claude **on Tom's behalf** (he asked for the build tickets to run without his input, taking the recommended option at every fork). Quests from more than one giver (Professions ticket 12, PR #79), loot (PR #82) and classes (PR #81) landed first, so this is built on their chains, `state.giver(...)` and `state.class`.
+Built on 2026-09-30 by Claude **on Tom's behalf** (he asked for the build tickets to run without his input, taking the recommended option at every fork). Quests from more than one giver (Professions ticket 12, PR #79), loot (PR #82), classes (PR #81), the stash (PR #86) and the character roster (PR #89) landed first, so this is built on their chains, `state.giver(...)`, `state.class` and the stash's panel beside the bag.
 
 **What was built**
 
@@ -27,9 +27,9 @@ Built on 2026-09-30 by Claude **on Tom's behalf** (he asked for the build ticket
   - `pickRefusal(pick, to)` answers before the item is let go, so the slot can turn red or green.
   - The orders go on the quest page when touched, and `giveUp` removes them at the hand-in. A record saved with the orders taken but not on the page gains them on load.
   - `haleSwordAtHip` is true unless a quest was handed in with `hale-longsword` picked. `pickedAt(id)` reads what was picked.
-  - The picks follow `state.class`, the class PR #81 added (`new AdventureState(saved, chains, { class })`, a warrior by default).
-- **The save**: each handed-in quest keeps `picked`. It's an optional field, so the version stays 2 with no migration. A record whose What Lies Below was handed in without `picked` counts as having taken the longsword, since that's all the old hand-in paid.
-- **Hale's board** (`src/ui/talkBoard.ts`): at a hand-in, the buttons' row becomes the reward row. Each item stands in a frame of its rarity's colour, with its card underneath (the bag's card, comparing against what you wear). The board also says "Carry one into your bag." The card painter moved out of `BagPanel` as `paintItemCard`.
+  - The picks follow `state.class`, which the Adventure now sets from the character you play (the roster, PR #89).
+- **The save**: each handed-in quest keeps `picked`. It's an optional field, so the record's version isn't bumped and there's no migration. A record whose What Lies Below was handed in without `picked` counts as having taken the longsword, since that's all the old hand-in paid.
+- **Hale's board** (`src/ui/talkBoard.ts`): at a hand-in, the buttons' row becomes the reward row. Each item stands in a frame of its rarity's colour, with its card underneath (the bag's card, comparing against what you wear). The board also says "Carry one into your bag." The cards are painted with the stash's `paintCard` (`ui/bag/pieces.ts`).
 - **Carrying a pick** (`src/ui/bag/bag.ts`): the bag takes an optional `Shelf`, meaning items offered beside it. A fist or the tip on a pick lights its frame, with the light buzz. The grip carries it, and if the bag is shut it swings round in front of you with the item already in hand. Let go over a bag slot to take it. Let go anywhere else and it goes back to the board. The Adventure's shelf is Hale's board, and taking a pick hands the quest in with the fanfare over Hale.
 
 **Checks**
@@ -49,8 +49,8 @@ Built on 2026-09-30 by Claude **on Tom's behalf** (he asked for the build ticket
 
 **For later tickets**
 
-- 14 and 15 (vendors and the stash): a wares board or the stash can be a `Shelf` for `Bag.update` (`itemAt`, `stackAt`, `check`, `take`, `show`). `paintItemCard` draws any card. `Inventory.receive(stack, to)` and `checkReceive` take something into a chosen bag slot. `purchase` now uses them.
-- The Abilities roster: pass the character's class in `AdventureState`'s options (`{ class }`), and the board offers that class's picks.
+- 14 (vendors): a wares board can be a `Shelf` for `Bag.update` (`itemAt`, `stackAt`, `check`, `take`, `show`), carried into a bag slot as a pick is; a shelf carry can't land in the stash beside the bag. `paintCard` draws any card. `Inventory.receive(stack, to)` and `checkReceive` take something into a chosen bag slot. `purchase` now uses them.
+- The ranger's and mage's weapons (Inventory 16): Hale's Old Hunting Bow and the Crypt-Warded Staff are placeholders with borrowed models (`hunting-bow`, `crypt-staff` in `looks.ts`); give them real ones there.
 - The trainers' quests (Professions 18): give a quest `picks` for a reward row, or none to keep the "Hand in" button.
 
 **On the headset** (plain URL, a new character):
