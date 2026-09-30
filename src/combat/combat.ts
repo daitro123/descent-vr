@@ -12,7 +12,8 @@ import { clamp01, closestPointOnSegment, closestSegmentSegment, segmentIntersect
 import { type Arrow, type ArrowContact, type ArrowResolver, Projectiles } from './projectiles';
 import { ABILITY_COLOUR, blocked, type Refusal, sweptTo, throwTarget } from './abilities';
 import { assist, type Bolt, Bolts } from './bolts';
-import { afterBlock, boltDamage, type BoltShape, within } from './mage';
+import { afterBlock, BOLT_CHARGES, type BoltCharge, boltDamage, type BoltShape, chainFrom, within } from './mage';
+import { Blizzard, blizzardAt } from './blizzard';
 import { RangerKit } from './ranger';
 import { type BladeResult, bladeTarget, type Defender, sweepBlade, sweepStrike, type SweepResult } from './strike';
 import { ThrownAxes } from './thrownAxes';
@@ -96,6 +97,12 @@ export const combatStats = {
   frozen: 0,
   /** Enemies a Fireball's burst reached besides the one it hit. */
   burnt: 0,
+  /** Enemies a Frostbolt slowed. */
+  chilled: 0,
+  /** Enemies Chain Lightning arced on to. */
+  arcs: 0,
+  /** Blows Blizzard's ice dealt, one an enemy a tick. */
+  blizzardHits: 0,
 };
 
 export function resetCombatStats(): void {
@@ -120,6 +127,8 @@ export class Combat implements ArrowResolver {
   readonly axes: ThrownAxes;
   /** The mage's bolts in flight. */
   readonly bolts: Bolts;
+  /** The mage's Blizzard, falling or not. */
+  readonly blizzard: Blizzard;
   /** The ranger's bow, arrows, ward and traps: a ranger's only. */
   readonly ranger: RangerKit | null;
   private swinging = false;
@@ -138,6 +147,7 @@ export class Combat implements ArrowResolver {
     this.projectiles = new Projectiles(parent, player.ground);
     this.axes = new ThrownAxes(parent);
     this.bolts = new Bolts(parent);
+    this.blizzard = new Blizzard(parent);
     this.ranger =
       player.klass === 'ranger'
         ? new RangerKit(player, fx, { land: (e, d, head, at, push) => this.arrowLands(e, d, head, at, push), evade: (at) => this.evade(at), reflect: (a, label) => this.reflectArrow(a, label) }, parent)
@@ -169,6 +179,7 @@ export class Combat implements ArrowResolver {
     this.projectiles.update(dt, this);
     this.axes.update(dt, (enemy, at, dir, from) => this.axeLands(enemy, at, dir, from));
     this.bolts.update(dt, enemies, this.player.ground, this.fx.particles, (bolt, enemy, at, crit) => this.boltLands(bolt, enemy, at, crit));
+    this.blizzard.update(dt, enemies, (caught) => this.blizzardTick(caught), this.fx.particles);
   }
 
   /** Snapshot the player's hurt volumes, shield and blade for this frame's enemy blows. */
@@ -291,6 +302,7 @@ export class Combat implements ArrowResolver {
     this.projectiles.clear();
     this.axes.clear();
     this.bolts.clear();
+    this.blizzard.clear();
     this.ranger?.clear();
   }
 
@@ -359,11 +371,24 @@ export class Combat implements ArrowResolver {
         player.abilities.used(ability);
         break;
       case 'fireball':
-        // The next bolt you charge burns, until it's thrown.
-        if (player.abilities.primed(ability)) return 'waiting';
+      case 'frostbolt':
+      case 'chainLightning':
+        // The next bolt you charge takes it, until it's thrown. One waits at a time.
+        if (player.abilities.waitingOn(BOLT_CHARGES)) return 'waiting';
         player.abilities.prime(ability);
         player.abilities.used(ability);
-        sfx.fireballReady();
+        if (ability === 'fireball') sfx.fireballReady();
+        else if (ability === 'frostbolt') sfx.frostboltReady();
+        else sfx.chainLightningReady();
+        break;
+      case 'blizzard':
+        // Ice falls where the right hand points.
+        if (!aim) return 'no target';
+        blizzardAt(aim.from, aim.hand, this.enemies, player.ground, _p);
+        this.blizzard.start(_p, this.fx.particles);
+        player.abilities.used(ability);
+        sfx.blizzard(_p);
+        this.fx.text.spawn('BLIZZARD', _a.copy(_p).setY(_p.y + 1.4), { color: '#e4f4ff', scale: 0.18 });
         break;
       case 'powerShot':
       case 'snareTrap': {
@@ -429,30 +454,39 @@ export class Combat implements ArrowResolver {
   /**
    * A bolt leaves your `hand` from `from` along `dir` (bent onto the chest of
    * whoever the aim assist finds), shaped by the throw and as strong as its
-   * charge was full. A Fireball waiting on it makes it burn.
+   * charge was full. A Fireball, Frostbolt or Chain Lightning waiting on it
+   * goes with it.
    */
   castBolt(hand: Handedness, from: Vector3, dir: Vector3, shape: BoltShape, fraction: number, colour: number): Bolt {
     const target = assist(from, dir, this.enemies, CONFIG.mage.throw.assistDeg);
-    const fire = this.player.abilities.spend('fireball');
+    const charge = this.player.abilities.waitingOn(BOLT_CHARGES) as BoltCharge | null;
+    if (charge) this.player.abilities.spend(charge);
+    const fire = charge === 'fireball';
     const F = CONFIG.classes.mage.abilities.fireball;
     combatStats.bolts++;
     combatStats.swings++;
     sfx.whoosh(from);
     if (fire) sfx.fireball(from);
+    else if (charge === 'frostbolt') sfx.frostbolt(from);
+    else if (charge === 'chainLightning') sfx.chainLightningLoose(from);
     else sfx.arrowLoose(from);
     return this.bolts.fire({
       pos: from.clone(),
       vel: dir.clone().multiplyScalar(shape.speed),
       radius: shape.radius * (fire ? 1.3 : 1),
       damage: boltDamage(fraction) * (fire ? F.multiplier : 1),
-      color: fire ? ABILITY_COLOUR.fireball! : colour,
+      color: charge ? ABILITY_COLOUR[charge]! : colour,
       hand,
       target,
-      fire,
+      charge,
     });
   }
 
-  /** A bolt lands on an enemy (its head a crit), or on nothing; a Fireball bursts either way. */
+  /**
+   * A bolt lands on an enemy (its head a crit), or on nothing; a Fireball
+   * bursts either way. A Frostbolt slows the enemy it hits once the blow has
+   * landed; Chain Lightning arcs on from it.
+   */
   private boltLands(bolt: Bolt, enemy: Enemy | null, at: Vector3, crit: boolean): void {
     const { player } = this;
     if (enemy?.evading) {
@@ -472,14 +506,81 @@ export class Combat implements ArrowResolver {
       if (crit) combatStats.crits++;
       this.fx.particles.burst('magic', at, 16, undefined, bolt.color);
       if (crit) this.fx.particles.burst('sparks', at, 12, undefined, 0xbfe8ff);
-      const colour = bolt.fire ? '#ffb070' : '#bcdcff';
+      const colour = bolt.charge === 'fireball' ? '#ffb070' : bolt.charge === 'frostbolt' ? '#8fd0ff' : bolt.charge === 'chainLightning' ? '#d8c8ff' : '#bcdcff';
       this.fx.text.spawn(crit ? `${damage}!` : `${damage}`, at, { color: crit ? '#ffd23a' : colour, scale: crit ? 0.3 : 0.22 });
       sfx.hit(crit, at);
       const h = CONFIG.mage.haptics.hit;
       player.input.pulse(bolt.hand, h.intensity, h.ms);
       this.landed(enemy, killed, 0.03);
+      if (bolt.charge === 'frostbolt' && !killed) this.chill(enemy, at);
+      if (bolt.charge === 'chainLightning') this.arc(enemy, bolt.damage, at);
     } else this.fx.particles.burst('magic', at, 8, undefined, bolt.color);
-    if (bolt.fire) this.burst(at, enemy);
+    if (bolt.charge === 'fireball') this.burst(at, enemy);
+  }
+
+  /** A Frostbolt landed on `enemy`: it's slowed, and frost clings to it. */
+  private chill(enemy: Enemy, at: Vector3): void {
+    const F = CONFIG.classes.mage.abilities.frostbolt;
+    if (enemy.afflict('slowed', F.time, F.slow) > 0) combatStats.chilled++;
+    this.fx.particles.burst('magic', at, 12, undefined, ABILITY_COLOUR.frostbolt);
+    sfx.frostboltHit(at);
+  }
+
+  /**
+   * Chain Lightning's bolt struck `struck`: it arcs on to the next enemies
+   * within reach, one after another, each taking a share of the bolt (`damage`,
+   * in level-1 terms; no crit or exposed bonus rides the arcs).
+   */
+  private arc(struck: Enemy, damage: number, at: Vector3): void {
+    const C = CONFIG.classes.mage.abilities.chainLightning;
+    const colour = ABILITY_COLOUR.chainLightning!;
+    const dealt = Math.max(1, Math.round(damage * C.share * this.player.stats.damage));
+    _a.copy(at);
+    for (const enemy of chainFrom(struck, this.enemies, C.jumps, C.reach)) {
+      enemy.capsule(_b, _p);
+      _b.lerp(_p, 0.6);
+      this.lightning(_a, _b, colour);
+      _push.subVectors(_b, _a).setY(0);
+      if (_push.lengthSq() > 1e-6) _push.normalize().multiplyScalar(1);
+      const killed = enemy.takeHit(dealt, _push, { from: _a });
+      combatStats.arcs++;
+      this.fx.particles.burst('sparks', _b, 10, undefined, colour);
+      this.fx.text.spawn(`${dealt}`, _b, { color: '#d8c8ff', scale: 0.2 });
+      sfx.chainLightning(_b);
+      this.events.onEnemyHit(enemy, killed);
+      if (killed) this.onKill(enemy);
+      _a.copy(_b);
+    }
+  }
+
+  /** A crackling line of sparks from `a` to `b`, jagged, through the shared particles (no draw call of its own). */
+  private lightning(a: Vector3, b: Vector3, colour: number): void {
+    const steps = 8;
+    for (let i = 1; i < steps; i++) {
+      _to.lerpVectors(a, b, i / steps);
+      _to.x += (Math.random() - 0.5) * 0.25;
+      _to.y += (Math.random() - 0.5) * 0.25;
+      _to.z += (Math.random() - 0.5) * 0.25;
+      this.fx.particles.burst('sparks', _to, 2, undefined, colour);
+    }
+  }
+
+  /** One of Blizzard's ticks: every enemy in its circle takes a little and is slowed while it stands there. */
+  private blizzardTick(caught: Enemy[]): void {
+    const B = CONFIG.classes.mage.abilities.blizzard;
+    const { centre } = this.blizzard;
+    const damage = Math.round(B.damage * this.player.stats.damage);
+    for (const enemy of caught) {
+      const killed = enemy.takeHit(damage, _push.set(0, 0, 0), { from: centre });
+      combatStats.blizzardHits++;
+      if (!killed) enemy.afflict('slowed', B.linger, B.slow);
+      enemy.capsule(_a, _b);
+      _a.lerp(_b, 0.8);
+      this.fx.text.spawn(`${damage}`, _a, { color: '#e4f4ff', scale: 0.16 });
+      this.events.onEnemyHit(enemy, killed);
+      if (killed) this.onKill(enemy);
+    }
+    if (caught.length) sfx.blizzardTick(centre);
   }
 
   /** A Fireball bursts at `at`: every other enemy within reach burns for the burst. */

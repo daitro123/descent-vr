@@ -12,10 +12,11 @@ import {
 } from 'three';
 import { CONFIG } from '../config';
 import type { Enemy } from '../enemies/enemy';
-import type { Particles } from '../fx/particles';
+import type { BurstKind, Particles } from '../fx/particles';
 import type { Handedness } from '../player/input';
 import type { Ground } from '../world/ground';
 import { closestPointOnSegment, closestSegmentSegment, type SegmentHit } from './geometry';
+import type { BoltCharge } from './mage';
 
 // The mage's bolts in flight (.scratch/abilities/spec.md, "The mage"): one
 // instanced mesh for all of them, a trail of motes behind each, bending a
@@ -37,12 +38,18 @@ export interface Bolt {
   readonly hand: Handedness;
   /** What the aim assist locked on as it was thrown: it bends toward it in flight. */
   readonly target: Enemy | null;
-  /** A Fireball: it burns, and bursts where it lands. */
-  readonly fire: boolean;
+  /**
+   * What an ability made of it, if anything: a Fireball burns and bursts where
+   * it lands, a Frostbolt slows the enemy it hits, Chain Lightning arcs on.
+   */
+  readonly charge: BoltCharge | null;
 }
 
 /** What a bolt came to: an enemy's body or head, or (enemy null) the floor, a wall or a prop at `at`. */
 export type BoltLands = (bolt: Bolt, enemy: Enemy | null, at: Vector3, crit: boolean) => void;
+
+/** The motes a bolt leaves behind it: a Fireball's rise as embers, Chain Lightning's crackle as sparks. */
+const TRAIL: Readonly<Record<BoltCharge | 'plain', BurstKind>> = { plain: 'magic', fireball: 'embers', frostbolt: 'magic', chainLightning: 'sparks' };
 
 /** At most this many in flight: a new one ends the oldest. */
 const MAX = 16;
@@ -124,7 +131,7 @@ export class Bolts {
       }
       b.prev.copy(b.pos);
       b.pos.addScaledVector(b.vel, dt);
-      if (particles && Math.random() < 0.8) particles.burst(b.fire ? 'embers' : 'magic', b.pos, 1, undefined, b.color);
+      if (particles && Math.random() < 0.8) particles.burst(TRAIL[b.charge ?? 'plain'], b.pos, 1, undefined, b.color);
       if (this.strike(b, enemies, lands)) this.bolts.splice(i, 1);
       else if (ground.arrowStops(b.pos)) {
         lands(b, null, b.pos, false);

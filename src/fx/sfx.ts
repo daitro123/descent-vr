@@ -263,6 +263,47 @@ export const sfx = {
     noise(0.45, 0.5, 900, at);
     noise(0.3, 0.2, 3000, at, 'bandpass', 0.05, 2);
   },
+  /** Frostbolt is on your next bolt: a thin glassy chime, falling. */
+  frostboltReady() {
+    tone(2200, 1600, 0.3, 'sine', 0.08);
+    tone(3300, 2400, 0.22, 'triangle', 0.04, undefined, 0.04);
+    noise(0.25, 0.12, 6000, undefined, 'highpass');
+  },
+  /** A frost bolt leaves the hand: a cold hiss over the throw. */
+  frostbolt(at: Vector3) {
+    noise(0.28, 0.25, 5000, at, 'highpass');
+    tone(1400, 900, 0.2, 'triangle', 0.06, at);
+  },
+  /** A Frostbolt lands: ice cracking over the blow. */
+  frostboltHit(at: Vector3) {
+    tone(1900, 700, 0.18, 'triangle', 0.1, at);
+    noise(0.2, 0.2, 4200, at, 'bandpass', 0.02, 3);
+  },
+  /** Chain Lightning is on your next bolt: a rising electric buzz. */
+  chainLightningReady() {
+    tone(220, 880, 0.3, 'sawtooth', 0.06);
+    noise(0.3, 0.15, 3500, undefined, 'bandpass', 0, 4);
+  },
+  /** A lightning bolt leaves the hand: a sharp crackle. */
+  chainLightningLoose(at: Vector3) {
+    noise(0.15, 0.35, 3000, at, 'bandpass', 0, 2);
+    tone(1200, 300, 0.12, 'square', 0.06, at);
+  },
+  /** An arc leaps to the next enemy: a snap. */
+  chainLightning(at: Vector3) {
+    noise(0.08, 0.5, 2600, at, 'bandpass', 0, 1.5);
+    tone(900, 180, 0.1, 'square', 0.08, at);
+  },
+  /** Blizzard starts where you point: a rising wind that blows for the storm's length. */
+  blizzard(at: Vector3) {
+    noise(5, 0.18, 700, at, 'bandpass', 0, 0.6);
+    noise(4.8, 0.08, 2200, at, 'bandpass', 0.2, 1.2);
+    tone(1600, 1200, 0.4, 'sine', 0.05, at);
+  },
+  /** Blizzard's ice bites whoever stands in it: a patter of ice. */
+  blizzardTick(at: Vector3) {
+    for (let i = 0; i < 3; i++) noise(0.04, 0.15, 4500 + Math.random() * 1500, at, 'bandpass', Math.random() * 0.12, 5);
+  },
   /** The mage's blink: a soft rush in and a chime out. */
   blink() {
     noise(0.14, 0.2, 2200, undefined, 'bandpass', 0, 0.8);

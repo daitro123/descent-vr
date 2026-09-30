@@ -1,7 +1,8 @@
 import { AdditiveBlending, CircleGeometry, DoubleSide, Group, IcosahedronGeometry, Mesh, MeshBasicMaterial, Vector3 } from 'three';
 import type { Combat } from '../combat/combat';
 import { combatStats } from '../combat/combat';
-import { blinkTo, boltShape, chargeOf, conjured, wardRises } from '../combat/mage';
+import { ABILITY_COLOUR } from '../combat/abilities';
+import { blinkTo, BOLT_CHARGES, boltShape, chargeOf, conjured, wardRises } from '../combat/mage';
 import { CONFIG } from '../config';
 import type { Particles } from '../fx/particles';
 import { sfx } from '../fx/sfx';
@@ -253,9 +254,10 @@ export class MageHands {
     this.wardMaterial.opacity = 0.22 + this.wardFlash * 2;
   }
 
-  /** The colour a hand's bolt gathers in: a Fireball's, if one waits on it. */
+  /** The colour a hand's bolt gathers in: a Fireball's, Frostbolt's or Chain Lightning's, if one waits on it. */
   private colourOf(hand: Handedness): number {
-    return this.player.abilities.primed('fireball') ? 0xff7a20 : COLOUR[hand];
+    const charge = this.player.abilities.waitingOn(BOLT_CHARGES);
+    return charge ? ABILITY_COLOUR[charge]! : COLOUR[hand];
   }
 
   /** One hand's charge and throw. */
