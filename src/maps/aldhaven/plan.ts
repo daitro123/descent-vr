@@ -111,13 +111,14 @@ export type PieceKind =
   | 'wall' | 'tower' | 'gatehouse' | 'waterGate' | 'gorgegate' | 'quay' | 'lowWall'
   | 'marketCross' | 'stall' | 'lamp' | 'well' | 'statue' | 'grave' | 'butt' | 'dummy' | 'bench'
   | 'crates' | 'barrels' | 'cart' | 'ship' | 'boat' | 'signpost' | 'mapboard' | 'banner' | 'sinkhole' | 'haystack' | 'bollard' | 'pondRim'
-  | 'fountain' | 'kerb' | 'tent' | 'bundle' | 'nets' | 'vats' | 'rack' | 'woodpile' | 'shed' | 'sacks' | 'anchor' | 'planter';
+  | 'fountain' | 'kerb' | 'tent' | 'bundle' | 'nets' | 'vats' | 'rack' | 'woodpile' | 'shed' | 'sacks' | 'anchor' | 'planter'
+  | 'washing';
 
 /** Too small to see from a stand-in's distance. */
 export const SMALL: ReadonlySet<PieceKind> = new Set<PieceKind>([
   'stall', 'lamp', 'well', 'statue', 'grave', 'butt', 'dummy', 'bench', 'crates', 'barrels', 'cart', 'boat',
   'signpost', 'mapboard', 'banner', 'sinkhole', 'haystack', 'bollard', 'pondRim',
-  'fountain', 'kerb', 'tent', 'bundle', 'nets', 'vats', 'rack', 'woodpile', 'shed', 'sacks', 'anchor', 'planter',
+  'fountain', 'kerb', 'tent', 'bundle', 'nets', 'vats', 'rack', 'woodpile', 'shed', 'sacks', 'anchor', 'planter', 'washing',
 ]);
 
 /**
@@ -743,7 +744,7 @@ export function planAldhaven(): AldhavenPlan {
   // The harbour mole and its light; ships at anchor in the basin and boats at the wharf.
   put('lighthouse', 150, 45, PI, { w: 8, d: 8, h: 20 }, 'circle');
   for (const [x, z, yaw, v] of [[72, 52, PI / 2, 0], [98, 64, PI / 2 + 0.15, 1], [74, 78, -PI / 2, 2], [126, 60, PI / 2 - 0.3, 1]] as const) put('ship', x, z, yaw, { w: 5, d: 17, h: 14, variant: v }, 'none');
-  for (const [x, z, yaw] of [[-92, 72.5, PI / 2], [-80, 73, PI / 2 + 0.2], [-66, 72.5, PI / 2], [10, 47, 0.1], [-50, 71, -0.2], [104, 34.5, PI / 2 - 0.1], [60, 89, -PI / 2]] as const) put('boat', x, z, yaw, { w: 1.5, d: 4.5 }, 'none');
+  for (const [x, z, yaw] of [[-92, 72.5, PI / 2], [-80, 73, PI / 2 + 0.2], [-66, 72.5, PI / 2], [10, 47, 0.1], [-50, 71, -0.2], [104, 34.5, PI / 2 - 0.1], [60, 89, -PI / 2], [-58, 47.4, PI / 2 + 0.08], [-14, 47.2, PI / 2 - 0.06], [24, 72.7, -PI / 2 + 0.1], [-4, 72.9, PI / 2], [64, 33.2, PI / 2 + 0.05], [92, 88.7, -PI / 2 + 0.12]] as const) put('boat', x, z, yaw, { w: 1.5, d: 4.5 }, 'none');
   // A river barge at the wharf, and a ship alongside the Long Quay under the crane's jib.
   put('boat', -100, 71.5, PI / 2, { w: 3.4, d: 11, variant: 1 }, 'none');
   put('ship', 82, 35, PI / 2, { w: 5, d: 17, h: 14, variant: 2 }, 'none');
@@ -1125,6 +1126,59 @@ export function planAldhaven(): AldhavenPlan {
   const grown: CityPlant[] = plants.map((p) => ({ ...p, y: ground0(p.x, p.z), x: p.x + ox, z: p.z + oz }));
   const TREE_HEIGHT: Partial<Record<CityPlantKind, number>> = { plane: 9, oak: 9, pine: 8, orchard: 4 };
   const trees = grown.filter((p) => TREE_HEIGHT[p.kind]).map((p) => ({ x: p.x, y: p.y, z: p.z, height: (TREE_HEIGHT[p.kind] ?? 0) * p.scale }));
+
+  // Washing hung out over the narrower streets of the old town, the harbour, the guilds and the close: a line from
+  // one house's upper floor to the house facing it, where nothing stands in the way. Its piece sits at the line's
+  // middle, at the line's height (`h` its rise from one end to the other, `w` its length).
+  const WASHING: ReadonlySet<District> = new Set<District>(['oldTown', 'harbour', 'guild', 'close']);
+  const washRand = mulberry32(5153);
+  const hung = new Set<Piece>();
+  const houses = placed.filter((p) => p.kind === 'house' && p.storeys >= 2 && WASHING.has(p.district));
+  const LOW: ReadonlySet<PieceKind> = new Set<PieceKind>(['quay', 'lowWall', 'bridge', 'kingsbridge', 'mole']);
+  const blockers = placed.filter((p) => (!SMALL.has(p.kind) && !LOW.has(p.kind)) || p.kind === 'banner');
+  const within = (p: Piece, x: number, z: number, pad: number) => {
+    const [dx, dz] = [x - p.x, z - p.z];
+    return Math.abs(dx * Math.cos(p.yaw) - dz * Math.sin(p.yaw)) < p.w / 2 + pad && Math.abs(dx * Math.sin(p.yaw) + dz * Math.cos(p.yaw)) < p.d / 2 + pad;
+  };
+  const washing: Piece[] = [];
+  for (const a of houses) {
+    if (hung.has(a)) continue;
+    const fa: P2 = [Math.sin(a.yaw), Math.cos(a.yaw)];
+    const e: P2 = [Math.cos(a.yaw), -Math.sin(a.yaw)];
+    let best: { b: Piece; ea: P2; eb: P2; gap: number } | null = null;
+    for (const b of houses) {
+      if (b === a || hung.has(b) || Math.abs(b.x - a.x) + Math.abs(b.z - a.z) > 30) continue;
+      const fb: P2 = [Math.sin(b.yaw), Math.cos(b.yaw)];
+      if (fa[0] * fb[0] + fa[1] * fb[1] > -0.97) continue;
+      const [ua, ub] = [a.x * e[0] + a.z * e[1], b.x * e[0] + b.z * e[1]];
+      const u = (ua + ub) / 2;
+      if (Math.abs(u - ua) > a.w / 2 - 0.9 || Math.abs(u - ub) > b.w / 2 - 0.9) continue;
+      const ea: P2 = [a.x + fa[0] * (a.d / 2 + 0.3) + e[0] * (u - ua), a.z + fa[1] * (a.d / 2 + 0.3) + e[1] * (u - ua)];
+      const eb: P2 = [b.x + fb[0] * (b.d / 2 + 0.3) + e[0] * (u - ub), b.z + fb[1] * (b.d / 2 + 0.3) + e[1] * (u - ub)];
+      const gap = Math.hypot(eb[0] - ea[0], eb[1] - ea[1]);
+      const across = (eb[0] - ea[0]) * fa[0] + (eb[1] - ea[1]) * fa[1];
+      if (across < 3.5 || across > 10 || gap > across * 1.05) continue;
+      if (!best || gap < best.gap) best = { b, ea, eb, gap };
+    }
+    if (!best || washRand() > 0.6) continue;
+    const { b, ea, eb, gap } = best;
+    const [ya, yb] = [a.y + 5.9, b.y + 5.9];
+    if (Math.abs(ya - yb) > 0.7) continue;
+    let clear = true;
+    for (let k = 1; k < 10 && clear; k++) {
+      const [x, z] = [ea[0] + ((eb[0] - ea[0]) * k) / 10, ea[1] + ((eb[1] - ea[1]) * k) / 10];
+      if (blockers.some((p) => p !== a && p !== b && within(p, x, z, p.kind === 'banner' ? 0.8 : 0.4))) clear = false;
+      if (trees.some((t) => Math.hypot(t.x - x, t.z - z) < 3.2)) clear = false;
+    }
+    if (!clear) continue;
+    hung.add(a);
+    hung.add(b);
+    washing.push({
+      kind: 'washing', x: (ea[0] + eb[0]) / 2, z: (ea[1] + eb[1]) / 2, y: (ya + yb) / 2, yaw: Math.atan2(-(eb[1] - ea[1]), eb[0] - ea[0]),
+      w: gap, d: 0.4, h: yb - ya, storeys: 0, variant: Math.floor(washRand() * 3), district: a.district, seed: 20000 + washing.length,
+    });
+  }
+  placed.push(...washing);
 
   // The places that sound where they are.
   const sound = (id: PlaceSound['id'], x: number, z: number, y = ground0(x, z) + 1): PlaceSound => ({ id, x: x + ox, y, z: z + oz, interior: null });

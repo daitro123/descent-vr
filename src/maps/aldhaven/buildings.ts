@@ -1,6 +1,6 @@
 import type { BufferGeometry } from 'three';
 import { ModelBuilder, type PartOpts, type Vec3 } from '../../models/kit';
-import { mulberry32 } from '../forest/noise';
+import { lerp, mulberry32 } from '../forest/noise';
 import { AWNINGS, CITY_BUILD as C, DISTRICT_DOORS, HERALDRY as H, type District } from './palette';
 import { ALDHAVEN, deckHeight, kingsDeck, type Piece } from './plan';
 
@@ -56,19 +56,45 @@ function window(b: ModelBuilder, x: number, y: number, d: number, face: 1 | -1, 
   const z = face * (d / 2 + 0.03);
   slab(b, w + 0.2, 0.12, 0.1, x, y - 0.12, z, C.limestoneShade);
   slab(b, w, h, 0.07, x, y, z, lit ? C.warmWindow : C.window, lit ? { glow: 0.55, jitter: 0 } : { jitter: 0.04 });
+  // Its frame, and the glazing bars that cross it in four lights.
+  const zf = face * (d / 2 + 0.05);
+  slab(b, w + 0.18, 0.1, 0.08, x, y + h - 0.03, zf, C.timber, { jitter: 0 });
+  for (const s of [-1, 1]) slab(b, 0.08, h, 0.08, x + s * (w / 2), y, zf, C.timber, { jitter: 0 });
+  const zb = face * (d / 2 + 0.075);
+  slab(b, 0.04, h, 0.04, x, y, zb, C.timber, { jitter: 0 });
+  slab(b, w, 0.04, 0.04, x, y + h * 0.58, zb, C.timber, { jitter: 0 });
 }
 
 /** A window on a side wall (`side` -1 west, 1 east) of a box w wide. */
 function sideWindow(b: ModelBuilder, z: number, y: number, w: number, side: 1 | -1, lit: boolean): void {
-  slab(b, 0.07, 1.1, 0.8, side * (w / 2 + 0.03), y, z, lit ? C.warmWindow : C.window, lit ? { glow: 0.55, jitter: 0 } : { jitter: 0.04 });
+  const h = 1.1;
+  slab(b, 0.1, 0.12, 1.0, side * (w / 2 + 0.03), y - 0.12, z, C.limestoneShade);
+  slab(b, 0.07, h, 0.8, side * (w / 2 + 0.03), y, z, lit ? C.warmWindow : C.window, lit ? { glow: 0.55, jitter: 0 } : { jitter: 0.04 });
+  const xf = side * (w / 2 + 0.05);
+  slab(b, 0.08, 0.1, 0.98, xf, y + h - 0.03, z, C.timber, { jitter: 0 });
+  for (const s of [-1, 1]) slab(b, 0.08, h, 0.08, xf, y, z + s * 0.4, C.timber, { jitter: 0 });
+  const xb = side * (w / 2 + 0.075);
+  slab(b, 0.04, h, 0.04, xb, y, z, C.timber, { jitter: 0 });
+  slab(b, 0.04, 0.04, 0.8, xb, y + h * 0.58, z, C.timber, { jitter: 0 });
 }
 
-/** A door on the front of a box d deep: its leaf, a lintel, a step. */
+/** A colour darkened by `f` (0 black, 1 as it was). */
+function shade(color: number, f: number): number {
+  return (Math.round(((color >> 16) & 255) * f) << 16) | (Math.round(((color >> 8) & 255) * f) << 8) | Math.round((color & 255) * f);
+}
+
+/** A door on the front of a box d deep: its planked, iron-strapped leaf in a stone frame, a lintel, a step. */
 function door(b: ModelBuilder, x: number, y: number, d: number, color: number, w = 1.2, h = 2.2, face: 1 | -1 = 1): void {
   const z = face * (d / 2 + 0.04);
   slab(b, w, h, 0.08, x, y, z, color);
   slab(b, w + 0.4, 0.22, 0.16, x, y + h, z, C.limestoneDark);
   slab(b, w + 0.5, 0.18, 0.5, x, y - 0.1, face * (d / 2 + 0.25), C.limestoneDark);
+  for (const s of [-1, 1]) slab(b, 0.16, h, 0.14, x + s * (w / 2 + 0.08), y, face * (d / 2 + 0.06), C.limestoneDark);
+  const zl = face * (d / 2 + 0.085);
+  const seam = shade(color, 0.6);
+  for (const s of [-1, 1]) slab(b, 0.03, h - 0.08, 0.02, x + (s * w) / 6, y, zl, seam, { jitter: 0 });
+  for (const yh of [0.4, h - 0.55]) slab(b, w * 0.75, 0.06, 0.02, x - face * w * 0.1, y + yh, zl + face * 0.005, C.iron, { jitter: 0 });
+  b.ball(0.05, { at: [x + face * w * 0.3, y + 1.05, face * (d / 2 + 0.11)], color: C.iron });
 }
 
 /**
@@ -89,6 +115,8 @@ function steps(b: ModelBuilder, x: number, d: number, drop: number, w: number, c
 function chimney(b: ModelBuilder, x: number, z: number, from: number, to: number, color: number = C.limestoneShade): void {
   slab(b, 0.8, to - from, 0.8, x, from, z, color);
   slab(b, 0.95, 0.2, 0.95, x, to, z, C.basaltLight);
+  // Two clay pots on its cap.
+  for (const s of [-1, 1]) b.cyl(0.11, 0.14, 0.42, 6, { at: [x + s * 0.2, to + 0.41, z], color: 0xa0583a, jitter: 0.05 });
 }
 
 /** A painted sign on a wrought bracket, out from the front wall at `x`. */
@@ -173,13 +201,13 @@ function house(b: ModelBuilder, w: number, d: number, storeys: number, district:
     slab(b, w + 0.1, upper, d + 2 * jetty, 0, y, 0, L.plaster);
     slab(b, w + 0.16, 0.2, d + 2 * jetty + 0.06, 0, y, 0, C.timber);
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) slab(b, 0.22, upper, 0.22, sx * (w / 2), y, sz * zf, C.timber);
+    const n = Math.max(1, Math.floor(w / 2.4));
     for (const sz of [-1, 1]) {
-      const bays = Math.max(2, Math.round(w / 2.4));
-      for (let i = 1; i < bays; i++) slab(b, 0.14, upper, 0.08, -w / 2 + (i * w) / bays, y, sz * (zf + 0.03), C.timber);
+      // Posts between the windows, never across one.
+      for (let i = 1; i < n; i++) slab(b, 0.14, upper, 0.08, -w / 2 + (i * w) / n, y, sz * (zf + 0.03), C.timber);
       // Braces up from the corner posts.
       if (braced) for (const sx of [-1, 1]) b.bar([sx * (w / 2 - 0.05), y + 0.2, sz * (zf + 0.04)], [sx * (w / 2 - 0.75), y + 1.05, sz * (zf + 0.04)], 0.12, 0.06, { color: C.timber, jitter: 0 });
     }
-    const n = Math.max(1, Math.floor(w / 2.4));
     for (let i = 0; i < n; i++) {
       const x = -w / 2 + ((i + 0.5) * w) / n;
       window(b, x, y + 0.8, d + 2 * jetty, 1, rand() < 0.22);
@@ -796,10 +824,25 @@ function gorgegate(b: ModelBuilder, w: number, d: number, h: number): void {
 }
 
 /** A stretch of quay wall `w` long, its top at the quay's level (y 0), its face (+Z) to the water: basalt to the river bed, a limestone coping and a lip. */
-function quay(b: ModelBuilder, w: number, d: number): void {
+function quay(b: ModelBuilder, w: number, d: number, seed: number): void {
   slab(b, w, 5.2, d, 0, -6.4, 0, C.basalt);
   slab(b, w, 1.2, d, 0, -1.2, 0, C.limestoneShade);
   slab(b, w, 0.3, 0.4, 0, 0, -d / 2 + 0.25, C.limestoneDark);
+  // Its face to the water (-Z): every so often an iron ladder down to the boats, its rails bent over the coping;
+  // between them, mooring rings.
+  const face = -d / 2 - 0.06;
+  if (seed % 4 === 0) {
+    for (const s of [-1, 1]) {
+      slab(b, 0.05, 3.5, 0.05, s * 0.24, -2.9, face, C.iron, { jitter: 0 });
+      b.box(0.05, 0.05, 0.42, { at: [s * 0.24, 0.6, face + 0.19], color: C.iron, jitter: 0 });
+      slab(b, 0.05, 0.3, 0.05, s * 0.24, 0.3, face + 0.38, C.iron, { jitter: 0 });
+    }
+    for (let y = -2.6; y < 0.45; y += 0.3) b.box(0.48, 0.04, 0.04, { at: [0, y, face], color: C.iron, jitter: 0 });
+  } else if (seed % 4 === 2) {
+    // A ring on a staple, hanging.
+    b.box(0.08, 0.08, 0.08, { at: [0, -0.7, face + 0.02], color: C.iron, jitter: 0 });
+    for (const [x, y, r] of [[-0.1, -0.88, 0.6], [0.1, -0.88, -0.6], [0, -1.02, PI / 2]] as const) b.box(0.04, 0.2, 0.04, { at: [x, y, face - 0.02], rot: [0, 0, r], color: C.iron, jitter: 0 });
+  }
 }
 
 /** A low wall with a coping: the close's, the King's Garden's. */
@@ -1141,18 +1184,30 @@ function kerb(b: ModelBuilder, w: number, d: number): void {
 
 /** A refugee's shelter: patched canvas over a ridge pole, its open end (+Z) dark. */
 function tent(b: ModelBuilder, w: number, d: number, h: number, rand: Rand): void {
-  const cloth = [0xb8a888, 0xa89878, 0x9a8a6e][Math.floor(rand() * 3)];
-  b.taper(w + 0.25, d, 0.06, d, h + 0.35, { at: [0, -0.35, 0], color: cloth, jitter: 0.12 });
+  const k = Math.floor(rand() * 3);
+  const cloth = [0xd6c8a4, 0xc9b88f, 0xbfae86][k];
+  b.taper(w + 0.25, d, 0.06, d, h + 0.35, { at: [0, -0.35, 0], color: cloth, jitter: 0.06 });
   b.taper(w * 0.7, 0.05, 0.05, 0.05, h * 0.82, { at: [0, 0, d / 2 + 0.01], color: 0x2a2620, jitter: 0 });
+  // Its poles and ridge pole, and guy ropes out to pegs.
   for (const z of [-d / 2 - 0.1, d / 2 + 0.1]) slab(b, 0.08, h + 0.2, 0.08, 0, 0, z, C.timber);
-  slab(b, 0.9, 0.05, 0.7, w * 0.15, h * 0.4, d * 0.1, cloth === 0xb8a888 ? 0x8a6a44 : 0xc8b898, { jitter: 0 });
+  b.box(0.07, 0.07, d + 0.3, { at: [0, h + 0.02, 0], color: C.timber, jitter: 0 });
+  for (const s of [-1, 1]) {
+    b.bar([0, h + 0.1, s * (d / 2 + 0.1)], [0, 0, s * (d / 2 + 1.1)], 0.025, 0.025, { color: C.rope, jitter: 0 });
+    for (const t of [-0.3, 0.3]) b.bar([s * (w / 2 + 0.1) * 0.45, h * 0.55, t * d], [s * (w / 2 + 0.8), 0, t * d * 1.2], 0.025, 0.025, { color: C.rope, jitter: 0 });
+  }
+  // A patch sewn over a tear, flat on one slope.
+  const side = k === 1 ? -1 : 1;
+  const a = Math.atan2(h + 0.35, (w + 0.25) / 2);
+  const [px, py] = [(w + 0.25) / 4 + Math.sin(a) * 0.02, -0.35 + (h + 0.35) / 2 + Math.cos(a) * 0.02];
+  b.box(0.7, 0.03, 0.6, { at: [side * px, py, d * 0.1], rot: [0, 0, -side * a], color: [0x8a6a44, 0xa89470, 0x9a8a6e][k], jitter: 0 });
 }
 
 /** A bundle of someone's belongings: a tied sack and a box. */
 function bundle(b: ModelBuilder, rand: Rand): void {
-  b.ball(0.4, { at: [0, 0.3, 0], color: 0x9a8a6e, jitter: 0.1 });
+  b.ball(0.4, { at: [0, 0.3, 0], color: 0xb09a70, jitter: 0.1 });
   b.box(0.05, 0.3, 0.05, { at: [0, 0.75, 0], color: C.rope });
-  slab(b, 0.5, 0.35, 0.4, 0.5, 0, 0.1, rand() < 0.5 ? C.plank : 0x5a4636);
+  slab(b, 0.5, 0.35, 0.4, 0.5, 0, 0.1, rand() < 0.5 ? C.plank : 0x8a6a44, { jitter: 0.03 });
+  for (const y of [0.1, 0.25]) slab(b, 0.52, 0.04, 0.42, 0.5, y, 0.1, C.iron, { jitter: 0 });
 }
 
 /** Fishing nets hung to dry on a pole frame. */
@@ -1165,6 +1220,48 @@ function nets(b: ModelBuilder, w: number, h: number): void {
   for (let k = 1; k <= 4; k++) b.box(w - 0.2, 0.035, 0.035, { at: [0, h - 0.1 - (k * drop * 0.8) / 4, 0.05], color: 0x8a7e62, jitter: 0 });
   // Cork floats strung along the bottom cord.
   for (let k = 0; k < 3; k++) b.ball(0.07, { at: [-w / 2 + (k + 1) * (w / 4), h - 0.1 - drop * 0.8, 0.08], color: 0xb88a4a });
+}
+
+/**
+ * A washing line across a street, from one upper floor to the one opposite:
+ * its piece's middle at the line's height, the line along X `w` long, rising
+ * `rise` from its west end to its east, sagging in the middle under shirts,
+ * sheets and hose pegged along it.
+ */
+function washing(b: ModelBuilder, w: number, rise: number, rand: Rand): void {
+  const sag = 0.25 + w * 0.03;
+  const end = (s: -1 | 1): Vec3 => [(s * w) / 2, (s * rise) / 2, 0];
+  const mid: Vec3 = [0, -sag, 0];
+  const yAt = (x: number) => (x < 0 ? lerp(-rise / 2, -sag, (x + w / 2) / (w / 2)) : lerp(-sag, rise / 2, x / (w / 2)));
+  b.bar(end(-1), mid, 0.025, 0.025, { color: C.rope, jitter: 0 });
+  b.bar(mid, end(1), 0.025, 0.025, { color: C.rope, jitter: 0 });
+  // The iron hooks it hangs from, out of each wall.
+  for (const s of [-1, 1] as const) b.box(0.3, 0.05, 0.05, { at: [s * (w / 2 + 0.05), (s * rise) / 2, 0], color: C.iron, jitter: 0 });
+  const CLOTHS = [0xf0ece0, 0xe8e0c8, 0xd8ccb0, 0x8aa0b8, 0xb85a4a, 0x6a8a5a, 0xd8b85a, 0x5a6a8a];
+  for (let x = -w / 2 + 0.6; x < w / 2 - 0.5; ) {
+    const kind = rand();
+    const cw = kind < 0.25 ? 0.9 + rand() * 0.4 : 0.4 + rand() * 0.25;
+    if (x + cw > w / 2 - 0.4) break;
+    if (rand() < 0.8) {
+      const cx = x + cw / 2;
+      const top = yAt(cx) - 0.02;
+      const color = CLOTHS[Math.floor(rand() * CLOTHS.length)];
+      const tilt = (yAt(x + cw) - yAt(x)) / cw;
+      if (kind < 0.25) {
+        // A sheet, long and pale.
+        b.box(cw, 0.7 + rand() * 0.3, 0.02, { at: [cx, top - 0.4, 0], rot: [0, 0, Math.atan(tilt)], color: rand() < 0.7 ? 0xf0ece0 : color, jitter: 0.03 });
+      } else if (kind < 0.7) {
+        // A shirt: its body and its sleeves out either side.
+        b.box(cw * 0.8, 0.55, 0.03, { at: [cx, top - 0.3, 0], color, jitter: 0.03 });
+        b.box(cw * 1.3, 0.16, 0.03, { at: [cx, top - 0.1, 0], color, jitter: 0.03 });
+      } else {
+        // Hose, a pair hung by the feet.
+        for (const s of [-1, 1]) b.box(0.13, 0.5, 0.03, { at: [cx + s * 0.1, top - 0.26, 0], color, jitter: 0.03 });
+      }
+      for (const s of [-1, 1]) b.box(0.03, 0.08, 0.04, { at: [cx + (s * cw) / 2.6, top + 0.02, 0], color: 0x8a6a44, jitter: 0 });
+    }
+    x += cw + 0.15 + rand() * 0.3;
+  }
 }
 
 /** The dyers' vats: three wooden tubs of indigo, madder and weld. */
@@ -1289,7 +1386,7 @@ export function buildPiece(p: Piece, far = false): BufferGeometry {
     case 'gatehouse': gatehouse(b, p.w, p.d, p.h); break;
     case 'waterGate': waterGate(b, p.w, p.d, p.h); break;
     case 'gorgegate': gorgegate(b, p.w, p.d, p.h); break;
-    case 'quay': quay(b, p.w, p.d); break;
+    case 'quay': quay(b, p.w, p.d, far ? 1 : p.seed); break;
     case 'lowWall': lowWall(b, p.w, p.d, p.h); break;
     case 'marketCross': marketCross(b); break;
     case 'stall': stall(b, p.w, p.d, p.variant, rand); break;
@@ -1305,6 +1402,7 @@ export function buildPiece(p: Piece, far = false): BufferGeometry {
     case 'cart': cart(b); break;
     case 'ship': ship(b, p.w, p.d, p.variant); break;
     case 'boat': boat(b, p.w, p.d, p.variant, rand); break;
+    case 'washing': washing(b, p.w, p.h, rand); break;
     case 'signpost': signpost(b, p.h, p.variant); break;
     case 'mapboard': mapboard(b); break;
     case 'banner': banner(b, p.h, p.variant); break;
