@@ -97,18 +97,20 @@ describe('each role', () => {
 });
 
 describe('what drops', () => {
-  it("is the enemy's family's junk: bandits' trinkets and cloth, the undead's charms and dust", () => {
+  it("is the enemy's family's junk: bandits' trinkets and cloth, the undead's charms and dust, Corvane's tallies and badges", () => {
     const bases = (family: Family) => new Set(itemsOf(many(kill('leader', 3, family)), 'junk').map((i) => i.id.replace(/-\d+$/, '')));
     expect(bases('bandit')).toEqual(new Set(['worn-trinket', 'torn-cloth']));
     expect(bases('undead')).toEqual(new Set(['bone-charm', 'grave-dust']));
+    expect(bases('corvane')).toEqual(new Set(['tithe-tally', 'key-badge']));
   });
 
   it("is at the enemy's level, up to the loot levels", () => {
-    for (const level of [1, 2, 3, 4, 5]) {
+    // Oakvale's levels, and the far north's.
+    for (const level of [1, 2, 3, 4, 5, 26, 40]) {
       const items = many(kill('leader', level)).flatMap((l) => l.items.map((id) => itemOf(id)!));
       expect(new Set(items.map((i) => i.level))).toEqual(new Set([level]));
     }
-    const past = many(kill('leader', 9)).flatMap((l) => l.items.map((id) => itemOf(id)!.level));
+    const past = many(kill('leader', LOOT_LEVELS.at(-1)! + 4)).flatMap((l) => l.items.map((id) => itemOf(id)!.level));
     expect(new Set(past)).toEqual(new Set([LOOT_LEVELS.at(-1)]));
   });
 

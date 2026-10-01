@@ -696,7 +696,7 @@ export class Combat implements ArrowResolver {
     _a.lerp(_b, 0.75);
     const burn = kind === 'burn';
     if (burn) this.fx.particles.burst('embers', _a, 6, undefined, ABILITY_COLOUR.fireball);
-    else if (enemy.family === 'bandit') this.fx.particles.burst('blood', _a, 4, undefined, HUMAN_BLOOD);
+    else if (enemy.body === 'human') this.fx.particles.burst('blood', _a, 4, undefined, HUMAN_BLOOD);
     else this.fx.particles.burst('blood', _a, 4);
     this.fx.text.spawn(`${dealt}`, _a, { color: burn ? '#ff9a50' : '#d05050', scale: 0.13 });
     this.events.onEnemyHit(enemy, killed);
@@ -839,10 +839,10 @@ export class Combat implements ArrowResolver {
     this.fx.text.spawn('Evade', at.clone().setY(at.y + 0.2), { color: '#c0c0c0', scale: 0.16 });
   }
 
-  /** Red from bandits, dark ichor from the undead brute, bone chips from skeletons; sparks on crits. */
+  /** Red from the living, dark ichor from the undead brute, bone chips from skeletons; sparks on crits. */
   private impactFx(enemy: Enemy, at: Vector3, dir: Vector3, bright: boolean): void {
     _vel.copy(dir).normalize();
-    if (enemy.family === 'bandit') this.fx.particles.burst('blood', at, 8, _vel, HUMAN_BLOOD);
+    if (enemy.body === 'human') this.fx.particles.burst('blood', at, 8, _vel, HUMAN_BLOOD);
     else if (enemy.kind === 'brute') this.fx.particles.burst('blood', at, 10, _vel);
     else this.fx.particles.burst('bone', at, 6, _vel);
     if (bright) this.fx.particles.burst('sparks', at, 14, _vel);
@@ -859,9 +859,9 @@ export class Combat implements ArrowResolver {
     combatStats.kills++;
     enemy.capsule(_a, _b);
     _a.lerp(_b, 0.5);
-    const bandit = enemy.family === 'bandit';
-    sfx.death(_a, { big: enemy.kind === 'warden' || enemy.kind === 'brute', bones: !bandit });
-    if (bandit) this.fx.particles.burst('blood', _a, 12, undefined, HUMAN_BLOOD);
+    const living = enemy.body === 'human';
+    sfx.death(_a, { big: enemy.kind === 'warden' || enemy.kind === 'brute', bones: !living });
+    if (living) this.fx.particles.burst('blood', _a, 12, undefined, HUMAN_BLOOD);
     else if (enemy.kind === 'brute') this.fx.particles.burst('blood', _a, 24);
     else this.fx.particles.burst('bone', _a, enemy.kind === 'warden' ? 40 : 14);
     if (enemy.kind === 'warden') {

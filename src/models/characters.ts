@@ -1,7 +1,7 @@
 import type { Material } from 'three';
-import { BANDIT_BUILDS, type BanditKind, dressBandit } from './bandits';
+import { BANDITS } from './bandits';
+import { BAILIFFS } from './bailiffs';
 import { bow } from './bow';
-import { BUILDS } from './human';
 import type { Vec3 } from './kit';
 import { PAL } from './palette';
 import { type BoneName, type DressContext, type Proportions, Rig } from './rig';
@@ -9,14 +9,15 @@ import { type BoneName, type DressContext, type Proportions, Rig } from './rig';
 // The bestiary's bodies. Each is a Rig (one draw call) dressed from simple
 // primitives. Sizes are in metres; `s` scales bone thickness, not length. An
 // enemy's body comes from its family as well as its behaviour: the undead are
-// the skeletons here (and the brute's stitched flesh), and bandits wear the
-// human body (people.ts).
+// the skeletons here (and the brute's stitched flesh); the bandits
+// (bandits.ts) and House Corvane's bailiffs (bailiffs.ts) wear the human body
+// (human.ts). Every family is an entry in FAMILIES.
 
 /** An enemy's behaviour: how it fights. */
 export type EnemyKind = 'grunt' | 'archer' | 'brute' | 'warden';
 
-/** Who an enemy is, whatever its behaviour. The Warden is only ever undead. */
-export type Family = 'undead' | 'bandit';
+/** What an enemy family is made of: the dead are skeletons, the living wear the human body. */
+export type EnemyBody = 'skeleton' | 'human';
 
 /** The business end of a weapon, in its bone's space. Enemy strikes sweep this segment. */
 export interface WeaponSpec {
@@ -29,6 +30,32 @@ export interface WeaponSpec {
 export interface CharacterModel {
   rig: Rig;
   weapon: WeaponSpec;
+}
+
+/** One family's fighter with one behaviour: the body it fights in, and how that body's dressed. */
+export interface Fighter {
+  /** Its name in the model inspector: "Bandit thug". */
+  readonly label: string;
+  /** How many looks it comes in: grunts and thugs vary, the rest have one. */
+  readonly looks: number;
+  /** Its bone lengths: a skeleton's, or a build of the human body. */
+  readonly proportions: Proportions;
+  /** Dress it in look `variant` (any whole number: it wraps), and say what it strikes with. */
+  dress(ctx: DressContext, variant: number): WeaponSpec;
+}
+
+/**
+ * An enemy family: who an enemy is, whatever its behaviour. Its body decides
+ * how it comes and goes and what flies when it's hit: the dead claw up out of
+ * the ground and fall to pieces, the living are simply standing there and
+ * fall whole. A family fights only with the behaviours it dresses for: only
+ * the undead have a Warden.
+ */
+export interface FamilyDef {
+  readonly body: EnemyBody;
+  readonly fights: Partial<Record<EnemyKind, Fighter>>;
+  /** Varies its per-face shading, with its look. */
+  readonly seed: number;
 }
 
 const PI = Math.PI;
@@ -371,51 +398,57 @@ function dressWarden(ctx: DressContext): WeaponSpec {
   return greatsword(ctx);
 }
 
+/** The undead: skeletons, and the brute's stitched flesh, raised by the Warden among them. */
+const UNDEAD: FamilyDef = {
+  body: 'skeleton',
+  seed: 11,
+  fights: {
+    grunt: { label: 'Grunt', looks: 6, proportions: PROPORTIONS.grunt, dress: dressGrunt },
+    archer: { label: 'Archer', looks: 1, proportions: PROPORTIONS.archer, dress: dressArcher },
+    brute: { label: 'Brute', looks: 1, proportions: PROPORTIONS.brute, dress: dressBrute },
+    warden: { label: 'Bone Warden', looks: 1, proportions: PROPORTIONS.warden, dress: dressWarden },
+  },
+};
+
+/**
+ * Every enemy family, by name. A new family is a new entry here, with its
+ * fighters dressed in a file of its own, and its junk in items.ts (JUNK);
+ * camps, the inspector, combat and the loot take it from there.
+ */
+export const FAMILIES = {
+  undead: UNDEAD,
+  bandit: BANDITS,
+  corvane: BAILIFFS,
+} satisfies Record<string, FamilyDef>;
+
+/** Who an enemy is, whatever its behaviour: one of FAMILIES. */
+export type Family = keyof typeof FAMILIES;
+
 export interface BuildOptions {
   material?: Material;
-  /** Its body: a skeleton (the default) or a bandit in the human body. */
+  /** Who it is: the undead (the default, skeletons) or a family in the human body. */
   family?: Family;
-  /** Varies helmets, cloth and weapons among grunts, and looks and weapons among thugs. */
+  /** Which of its family's looks for its behaviour: varies helmets, cloth, faces and weapons. */
   variant?: number;
+}
+
+/** `family`'s fighter with the behaviour `kind`: there's none of some (only the undead have a Warden). */
+export function fighterOf(kind: EnemyKind, family: Family = 'undead'): Fighter {
+  const fighter: Fighter | undefined = FAMILIES[family].fights[kind];
+  if (!fighter) throw new Error(`No ${kind} among the ${family} family`);
+  return fighter;
 }
 
 /** The bone lengths of an enemy with this behaviour and family. */
 export function proportionsOf(kind: EnemyKind, family: Family = 'undead'): Proportions {
-  if (family === 'undead') return PROPORTIONS[kind];
-  return BUILDS[BANDIT_BUILDS[banditOnly(kind)]].proportions;
-}
-
-/** Bandits fight as thugs, archers and a leader; the Warden is only ever undead. */
-function banditOnly(kind: EnemyKind): BanditKind {
-  if (kind === 'warden') throw new Error('The Warden is undead');
-  return kind;
+  return fighterOf(kind, family).proportions;
 }
 
 export function buildCharacter(kind: EnemyKind, opts: BuildOptions = {}): CharacterModel {
-  let weapon: WeaponSpec | undefined;
   const variant = opts.variant ?? 0;
   const family = opts.family ?? 'undead';
-  const dress = (ctx: DressContext) => {
-    if (family === 'bandit') {
-      weapon = dressBandit(ctx, banditOnly(kind), variant);
-      return;
-    }
-    switch (kind) {
-      case 'grunt':
-        weapon = dressGrunt(ctx, variant);
-        break;
-      case 'archer':
-        weapon = dressArcher(ctx);
-        break;
-      case 'brute':
-        weapon = dressBrute(ctx);
-        break;
-      case 'warden':
-        weapon = dressWarden(ctx);
-        break;
-    }
-  };
-  const seed = (family === 'bandit' ? 21 : 11) + variant * 7;
-  const rig = new Rig(proportionsOf(kind, family), dress, opts.material, seed);
+  const fighter = fighterOf(kind, family);
+  let weapon: WeaponSpec | undefined;
+  const rig = new Rig(fighter.proportions, (ctx) => (weapon = fighter.dress(ctx, variant)), opts.material, FAMILIES[family].seed + variant * 7);
   return { rig, weapon: weapon! };
 }

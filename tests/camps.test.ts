@@ -4,6 +4,7 @@ import { CONFIG } from '../src/config';
 import { type Camp, type CampHooks, Camps, type You } from '../src/enemies/camps';
 import { mulberry32 } from '../src/maps/forest/noise';
 import type { CampId, CampPlan, PostPlan } from '../src/maps/types';
+import type { Story } from '../src/story';
 import type { Ground } from '../src/world/ground';
 
 // Camps drive real enemies (their rigs, steering and attack timelines)
@@ -623,5 +624,80 @@ describe("another zone's camps", () => {
     step(1);
     expect(camps.camps[0].awake).toBe(true);
     expect(camps.enemies).toHaveLength(2);
+  });
+});
+
+describe('camps and the quests', () => {
+  const N = CONFIG.population;
+
+  /** You by camps that hear how the quests stand: `come.add('quest:stage')` brings a moment. */
+  function storied(plans: CampPlan[], x: number, z: number) {
+    const come = new Set<string>();
+    const story: Story = { reached: (m) => come.has(`${m.quest}:${m.stage}`) };
+    const camps = new Camps(plans, hill, hooks, {}, story);
+    const you: You = { feet: new Vector3(), head: new Vector3(), sword: null, alive: true, interior: null };
+    const stand = (nx: number, nz: number) => {
+      you.feet.set(nx, hill.heightAt(nx, nz), nz);
+      you.head.copy(you.feet).setY(you.feet.y + 1.6);
+    };
+    stand(x, z);
+    const step = (seconds: number) => {
+      for (let t = 0; t < seconds - 1e-9; t += DT) camps.update(DT, you);
+    };
+    step(1);
+    return { camps, come, stand, step };
+  }
+  const letters = { quest: 'letters', stage: 'active' } as const;
+
+  it('a neutral camp leaves you be until its quest turns it, but fights whoever hurts it, with its campmates', () => {
+    const { camps, stand, step } = storied([{ ...camp('brackenmoor-fellgate', [thug(0, 0), thug(3, 0)]), neutralUntil: letters }], 0, 30);
+    const [gate] = camps.camps;
+    stand(0, C.notice - 3);
+    step(1);
+    expect(camps.fighting).toBe(false);
+    hit(gate, 0);
+    step(0.2);
+    expect(minds(gate)).toEqual(['fight', 'fight']);
+    // Turned: it notices you as any camp does.
+    const turned = storied([{ ...camp('brackenmoor-fellgate', [thug(0, 0), thug(3, 0)]), neutralUntil: letters }], 0, 30);
+    turned.come.add('letters:active');
+    turned.stand(0, C.notice - 3);
+    turned.step(0.5);
+    expect(turned.camps.fighting).toBe(true);
+  });
+
+  it('a camp there from a moment on is raised only once it comes, near you, a member a frame', () => {
+    const { camps, come, step } = storied([{ ...camp('sallows-punt', [thug(0, 0), thug(3, 0)]), from: { quest: 'signal', stage: 'active' } }], 0, 20);
+    step(1);
+    expect(camps.enemies).toHaveLength(0);
+    expect(camps.camps[0].lazy).toBe(true);
+    come.add('signal:active');
+    step(DT);
+    expect(camps.enemies).toHaveLength(1);
+    step(DT);
+    expect(camps.enemies).toHaveLength(2);
+  });
+
+  it('a camp gone after a moment goes once it is calm and its fallen have fallen, and never refills', () => {
+    const { camps, come, stand, step } = storied([{ ...camp('sallows-hask', [thug(0, 0), thug(3, 0)]), until: { quest: 'office', stage: 'handedIn' } }], 0, 20);
+    const [hask] = camps.camps;
+    step(1);
+    expect(camps.enemies).toHaveLength(2);
+    hit(hask, 0, 999);
+    hit(hask, 1, 999);
+    come.add('office:handedIn');
+    step(0.5);
+    // Still falling, in view: not whisked away.
+    expect(hask.awake).toBe(true);
+    expect(camps.enemies).toHaveLength(2);
+    step(4);
+    expect(hask.awake).toBe(false);
+    expect(camps.enemies).toHaveLength(0);
+    // Past the refill time, away and back: still gone.
+    stand(0, N.near + N.hysteresis + 20);
+    step(C.refillTime + 5);
+    stand(0, 20);
+    step(1);
+    expect(camps.enemies).toHaveLength(0);
   });
 });

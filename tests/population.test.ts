@@ -1,13 +1,15 @@
-import { Vector3 } from 'three';
+import { Box3, Group, Vector3 } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
 import { MAPS } from '../src/maps/registry';
 import type { PersonPlan, Zone } from '../src/maps/types';
 import { CAST, type CastId, Wardrobe } from '../src/people/cast';
-import { type Builder, type Placed, Population } from '../src/people/population';
+import { Fallen } from '../src/people/fallen';
+import { type Builder, type Placed, Population, type Streets, villagersOn } from '../src/people/population';
 import { strollFrom } from '../src/people/villagers';
 import { WORKS } from '../src/people/work';
-import { CHAINS, VILLAGERS } from '../src/quests';
+import { CHAINS, type QuestMoment, VILLAGERS } from '../src/quests';
+import { NO_STORY, type Story } from '../src/story';
 
 // Who lives in each zone (people/population.ts): the villagers a zone places
 // by data are built only while you're near them, the nearest few at most and
@@ -45,8 +47,15 @@ class Body implements Placed {
   }
 }
 
+/** A story whose moments come as a test says: `come.add('quest:stage')`. */
+function told() {
+  const come = new Set<string>();
+  const story: Story = { reached: (m) => come.has(`${m.quest}:${m.stage}`) };
+  return { story, come };
+}
+
 /** A population of stand-in bodies, counting the builds. */
-function population(people: PersonPlan[]) {
+function population(people: PersonPlan[], story: Story = NO_STORY) {
   const made: Body[] = [];
   const builder: Builder<Body> = {
     make: (plan, stroll) => {
@@ -58,7 +67,7 @@ function population(people: PersonPlan[]) {
       b.gone = true;
     },
   };
-  const pop = new Population(builder);
+  const pop = new Population(builder, story);
   pop.add(people);
   const you = new Vector3();
   const step = (seconds: number) => {
@@ -90,7 +99,7 @@ describe('a population', () => {
   it('builds no farther than the fog lets you see, where it closes in nearer', () => {
     const { pop, you, step, ids } = population([person('near', 0, 60), person('past', 0, 90)]);
     you.set(0, 0, 0);
-    for (let t = 0; t < 1; t += DT) pop.update(DT, you, 75);
+    for (let t = 0; t < 1; t += DT) pop.update(DT, you, { near: 75, most: P.most });
     expect(ids()).toEqual(['near']);
     step(1);
     expect(ids()).toEqual(['near', 'past']);
@@ -135,6 +144,16 @@ describe('a population', () => {
     expect(Math.max(...built)).toBeLessThanOrEqual(Math.min(...left));
   });
 
+  it("keeps to the zone's own crowd: a city's nearer and thicker", () => {
+    const city = { near: 50, most: 45 };
+    const street = Array.from({ length: 60 }, (_, i) => person(`p${i}`, (i % 10) * 4, Math.floor(i / 10) * 4));
+    const { pop, you } = population([...street, person('past', 0, 70)]);
+    you.set(0, 0, 0);
+    pop.fill(you, city);
+    expect(pop.built).toHaveLength(45);
+    expect(pop.get('past')).toBeNull();
+  });
+
   it('says each line in turn as you come close, and nothing without lines', () => {
     const { pop, you, step } = population([
       person('talker', 0, 0, { barks: ['One.', 'Two.'] }),
@@ -157,6 +176,22 @@ describe('a population', () => {
     expect((pop.get('quiet') as Body).said.filter((l) => l !== null)).toEqual([]);
   });
 
+  it('brings someone only from their moment of a quest on, and takes another away for good at theirs', () => {
+    const { story, come } = told();
+    const home: QuestMoment = { quest: 'northWind', stage: 'handedIn' };
+    const left: QuestMoment = { quest: 'emptyOffice', stage: 'handedIn' };
+    const { pop, you, step, ids, made } = population([person('son', 0, 5, { from: home }), person('hask', 5, 0, { until: left }), person('wife', 0, -5)], story);
+    pop.fill(you);
+    expect(ids()).toEqual(['hask', 'wife']);
+    come.add('northWind:handedIn');
+    step(0.1);
+    expect(ids()).toEqual(['hask', 'son', 'wife']);
+    come.add('emptyOffice:handedIn');
+    step(0.1);
+    expect(ids()).toEqual(['son', 'wife']);
+    expect(made.find((b) => b.plan.id === 'hask')!.gone).toBe(true);
+  });
+
   it('walks a stroller on while they are dropped', () => {
     const { pop, you, step } = population([person('walker', 0, 0, { route: [{ x: 0, z: 40 }] })]);
     you.set(0, 0, 0);
@@ -169,6 +204,48 @@ describe('a population', () => {
     const walker = pop.get('walker') as Body;
     // Ten seconds on at a stroll, less the pause at the far end if they reached it.
     expect(walker.at.z).toBeGreaterThan(5);
+  });
+});
+
+describe('the fallen', () => {
+  /** Flat ground at 2 m, counting who's made solid on it. */
+  const streets = () => {
+    const bodies: unknown[] = [];
+    const s: Streets = {
+      heightAt: () => 2,
+      resolve: () => false,
+      lineOfSight: () => true,
+      steer: () => {},
+      arrowStops: () => false,
+      addBody: (b) => bodies.push(b),
+      removeBody: (b) => bodies.splice(bodies.indexOf(b), 1),
+    };
+    return { s, bodies };
+  };
+
+  it('lie face down along the way they faced, on the ground, still and not solid', () => {
+    const { s, bodies } = streets();
+    const root = new Group();
+    const builder = villagersOn(s, root);
+    const yaw = Math.PI / 2;
+    // The goodwife: nothing long in her hands to stick out of the ground or up from it.
+    const dead = builder.make({ id: 'digger', cast: 'goodwife', x: 10, z: 0, yaw, fallen: true }, null);
+    expect(dead).toBeInstanceOf(Fallen);
+    expect(bodies).toHaveLength(0);
+    const body = new Box3().setFromObject((dead as Fallen).rig.mesh, true);
+    // Low on the ground, a bent knee the highest of it, none of it far under.
+    expect(body.max.y - 2).toBeLessThan(0.55);
+    expect(body.min.y - 2).toBeGreaterThan(-0.15);
+    // Long along +X, the way they faced, from their feet at their spot.
+    expect(body.max.x - body.min.x).toBeGreaterThan(1.6);
+    expect(body.min.x).toBeGreaterThan(9.4);
+    expect(body.max.z - body.min.z).toBeLessThan(1.4);
+    // Never stepped: nothing of it updates its matrix.
+    let moving = 0;
+    (dead as Fallen).root.traverse((o) => (moving += o.matrixAutoUpdate ? 1 : 0));
+    expect(moving).toBe(0);
+    builder.drop(dead, { id: 'digger', cast: 'goodwife', x: 10, z: 0, yaw, fallen: true });
+    expect(root.children).toHaveLength(0);
   });
 });
 
@@ -257,6 +334,27 @@ describe("every zone's people and camps", () => {
       return walk.spot(0);
     });
   };
+
+  it('shows each zone a crowd no wider than the chunks drawn in full round you, and no bigger than the frame can carry', () => {
+    for (const zone of zones) {
+      expect(zone.crowd.near, zone.id).toBeGreaterThan(0);
+      expect(zone.crowd.near, zone.id).toBeLessThanOrEqual(CONFIG.streaming.full);
+      expect(zone.crowd.most, zone.id).toBeGreaterThan(0);
+      // About 1.5k triangles and 2 draw calls each, both eyes, if all of them are in view.
+      expect(zone.crowd.most, zone.id).toBeLessThanOrEqual(50);
+    }
+  });
+
+  it('names a quest there is at every moment that brings or takes away someone or a camp, or turns a camp; and the fallen only lie there', () => {
+    const quests = new Set(CHAINS.flatMap((c) => c.quests.map((q) => q.id)));
+    for (const zone of zones) {
+      for (const p of zone.people) {
+        for (const m of [p.from, p.until]) if (m) expect(quests, `${p.id}: ${m.quest}`).toContain(m.quest);
+        if (p.fallen) expect([p.work, p.route, p.barks], p.id).toEqual([undefined, undefined, undefined]);
+      }
+      for (const c of zone.camps) for (const m of [c.from, c.until, c.neutralUntil]) if (m) expect(quests, `${c.id}: ${m.quest}`).toContain(m.quest);
+    }
+  });
 
   it('places each villager under an id nobody else has, one of the cast at a work there is', () => {
     const ids = zones.flatMap((z) => z.people.map((p) => p.id));
