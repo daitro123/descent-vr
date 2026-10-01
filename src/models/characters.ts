@@ -1,9 +1,11 @@
 import type { Material } from 'three';
 import { BANDITS } from './bandits';
 import { BAILIFFS } from './bailiffs';
+import { BOG } from './bog';
 import { RAIDERS } from './raiders';
 import { LANTERN_MEN, UNDERGATE } from './smugglers';
 import { bow } from './bow';
+import { DROWNED } from './drowned';
 import type { Vec3 } from './kit';
 import { PAL } from './palette';
 import { type BoneName, type DressContext, type Proportions, Rig } from './rig';
@@ -25,9 +27,9 @@ export type HumanoidKind = Exclude<EnemyKind, 'biter'>;
 
 /**
  * What an enemy is made of: the dead are skeletons, the living wear the human
- * body, and leeches and adders are crawlers (crawler.ts).
+ * body, the bog's beasts are mud, and leeches and adders are crawlers (crawler.ts).
  */
-export type EnemyBody = 'skeleton' | 'human' | 'crawler';
+export type EnemyBody = 'skeleton' | 'human' | 'mud' | 'crawler';
 
 /** The business end of a weapon, in its bone's space. Enemy strikes sweep this segment. */
 export interface WeaponSpec<B extends string = BoneName> {
@@ -52,14 +54,17 @@ export interface Fighter {
   readonly proportions: Proportions;
   /** Dress it in look `variant` (any whole number: it wraps), and say what it strikes with. */
   dress(ctx: DressContext, variant: number): WeaponSpec;
+  /** Its name over its health bar, if it goes by one: the bosses, and named fighters the fen tales name (the Mire King). */
+  readonly title?: string;
 }
 
 /**
  * An enemy family: who an enemy is, whatever its behaviour. Its body decides
  * how it comes and goes and what flies when it's hit: the dead claw up out of
- * the ground and fall to pieces, the living are simply standing there and
- * fall whole. A family fights only with the behaviours it dresses for: only
- * the undead have a Warden.
+ * the ground (or come up out of the water) and fall to pieces, the living are
+ * simply standing there and fall whole, the bog's beasts lie sunk in the mud
+ * as mounds until they heave up. A family fights only with the behaviours it
+ * dresses for: only the undead and the drowned have a Warden.
  */
 export interface FamilyDef {
   readonly body: Exclude<EnemyBody, 'crawler'>;
@@ -71,6 +76,8 @@ export interface FamilyDef {
    * them, whatever look they're given.
    */
   readonly named?: Readonly<Record<string, NamedFighter>>;
+  /** A camp's lie hidden where they're raised (under the ground, the water, the mud) until you come near: the drowned, the bog's beasts. */
+  readonly lurks?: boolean;
   /** Varies its per-face shading, with its look. */
   readonly seed: number;
 }
@@ -85,41 +92,45 @@ const DOWN: Vec3 = [PI, 0, 0]; // taper parts grow along +Y; this flips them dow
 
 // ---------------------------------------------------------------- skeleton parts
 
-interface SkeletonLook {
+/** A skeleton's bones: `s` scales their thickness, `eye` glows in the sockets; `bone` and `shade` stain them (the drowned's peat). */
+export interface SkeletonLook {
   s: number;
   eye: number;
   bone?: number;
+  shade?: number;
 }
 
 function skull(ctx: DressContext, l: SkeletonLook): void {
   const { s, eye } = l;
   const B = l.bone ?? PAL.bone;
+  const S = l.shade ?? PAL.boneShade;
   const neckLen = ctx.p.neck - ctx.p.spine;
   ctx
     .on('head')
-    .box(0.045 * s, neckLen + 0.05 * s, 0.045 * s, { at: [0, (0.05 * s - neckLen) / 2, -0.01 * s], color: PAL.boneShade })
+    .box(0.045 * s, neckLen + 0.05 * s, 0.045 * s, { at: [0, (0.05 * s - neckLen) / 2, -0.01 * s], color: S })
     .box(0.19 * s, 0.16 * s, 0.2 * s, { at: [0, 0.145 * s, 0], color: B })
     .taper(0.19 * s, 0.2 * s, 0.13 * s, 0.15 * s, 0.05 * s, { at: [0, 0.225 * s, 0], color: B })
-    .box(0.2 * s, 0.03 * s, 0.04 * s, { at: [0, 0.168 * s, 0.09 * s], color: PAL.boneShade })
+    .box(0.2 * s, 0.03 * s, 0.04 * s, { at: [0, 0.168 * s, 0.09 * s], color: S })
     .box(0.16 * s, 0.07 * s, 0.05 * s, { at: [0, 0.088 * s, 0.08 * s], color: B })
     .box(0.056 * s, 0.046 * s, 0.03 * s, { at: [-0.046 * s, 0.13 * s, 0.093 * s], color: PAL.socket, jitter: 0 })
     .box(0.056 * s, 0.046 * s, 0.03 * s, { at: [0.046 * s, 0.13 * s, 0.093 * s], color: PAL.socket, jitter: 0 })
     .box(0.024 * s, 0.024 * s, 0.02 * s, { at: [-0.046 * s, 0.13 * s, 0.1 * s], color: eye, glow: 1, jitter: 0 })
     .box(0.024 * s, 0.024 * s, 0.02 * s, { at: [0.046 * s, 0.13 * s, 0.1 * s], color: eye, glow: 1, jitter: 0 })
     .box(0.026 * s, 0.03 * s, 0.02 * s, { at: [0, 0.09 * s, 0.106 * s], color: PAL.socket, jitter: 0 })
-    .box(0.12 * s, 0.022 * s, 0.03 * s, { at: [0, 0.052 * s, 0.09 * s], color: PAL.bone });
+    .box(0.12 * s, 0.022 * s, 0.03 * s, { at: [0, 0.052 * s, 0.09 * s], color: B });
   ctx
     .on('jaw')
     .box(0.14 * s, 0.04 * s, 0.1 * s, { at: [0, 0.01 * s, 0.015 * s], color: B })
-    .box(0.11 * s, 0.018 * s, 0.025 * s, { at: [0, 0.035 * s, 0.045 * s], color: PAL.bone });
+    .box(0.11 * s, 0.018 * s, 0.025 * s, { at: [0, 0.035 * s, 0.045 * s], color: B });
 }
 
 function ribcage(ctx: DressContext, l: SkeletonLook): void {
   const { s } = l;
   const B = l.bone ?? PAL.bone;
+  const S = l.shade ?? PAL.boneShade;
   const L = ctx.p.spine;
   const b = ctx.on('spine');
-  b.box(0.045 * s, L + 0.03 * s, 0.045 * s, { at: [0, L / 2 - 0.015 * s, -0.075 * s], color: PAL.boneShade });
+  b.box(0.045 * s, L + 0.03 * s, 0.045 * s, { at: [0, L / 2 - 0.015 * s, -0.075 * s], color: S });
   const ribs: [number, number, number][] = [
     [L - 0.07 * s, 0.26, 0.17],
     [L - 0.13 * s, 0.28, 0.18],
@@ -134,12 +145,12 @@ function ribcage(ctx: DressContext, l: SkeletonLook): void {
       .box(t, t, d, { at: [w / 2, y, 0], color: B })
       .box(w / 2 - 0.03 * s, t, t, { at: [-(w / 4 + 0.015 * s), y - 0.012 * s, d / 2], color: B })
       .box(w / 2 - 0.03 * s, t, t, { at: [w / 4 + 0.015 * s, y - 0.012 * s, d / 2], color: B })
-      .box(w, t, t, { at: [0, y, -d / 2], color: PAL.boneShade });
+      .box(w, t, t, { at: [0, y, -d / 2], color: S });
   }
   b.box(0.035 * s, 0.2 * s, 0.025 * s, { at: [0, L - 0.16 * s, 0.09 * s], color: B })
     .box(ctx.p.shoulderW * 2, 0.03 * s, 0.035 * s, { at: [0, L - 0.01 * s, 0.03 * s], color: B })
-    .box(0.1 * s, 0.12 * s, 0.02 * s, { at: [-0.09 * s, L - 0.09 * s, -0.1 * s], color: PAL.boneShade })
-    .box(0.1 * s, 0.12 * s, 0.02 * s, { at: [0.09 * s, L - 0.09 * s, -0.1 * s], color: PAL.boneShade });
+    .box(0.1 * s, 0.12 * s, 0.02 * s, { at: [-0.09 * s, L - 0.09 * s, -0.1 * s], color: S })
+    .box(0.1 * s, 0.12 * s, 0.02 * s, { at: [0.09 * s, L - 0.09 * s, -0.1 * s], color: S });
   ctx
     .on('hips')
     .taper(0.16 * s, 0.1 * s, 0.26 * s, 0.14 * s, 0.12 * s, { at: [0, -0.09 * s, 0], color: B })
@@ -149,41 +160,42 @@ function ribcage(ctx: DressContext, l: SkeletonLook): void {
 function skeletonLimbs(ctx: DressContext, l: SkeletonLook): void {
   const { s } = l;
   const B = l.bone ?? PAL.bone;
+  const S = l.shade ?? PAL.boneShade;
   const { upperArm: UA, forearm: FA, thigh: TH, shin: SH } = ctx.p;
   for (const side of ['L', 'R'] as const) {
     ctx
       .on(`upperArm${side}`)
       .ball(0.04 * s, { color: B })
       .box(0.04 * s, UA - 0.05 * s, 0.04 * s, { at: [0, -UA / 2, 0], color: B })
-      .ball(0.034 * s, { at: [0, -UA, 0], color: PAL.boneShade });
+      .ball(0.034 * s, { at: [0, -UA, 0], color: S });
     ctx
       .on(`forearm${side}`)
       .box(0.024 * s, FA - 0.03 * s, 0.024 * s, { at: [-0.012 * s, -FA / 2, 0], color: B })
-      .box(0.024 * s, FA - 0.03 * s, 0.024 * s, { at: [0.012 * s, -FA / 2, 0], color: PAL.boneShade });
+      .box(0.024 * s, FA - 0.03 * s, 0.024 * s, { at: [0.012 * s, -FA / 2, 0], color: S });
     ctx
       .on(`hand${side}`)
       .box(0.05 * s, 0.055 * s, 0.028 * s, { at: [0, -0.035 * s, 0], color: B })
-      .box(0.05 * s, 0.045 * s, 0.045 * s, { at: [0, -0.075 * s, 0.006 * s], color: PAL.boneShade });
+      .box(0.05 * s, 0.045 * s, 0.045 * s, { at: [0, -0.075 * s, 0.006 * s], color: S });
     ctx
       .on(`thigh${side}`)
       .ball(0.045 * s, { color: B })
       .box(0.048 * s, TH - 0.06 * s, 0.048 * s, { at: [0, -TH / 2, 0], color: B })
-      .ball(0.042 * s, { at: [0, -TH, 0.01 * s], color: PAL.boneShade });
+      .ball(0.042 * s, { at: [0, -TH, 0.01 * s], color: S });
     ctx
       .on(`shin${side}`)
       .box(0.042 * s, SH - 0.04 * s, 0.042 * s, { at: [0, -SH / 2, 0], color: B })
-      .box(0.08 * s, 0.045 * s, 0.2 * s, { at: [0, -SH - 0.012 * s, 0.05 * s], color: PAL.boneShade });
+      .box(0.08 * s, 0.045 * s, 0.2 * s, { at: [0, -SH - 0.012 * s, 0.05 * s], color: S });
   }
 }
 
-function skeleton(ctx: DressContext, l: SkeletonLook): void {
+export function skeleton(ctx: DressContext, l: SkeletonLook): void {
   skull(ctx, l);
   ribcage(ctx, l);
   skeletonLimbs(ctx, l);
 }
 
 /** Tattered cloth hanging from the hips, front and back. */
-function loincloth(ctx: DressContext, s: number, color: number, len: number): void {
+export function loincloth(ctx: DressContext, s: number, color: number, len: number): void {
   ctx
     .on('hips')
     .box(0.3 * s, 0.05 * s, 0.18 * s, { at: [0, -0.02 * s, 0], color: PAL.leather })
@@ -428,7 +440,7 @@ const UNDEAD: FamilyDef = {
     grunt: { label: 'Grunt', looks: 6, proportions: PROPORTIONS.grunt, dress: dressGrunt },
     archer: { label: 'Archer', looks: 1, proportions: PROPORTIONS.archer, dress: dressArcher },
     brute: { label: 'Brute', looks: 1, proportions: PROPORTIONS.brute, dress: dressBrute },
-    warden: { label: 'Bone Warden', looks: 1, proportions: PROPORTIONS.warden, dress: dressWarden },
+    warden: { label: 'Bone Warden', looks: 1, proportions: PROPORTIONS.warden, dress: dressWarden, title: 'The Bone Warden' },
   },
 };
 
@@ -444,6 +456,8 @@ export const FAMILIES = {
   smuggler: LANTERN_MEN,
   undergate: UNDERGATE,
   raider: RAIDERS,
+  drowned: DROWNED,
+  bog: BOG,
 } satisfies Record<string, FamilyDef>;
 
 /** Who an enemy on a skeleton or the human body is, whatever its behaviour: one of FAMILIES. */

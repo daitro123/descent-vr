@@ -145,6 +145,14 @@ export const JUNK = {
     ['eel-hook', 'Rusty Eel Hook', 'eel-hook'],
     ['reed-charm', 'Plaited Reed Charm', 'reed-charm'],
   ],
+  drowned: [
+    ['corroded-deep-coin', 'Corroded Deepking Coin', 'deep-coin'],
+    ['silted-knucklebone', 'Silted Knucklebone', 'silted-bone'],
+  ],
+  bog: [
+    ['marsh-gas-bladder', 'Marsh-Gas Bladder', 'gas-bladder'],
+    ['clod-of-peat', 'Clod of Peat', 'peat'],
+  ],
   leech: [
     ['leech-slime', 'Leech Slime', 'slime'],
     ['leech-teeth', 'Leech Teeth', 'teeth'],

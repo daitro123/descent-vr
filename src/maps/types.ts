@@ -351,6 +351,8 @@ export interface Zone extends MapBase {
   readonly villagers: readonly VillagerSpot[];
   /** Its other villagers, placed by data and built as you come near them. */
   readonly people: readonly PersonPlan[];
+  /** The water's surface at (x, z) where water stands over the ground, or null where it's dry (Ground.waterAt). Without it, the zone is dry. */
+  waterAt?(x: number, z: number): number | null;
   /** How near you villagers are built while you're in it, and how many at once. */
   readonly crowd: Crowd;
   /** Its critters, placed by data, living and drawn only while you're near (world/critters.ts). */

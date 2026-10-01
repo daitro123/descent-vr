@@ -94,6 +94,11 @@ const MODELS: Readonly<Record<string, ItemLook>> = {
   // The fen raiders' junk: a rusty eel hook, and a charm of plaited reed.
   'eel-hook': { look: 'trinket', tint: 0x8a4e2a },
   'reed-charm': { look: 'charm', tint: 0xa89d62 },
+  // The drowned's junk and the bog beasts'.
+  'deep-coin': { look: 'trinket', tint: 0x5a8670 },
+  'silted-bone': { look: 'charm', tint: 0x9a8762 },
+  'gas-bladder': { look: 'pouch', tint: 0x8a9a5a },
+  peat: { look: 'dust', tint: 0x3e3828 },
   // Professions' materials and what they make (the pouch stands in for ore, stone, bars and herbs).
   'ore-copper': { look: 'pouch', tint: 0xb8733a },
   'stone-rough': { look: 'pouch', tint: 0x8a8680 },

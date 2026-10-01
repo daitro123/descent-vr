@@ -225,6 +225,8 @@ export interface EnemyOptions {
   named?: string;
   /** Its behaviour's level-1 numbers, if not the usual ones (the `?duel` duelist). */
   def?: EnemyConfig;
+  /** Lie hidden where it stands until you come near or it's called to fight (EnemyTraits.lurks). */
+  lurks?: boolean;
 }
 
 // ---------------------------------------------------------------- biters
@@ -359,8 +361,8 @@ export class Biter extends MeleeEnemy {
  * camp, so they play with the numbers in CONFIG as they are.
  */
 export function createEnemy(kind: EnemyKind, x: number, z: number, options: EnemyOptions = {}): Enemy {
-  const { level = 1, inCamp = false, family = 'undead', variant = 0, named } = options;
-  const traits = { family, variant, named, level, def: enemyNumbers(options.def ?? CONFIG.enemies[kind], level, inCamp) };
+  const { level = 1, inCamp = false, family = 'undead', variant = 0, named, lurks } = options;
+  const traits = { family, variant, named, lurks, level, def: enemyNumbers(options.def ?? CONFIG.enemies[kind], level, inCamp) };
   switch (kind) {
     case 'grunt':
       return new Grunt(kind, x, z, traits);

@@ -3,12 +3,12 @@ import { closestSegmentSegment, type SegmentHit } from '../combat/geometry';
 import type { BladeTarget } from '../combat/strike';
 import type { AttackConfig, EnemyConfig } from '../config';
 import { CONFIG } from '../config';
-import { buildCharacter, type EnemyBody, type EnemyFamily, type EnemyKind, FAMILIES, isFamily, type WeaponSpec } from '../models/characters';
+import { buildCharacter, type EnemyBody, type EnemyFamily, type EnemyKind, FAMILIES, fighterOf, isFamily, type WeaponSpec } from '../models/characters';
 import { createModelMaterial, type ModelMaterial } from '../models/materials';
 import { BONES, type BoneName, blendPoses, type PoseOf, type Rig, type SkeletonRig } from '../models/rig';
 import { HealthBar } from '../ui/healthBar';
 import type { Ground } from '../world/ground';
-import { GUARD, type GuardSide, humanoidAttack, IDLE, KNEEL, KNEEL_DROP, RISE, SEATED, STAGGER, walkOffsets } from './poses';
+import { GUARD, type GuardSide, humanoidAttack, IDLE, KNEEL, KNEEL_DROP, MOUND, MOUND_DROP, RISE, SEATED, STAGGER, SURFACE, walkOffsets } from './poses';
 import type { AttackTokens } from './tokens';
 
 export type EnemyState = 'rising' | 'move' | 'attack' | 'guard' | 'stagger' | 'kneel' | 'seated' | 'sitting' | 'frozen' | 'dead';
@@ -54,7 +54,12 @@ export interface EnemyContext {
   summon(enemy: Enemy, count: number): void;
   /** An attack's wind-up began (sound cue, threat indicator). */
   telegraph(enemy: Enemy, attack: AttackConfig): void;
+  /** One lying in wait began to rise, out of the ground, the water or the mud (a sound, a splash). */
+  emerge?(enemy: Enemy, from: Emergence): void;
 }
+
+/** Where one that rises comes up out of: the earth (the dead), the water it lies in (the drowned), the mud (the bog's beasts). */
+export type Emergence = 'ground' | 'water' | 'mud';
 
 type MutablePose = Record<string, [number, number, number]>;
 
@@ -85,6 +90,8 @@ export interface EnemyTraits {
   level?: number;
   /** Its body, if not its family's human body or skeleton: built in the material given. A crawler's needs it. */
   model?: (material: ModelMaterial) => EnemyModel;
+  /** Lie hidden where it's raised until you come near or it's called to fight (a camp's, of a family that lurks). */
+  lurks?: boolean;
 }
 
 /** Where an enemy waits when it isn't fighting (see Enemy.post). */
@@ -108,6 +115,11 @@ export interface Seat {
 }
 
 const RISE_DEPTH = 1.9;
+/** m of water over its feet that it comes up out of, rather than the ground under it. */
+const SURFACE_DEPTH = 0.25;
+/** How much longer coming up out of the water, or heaving up out of the mud, takes than clawing out of the ground. */
+const SURFACE_SLOWER = 1.6;
+const MOUND_SLOWER = 1.3;
 const UP = new Vector3(0, 1, 0);
 const _to = new Vector3();
 const _v = new Vector3();
@@ -186,6 +198,10 @@ export abstract class Enemy {
   readonly family: EnemyFamily;
   /** What its family is made of: how it comes and goes, and what flies when it's hit. */
   readonly body: EnemyBody;
+  /** Which of its family's named fighters it is (FamilyDef.named), or null for an ordinary fighter. */
+  readonly named: string | null;
+  /** Lying hidden where it was raised, still to rise: until you come near or its camp fights. */
+  lurking: boolean;
   /** Which of its family's bodies and weapons it fights with, for the aim measured once per body. */
   private readonly fighter: string;
   readonly def: EnemyConfig;
@@ -248,6 +264,8 @@ export abstract class Enemy {
   private staggerSide = 1;
   private steady = 0; // s left in which blows can't stagger it (def.steadyTime)
   private readonly riseTime: number;
+  /** Rising: what out of, how deep it starts, its pose and how long it takes, and whether you roused it. Set as it starts. */
+  private emerging: { from: Emergence; depth: number; pose: BodyPose; time: number; roused: boolean } | null = null;
   private readonly prevBase = new Vector3();
   private readonly prevTip = new Vector3();
   private readonly base = new Vector3();
@@ -297,11 +315,13 @@ export abstract class Enemy {
     z: number,
     traits: EnemyTraits = {},
   ) {
-    const { family = 'undead', variant = 0, named, def = CONFIG.enemies[kind], level = 1 } = traits;
+    const { family = 'undead', variant = 0, named, def = CONFIG.enemies[kind], level = 1, lurks = false } = traits;
     this.family = family;
     this.variant = variant;
     this.body = isFamily(family) ? FAMILIES[family].body : 'crawler';
     this.fighter = `${family}:${kind}:${named ?? variant}`;
+    this.named = named ?? null;
+    this.lurking = lurks;
     this.def = def;
     this.level = level;
     this.hp = this.maxHp = this.def.hp;
@@ -322,19 +342,22 @@ export abstract class Enemy {
     this.root.add(this.visual);
     this.visual.add(this.rig.mesh);
     this.riseTime = kind === 'warden' ? 2.4 : 1.1;
-    if (this.body === 'skeleton') {
-      // The dead claw their way up out of the ground.
+    if (this.body === 'skeleton' || this.body === 'mud') {
+      // The dead claw their way up out of the ground (or the water they lie in), the bog's beasts heave up out of the mud: out of sight till then.
       this.visual.position.y = -RISE_DEPTH * this.heightScale;
-      copyPose(RISE, this.pose); // copies: poses are shared constants, and this.pose is eased in place
+      // copies: poses are shared constants, and this.pose is eased in place
+      copyPose(this.body === 'mud' ? MOUND : lurks ? SURFACE : RISE, this.pose);
     } else {
       // The living are simply there, standing.
       this.state = 'move';
       copyPose(this.idlePose(), this.pose);
     }
 
+    // A boss (the Warden, the Reeve) has its name over a long bar; a named fighter with a title (the Mire King) over a red one a little longer than the rest.
     const big = kind === 'warden';
-    this.healthBar = big ? new HealthBar(1.4, 0.1, 0x6ad0ff, 'THE BONE WARDEN') : new HealthBar(0.5, 0.05, 0xc81e1e);
-    this.healthBar.root.position.y = this.barHeight();
+    const title = kind !== 'biter' && isFamily(family) ? fighterOf(kind, family, named).title?.toUpperCase() : undefined;
+    this.healthBar = big ? new HealthBar(1.4, 0.1, 0x6ad0ff, title) : title ? new HealthBar(0.7, 0.06, 0xc81e1e, title) : new HealthBar(0.5, 0.05, 0xc81e1e);
+    this.healthBar.root.position.y = this.barHeight() + (title && !big ? 0.06 : 0);
     this.root.add(this.healthBar.root);
   }
 
@@ -683,6 +706,21 @@ export abstract class Enemy {
     this.seatTo.set(to.x, 0, to.z);
     this.seatTime = seconds;
     this.enter('rising');
+  }
+
+  /**
+   * How it rises where it stands: the bog's beasts heave up out of the mud,
+   * sunk to the shoulders as a mound (MOUND); the dead come up out of water
+   * standing over their feet, from just under its surface (SURFACE), or else
+   * claw up out of the ground from well under it (RISE).
+   */
+  private emergence(ground: Ground): { from: Emergence; depth: number; pose: BodyPose; time: number; roused: boolean } {
+    const { x, z } = this.position;
+    const bed = ground.heightAt(x, z);
+    const water = Math.max(0, (ground.waterAt?.(x, z) ?? bed) - bed);
+    if (this.body === 'mud') return { from: 'mud', depth: water - MOUND_DROP * this.humanoid.proportions.hipY, pose: MOUND, time: this.riseTime * MOUND_SLOWER, roused: false };
+    if (water > SURFACE_DEPTH) return { from: 'water', depth: Math.min(0, water - this.headTopY() - 0.1), pose: SURFACE, time: this.riseTime * SURFACE_SLOWER, roused: false };
+    return { from: 'ground', depth: -RISE_DEPTH * this.heightScale, pose: RISE, time: this.riseTime, roused: false };
   }
 
   /** The hip drop that sits its hips at `seat`'s height, as a share of its hip height. */
@@ -1273,11 +1311,26 @@ export abstract class Enemy {
           }
           break;
         }
-        const k = Math.min(1, this.stateTime / this.riseTime);
-        this.visual.position.y = -RISE_DEPTH * this.heightScale * (1 - easeOut(k));
-        this.faceToward(this.post ? this.postFacing(_home) : ctx.playerFeet, dt, 0.5);
-        target = k < 0.7 ? RISE : idle;
-        if (k >= 1) this.enter('move');
+        const e = (this.emerging ??= this.emergence(ctx.ground));
+        if (this.lurking) {
+          // Lying in wait where it was raised, until you come near or its camp fights.
+          this.stateTime = 0;
+          if (dist < CONFIG.camps.lurk.wake || !this.post) {
+            this.lurking = false;
+            e.roused = true;
+            ctx.emerge?.(this, e.from);
+          }
+        }
+        const k = Math.min(1, this.stateTime / e.time);
+        this.visual.position.y = e.depth * (1 - easeOut(k));
+        // It comes up facing its post's way, or you if you roused it.
+        this.faceToward(this.post && !e.roused ? this.postFacing(_home) : ctx.playerFeet, dt, 0.5);
+        // Lying in wait it's bowed with its arms down, so nothing it holds pokes up out of the ground; then it claws its way up.
+        target = this.lurking ? (e.from === 'mud' ? MOUND : SURFACE) : k < 0.7 ? e.pose : idle;
+        if (k >= 1) {
+          this.emerging = null;
+          this.enter('move');
+        }
         break;
       }
       case 'move':
