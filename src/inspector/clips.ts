@@ -4,7 +4,9 @@ import { GUARD, type GuardSide, humanoidAttack, IDLE, KNEEL, KNEEL_DROP, MOUND, 
 import { FAMILIES, type Family, type HumanoidKind, proportionsOf } from '../models/characters';
 import { BUILDS, type BuildName } from '../models/human';
 import { PEOPLE, type Person, type PersonId } from '../models/people';
-import { BONES, blendPoses, type Pose, type Proportions } from '../models/rig';
+import { ANIMALS, type AnimalId } from '../models/animals';
+import { BONES, blendPoses, type Pose, type PoseOf, type Proportions } from '../models/rig';
+import { addInto, alive, gait, gaitBob, movesOf, strideRate } from '../animals/poses';
 import { CAST, type CastId } from '../people/cast';
 import { BREATH_PERIOD, friendlyPose } from '../people/poses';
 import { walkFrame, walkOver } from '../people/walk';
@@ -18,7 +20,8 @@ import { WORKS, type WorkLoop, workLoop } from '../people/work';
 export type MutablePose = Record<string, [number, number, number]>;
 
 export interface ClipFrame {
-  pose: Pose;
+  /** On whichever skeleton the clip is for: the humanoid's, or an animal's. */
+  pose: PoseOf<string>;
   /** Hip offset in Y, metres (walk bob, kneel drop). */
   hipY: number;
   /** The whole hip offset, metres, where it moves aside too (a friendly walk's sway); else (0, hipY, 0). */
@@ -247,4 +250,60 @@ export function castClips(id: CastId): Clip[] {
     strollClip(stand, look.build, person.carry),
     ...(person.works ?? []).map((name) => workClip(name, WORKS[name](stand, 0))),
   ];
+}
+
+/**
+ * One of the animals (models/animals.ts), as it moves in a zone
+ * (animals/animal.ts): standing, walking and running at its species' paces,
+ * grazing, looking up, lying down, and a horse's resting a hind leg and
+ * stamping. A frame's `hipY` is the body's drop (lying) or bob (walking).
+ */
+export function animalClips(id: AnimalId): Clip[] {
+  const { species, proportions: p } = ANIMALS[id];
+  const m = movesOf(id);
+  const speed = CONFIG.animals.speed[species];
+  const swish = species === 'horse' ? 1 : 0;
+  const stride: MutablePose = {};
+  const still = (name: string, pose: typeof m.stand, chew = 0, drop = 0): Clip => ({
+    name,
+    duration: 4,
+    sample: (t, out) => ({ pose: alive(pose, t, out, swish, chew), hipY: -drop, phase: name, telegraph: 0 }),
+  });
+  const moving = (name: string, pace: number, trot: number): Clip => {
+    const rate = strideRate(m, pace);
+    return {
+      name,
+      duration: (4 * Math.PI) / rate,
+      sample: (t, out) => {
+        const phase = t * rate;
+        for (const k of Object.keys(stride)) delete stride[k];
+        gait(phase, 1, m.swing, trot, stride);
+        alive(m.stand, t, out);
+        return { pose: addInto(out, stride), hipY: gaitBob(phase, 1, p), phase: name, telegraph: 0 };
+      },
+    };
+  };
+  const clips: Clip[] = [
+    still('stand', m.stand),
+    moving('walk', speed.walk, species === 'dog' ? 1 : 0),
+    moving('run', speed.run, 1),
+    still('graze', m.graze, 1),
+    still('look up', m.alert),
+    still('lie', m.lie, 0, m.lieDrop),
+  ];
+  if (species === 'horse') {
+    clips.push(still('rest a leg', m.rest));
+    clips.push({
+      name: 'stamp',
+      duration: 2,
+      sample: (t, out) => {
+        // The near fore lifted, held and stamped down.
+        const k = Math.max(0, Math.sin(Math.min(1, t / 0.9) * Math.PI));
+        alive(m.stand, t, out, swish);
+        addInto(out, { foreThighL: [-0.35 * k, 0, 0], foreShinL: [1.1 * k, 0, 0], neck: [0.1 * k, 0, 0] });
+        return { pose: out, hipY: 0, phase: k > 0 ? 'stamp' : 'rest', telegraph: 0 };
+      },
+    });
+  }
+  return clips;
 }

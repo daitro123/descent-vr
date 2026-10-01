@@ -156,6 +156,8 @@ async function startAdventure(
     camps: adventure.camps,
     /** Every zone's villagers placed by data: `people.built` are those near you. */
     people: adventure.people,
+    /** Every zone's animals placed by data: `herds.built` are those near you. */
+    herds: adventure.herds,
     /** Every zone's critters: `critters.shown` are those drawn now, nearest first. */
     critters: adventure.critters,
     /** What the fighting has come to: hits, kills, blocks, bolts, freezes. */

@@ -981,6 +981,49 @@ export const CONFIG = {
     walk: { speed: 1.1, pause: 4 }, // m/s strolling a route (each build has its own pace: human.ts `Gait`), s standing at each end
   },
 
+  // The animals a zone places (animals/herds.ts): built as you come near, as
+  // its villagers are, and sharing a body per look. Sheep graze about their
+  // home and scatter from you; dogs lie, trot about or follow; horses stand
+  // tethered. (Wolves are enemies: CONFIG.wolf.)
+  animals: {
+    most: 40, // animals built at once, the nearest: a sheep or a dog is about 450 triangles, a horse about 500
+    perFrame: 2, // herds (a flock, a dog, a horse) built a frame as you walk: each look's first body is a build, the rest share it
+    pad: 0.5, // m round an animal's body at bind that culls it out of view: room for its legs and neck to swing
+    speed: {
+      sheep: { walk: 0.45, run: 2.3 },
+      dog: { walk: 1.2, run: 3.2 },
+      horse: { walk: 1.0, run: 2.6 },
+    },
+    turn: 4, // rad/s an animal turns at its walk (twice that running)
+    radius: { sheep: 0.32, dog: 0.25, horse: 0.55 }, // m: the solid round each, that you and the others walk round (a horse's at each end is 0.85 of it)
+    // A flock grazes about its home: each sheep walks a few metres to a new
+    // patch, grazes `graze` s, and now and then lifts its head (`look`) and looks round.
+    flock: {
+      roam: 6, // m from home a sheep grazes, unless the plan says
+      graze: [5, 14] as const, // s at one patch
+      look: 0.25, // chance it looks up between patches…
+      lie: 0.1, // …or lies down a while, chewing the cud (`rest` s)
+      rest: [15, 30] as const,
+      // A shy one runs from you once you're within `fear`, straight away, until
+      // it's `safe` off; it drifts back home only while you're well clear of it.
+      fear: 6,
+      safe: 11,
+      clear: 9, // m: how far you must be from home before they drift back to it
+      wary: [3, 6] as const, // s a sheep that's run stands watching you before it grazes where it is
+      aside: 1.4, // m: a flock that isn't shy still steps out of your way this close
+    },
+    // A dog that minds a flock gets up every `every` s and goes round it, `round`
+    // m beyond its roam, sniffing at a couple of places; when the flock scatters
+    // it follows, keeping `round` m off its edge, and goes back to its bed once
+    // the flock is home.
+    follow: { round: 2.5, every: [20, 40] as const },
+    notice: 7, // m: a lying dog lifts its head to you, a tethered horse turns its head
+    sniff: [2, 4] as const, // s a dog going round sniffs at each of a couple of places
+    // s a tethered horse stands, crops the grass, or rests a hind leg, before it changes;
+    // and the chance it stamps as it does.
+    tether: { stand: [5, 12] as const, graze: [4, 10] as const, rest: [10, 20] as const, stamp: 0.25 },
+  },
+
   // Critters (world/critters.ts): hares and rabbits, frogs, rats, each a
   // few still frames drawn instanced. They live round their spot and always
   // run away from you, never towards you.
