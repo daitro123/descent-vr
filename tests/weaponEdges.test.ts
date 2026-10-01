@@ -33,6 +33,12 @@ const WIELDERS: [string, EnemyKind, number, Family, string?][] = [
   ['fen raider (eel spear, three tines)', 'grunt', 1, 'raider'],
   ['fen raider peat cutter (peat spade)', 'brute', 0, 'raider'],
   ['Abel Thatch (slasher)', 'brute', 0, 'raider', 'headman'],
+  ['drowned (Deepking blade)', 'grunt', 0, 'drowned'],
+  ['drowned (eel gaff)', 'grunt', 1, 'drowned'],
+  ['drowned (cleaver)', 'grunt', 2, 'drowned'],
+  ['drowned lock-warden (anchor)', 'brute', 0, 'drowned'],
+  ['Drowned Reeve (rod of office)', 'warden', 0, 'drowned'],
+  ['bog lurker (bog-oak limb)', 'brute', 0, 'bog'],
 ];
 
 /** Angles (degrees) between the cutting side and the blade's travel, across the swing. */

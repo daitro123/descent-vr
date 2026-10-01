@@ -72,12 +72,15 @@ const FIRE = CONFIG.talents.trees.mage.fire;
 const FROST = CONFIG.talents.trees.mage.frost;
 /** What flies from a bandit when a blow lands. */
 const HUMAN_BLOOD = 0x7a1812;
+/** And from a bog lurker: wet peat. */
+const MUD = 0x3a3022;
 /** What flies from the living that aren't people: a leech's the blood it drank, darkened; an adder's. */
 const CREATURE_BLOOD: Partial<Record<Enemy['family'], number>> = { leech: 0x3a0e0c, snake: 0x6a1410 };
 
 /** The blood that flies from `enemy`, or null for the dead, who are bones (bar the brute's dark ichor, the default). */
 function bloodOf(enemy: Enemy): number | undefined | null {
   if (enemy.body === 'human') return HUMAN_BLOOD;
+  if (enemy.body === 'mud') return MUD;
   if (enemy.body === 'crawler') return CREATURE_BLOOD[enemy.family];
   return enemy.kind === 'brute' ? undefined : null;
 }
@@ -850,7 +853,7 @@ export class Combat implements ArrowResolver {
     this.fx.text.spawn('Evade', at.clone().setY(at.y + 0.2), { color: '#c0c0c0', scale: 0.16 });
   }
 
-  /** Red from the living, leeches and adders, dark ichor from the undead brute, bone chips from skeletons; sparks on crits. */
+  /** Red from the living, leeches and adders, mud from the bog's beasts, dark ichor from the undead brute, bone chips from skeletons; sparks on crits. */
   private impactFx(enemy: Enemy, at: Vector3, dir: Vector3, bright: boolean): void {
     _vel.copy(dir).normalize();
     const blood = bloodOf(enemy);

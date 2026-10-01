@@ -357,6 +357,47 @@ export const RISE: Pose = {
   shinR: [0.5, 0, 0],
 };
 
+/**
+ * Coming up out of the water it waited under (the drowned): bowed, head
+ * hanging, arms trailing limp behind; it straightens and lifts its head as
+ * it clears the surface.
+ */
+export const SURFACE: Pose = {
+  spine: [0.55, 0, 0],
+  head: [0.55, 0, 0],
+  jaw: [0.25, 0, 0],
+  upperArmR: [0.35, 0, -0.12],
+  forearmR: [-0.15, 0, 0],
+  handR: [0.3, 0, 0],
+  upperArmL: [0.4, 0, 0.12],
+  forearmL: [-0.1, 0, 0],
+  thighL: [-0.25, 0, 0],
+  shinL: [0.45, 0, 0],
+  thighR: [-0.05, 0, 0],
+  shinR: [0.3, 0, 0],
+};
+
+/**
+ * Sunk in the mud as a mound, waiting (a bog lurker): squatting, its back
+ * bowed level and its head tucked under, its arms down at its sides. Goes
+ * with MOUND_DROP, which sinks it to the shoulders, so all that shows above
+ * the mud is the hump of its back and the reeds out of it.
+ */
+export const MOUND: Pose = {
+  spine: [1.15, 0, 0],
+  head: [0.75, 0, 0],
+  upperArmR: [-1.1, 0, -0.15],
+  forearmR: [-0.3, 0, 0],
+  upperArmL: [-1.1, 0, 0.15],
+  forearmL: [-0.3, 0, 0],
+  thighL: [-2.0, 0, 0.35],
+  shinL: [2.5, 0, 0],
+  thighR: [-2.0, 0, -0.35],
+  shinR: [2.5, 0, 0],
+};
+/** Hip drop that goes with MOUND, as a fraction of hip height: below the mud. */
+export const MOUND_DROP = 1.15;
+
 /** Walk cycle offsets, added on top of a base pose. `phase` in radians, `amount` 0–1. */
 export function walkOffsets(phase: number, amount: number, out: Record<string, [number, number, number]>): void {
   const s = Math.sin(phase);

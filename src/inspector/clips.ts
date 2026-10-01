@@ -1,6 +1,6 @@
 import { type AttackConfig, CONFIG, type EnemyConfig } from '../config';
 import { SUMMON_ATTACK } from '../enemies/kinds';
-import { GUARD, type GuardSide, humanoidAttack, IDLE, KNEEL, KNEEL_DROP, RISE, STAGGER, walkOffsets } from '../enemies/poses';
+import { GUARD, type GuardSide, humanoidAttack, IDLE, KNEEL, KNEEL_DROP, MOUND, MOUND_DROP, RISE, STAGGER, SURFACE, walkOffsets } from '../enemies/poses';
 import { FAMILIES, type Family, type HumanoidKind, proportionsOf } from '../models/characters';
 import { BUILDS, type BuildName } from '../models/human';
 import { PEOPLE, type Person, type PersonId } from '../models/people';
@@ -156,8 +156,10 @@ export function clipsFor(kind: HumanoidKind, family: Family = 'undead', named?: 
   }
   clips.push(holdClip(kind, 'stagger', STAGGER, def.staggerTime * 0.6));
   if (kind === 'warden') clips.push(holdClip(kind, 'kneel', KNEEL, CONFIG.warden.kneelTime, KNEEL_DROP * p.hipY));
-  // Only the dead claw up out of the ground.
-  if (FAMILIES[family].body === 'skeleton') clips.push(holdClip(kind, 'rise', RISE, 0.8));
+  // Only the dead claw up out of the ground, or come up out of the water they lie in; the bog's beasts heave up out of the mud.
+  const body = FAMILIES[family].body;
+  if (body === 'skeleton') clips.push(holdClip(kind, 'rise', RISE, 0.8), holdClip(kind, 'surface', SURFACE, 0.8));
+  if (body === 'mud') clips.push(holdClip(kind, 'mound', MOUND, 1.2, MOUND_DROP * p.hipY));
   return clips;
 }
 
