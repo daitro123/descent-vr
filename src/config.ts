@@ -368,6 +368,10 @@ export const CONFIG = {
     // each end. It holds where it is while any of it lags this far behind its
     // place in the file, so nobody is left behind.
     patrol: { speed: 0.8, gap: 1.8, pause: 3, keepUp: 1.2 }, // m/s, m apart, s at each end, m
+    // A family that lurks (the drowned, the bog's beasts) lies hidden where it's
+    // raised, under the ground, the water or the mud, until you come this near
+    // (m, a little beyond `notice`) or its camp fights; then it rises.
+    lurk: { wake: 11 },
   },
 
   // Levels (adventureState.ts): the Adventure's character climbs from 1 to the

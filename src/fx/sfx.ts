@@ -407,9 +407,19 @@ export const sfx = {
     tone(120, 240, 1.2, 'sine', 0.12, at);
     noise(1.0, 0.2, 300, at);
   },
-  rise(at: Vector3) {
-    noise(0.5, 0.25, 250, at);
-    rattle(at, 5, 0.6, 0.18);
+  /** Something comes up: bones clawing out of the earth, the drowned out of the water with a slosh, a bog lurker heaving up out of the mud. */
+  rise(at: Vector3, from: 'ground' | 'water' | 'mud' = 'ground') {
+    if (from === 'water') {
+      noise(0.9, 0.22, 600, at);
+      noise(0.4, 0.1, 1800, at, 'bandpass', 0.3, 2);
+      rattle(at, 3, 0.6, 0.1);
+    } else if (from === 'mud') {
+      noise(1.2, 0.3, 160, at);
+      tone(62, 40, 1.1, 'sine', 0.2, at);
+    } else {
+      noise(0.5, 0.25, 250, at);
+      rattle(at, 5, 0.6, 0.18);
+    }
   },
   roar(at: Vector3) {
     tone(70, 45, 1.6, 'sawtooth', 0.35, at);

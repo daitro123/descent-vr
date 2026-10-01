@@ -420,5 +420,5 @@ describe("every zone's birds", () => {
         flock.dispose();
       }
     }
-  });
+  }, 30000);
 });

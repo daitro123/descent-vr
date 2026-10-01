@@ -6,7 +6,7 @@ import { CHAINS } from './quests';
 import { Combat } from './combat/combat';
 import { CONFIG } from './config';
 import { type Camp, type CampHooks, Camps, type Member, type You } from './enemies/camps';
-import type { Enemy } from './enemies/enemy';
+import type { Emergence, Enemy } from './enemies/enemy';
 import { Throne } from './enemies/throne';
 import { Ambience } from './fx/ambience';
 import { FloatingText } from './fx/floatingText';
@@ -68,6 +68,8 @@ import { pointsAt, type Talent, TALENT_POINT_LINE, type TalentRefusal } from './
 
 const _a = new Vector3();
 const _b = new Vector3();
+/** What's thrown up round one that rises: earth, fen water, wet peat. */
+const EMERGE: Record<Emergence, number> = { ground: 0x6a5e52, water: 0x8a9a8a, mud: 0x3a3022 };
 const _gaze = new Vector3();
 const _haleHead = new Vector3();
 const _herbalist = { feet: new Vector3(), head: new Vector3() };
@@ -398,6 +400,14 @@ export class Adventure {
       telegraph: (e, a) => {
         e.weaponSegment(_a, _b);
         sfx.windup(_b, a.blockable);
+      },
+      // One lying in wait comes up: earth, a splash of fen water or wet peat thrown up round it.
+      emerge: (e, from) => {
+        sfx.rise(e.position, from);
+        const big = e.kind === 'brute' || e.kind === 'warden';
+        _a.copy(e.position);
+        if (from === 'water') _a.y = this.world.waterAt(_a.x, _a.z) ?? _a.y;
+        this.particles.burst(from === 'mud' ? 'blood' : 'dust', _a, big ? 18 : 10, undefined, EMERGE[from]);
       },
     };
     this.camps = new Camps(
