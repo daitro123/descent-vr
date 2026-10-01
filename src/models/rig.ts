@@ -99,7 +99,9 @@ export type Dresser = (ctx: DressContext) => void;
 
 /**
  * A rigidly skinned humanoid: one SkinnedMesh, one draw call. `dress` adds the
- * parts, each authored in its bone's local space via `on(bone)`.
+ * parts, each authored in its bone's local space via `on(bone)`. Or, given
+ * another rig's `geometry` with the same proportions, it wears that instead
+ * of building its own: people dressed alike share one copy (people/cast.ts).
  */
 export class Rig {
   readonly mesh: SkinnedMesh;
@@ -107,7 +109,7 @@ export class Rig {
   readonly proportions: Proportions;
   private readonly bind: Record<BoneName, Vector3>;
 
-  constructor(p: Proportions, dress: Dresser, material?: Material, seed = 1) {
+  constructor(p: Proportions, dress: Dresser | BufferGeometry, material?: Material, seed = 1) {
     this.proportions = p;
     const offsets = bindOffsets(p);
     const bones = {} as Record<BoneName, Bone>;
@@ -124,15 +126,18 @@ export class Rig {
     }
     bones.hips.updateMatrixWorld(true);
 
-    const builder = new ModelBuilder(seed);
-    dress({
-      p,
-      builder,
-      on: (name) => builder.on(BONES.indexOf(name), bones[name].matrixWorld),
-      point: (name, x, y, z) => new Vector3(x, y, z).applyMatrix4(bones[name].matrixWorld),
-      index: (name) => BONES.indexOf(name),
-    });
-    const geometry: BufferGeometry = builder.build({ skinned: true, ao: { from: 0, to: p.hipY, min: 0.55 } });
+    let geometry: BufferGeometry;
+    if (typeof dress === 'function') {
+      const builder = new ModelBuilder(seed);
+      dress({
+        p,
+        builder,
+        on: (name) => builder.on(BONES.indexOf(name), bones[name].matrixWorld),
+        point: (name, x, y, z) => new Vector3(x, y, z).applyMatrix4(bones[name].matrixWorld),
+        index: (name) => BONES.indexOf(name),
+      });
+      geometry = builder.build({ skinned: true, ao: { from: 0, to: p.hipY, min: 0.55 } });
+    } else geometry = dress;
 
     this.mesh = new SkinnedMesh(geometry, material);
     this.mesh.add(bones.hips);
@@ -141,6 +146,20 @@ export class Rig {
     this.mesh.frustumCulled = false;
     this.bones = bones;
     this.bind = bind;
+  }
+
+  /**
+   * Leave it undrawn while it's out of view: it's culled by a sphere `pad` m
+   * wider than its body at bind, room for its arms to swing and what it holds
+   * to move. (Enemies stay uncullable: they scatter as they fall.)
+   */
+  cullOutside(pad: number): void {
+    const geometry = this.mesh.geometry;
+    if (!geometry.boundingSphere) geometry.computeBoundingSphere();
+    const sphere = geometry.boundingSphere!.clone();
+    sphere.radius += pad;
+    this.mesh.boundingSphere = sphere;
+    this.mesh.frustumCulled = true;
   }
 
   /** What the body costs to draw. */

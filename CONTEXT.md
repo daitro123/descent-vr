@@ -40,6 +40,14 @@ _Avoid_: NPC (too broad: every friendly character is an NPC), questgiver
 A friendly character who lives in a zone and gives no quests. Oakvale has two: the innkeeper and the farmer (the smith is a trainer).
 _Avoid_: NPC (too broad), townsfolk, civilian
 
+**Cast**:
+Every friendly character a zone can place as a villager, by name: each a look on the human body, the pose they stand in and the name over their barks. Oakvale's innkeeper, smith, farmer and herbalist are in it, and the plain shepherd and goodwife; a model family adds its own. One of the cast can stand in many places at once (two goodwives at a market).
+_Avoid_: NPC type, archetype, template
+
+**Stroll**:
+A villager's walk along a set route and back, at a walking pace, standing a while at each end. Like any villager, a stroller stops and turns to you as you come close.
+_Avoid_: patrol (a patrol is a camp's), wander, path
+
 **Bark**:
 A short line a friendly character says unasked as you walk near, shown as text over their head. It isn't a conversation, and what it says can change as the quest chain moves on.
 _Avoid_: greeting, gossip, chatter, speech bubble
@@ -137,7 +145,7 @@ A number that describes a character's strength and rises on its own with their l
 _Avoid_: stat point, characteristic
 
 **Respawn point**:
-Where you wake after dying, at full health, with nothing lost. Oakvale has two: the inn's hearth in the village, and just outside the old mine for a death inside it.
+Where you wake after dying, at full health, with nothing lost. Oakvale has two: the inn's hearth in the village, and just outside the old mine for a death inside it. Another zone may have its own, and you wake at the one nearest where you fell; a zone with none sends you back to Oakvale's inn.
 _Avoid_: graveyard, checkpoint, spawn
 
 **Interior**:

@@ -228,6 +228,7 @@ src/
     kit.ts           procedural modelling: primitives → one merged, vertex-coloured, pixel-grained mesh
     rig.ts           humanoid skeleton, rigidly skinned (a whole animated character is one draw call)
     characters.ts    the bestiary's bodies and weapons
+    people.ts, commoners.ts  friendly characters on the human body: Oakvale's cast, and plain villagers for any zone
     gear.ts          the warrior's longsword and heater shield
     materials.ts     shared Lambert material: grain texture, per-vertex glow, weapon telegraph
     palette.ts       the limited palette
@@ -260,9 +261,11 @@ src/
     kinds.ts         per-type brains: grunt, archer, brute, the Warden
     poses.ts         keyframe poses; the arc between wind-up and strike is the blow
     tokens.ts        attack tokens: who may swing, and spacing between swings
-    camps.ts         Oakvale's camps: pulls, the leash, refilling, one token pool (unit tested)
+    camps.ts         camps: pulls, the leash, refilling, one token pool; another zone's raised as you come near (unit tested)
     throne.ts        the Warden on its throne at the mine's foot: seated, fighting, resetting, beaten (unit tested)
-  people/            Marshal Hale (turns to you, waves, the "!" or "?"), the villagers at work and their barks
+  people/            Marshal Hale (turns to you, waves, the "!" or "?"), the villagers at work and their barks;
+                     cast.ts is every friendly character a zone can place, population.ts builds each zone's villagers
+                     as you come near them and drops them as you leave (unit tested)
   world/             the World: one light rig, sky and radial fog, the streamer and its chunk worker, Ground
                      for every zone, the seam's crossing and blended air, interiors and the mine with their
                      switch, the ambience's mix; also the arena's crypt hall, glows, blob shadows, orbs, smoke
@@ -273,7 +276,8 @@ src/
     crypt/           the crypt hall (world/arena.ts) as a map
     forest/          Oakvale, the starting zone: layout.ts is the plan (heights, roads, what stands where,
                      camps, places, colliders, unit tested); chunks.ts builds a 40 m chunk of it (in a worker)
-    brackenmoor/     Brackenmoor, the moor over the southern pass: its plan, buildings and chunk builder
+    brackenmoor/     Brackenmoor, the moor over the southern pass: its plan, buildings and chunk builder, and
+                     people.ts, its villagers (a zone's people and camps are data on its Zone: maps/types.ts)
     decks.ts, lines.ts, props.ts, recolour.ts, waterSheet.ts  pieces any zone builds with: decks you walk on, roads laid into a height grid, building parts, Oakvale's plants recoloured, a water sheet
     fenRoad.ts       the Fen road's seam between Brackenmoor and the Sallows, its heights fixed so either zone plans alone
   fx/                particles, sword trail, shockwaves, floating text, spatial synthesised SFX and ambience

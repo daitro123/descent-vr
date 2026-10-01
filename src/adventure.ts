@@ -20,6 +20,7 @@ import { lootSeed } from './loot';
 import { findMap } from './maps/registry';
 import type { Respawn, StartingZone, Zone } from './maps/types';
 import { Hale } from './people/hale';
+import { type Population, worldPopulation } from './people/population';
 import { Villagers } from './people/villagers';
 import { type AlchemyBench, standInHouse } from './professions/bench';
 import { PROFESSION_NAMES, type Profession, type ProfessionsEffects } from './professions/professions';
@@ -145,6 +146,10 @@ export class Adventure {
   readonly hale: Hale;
   /** The innkeeper, the smith and the farmer, at work. */
   readonly villagers: Villagers;
+  /** Every zone's other villagers, built as you come near them and dropped as you walk on. */
+  readonly people: Population;
+  /** What they hang from: hidden with the outdoors. */
+  private readonly peopleRoot: Object3D;
   /** The alchemy bench in the house by the well; null in a zone without the house. The herbalist at its end is a villager. */
   readonly bench: AlchemyBench | null = null;
   /** The wind, the birds in the trees and each place's sound where it is. */
@@ -243,7 +248,7 @@ export class Adventure {
     zone: StartingZone,
     /** The character to play (their record, or none for a new one), who they are, and where their progress goes. */
     played: Pick<Played, 'key' | 'record' | 'who' | 'write'>,
-    /** The zones over its seams (Brackenmoor), walked into with nothing in them. */
+    /** The zones over its seams (Brackenmoor), with their own villagers and camps, raised as you come near. */
     neighbours: readonly Zone[] = [],
     /** The top level, when a test raises it past the content's (`&cap=`). */
     cap?: number,
@@ -436,6 +441,15 @@ export class Adventure {
     // The outdoors' villagers with the chunks round you; the innkeeper is the inn's (its room's).
     this.world.stageWith(null, this.villagers.root);
     this.villagers.warm(renderer, camera, scene);
+    // Every zone's own villagers, and every other zone's camps, are built as you come near them;
+    // a zone loaded later (fetched over a seam) brings its own as it comes.
+    const people = worldPopulation(this.world);
+    this.people = people.population;
+    this.peopleRoot = people.root;
+    scene.add(this.peopleRoot);
+    this.world.stageWith(null, this.peopleRoot);
+    this.populate(zone, false);
+    for (const n of neighbours) this.populate(n, true);
     // The smith's hammer rings on the anvil with each blow of their work.
     this.ambience = new Ambience([zone, ...neighbours]);
     this.villagers.onStrike = () => this.ambience.strike('anvil');
@@ -484,6 +498,9 @@ export class Adventure {
     this.world.settle(interior);
     this.player.reset(x, z, yaw);
     this.lastHp = this.player.hp;
+    // Whoever lives round where you stand, there before the first frame (and uploaded with the chunks).
+    this.camps.fill(_a.set(x, 0, z));
+    this.people.fill(_a, this.peopleNear);
     // Oakvale round where you stand, all at once behind the page, and compiled now rather than when
     // it first comes into view (the World does that with the first fill). A save made over the pass
     // loads there, in Brackenmoor's air, with Oakvale streaming in behind you.
@@ -495,7 +512,25 @@ export class Adventure {
       this.zoneName.show(zone.label);
       this.applyThings(this.state.inventory.leaveZone(), this.you.head);
     };
-    this.world.onAdd = (zone) => this.ambience.add(zone);
+    this.world.onAdd = (zone) => {
+      this.ambience.add(zone);
+      this.populate(zone, true);
+    };
+  }
+
+  /** How near villagers are built: CONFIG.population.near, or only as far as you can see through the fog (in a fen). */
+  private get peopleNear(): number {
+    return Math.min(CONFIG.population.near, this.world.outdoorsSeen);
+  }
+
+  /**
+   * Take in a zone's villagers and camps as it's loaded. The starting zone's
+   * camps stand from the start, as they always have (they're made with the
+   * Adventure); another zone's (`lazy`) sleep until you come near.
+   */
+  private populate(zone: Zone, lazy: boolean): void {
+    this.people.add(zone.people);
+    if (lazy) this.camps.add(zone.camps, this.world, true);
   }
 
   update(dt: number): void {
@@ -506,7 +541,7 @@ export class Adventure {
     this.world.update(dt, player.camera);
     // With a door shut behind you, what stands outside isn't drawn either.
     const outdoors = this.world.outdoorsShown;
-    this.pickups.root.visible = this.hale.root.visible = this.villagers.root.visible = this.chests.outdoors.visible = outdoors;
+    this.pickups.root.visible = this.hale.root.visible = this.villagers.root.visible = this.peopleRoot.visible = this.chests.outdoors.visible = outdoors;
     for (const { mesh, interior } of this.gathering.meshes) if (interior === null) mesh.visible = outdoors;
     if (this.anvil) this.anvil.frame.visible = outdoors;
     this.showCamps(outdoors);
@@ -574,6 +609,7 @@ export class Adventure {
     this.updateAnvil(dt);
     this.updateBag(dt);
     this.villagers.update(dt, you.head, this.state);
+    this.people.update(dt, you.head, this.peopleNear);
     // Talking to the herbalist holds the bench off: it takes your hands once the talk ends.
     this.bench?.update(dt, this.fighting, this.herbalistBoard.isOpen);
     this.pickUp();
@@ -1309,23 +1345,36 @@ export class Adventure {
     if (this.player.alive) return;
     if (this.deadFor === null) {
       this.deadFor = 0;
-      this.respawn = this.world.interior === 'mine' ? this.respawns.mine : this.respawns.village;
+      this.respawn = this.world.interior === 'mine' ? this.respawns.mine : this.respawnNear(this.you.feet);
       this.text.banner(this.player.camera, 'YOU DIED', '#c81e1e');
     } else this.deadFor += dt;
     this.fade.level = (this.deadFor - D.linger) / D.fadeOut;
     if (this.deadFor >= D.linger + D.fadeOut + D.dark) this.wake();
   }
 
+  /** Where you wake after falling at `at`, out of doors: the zone you're in's respawn point nearest it, or the village's if it has none. */
+  private respawnNear(at: Vector3): Respawn {
+    let best = this.respawns.village;
+    let bestD = Infinity;
+    for (const r of this.world.zone?.respawnPoints ?? []) {
+      const d = Math.hypot(r.x - at.x, r.z - at.z);
+      if (d < bestD) [best, bestD] = [r, d];
+    }
+    return best;
+  }
+
   /**
    * At the respawn point, with full health and no rage: by the inn's hearth
-   * with the door shut, or on the rail bed outside the mine if you died in it.
-   * Nothing else changes.
+   * with the door shut, or on the rail bed outside the mine if you died in it,
+   * or at the zone's own nearest where you fell. Nothing else changes.
    */
   private wake(): void {
     const { x, z, yaw, interior } = this.respawn;
     this.world.settle(interior);
     this.player.reset(x, z, yaw);
-    // Behind the fade, the chunks round where you wake, at once.
+    // Behind the fade, who lives round where you wake and the chunks round it, at once.
+    this.camps.fill(_a.set(x, 0, z));
+    this.people.fill(_a, this.peopleNear);
     this.world.fill(x, z);
     this.lastHp = this.player.hp;
     this.combat.clear();

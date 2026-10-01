@@ -224,6 +224,12 @@ export class World implements Ground {
     this.bodies.push(body);
   }
 
+  /** Take away a body `addBody` stood (a villager dropped as you walked on). */
+  removeBody(body: { readonly x: number; readonly z: number; readonly r: number }): void {
+    const i = this.bodies.indexOf(body);
+    if (i >= 0) this.bodies.splice(i, 1);
+  }
+
   /**
    * Add a zone (once), with its interiors, and make it the current zone, its
    * atmosphere the World's, until you stand somewhere else. Its neighbours
@@ -320,6 +326,11 @@ export class World implements Ground {
   apply(atmosphere: Atmosphere): void {
     this.atmosphere = atmosphere;
     this.show(this.blend.atmosphere ? blendAtmospheres(atmosphere, this.blend.atmosphere, this.blend.t) : atmosphere);
+  }
+
+  /** How far you see out of doors where you stand: the fog's far edge (blended over a seam), or farther with it lifted. */
+  get outdoorsSeen(): number {
+    return this.liftedTo ?? this.atmosphere?.fog.far ?? Infinity;
   }
 
   /** Is the outdoors drawn? Not while a door is shut behind you, or you're past the mine's bend: whoever adds to it outside the zones (camps, people) hides theirs too. */

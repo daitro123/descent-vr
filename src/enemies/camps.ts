@@ -15,7 +15,10 @@ import { AttackTokens } from './tokens';
 // fills again a while later, once you're well away. A patrol is a camp whose
 // posts walk a road (patrol.ts). The brain is the `?camp` prototype's rule A
 // (in history at merge 1135338), driving enemies through their `post`,
-// `standDown` and `chaseSpeed` hooks.
+// `standDown` and `chaseSpeed` hooks. The starting zone's camps stand from the
+// start; any other zone's are raised a member a frame as you come near and laid
+// to rest once you've gone and they're calm, the way the chunks round you are
+// built and dropped (CONFIG.population).
 
 /** What a camp's member is doing. */
 export type Mind = 'idle' | 'fight' | 'home' | 'dead';
@@ -69,6 +72,8 @@ export class Camp {
   private refillIn: number | null = null;
   /** A patrol's walk along its road; null for a camp that stands. */
   readonly patrol: PatrolWalk | null;
+  /** Laid to rest while you're far off, with no bodies: a lazy camp's, until you come near. */
+  private sleeping: boolean;
 
   constructor(
     readonly plan: CampPlan,
@@ -77,10 +82,13 @@ export class Camp {
     private readonly events: CampEvents,
     /** The ground its members stand on: in the mine, rock blocks their noticing you and bringing each other. */
     private readonly ground: Ground,
+    /** Raised only while you're near, a member at a time (another zone's than the starting zone's); asleep until then. */
+    readonly lazy = false,
   ) {
     this.root.name = plan.id;
     this.patrol = plan.road ? new PatrolWalk(plan.road, plan.posts.length) : null;
-    this.fill();
+    this.sleeping = lazy;
+    if (!lazy) this.fill();
   }
 
   /** Is any of it fighting you? (Walking home doesn't count.) */
@@ -88,25 +96,80 @@ export class Camp {
     return this.members.some((m) => m.mind === 'fight');
   }
 
-  /** Everyone back at their posts, freshly raised (a patrol at its road's start). */
+  /** Raised and thinking, or being raised; not laid to rest. */
+  get awake(): boolean {
+    return !this.sleeping;
+  }
+
+  /** Is every member that's raised at their post or fallen: nobody fighting or walking home? */
+  get calm(): boolean {
+    return this.members.every((m) => m.mind === 'idle' || m.mind === 'dead');
+  }
+
+  /** How many of its members are still to be raised while it fills: a lazy camp's, a member a frame. */
+  get unraised(): number {
+    return this.sleeping ? 0 : this.plan.posts.length - this.members.length;
+  }
+
+  /** How far you are from it: from its clearing's edge, or from a patrol's road. */
+  away(you: { readonly x: number; readonly z: number }): number {
+    const { place, road } = this.plan;
+    return road ? fromRoad(road, you.x, you.z) : flat(place, you) - place.r;
+  }
+
+  /** Everyone back at their posts, freshly raised (a patrol at its road's start): at once, or for a lazy camp a member at a time. */
   private fill(): void {
     this.refillIn = null;
     this.members.length = 0;
     this.patrol?.reset();
-    for (const [i, plan] of this.plan.posts.entries()) {
-      const post: EnemyPost = { x: plan.x, z: plan.z, yaw: plan.yaw, evading: false };
-      if (this.patrol) {
-        this.patrol.spot(i, post);
-        post.pace = CONFIG.camps.patrol.speed;
-      }
-      const enemy = this.raise(plan, post);
-      this.root.add(enemy.root);
-      this.members.push({ plan, post, enemy, mind: 'idle', hp: enemy.hp, nearest: 0, stalled: 0 });
+    if (!this.lazy) while (this.raiseNext());
+  }
+
+  /** Raise its next member at their post while it fills: true if there was one to raise. */
+  raiseNext(): boolean {
+    const i = this.members.length;
+    const plan = this.plan.posts[i];
+    if (this.sleeping || !plan) return false;
+    const post: EnemyPost = { x: plan.x, z: plan.z, yaw: plan.yaw, evading: false };
+    if (this.patrol) {
+      this.patrol.spot(i, post);
+      post.pace = CONFIG.camps.patrol.speed;
     }
+    const enemy = this.raise(plan, post);
+    this.root.add(enemy.root);
+    this.members.push({ plan, post, enemy, mind: 'idle', hp: enemy.hp, nearest: 0, stalled: 0 });
+    return true;
+  }
+
+  /**
+   * Lay it to rest, you being far off (`Camps` takes its bodies away). One
+   * still standing fills afresh when it wakes; a cleared one's refill goes on
+   * counting down while it sleeps.
+   */
+  rest(): void {
+    this.sleeping = true;
+    const cleared = this.members.length > 0 && this.members.every((m) => m.mind === 'dead');
+    if (!cleared) {
+      this.members.length = 0;
+      this.refillIn = null;
+    }
+  }
+
+  /** Wake as you come near: one that wasn't cleared fills, a member at a time. */
+  wake(): void {
+    this.sleeping = false;
+    if (this.members.length === 0) this.fill();
+  }
+
+  /** Asleep a while: a cleared camp's refill counts down. */
+  doze(dt: number): void {
+    if (this.refillIn !== null) this.refillIn = Math.max(0, this.refillIn - dt);
   }
 
   /** Decide who notices you, who comes along, who gives up, and whether it refills. */
   think(dt: number, you: You): void {
+    // Asleep, or still being raised: everyone stands where they're raised.
+    if (this.sleeping || this.unraised > 0) return;
     const { notice, leash, home, stuck } = CONFIG.camps;
     // It fights you only where it is: out of doors, or in the mine.
     const here = you.alive && you.interior === (this.plan.interior ?? null);
@@ -210,8 +273,7 @@ export class Camp {
     }
     const { refillTime, refillAway } = CONFIG.camps;
     this.refillIn = Math.max(0, (this.refillIn ?? refillTime) - dt);
-    const { place, road } = this.plan;
-    const away = road ? fromRoad(road, you.feet.x, you.feet.z) : flat(place, you.feet) - place.r;
+    const away = this.away(you.feet);
     // The mine's only once you've also left it.
     const inside = this.plan.interior !== undefined && you.interior === this.plan.interior;
     if (this.refillIn <= 0 && away >= refillAway && !inside) this.fill();
@@ -234,7 +296,7 @@ interface Floor {
 export class Camps {
   /** The enemies' bodies, a group per camp: add it to the scene. */
   readonly root = new Group();
-  readonly camps: readonly Camp[];
+  private readonly list: Camp[] = [];
   /** Every body in the world: waiting, fighting, walking home, or falling. */
   readonly enemies: Enemy[] = [];
   readonly meleeTokens = new AttackTokens(CONFIG.camps.tokens.melee, CONFIG.tokens.meleeGap);
@@ -246,39 +308,62 @@ export class Camps {
     plans: readonly CampPlan[],
     /** The ground every camp stands on, or each camp's own (the mine's undead stand on the mine's). */
     ground: Ground | ((plan: CampPlan) => Ground),
-    hooks: CampHooks,
-    events: CampEvents = {},
+    private readonly hooks: CampHooks,
+    private readonly events: CampEvents = {},
   ) {
     this.root.name = 'camps';
-    const floorOf = (g: Ground): Floor => {
-      let floor = this.floors.get(g);
-      if (!floor) {
-        const ctx: EnemyContext = {
-          ...hooks,
-          playerFeet: new Vector3(),
-          playerHead: new Vector3(),
-          playerSword: null,
-          summon: () => {},
-          ground: g,
-          meleeTokens: this.meleeTokens,
-          rangedTokens: this.rangedTokens,
-        };
-        floor = { ctx, enemies: [] };
-        this.floors.set(g, floor);
-      }
-      return floor;
-    };
-    this.camps = plans.map((plan) => {
-      const floor = floorOf(typeof ground === 'function' ? ground(plan) : ground);
-      const camp = new Camp(plan, (post, at) => this.raise(plan.level, post, at, floor), events, floor.ctx.ground);
+    this.add(plans, ground);
+  }
+
+  /** Every camp, in the order they were added. */
+  get camps(): readonly Camp[] {
+    return this.list;
+  }
+
+  /**
+   * Add camps: a zone's, as it's loaded. `lazy` ones (any zone's but the
+   * starting zone's) sleep until you come near them.
+   */
+  add(plans: readonly CampPlan[], ground: Ground | ((plan: CampPlan) => Ground), lazy = false): void {
+    for (const plan of plans) {
+      const floor = this.floorOf(typeof ground === 'function' ? ground(plan) : ground);
+      const camp = new Camp(plan, (post, at) => this.raise(plan.level, post, at, floor), this.events, floor.ctx.ground, lazy);
       this.root.add(camp.root);
-      return camp;
-    });
+      this.list.push(camp);
+    }
+  }
+
+  private floorOf(g: Ground): Floor {
+    let floor = this.floors.get(g);
+    if (!floor) {
+      const ctx: EnemyContext = {
+        ...this.hooks,
+        playerFeet: new Vector3(),
+        playerHead: new Vector3(),
+        playerSword: null,
+        summon: () => {},
+        ground: g,
+        meleeTokens: this.meleeTokens,
+        rangedTokens: this.rangedTokens,
+      };
+      floor = { ctx, enemies: [] };
+      this.floors.set(g, floor);
+    }
+    return floor;
   }
 
   /** Is anything fighting you? (Enemies walking home don't count.) */
   get fighting(): boolean {
-    return this.camps.some((c) => c.fighting);
+    return this.list.some((c) => c.fighting);
+  }
+
+  /** Wake every lazy camp near `you` and raise it whole at once (loading in, waking after a death). */
+  fill(you: { readonly x: number; readonly z: number }): void {
+    for (const camp of this.list) {
+      if (!camp.lazy || camp.away(you) >= CONFIG.population.near) continue;
+      if (!camp.awake) camp.wake();
+      while (camp.raiseNext());
+    }
   }
 
   update(dt: number, you: You): void {
@@ -287,7 +372,8 @@ export class Camps {
       ctx.playerHead.copy(you.head);
       ctx.playerSword = you.alive ? you.sword : null;
     }
-    for (const camp of this.camps) camp.think(dt, you);
+    this.wakeAndSleep(dt, you.feet);
+    for (const camp of this.list) camp.think(dt, you);
     this.meleeTokens.update(dt);
     this.rangedTokens.update(dt);
     for (const { ctx, enemies } of this.floors.values()) {
@@ -295,12 +381,57 @@ export class Camps {
         const enemy = enemies[i];
         if (!enemy.update(dt, ctx)) {
           enemy.root.removeFromParent();
+          enemy.rig.mesh.geometry.dispose();
           enemies.splice(i, 1);
           this.enemies.splice(this.enemies.indexOf(enemy), 1);
         }
       }
       keepApart(enemies, ctx.playerFeet, ctx.ground);
     }
+  }
+
+  /**
+   * The lazy camps: each wakes as you come within CONFIG.population.near and
+   * sleeps once you're `hysteresis` farther and it's calm. Waking camps are
+   * raised a few members a frame between them, nearest camp first.
+   */
+  private wakeAndSleep(dt: number, you: Vector3): void {
+    const { near, hysteresis, perFrame } = CONFIG.population;
+    let budget = perFrame;
+    for (const camp of this.list) {
+      if (!camp.lazy) continue;
+      const away = camp.away(you);
+      if (!camp.awake) {
+        if (away < near) camp.wake();
+        else camp.doze(dt);
+      } else if (away >= near + hysteresis && camp.calm) this.sleep(camp);
+    }
+    while (budget > 0) {
+      let next: Camp | null = null;
+      for (const camp of this.list) if (camp.unraised > 0 && (!next || camp.away(you) < next.away(you))) next = camp;
+      if (!next) break;
+      next.raiseNext();
+      budget--;
+    }
+  }
+
+  /** Lay `camp` to rest: its bodies, standing or fallen, are taken away. */
+  private sleep(camp: Camp): void {
+    for (const m of camp.members) this.bury(m.enemy);
+    camp.rest();
+  }
+
+  /** Take `enemy`'s body out of the world, if it's still in it. */
+  private bury(enemy: Enemy): void {
+    const i = this.enemies.indexOf(enemy);
+    if (i < 0) return;
+    this.enemies.splice(i, 1);
+    for (const floor of this.floors.values()) {
+      const k = floor.enemies.indexOf(enemy);
+      if (k >= 0) floor.enemies.splice(k, 1);
+    }
+    enemy.root.removeFromParent();
+    enemy.rig.mesh.geometry.dispose();
   }
 
   /** A member's body at its post, in its family's looks, at its level (its camp's, unless its own) and with a camp's strength, running to keep up once it fights. */

@@ -951,6 +951,19 @@ export const CONFIG = {
     marker: 0.5, // m over their head the "!" or "?" floats
   },
 
+  // Who lives in each zone (people/population.ts): the villagers a zone places
+  // by data, and the camps of every zone but the starting zone, which are built
+  // as you come near and dropped as you leave, the way chunks are. Oakvale's own
+  // cast and camps stand from the start, as they always have.
+  population: {
+    near: 100, // m: what's this near you is built and shown (the chunks' full detail, CONFIG.streaming.full)…
+    hysteresis: 40, // m: …and dropped once you're this much farther
+    most: 30, // villagers built at once, the nearest: a town's crowd is about 1.5k triangles and 2 draw calls each in view (zones/character-notes.md)
+    perFrame: 1, // villagers built a frame as you walk, and as many of a camp's members: each is a few ms on the headset
+    pad: 0.6, // m round a villager's body at bind that culls them out of view: room for their arms to swing and what they hold to move
+    walk: { speed: 1.1, pause: 4, stride: 6.5 }, // m/s strolling a route, s standing at each end, walk cycle's rad per metre walked
+  },
+
   // The village's people at work (people/villagers.ts, people/work.ts): the
   // innkeeper behind the bar, the smith at the anvil, the farmer by the well.
   villagers: {
@@ -980,6 +993,8 @@ export const CONFIG = {
     innkeeper: { wipe: 5, polish: 5, setDown: 1.4, pickUp: 1.6, rubs: 1.6 }, // s each; rubs per s of the rag
     // The farmer's loop: leaning on the pitchfork, shifting their weight, shading their eyes to look towards the farm.
     farmer: { lean: 4, shift: 1.2, look: 3, lift: 0.8 }, // s each: a lean before each shift of weight, the look after every second one, the hand going up and down
+    // Standing about, for anyone with no work of their own: weight on one foot, then the other, and a look round each side now and then.
+    stand: { rest: 5, shift: 1.4, turn: 0.7, glance: 2.2, look: 0.75, hip: 0.025 }, // s on a foot, shifting, turning the head and looking; rad the head turns; m the hips shift
   },
 
   // Talking to Hale on a board that unfolds beside them: the talk prototype's

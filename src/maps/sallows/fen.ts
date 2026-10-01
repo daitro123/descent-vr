@@ -48,6 +48,8 @@ export function buildSallows(given?: SallowsPlan): Zone {
     interiors: [],
     mine: null,
     villagers: [],
+    people: [],
+    respawnPoints: [],
     pickups: [],
     chests: [],
     spots: [],

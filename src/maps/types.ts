@@ -3,6 +3,8 @@ import type { Role } from '../adventureState';
 import type { RoadPoint } from '../enemies/patrol';
 import type { Item, Place, VillagerId } from '../quests';
 import type { EnemyKind, Family } from '../models/characters';
+import type { CastId } from '../people/cast';
+import type { WorkName } from '../people/work';
 import type { PlaceSound, TreeCover, ZoneAmbience } from '../world/ambience';
 import type { Atmosphere } from '../world/atmosphere';
 import type { Interior as InteriorId } from '../save/record';
@@ -42,12 +44,52 @@ export interface Spot {
   readonly yaw: number;
 }
 
-/** Where a villager works (yaw as a model turns: 0 faces +Z), and the building they're in, if any. */
+/**
+ * Where one of Oakvale's own villagers works (yaw as a model turns: 0 faces
+ * +Z), and the building they're in, if any: the innkeeper, the smith, the
+ * farmer and the herbalist, whom the quests, the wares and the trainers know
+ * by name. Any other villager is a `PersonPlan`.
+ */
 export interface VillagerSpot extends Spot {
   readonly id: VillagerId;
   readonly interior: InteriorId | null;
   /** How far round to their left (rad) they turn to their work's other place: the smith's bellows. */
   readonly turn: number;
+}
+
+/**
+ * A villager a zone places by data (people/population.ts): who they are, where
+ * they stand at their work or which way they stroll, and what they say as you
+ * pass. Built as you come within CONFIG.population.near and dropped as you go
+ * on, like the chunks round them, so a zone can hold as many as its streets
+ * want; only those near you cost anything. Out of doors only, for now: no
+ * zone but Oakvale has interiors.
+ */
+export interface PersonPlan {
+  /** Unique across the world, for the checks and the log: 'cairnford-shepherd'. */
+  readonly id: string;
+  /** Who they are: one of the cast (people/cast.ts), their body, clothes, stand and name. */
+  readonly cast: CastId;
+  /** Where their feet are, in world metres (x east, z south). */
+  readonly x: number;
+  readonly z: number;
+  /** Which way they face at their work, as a model turns: their front faces (sin yaw, cos yaw), so 0 faces +Z. A stroller faces the way they walk. */
+  readonly yaw: number;
+  /** What they do there, round and round (people/work.ts WORKS): standing about without one. */
+  readonly work?: WorkName;
+  /** For a work with a second place (the smith's bellows): how far round to their left it stands, in radians. */
+  readonly turn?: number;
+  /** Their name over their barks, if not their cast's: "Old Maud". */
+  readonly label?: string;
+  /** What they say as you pass, one line after the next each time you come close: none, and they say nothing. */
+  readonly barks?: readonly string[];
+  /**
+   * A stroll: from (x, z) along these points and back again, at a walk,
+   * standing a while at each end at their work. They stop and turn to you as
+   * you come near, as one standing at their work does. The way must be clear
+   * to walk: a street, a road, a quay.
+   */
+  readonly route?: readonly RoadPoint[];
 }
 
 /**
@@ -65,10 +107,13 @@ export interface Respawn extends Spot {
 }
 
 /**
- * Every camp in the zones, by id. The quest chain counts kills by these, so a
- * camp built under another name would never count (quests.ts).
+ * A camp's id, unique across the world: the quest chain counts kills by it, so
+ * a camp built under another name would never count (quests.ts). Oakvale's are
+ * 'farm', 'lumberCamp', 'patrol', 'watchtower' and 'mine'; another zone's
+ * begin with the zone's id: 'brackenmoor-raven-scar'. tests/population.test.ts
+ * checks both.
  */
-export type CampId = 'farm' | 'lumberCamp' | 'patrol' | 'watchtower' | 'mine';
+export type CampId = string;
 
 /** One enemy's place in a camp: what it is, where it waits and which way it faces there. */
 export interface PostPlan {
@@ -227,14 +272,27 @@ export interface Zone extends MapBase {
   readonly sideSeams?: readonly SideSeam[];
   /** Its fog, sky colours and light, which the World applies. */
   readonly atmosphere: Atmosphere;
-  /** Its enemies, camp by camp. */
+  /**
+   * Its enemies, camp by camp. The starting zone's stand from the start; any
+   * other zone's are raised as you come within CONFIG.population.near of
+   * their clearing (or a patrol's road) and laid to rest once you've gone and
+   * they're calm (enemies/camps.ts).
+   */
   readonly camps: readonly CampPlan[];
   /** The buildings you walk into, built with the zone and hidden until their doors open. */
   readonly interiors: readonly Interior[];
   /** The old mine, built with the zone and hidden but for its adit until you walk in by its mouth. */
   readonly mine: Mine | null;
-  /** Where the innkeeper, the smith and the farmer work. */
+  /** Where Oakvale's own villagers work: the innkeeper, the smith, the farmer and the herbalist. */
   readonly villagers: readonly VillagerSpot[];
+  /** Its other villagers, placed by data and built as you come near them. */
+  readonly people: readonly PersonPlan[];
+  /**
+   * Where you wake after dying in it, out of doors: the one nearest where you
+   * fell. None, and you wake by Oakvale's inn hearth (a death in the mine
+   * wakes you outside its mouth, whatever this says).
+   */
+  readonly respawnPoints: readonly Respawn[];
   /** What lies about to be picked up by hand, shown while the adventure state says it lies there. */
   readonly pickups: readonly Pickup[];
   /** Its chests, each opened once per character. */

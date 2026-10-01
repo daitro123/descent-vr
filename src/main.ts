@@ -154,6 +154,8 @@ async function startAdventure(
     world: adventure.world,
     player: adventure.player,
     camps: adventure.camps,
+    /** Every zone's villagers placed by data: `people.built` are those near you. */
+    people: adventure.people,
     /** What the fighting has come to: hits, kills, blocks, bolts, freezes. */
     combatStats,
     /** Resolves once no save write is in flight. */

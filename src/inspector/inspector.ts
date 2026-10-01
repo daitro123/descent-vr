@@ -22,7 +22,8 @@ import { buildPerson, PEOPLE, type PersonId } from '../models/people';
 import type { Rig } from '../models/rig';
 import { XRInput } from '../player/input';
 import { TextPanel } from '../ui/panel';
-import { type Clip, clipsFor, type MutablePose, personClips } from './clips';
+import { CAST, type CastId, Wardrobe } from '../people/cast';
+import { castClips, type Clip, clipsFor, type MutablePose, personClips } from './clips';
 
 // `?inspect`: a turntable for every character. One at a time on a plinth in
 // front of you, looping any of its animations with the game's timings, with a
@@ -32,15 +33,17 @@ import { type Clip, clipsFor, type MutablePose, personClips } from './clips';
 export type InspectorEntry =
   /** An enemy: its behaviour, its family's body, and which of its looks. */
   | { kind: EnemyKind; family: Family; variant: number; label: string }
-  /** A friendly character. */
-  | { person: PersonId; label: string };
+  /** A friendly character: Hale or one of Oakvale's villagers. */
+  | { person: PersonId; label: string }
+  /** One of the cast a zone places as a villager, beyond Oakvale's (people/cast.ts). */
+  | { cast: CastId; label: string };
 
 const VARIANTS = [0, 1, 2, 3, 4, 5];
 
 /**
  * Every model the game builds: the undead (grunts come in six helmet, cloth
  * and weapon combos), the bandits (thugs in six looks and weapons), then
- * Marshal Hale and the villagers.
+ * Marshal Hale and the villagers, then the rest of the cast zones place.
  */
 export const ENTRIES: InspectorEntry[] = [
   ...VARIANTS.map((v) => ({ kind: 'grunt' as const, family: 'undead' as const, variant: v, label: `Grunt v${v}` })),
@@ -51,6 +54,7 @@ export const ENTRIES: InspectorEntry[] = [
   { kind: 'archer', family: 'bandit', variant: 0, label: 'Bandit archer' },
   { kind: 'brute', family: 'bandit', variant: 0, label: 'Bandit leader' },
   ...(Object.keys(PEOPLE) as PersonId[]).map((id) => ({ person: id, label: PEOPLE[id].label })),
+  ...(Object.keys(CAST) as CastId[]).filter((id) => !(id in PEOPLE)).map((id) => ({ cast: id, label: CAST[id].label })),
 ];
 
 export const SPEEDS = [1, 0.5, 0.25, 0.1];
@@ -146,6 +150,7 @@ export class Inspector {
       const e = ENTRIES[index];
       const material = createModelMaterial();
       if ('person' in e) b = { rig: buildPerson(e.person, material), weapon: null, material, clips: personClips(e.person) };
+      else if ('cast' in e) b = { rig: new Wardrobe().dress(e.cast, material), weapon: null, material, clips: castClips(e.cast) };
       else {
         const { rig, weapon } = buildCharacter(e.kind, { material, family: e.family, variant: e.variant });
         b = { rig, weapon, material, clips: clipsFor(e.kind, e.family) };

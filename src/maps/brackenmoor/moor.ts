@@ -6,6 +6,7 @@ import { buildWaterSheet } from '../waterSheet';
 import { smokeFrom } from './buildings';
 import { buildMoorChunk, moorChunks, planMoor } from './chunks';
 import { MOOR_BUILD } from './palette';
+import { MOOR_PEOPLE } from './people';
 import { MOOR, MOOR_ATMOSPHERE, type MoorPlan, type MoorStructure } from './plan';
 
 /**
@@ -13,8 +14,8 @@ import { MOOR, MOOR_ATMOSPHERE, type MoorPlan, type MoorStructure } from './plan
  * Oakvale's crest, its chunk builder (chunks.ts), and the extras built once on
  * the main thread: the water of the beck, the Blackmire's pools and Beck's
  * Foot as one sheet, and the peat smoke over Cairnford's and the crofts'
- * chimneys. Nothing lives here yet and nothing can hurt you, so it has no
- * camps, no people and nowhere to wake.
+ * chimneys. Its villagers (people.ts) are built as you come near them;
+ * nothing can hurt you yet, so it has no camps and nowhere to wake.
  */
 export function buildBrackenmoor(given?: MoorPlan): Zone {
   const plan = given ?? planMoor();
@@ -45,6 +46,8 @@ export function buildBrackenmoor(given?: MoorPlan): Zone {
     interiors: [],
     mine: null,
     villagers: [],
+    people: MOOR_PEOPLE,
+    respawnPoints: [],
     pickups: [],
     chests: [],
     spots: [],

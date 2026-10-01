@@ -518,3 +518,110 @@ describe('the patrol', () => {
     for (const m of walkers.members) expect(along(m.enemy.position)).toBeLessThan(P.gap + 1.5);
   });
 });
+
+describe("another zone's camps", () => {
+  const N = CONFIG.population;
+
+  /** `plans` added lazily, as a zone's beyond the starting zone, with you at (x, z). */
+  function zoneWorld(plans: CampPlan[], x: number, z: number) {
+    const camps = new Camps([], hill, hooks);
+    camps.add(plans, hill, true);
+    const you: You = { feet: new Vector3(), head: new Vector3(), sword: null, alive: true, interior: null };
+    const stand = (nx: number, nz: number) => {
+      you.feet.set(nx, hill.heightAt(nx, nz), nz);
+      you.head.copy(you.feet).setY(you.feet.y + 1.6);
+    };
+    stand(x, z);
+    const step = (seconds: number) => {
+      for (let t = 0; t < seconds - 1e-9; t += DT) camps.update(DT, you);
+    };
+    return { camps, you, stand, step };
+  }
+
+  it('sleep with no bodies while you are far off, and are raised a member a frame as you come near', () => {
+    const { camps, stand, step } = zoneWorld([camp('brackenmoor-scar', [thug(0, 0), thug(3, 0), archer(0, 3)])], 0, N.near + 30);
+    const [scar] = camps.camps;
+    step(2);
+    expect(scar.awake).toBe(false);
+    expect(camps.enemies).toHaveLength(0);
+    stand(0, N.near - 10);
+    const counts: number[] = [];
+    for (let i = 0; i < 4; i++) {
+      step(DT);
+      counts.push(camps.enemies.length);
+    }
+    expect(counts).toEqual(N.perFrame === 1 ? [1, 2, 3, 3] : expect.arrayContaining([3]));
+    expect(minds(scar)).toEqual(['idle', 'idle', 'idle']);
+  });
+
+  it('fight as any camp does once raised', () => {
+    const { camps, stand, step } = zoneWorld([camp('brackenmoor-scar', [thug(0, 0), thug(3, 0)])], 0, 40);
+    step(1);
+    stand(0, C.notice - 1);
+    step(0.5);
+    expect(camps.fighting).toBe(true);
+  });
+
+  it('are laid to rest once you are well past and they are calm, not while they fight', () => {
+    const { camps, stand, step } = zoneWorld([camp('brackenmoor-scar', [thug(0, 0), thug(3, 0)])], 0, 20);
+    const [scar] = camps.camps;
+    step(1);
+    // Just short of the far edge: they stand.
+    stand(0, N.near + N.hysteresis - 1 + 8);
+    step(1);
+    expect(scar.awake).toBe(true);
+    stand(0, N.near + N.hysteresis + 9);
+    step(DT);
+    expect(scar.awake).toBe(false);
+    expect(camps.enemies).toHaveLength(0);
+    expect(scar.members).toHaveLength(0);
+    // A fight goes on however far it's dragged; the leash ends it first.
+    stand(0, 20);
+    step(1);
+    stand(0, C.notice - 1);
+    step(0.5);
+    expect(camps.fighting).toBe(true);
+    stand(0, N.near + N.hysteresis + 20);
+    step(DT);
+    expect(scar.awake).toBe(true);
+  });
+
+  it('stay cleared while they sleep, and refill once the refill time has run, asleep or awake', () => {
+    const { camps, stand, step } = zoneWorld([camp('brackenmoor-scar', [thug(0, 0), thug(3, 0)])], 0, 20);
+    const [scar] = camps.camps;
+    step(1);
+    hit(scar, 0, 999);
+    hit(scar, 1, 999);
+    step(3);
+    expect(minds(scar)).toEqual(['dead', 'dead']);
+    // Away to sleep, and back before the refill time: still cleared.
+    stand(0, N.near + N.hysteresis + 20);
+    step(DT);
+    expect(scar.awake).toBe(false);
+    step(C.refillTime / 2);
+    stand(0, 50);
+    step(1);
+    expect(minds(scar)).toEqual(['dead', 'dead']);
+    // Off again past the refill time, then back: whole.
+    stand(0, N.near + N.hysteresis + 20);
+    step(C.refillTime / 2 + 5);
+    stand(0, 50);
+    step(1);
+    expect(minds(scar)).toEqual(['idle', 'idle']);
+    expect(camps.enemies).toHaveLength(2);
+  });
+
+  it('are raised whole at once round where you load in', () => {
+    const { camps, you } = zoneWorld([camp('brackenmoor-scar', [thug(0, 0), thug(3, 0), thug(6, 0)]), camp('brackenmoor-far', [thug(400, 0)])], 0, 30);
+    camps.fill(you.feet);
+    expect(camps.enemies).toHaveLength(3);
+  });
+
+  it("leave the starting zone's camps standing however far you go", () => {
+    const { camps, stand, step } = world([camp('farm', [thug(0, 0), thug(3, 0)])], 0, 30);
+    stand(0, 1000);
+    step(1);
+    expect(camps.camps[0].awake).toBe(true);
+    expect(camps.enemies).toHaveLength(2);
+  });
+});
