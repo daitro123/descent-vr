@@ -76,7 +76,7 @@ function onFoot(x: number, z: number, near = 0): boolean {
 
 describe('map registry', () => {
   it('finds every map folder', () => {
-    expect(MAPS.map((m) => m.id)).toEqual(['brackenmoor', 'crypt', 'forest']);
+    expect(MAPS.map((m) => m.id)).toEqual(['aldhaven', 'brackenmoor', 'crypt', 'forest']);
   });
 });
 
