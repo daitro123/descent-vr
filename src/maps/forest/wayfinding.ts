@@ -223,10 +223,11 @@ function paintMap(c: CanvasRenderingContext2D, layout: ForestLayout, board: Stru
   c.fillStyle = hex(WATER.shallow, 1.15);
   c.fill();
 
-  // The roads, the bridge over the stream and the dock.
+  // The roads and footpaths, the bridge over the stream and the dock.
   c.strokeStyle = hex(EARTH.dirtLight, 0.95);
   for (const p of layout.paths) {
-    c.lineWidth = Math.max(3, p.width * 0.8 * k);
+    // The footpaths to the doors and gates are drawn finer than the roads.
+    c.lineWidth = p.foot ? Math.max(1.5, p.width * 0.6 * k) : Math.max(3, p.width * 0.8 * k);
     line(p.line);
     c.stroke();
   }

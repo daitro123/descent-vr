@@ -1,7 +1,9 @@
 import { BufferAttribute, BufferGeometry, Color, Matrix4, Vector3 } from 'three';
 import { CONFIG } from '../../config';
 import type { HeightGrid } from '../heightGrid';
-import { FOREST, type ForestLayout, northPassScar, worldToLocal } from './layout';
+import { bracken, heather } from '../brackenmoor/plan';
+import { MOOR_GROUND } from '../brackenmoor/palette';
+import { CREST, FOREST, type ForestLayout, northPassScar, worldToLocal } from './layout';
 import { YARDS } from './dressing';
 import { hash01, lerp, smoothstep, valueNoise } from './noise';
 import { EARTH, GREEN } from './palette';
@@ -206,30 +208,70 @@ export function addGround(raw: MeshBuffer, layout: ForestLayout, region: Region,
   const cliff = new Color(EARTH.cliff);
   const moss = new Color(GREEN.moss);
   const rock = new Color(EARTH.rock);
+  const rockDark = new Color(EARTH.rockDark);
   const sand = new Color(EARTH.sand);
   const mud = new Color(EARTH.mud);
   const snow = new Color(EARTH.snow);
   const color = new Color();
+  // Brackenmoor's ground, which Oakvale's turns to over the last stretch up to the crest (see `moorAt`).
+  const moor = {
+    grass: new Color(MOOR_GROUND.grass),
+    dry: new Color(MOOR_GROUND.grassDry),
+    rust: new Color(MOOR_GROUND.bracken),
+    rustDark: new Color(MOOR_GROUND.brackenDark),
+    purple: new Color(MOOR_GROUND.heather),
+    purpleLight: new Color(MOOR_GROUND.heatherLight),
+    peat: new Color(MOOR_GROUND.peat),
+    rock: new Color(MOOR_GROUND.rock),
+    cliff: new Color(MOOR_GROUND.cliff),
+    top: new Color(MOOR_GROUND.hilltop),
+  };
+  const moorColour = new Color();
+  const moorVerge = new Color(EARTH.dirt).lerp(moor.grass, 0.5);
+  /**
+   * The moor's colour at (x, z), as Brackenmoor colours its ground by the crest
+   * (its chunks.ts): olive and dry grass, rust bracken and purple heather in
+   * their patches, paler on the tops, peat and rock on the slopes.
+   */
+  const moorAt = (x: number, z: number, h: number, ny: number): Color => {
+    moorColour.copy(moor.grass).lerp(moor.dry, valueNoise(x * 0.08, z * 0.08, 141) * 0.7);
+    moorColour.lerp(_c.copy(moor.rust).lerp(moor.rustDark, valueNoise(x * 0.2, z * 0.2, 143)), bracken(x, z) * 0.85);
+    moorColour.lerp(_c.copy(moor.purple).lerp(moor.purpleLight, valueNoise(x * 0.25, z * 0.25, 145)), heather(x, z) * 0.85);
+    moorColour.lerp(moor.top, smoothstep(20, 36, h) * 0.5);
+    moorColour.lerp(moor.peat, smoothstep(0.82, 0.62, ny) * 0.5);
+    return moorColour.lerp(_c.copy(moor.cliff).lerp(moor.rock, valueNoise(x * 0.05, z * 0.05, 147)), smoothstep(0.6, 0.45, ny));
+  };
 
   const colourAt = (x: number, z: number, h: number, ny: number, sh: number, rd: number, jitter: number): Color => {
     color.copy(grass).lerp(grassLight, valueNoise(x * 0.09, z * 0.09, 41));
     color.lerp(grassDry, smoothstep(0.55, 0.8, valueNoise(x * 0.02, z * 0.02, 43)) * 0.6);
     color.lerp(floor, Math.min(1, sh * 0.55));
     color.lerp(dirtDark, smoothstep(0.86, 0.66, ny) * 0.7);
-    color.lerp(cliff, smoothstep(0.66, 0.5, ny));
+    // Cliffs: banded in strata that dip and wander, some darker, some paler, some iron-stained, mossed in patches.
+    const steep = smoothstep(0.66, 0.5, ny);
+    if (steep > 0) {
+      const band = valueNoise(h * 0.55 + valueNoise(x * 0.04, z * 0.04, 63) * 3, 7.7, 61);
+      _c.copy(cliff).lerp(rockDark, smoothstep(0.55, 0.8, band) * 0.85).lerp(rock, smoothstep(0.42, 0.18, band) * 0.7);
+      _c.lerp(dirtDark, smoothstep(0.6, 0.8, valueNoise(h * 0.3, x * 0.02 + z * 0.02, 67)) * 0.45);
+      _c.lerp(moss, smoothstep(0.58, 0.78, valueNoise(x * 0.12, z * 0.12 + h * 0.1, 65)) * 0.6);
+      color.lerp(_c, steep);
+    }
     if (h > 12) color.lerp(_c.copy(moss).lerp(rock, valueNoise(x * 0.05, z * 0.05, 47) * 0.6), smoothstep(12, 30, h) * 0.7);
     // The Old North Pass's scar: bare grey rubble where the slide came down.
     const scar = northPassScar(x, z);
     if (scar > 0) color.lerp(_c.copy(rock).lerp(cliff, valueNoise(x * 0.4, z * 0.4, 53)), scar * 0.85);
     // Old snow lying on the northern ridge's tops, toward Greyfell.
     if (h > 24 && z < -100) color.lerp(snow, snowAt(x, z, h, ny));
+    // Up the pass, the ground turns to the moor's over its last 30 m, and is the moor's at the crest, so the two meet without a line.
+    const moorward = smoothstep(CREST.z - 30, CREST.z, z);
+    if (moorward > 0) color.lerp(moorAt(x, z, h, ny), moorward);
     // Worn verges: the ribbon draws the road itself, this just browns the grass beside it.
-    if (rd < 2) color.lerp(verge, smoothstep(2, 0, rd) * 0.5);
+    if (rd < 2) color.lerp(moorward > 0 ? _c.copy(verge).lerp(moorVerge, moorward) : verge, smoothstep(2, 0, rd) * 0.5);
     // A stand-in has no ribbons, so its ground is the road.
     if (coarse && layout.roadDistance.at(x, z) < 0) color.lerp(dirt, 0.85);
     color.lerp(sand, smoothstep(water + 0.4, water + 0.1, h));
     color.lerp(mud, smoothstep(water - 0.05, water - 0.4, h));
-    return color.multiplyScalar((1 - Math.min(0.25, sh * 0.1)) * (0.95 + jitter * 0.1));
+    return color.multiplyScalar((1 - Math.min(0.25, sh * 0.1) * (1 - moorward)) * (0.95 + jitter * 0.1));
   };
 
   const v = (i: number, j: number): [number, number, number] => [-half + i * cell, ground.get(i, j), -half + j * cell];
@@ -331,6 +373,68 @@ export function addPaths(raw: MeshBuffer, layout: ForestLayout, region: Region):
     return Math.abs(lx) < bridge.hw + 1 && Math.abs(lz) < bridge.hd - 0.2;
   };
   addRoads(raw, ground, layout.paths, region, GREEN.grass, onBridge);
+}
+
+/**
+ * The stream's banks: a strip down each side from just under the water to
+ * where the bank tops out, wet sand at the water's edge drying into the
+ * grass, laid along the bank so its edges follow it smoothly (the ground's
+ * own colouring, a triangle at a time, leaves them saw-toothed). Not under
+ * the bridge, whose abutments are its own, nor far out in the mountains.
+ */
+export function addBanks(raw: MeshBuffer, layout: ForestLayout, region: Region): void {
+  const { ground, stream, bridge } = layout;
+  const { water } = FOREST;
+  const wet = new Color(EARTH.sand).lerp(new Color(EARTH.mud), 0.4);
+  const dry = new Color(EARTH.sand).lerp(new Color(GREEN.grass), 0.35);
+  const grass = new Color(GREEN.grass);
+  const col = new Color();
+  const { line, half } = stream;
+  const under = (x: number, z: number) => {
+    const [lx, lz] = worldToLocal(bridge, x, z);
+    return Math.abs(lx) < bridge.hw + 1.5 && Math.abs(lz) < bridge.hd + 0.5;
+  };
+  // How far out from the middle, along (sx, sz), the bank first rises above `level`.
+  const reach = (x: number, z: number, sx: number, sz: number, level: number) => {
+    for (let d = 0; d <= half + 5; d += 0.1) if (ground.at(x + sx * d, z + sz * d) > level) return d;
+    return half + 5;
+  };
+  const rows = new Map<number, number[][]>();
+  const row = (i: number, side: number) => {
+    const key = i * 2 + (side > 0 ? 1 : 0);
+    let r = rows.get(key);
+    if (r) return r;
+    const [x, z] = line[i];
+    const [px, pz] = line[Math.max(0, i - 1)];
+    const [nx, nz] = line[Math.min(line.length - 1, i + 1)];
+    const len = Math.hypot(nx - px, nz - pz) || 1;
+    const [sx, sz] = [-(nz - pz) / len, (nx - px) / len];
+    const edge = reach(x, z, sx * side, sz * side, water - 0.15);
+    const mid = Math.max(edge + 0.2, reach(x, z, sx * side, sz * side, water + 0.15));
+    const top = Math.max(mid + 0.3, reach(x, z, sx * side, sz * side, water + 0.8) + 0.2 + hash01(i, side, 11) * 0.35);
+    // Ordered across the line the way addRoads orders a road's, so the strips face up on both banks.
+    const across = side > 0 ? [edge, mid, top] : [-top, -mid, -edge];
+    r = across.map((d) => [x + sx * d, ground.at(x + sx * d, z + sz * d) + 0.04, z + sz * d]);
+    rows.set(key, r);
+    return r;
+  };
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < line.length - 1; i++) {
+      const [x, z] = line[i];
+      // Out in the mountains past where you can walk, nobody's near enough to see the banks.
+      if (!region.owns(x, z) || Math.abs(x) > FOREST.play + 16 || under(x, z) || under(...line[i + 1])) continue;
+      const [here, next] = [row(i, side), row(i + 1, side)];
+      for (let k = 0; k < 2; k++) {
+        // Toward the water (inner strip) wet sand; away from it, sand drying into the grass.
+        const inner = side > 0 ? k === 0 : k === 1;
+        col.copy(inner ? wet : dry);
+        if (!inner) col.lerp(grass, valueNoise(x * 0.2, z * 0.2, 13) * 0.4);
+        col.multiplyScalar(0.95 + hash01(i, side * 7 + k, 12) * 0.1);
+        raw.tri(here[k], next[k], here[k + 1], col);
+        raw.tri(here[k + 1], next[k], next[k + 1], col);
+      }
+    }
+  }
 }
 
 /** A path as `addRoads` lays it: its centre line and width, and how its ends and height above the ground go. */

@@ -11,7 +11,7 @@ import { Walkable } from '../walkable';
 import { Colliders } from './colliders';
 import { HOUSE, planHouse } from './house';
 import { INN, planInn } from './inn';
-import { breakUpRidge, DOORSTEP, easeRailBank, planFootpaths, roundTowerHill } from './dressing';
+import { breakUpRidge, type ClutterKind, DOORSTEP, dressPlants, easeRailBank, placeClutter, planFootpaths, roundTowerHill } from './dressing';
 import { mineCamp, mineChest, mineClumps, mineRespawn, mineVeins, mouthColliders, mouthOf, planMine } from './mine';
 import { SMITHY, smithyColliders } from './smithy';
 import { fbm, lerp, mulberry32, nearestOnPolyline, type P2, sampleCurve, smoothstep, valueNoise } from './noise';
@@ -403,7 +403,7 @@ const CLEARINGS: Clearing[] = [
 export type StructureKind =
   | 'inn' | 'house' | 'smithy' | 'well' | 'signpost' | 'lamp' | 'cart' | 'farmhouse' | 'barn'
   | 'windmill' | 'scarecrow' | 'haybale' | 'trough' | 'tower' | 'mine' | 'tent' | 'campfire'
-  | 'logpile' | 'stones' | 'dock' | 'boat' | 'bridge' | 'mapboard' | 'cairn' | 'rockslide';
+  | 'logpile' | 'stones' | 'dock' | 'boat' | 'bridge' | 'mapboard' | 'cairn' | 'rockslide' | ClutterKind;
 
 export interface Structure {
   kind: StructureKind;
@@ -485,7 +485,7 @@ const FIELDS: Field[] = [
 
 export type PlantKind =
   | 'oak' | 'goldOak' | 'pine' | 'young' | 'bush' | 'rock' | 'grass' | 'flower' | 'mushroom'
-  | 'log' | 'stump' | 'reed' | 'lily';
+  | 'log' | 'stump' | 'reed' | 'lily' | 'fern' | 'crag';
 
 export interface Plant {
   kind: PlantKind;
@@ -799,6 +799,10 @@ export function buildLayout(): ForestLayout {
   }
   const stones = structures.find((s) => s.kind === 'stones')!;
   for (const [x, z] of standingStones(stones)) colliders.addCircle({ x, z, r: 0.55 });
+  {
+    const { angle, r, length } = FALLEN_STONE;
+    colliders.addBox({ x: stones.x + Math.cos(angle) * r, z: stones.z + Math.sin(angle) * r, hw: 0.3, hd: length / 2, yaw: angle });
+  }
   const smithyShapes = smithyColliders();
   for (const [lx, lz, hw, hd] of smithyShapes.boxes) {
     const [x, z] = localToWorld(smithySite, lx, lz);
@@ -886,6 +890,53 @@ export function buildLayout(): ForestLayout {
       .map((p) => ({ ...p, y: p.y + ground.at(p.x, p.z) - natural.at(p.x, p.z) })),
   );
   plants.push(...passEdges(ground, main.line));
+  // Ferns, crags and the pass's pines (dressing.ts), from their own random stream, clear of everything placed before them.
+  const keepOff = [...veins, ...clumps, ...CAMPS.flatMap((c) => c.posts), HALE, { x: START[0], z: START[1] }];
+  plants.push(
+    ...dressPlants(
+      ground,
+      plants,
+      {
+        clear: (x, z, margin) =>
+          roadDistance.at(x, z) >= margin &&
+          streamField.at(x, z) > STREAM_HALF + 0.6 + margin &&
+          Math.hypot(x - POND.x, z - POND.z) - pondRadius(x, z) > 0.8 + margin &&
+          !colliders.blocked(x, z, margin) &&
+          keepOff.every((k) => Math.hypot(x - k.x, z - k.z) > 1.5 + margin) &&
+          !structures.some((st) => {
+            const [lx, lz] = worldToLocal(st, x, z);
+            return Math.abs(lx) < st.hw + margin && Math.abs(lz) < st.hd + margin;
+          }) &&
+          !FIELDS.some((f) => {
+            const [lx, lz] = worldToLocal(f, x, z);
+            return Math.abs(lx) < f.hw + 1.2 + margin && Math.abs(lz) < f.hd + 1.2 + margin;
+          }),
+        woods: woodsAt,
+        open: (x, z) => CLEARINGS.some((c) => Math.hypot(x - c.x, z - c.z) < c.treeFree * 0.8),
+        northPass: (x, z) => inNorthPass(x, z, 3) || nearestOnPolyline(cartRoad.line, x, z).d < cartRoad.width / 2 + 2,
+      },
+      play,
+      FOREST.water,
+      mine,
+      main.line,
+      PASS.half,
+    ),
+  );
+  // The clutter of lived-in places (dressing.ts), placed last so nothing planted moves: what grew where it stands is cleared.
+  const clutter = placeClutter(structures, heightAt);
+  structures.push(...clutter);
+  plants.splice(
+    0,
+    plants.length,
+    ...plants.filter((p) =>
+      clutter.every((c) => {
+        const [lx, lz] = worldToLocal(c, p.x, p.z);
+        const margin = TREE_HEIGHT[p.kind] || p.kind === 'rock' || p.kind === 'crag' || p.kind === 'bush' ? 1.2 : 0.3;
+        return Math.abs(lx) > c.hw + margin || Math.abs(lz) > c.hd + margin;
+      }),
+    ),
+  );
+  for (const c of clutter) if (c.solid) colliders.addBox({ x: c.x, z: c.z, hw: c.hw, hd: c.hd, yaw: c.yaw });
   colliders.addCircle({ x: cairn.x, z: cairn.z, r: cairn.hw });
   // The slide's boulders where they come within reach of where you walk.
   for (const r of slide) if (walkable.distance(r.x, r.z) < r.r + 1) colliders.addCircle({ x: r.x, z: r.z, r: r.r * 0.85 });
@@ -1444,6 +1495,9 @@ export function localToWorld(o: { x: number; z: number; yaw: number }, lx: numbe
 }
 
 /** The ring of standing stones, as floor points. */
+/** The eighth stone, fallen long ago: lying across the gap to the west, its middle `r` m out from the circle's at `angle`. */
+export const FALLEN_STONE = { angle: Math.PI + 0.3, r: 5.4, length: 2.6 } as const;
+
 export function standingStones(s: { x: number; z: number }): P2[] {
   return Array.from({ length: 7 }, (_, i) => {
     const a = (i / 7) * Math.PI * 2 + 0.3;
@@ -1497,7 +1551,15 @@ const TRUNK_RADIUS: Partial<Record<PlantKind, number>> = {
   young: 0.18,
   rock: 0.7,
   stump: 0.42,
+  crag: 0.9,
 };
+
+/** How wooded (x, z) is, 0 to 1: patches of woods over the open land, thickening into the forest round the edge. */
+function woodsAt(x: number, z: number): number {
+  const r = Math.sqrt(Math.sqrt(x ** 4 + z ** 4));
+  const patch = 0.12 + 0.8 * smoothstep(0.44, 0.58, fbm(x * 0.025 + 3, z * 0.025 - 7, 5));
+  return Math.max(patch, 0.95 * smoothstep(60, 80, r));
+}
 
 function placePlants(ground: HeightField, roads: DistanceField, streamField: DistanceField, structures: Structure[], built: Colliders): Plant[] {
   const { play, water } = FOREST;
@@ -1518,11 +1580,7 @@ function placePlants(ground: HeightField, roads: DistanceField, streamField: Dis
     CLEARINGS.some((c) => Math.hypot(x - c.x, z - c.z) < c.treeFree * scale);
   const streamDist = (x: number, z: number) => streamField.at(x, z);
   const pondDist = (x: number, z: number) => Math.hypot(x - POND.x, z - POND.z) - pondRadius(x, z);
-  const woods = (x: number, z: number) => {
-    const r = Math.sqrt(Math.sqrt(x ** 4 + z ** 4));
-    const patch = 0.12 + 0.8 * smoothstep(0.44, 0.58, fbm(x * 0.025 + 3, z * 0.025 - 7, 5));
-    return Math.max(patch, 0.95 * smoothstep(60, 80, r));
-  };
+  const woods = woodsAt;
   const add = (kind: PlantKind, x: number, z: number, scale: number, y = ground.at(x, z)) =>
     plants.push({ kind, x, y, z, yaw: rand() * Math.PI * 2, scale, seed: Math.floor(rand() * 1e6) });
 

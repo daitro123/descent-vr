@@ -11,6 +11,7 @@ export const GREEN = {
   leafGold: [0xb08a2e, 0xc49c36, 0x9a7a2a, 0xa8642a] as const,
   pine: [0x2d5230, 0x355c36, 0x3e663a] as const,
   young: [0x6aa040, 0x7aaa46] as const,
+  fern: [0x4a7a2a, 0x568a30, 0x3f6c26] as const,
   reed: 0x7a8a3e,
   lily: 0x4f8a3a,
 } as const;

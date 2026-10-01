@@ -133,14 +133,19 @@ describe("Oakvale's chunk builder", () => {
     // take that 266,542 down to 214,824, and clearing what grew where the copper veins stand
     // (professions ticket 13) to 214,310, and where the clumps of herbs grow (ticket 14) to 213,811.
     // The Old North Pass (its slide, cairn, waymark and cart road, and the trees cleared off them) brings it to 215,629.
-    expect(triangles).toBe(215629);
+    // Oakvale's polish, with the budget raised by half (to about 323,000): footpaths to every door, worn yards,
+    // stream banks, ferns, crags on the ridge and the pass, the camps' and farms' props and the reworked wheat
+    // bring it to 293,603.
+    expect(triangles).toBe(293603);
   }, 20000);
 
-  it("cuts the budget's triangles in the woods and on the edge's mountains, and leaves the village as it was", () => {
+  it("cuts the budget's triangles in the woods and on the edge's mountains, and spends the polish's on the village and the woods", () => {
     const triangles = (key: ChunkKey) => buildOakvaleChunk(plan, key, 'full').position.length / 9;
     // Before the cuts: the village's chunk 12,035, the woods north-west of it 8,493, the western mountains 2,062.
-    expect(triangles('0,0')).toBe(12035);
-    expect(triangles('-1,-1')).toBeLessThan(8493 * 0.97);
+    // The polish raised the budget by half: the village's footpaths, yards and props take its chunk to 15,560,
+    // and the woods' ferns and the lumber camp's props stay within half again of the cut woods.
+    expect(triangles('0,0')).toBe(15560);
+    expect(triangles('-1,-1')).toBeLessThan(8493 * 0.97 * 1.5);
     expect(triangles('-3,0')).toBeLessThan(2062 * 0.75);
   }, 20000);
 

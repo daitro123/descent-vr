@@ -5,7 +5,7 @@ import { type ChunkData, type ChunkKey, chunkBounds, chunkCoord, chunkIndex, chu
 import { buildFence, buildField, buildStructure } from './buildings';
 import { FOREST, type ForestLayout, type PlantKind, planOakvale } from './layout';
 import { plantPrototypes, type Prototypes } from './nature';
-import { addGround, addPaths, addYards, MeshBuffer, type Region } from './terrain';
+import { addBanks, addGround, addPaths, addYards, MeshBuffer, type Region } from './terrain';
 
 // Oakvale's chunk builder: one 40 m chunk of its plan at full detail or as a
 // stand-in, as plain arrays. Free of the DOM, so it runs in tests and in its
@@ -22,7 +22,7 @@ import { addGround, addPaths, addYards, MeshBuffer, type Region } from './terrai
 const UP = new Vector3(0, 1, 0);
 
 /** Too small to see from a stand-in's distance. */
-const UNDERGROWTH: ReadonlySet<PlantKind> = new Set(['grass', 'flower', 'mushroom', 'log', 'stump', 'reed', 'lily']);
+const UNDERGROWTH: ReadonlySet<PlantKind> = new Set(['grass', 'flower', 'mushroom', 'log', 'stump', 'reed', 'lily', 'fern']);
 
 /** Trees farther than this (m) from where you can walk are the mountains': the cheaper ones. */
 const FAR_TREES = 6;
@@ -90,6 +90,7 @@ export function buildOakvaleChunk(plan: ForestLayout, key: ChunkKey, detail: Det
   if (full) {
     addPaths(raw, plan, region);
     addYards(raw, plan, region);
+    addBanks(raw, plan, region);
   }
 
   // Plants are stamped from prototypes; the mountains past where you can walk, deep in the woods and

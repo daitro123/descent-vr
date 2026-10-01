@@ -1,6 +1,6 @@
 import type { HeightGrid } from '../heightGrid';
-import { type Path, type Structure, type StructureKind, localToWorld, worldToLocal } from './layout';
-import { fbm, lerp, nearestOnPolyline, type P2, sampleCurve, smoothstep, valueNoise } from './noise';
+import { type Path, type Plant, type PlantKind, type Structure, type StructureKind, localToWorld, worldToLocal } from './layout';
+import { fbm, lerp, mulberry32, nearestOnPolyline, type P2, sampleCurve, smoothstep, valueNoise } from './noise';
 
 // Oakvale's finishing touches, planned after the zone itself so nothing laid
 // out before them moves: the trodden footpaths from the roads to every door
@@ -108,11 +108,7 @@ export function planFootpaths(ground: HeightGrid, roads: readonly Path[], struct
 
 /** The world point at `door.at` in front of the structure it names. */
 function doorOf(structures: readonly Structure[], door: Door): P2 {
-  const near = door.near ?? [0, 0];
-  const s = structures
-    .filter((st) => st.kind === door.kind && (door.variant === undefined || st.variant === door.variant))
-    .sort((a, b) => Math.hypot(a.x - near[0], a.z - near[1]) - Math.hypot(b.x - near[0], b.z - near[1]))[0];
-  if (!s) throw new Error(`No ${door.kind} for a footpath to end at`);
+  const s = nearest(structures, door);
   return localToWorld(s, door.at[0], door.at[1]);
 }
 
@@ -184,4 +180,215 @@ export function breakUpRidge(ground: HeightGrid, mine: Structure): void {
     const crag = crags * Math.max(0, fbm(x * 0.09, z * 0.09, 77) - 0.42) * 2.2 * behind * smoothstep(40, 22, Math.abs(x + 14));
     ground.data[k] += (broken - boxy(x, z)) * away + crag;
   });
+}
+
+// ------------------------------------------------------------------ what else grows
+
+/** What the dressing's plants need to know of the zone round them. */
+export interface Growing {
+  /** Whether something `margin` m across can stand at (x, z): off the roads and paths, the water, the buildings, the fields, the camps and the spots. */
+  clear(x: number, z: number, margin: number): boolean;
+  /** How wooded (x, z) is, 0 to 1, as the trees were planted. */
+  woods(x: number, z: number): number;
+  /** Whether (x, z) is in an open clearing (the village, the farm, the camps' ground) that's kept clear of undergrowth. */
+  open(x: number, z: number): boolean;
+  /** Whether (x, z) is in the Old North Pass's cut or on its cart road, which are kept bare. */
+  northPass(x: number, z: number): boolean;
+}
+
+/**
+ * The forest floor's ferns (where the woods are thick), crags breaking out of
+ * the mine's ridge and the southern pass's walls, and pines climbing those
+ * walls. They're planted from their own random stream after everything else
+ * grows, so nothing planted before them moves.
+ */
+export const DRESSING = {
+  ferns: { spacing: 2.2, from: 0.3, full: 0.75, chance: 0.7, trunk: 0.75, grade: 0.55 },
+  ridge: { minX: -58, maxX: 30, minZ: -114, maxZ: -70, spacing: 3, grade: 0.75, chance: 0.4, mouth: { half: 8, below: -88 } },
+  pass: { minX: -70, maxX: 70, minZ: 86, maxZ: 139, spacing: 4, road: 4, crag: 0.16, pine: 0.3, tufts: 2.4 },
+} as const;
+
+export function dressPlants(ground: HeightGrid, grown: readonly Plant[], g: Growing, play: number, water: number, mine: Structure, passRoad: readonly P2[], passHalf: number): Plant[] {
+  const rand = mulberry32(5150);
+  const out: Plant[] = [];
+  const add = (kind: PlantKind, x: number, z: number, scale: number, sink = 0) =>
+    out.push({ kind, x, y: ground.at(x, z) - sink, z, yaw: rand() * Math.PI * 2, scale, seed: Math.floor(rand() * 1e6) });
+  const grade = (x: number, z: number) => Math.hypot(ground.at(x + 1, z) - ground.at(x - 1, z), ground.at(x, z + 1) - ground.at(x, z - 1)) / 2;
+  // What already stands, in 4 m cells: ferns keep off trunks and boulders.
+  const cells = new Map<number, Plant[]>();
+  const cellOf = (x: number, z: number) => Math.floor(x / 4) * 1000 + Math.floor(z / 4);
+  for (const p of grown) if (!['grass', 'flower', 'mushroom', 'reed', 'lily'].includes(p.kind)) cells.set(cellOf(p.x, p.z), [...(cells.get(cellOf(p.x, p.z)) ?? []), p]);
+  const crowded = (x: number, z: number, r: number) => {
+    for (const dx of [-4, 0, 4]) for (const dz of [-4, 0, 4]) for (const p of cells.get(cellOf(x + dx, z + dz)) ?? []) if ((p.x - x) ** 2 + (p.z - z) ** 2 < (r * (p.kind === 'rock' || p.kind === 'bush' ? Math.max(1, p.scale) : 1)) ** 2) return true;
+    return false;
+  };
+
+  // Ferns over the forest floor, thicker the thicker the woods.
+  const F = DRESSING.ferns;
+  for (let gz = -play; gz <= play; gz += F.spacing) {
+    for (let gx = -play; gx <= play; gx += F.spacing) {
+      const x = gx + (rand() - 0.5) * F.spacing;
+      const z = gz + (rand() - 0.5) * F.spacing;
+      const roll = rand();
+      const size = 0.9 + rand() * 0.6;
+      if (roll > F.chance * smoothstep(F.from, F.full, g.woods(x, z))) continue;
+      if (ground.at(x, z) < water + 0.35 || grade(x, z) > F.grade || g.open(x, z) || g.northPass(x, z)) continue;
+      if (!g.clear(x, z, 0.5) || crowded(x, z, F.trunk)) continue;
+      add('fern', x, z, size);
+    }
+  }
+
+  // Crags out of the mine's ridge, where it's steep, but not round its mouth or in the Old North Pass.
+  const R = DRESSING.ridge;
+  for (let gz = R.minZ; gz <= R.maxZ; gz += R.spacing) {
+    for (let gx = R.minX; gx <= R.maxX; gx += R.spacing) {
+      const x = gx + (rand() - 0.5) * R.spacing;
+      const z = gz + (rand() - 0.5) * R.spacing;
+      const roll = rand();
+      const size = 0.8 + rand() * 1.4;
+      if (roll > R.chance || grade(x, z) < R.grade) continue;
+      if (Math.abs(x - mine.x) < R.mouth.half && z > R.mouth.below) continue;
+      if (g.northPass(x, z) || g.open(x, z) || !g.clear(x, z, 1.5)) continue;
+      // Sunk the deeper the steeper it is, so none sits perched on its slope.
+      add('crag', x, z, size, size * (0.4 + 0.45 * Math.min(1.4, grade(x, z))));
+    }
+  }
+
+  // Up the southern pass's walls: crags where they're steep, pines where they aren't, clear of the road and its edge.
+  const P = DRESSING.pass;
+  for (let gz = P.minZ; gz <= P.maxZ; gz += P.spacing) {
+    for (let gx = P.minX; gx <= P.maxX; gx += P.spacing) {
+      const x = gx + (rand() - 0.5) * P.spacing;
+      const z = Math.min(gz + (rand() - 0.5) * P.spacing, P.maxZ);
+      const roll = rand();
+      const size = rand();
+      if (nearestOnPolyline(passRoad, x, z).d < passHalf + P.road || !g.clear(x, z, 1)) continue;
+      const steep = grade(x, z);
+      if (steep > 0.5 && roll < P.crag) add('crag', x, z, 0.9 + size * 1.5, (0.9 + size * 1.5) * (0.4 + 0.45 * Math.min(1.4, steep)));
+      else if (steep < 1 && roll > 1 - P.pine && !crowded(x, z, 2.5)) add('pine', x, z, 0.75 + size * 0.45);
+    }
+  }
+  // And grass in tufts over the pass's floor either side of the road, thinning toward the crest's moor.
+  for (let gz = P.minZ; gz <= P.maxZ; gz += P.tufts) {
+    for (let gx = -passHalf - 12; gx <= passHalf + 12; gx += P.tufts) {
+      const x = gx + (rand() - 0.5) * P.tufts + passRoad[nearestOnPolyline(passRoad, 0, gz).i][0];
+      const z = Math.min(gz + (rand() - 0.5) * P.tufts, P.maxZ);
+      const roll = rand();
+      const size = 0.7 + rand() * 0.6;
+      if (roll > 0.5 * smoothstep(P.maxZ, P.maxZ - 30, z) + 0.12 || !g.clear(x, z, 0.3)) continue;
+      add(roll < 0.08 ? 'bush' : 'grass', x, z, size);
+    }
+  }
+  return out;
+}
+
+// ------------------------------------------------------------------ the clutter of lived-in places
+
+/** The small things left about where people live and work, each modelled in buildings.ts. */
+export type ClutterKind =
+  | 'bench' | 'barrels' | 'butt' | 'crates' | 'woodpile' | 'sawhorse' | 'chopblock' | 'planks'
+  | 'timbers' | 'ore' | 'sacks' | 'coop' | 'wagon' | 'vegbed' | 'rack' | 'leanto';
+
+/** Each kind's footprint (half width and depth, in its own frame) and whether you walk into it. */
+export const CLUTTER_SIZE: Record<ClutterKind, readonly [number, number, boolean]> = {
+  bench: [0.9, 0.25, true],
+  barrels: [0.8, 0.6, true],
+  butt: [0.4, 0.4, true],
+  crates: [0.75, 0.6, true],
+  woodpile: [1.35, 0.4, true],
+  sawhorse: [1.0, 0.35, true],
+  chopblock: [0.45, 0.45, true],
+  planks: [1.5, 0.45, true],
+  timbers: [1.4, 0.5, true],
+  ore: [1.2, 0.8, true],
+  sacks: [0.6, 0.45, true],
+  coop: [0.85, 0.65, true],
+  wagon: [1.0, 1.9, true],
+  vegbed: [1.4, 0.7, false],
+  rack: [0.8, 0.3, true],
+  leanto: [1.35, 1.1, true],
+};
+
+/** Where a piece of clutter stands: in the world, or by a structure (in its frame, turned by `turn` from it). */
+type ClutterSpot = { at: P2; face?: P2; yaw?: number } | { by: { kind: StructureKind; variant?: number; near?: P2 }; at: P2; turn?: number };
+
+/**
+ * The village's benches, woodpiles against the cottages, vegetable beds in
+ * their gardens and the inn's yard stores; the farm's hay wagon, hen coop,
+ * sacks and woodpile; the lumber camp's sawhorse, chopping block, planks and
+ * lean-to; the pit props, ore heap and crates at the mine's mouth; the
+ * watchtower's stores and spear rack. All clear of the roads, paths, doors,
+ * camps and spots (the forest tests hold them to it).
+ */
+const CLUTTER: readonly ({ kind: ClutterKind } & ClutterSpot)[] = [
+  // The village.
+  { kind: 'vegbed', by: { kind: 'house', variant: 0 }, at: [0, -5.1] },
+  { kind: 'vegbed', by: { kind: 'house', variant: 1 }, at: [0, -4.9] },
+  { kind: 'woodpile', by: { kind: 'house', variant: 1 }, at: [-3.65, -0.4], turn: -Math.PI / 2 },
+  { kind: 'bench', by: { kind: 'house', variant: 1 }, at: [-1.8, 3.45] },
+  { kind: 'woodpile', by: { kind: 'house', variant: 2 }, at: [3.45, -0.4], turn: Math.PI / 2 },
+  { kind: 'butt', by: { kind: 'house', variant: 2 }, at: [-3.45, 2.0] },
+  { kind: 'butt', by: { kind: 'house', variant: 0 }, at: [3.95, 2.3] },
+  { kind: 'bench', at: [-8.9, -4.4], face: [-5.5, -5.5] },
+  { kind: 'woodpile', by: { kind: 'inn' }, at: [-2.4, -4.45], turn: Math.PI },
+  { kind: 'crates', by: { kind: 'inn' }, at: [6.4, -2.2], turn: Math.PI / 2 },
+  { kind: 'barrels', by: { kind: 'inn' }, at: [6.35, 3.3], turn: Math.PI / 2 },
+  { kind: 'butt', by: { kind: 'smithy' }, at: [-3.95, -2.2] },
+  // The farm.
+  { kind: 'wagon', at: [56.4, 19.2], yaw: 2.3 },
+  { kind: 'woodpile', by: { kind: 'farmhouse' }, at: [4.45, -0.6], turn: Math.PI / 2 },
+  { kind: 'butt', by: { kind: 'farmhouse' }, at: [3.6, 3.45] },
+  { kind: 'coop', at: [39.2, 31.6], face: [46, 27] },
+  { kind: 'sacks', by: { kind: 'barn' }, at: [3.0, 4.6] },
+  { kind: 'barrels', by: { kind: 'barn' }, at: [-3.2, 4.65] },
+  { kind: 'sacks', by: { kind: 'windmill' }, at: [1.7, 3.1] },
+  { kind: 'barrels', at: [48.3, 27.4], yaw: 0.5 },
+  // The lumber camp.
+  { kind: 'sawhorse', at: [-43.4, -37.6], yaw: 0.3 },
+  { kind: 'chopblock', at: [-45.6, -35.6], yaw: 1.1 },
+  { kind: 'planks', at: [-58.4, -43.4], yaw: 1.45 },
+  { kind: 'leanto', at: [-42.4, -51.2], face: [-48, -41] },
+  // Not behind the tent, where its leader must come round to you (world.test.ts).
+  { kind: 'barrels', at: [-58.6, -40.2], yaw: 1.2 },
+  { kind: 'crates', at: [-40.2, -49.4], yaw: 0.7 },
+  // The old mine's mouth.
+  { kind: 'timbers', at: [-19.3, -70.2], yaw: 1.3 },
+  { kind: 'ore', at: [-8.0, -70.0], yaw: -0.4 },
+  { kind: 'crates', at: [-19.6, -76.2], yaw: 0.3 },
+  { kind: 'barrels', at: [-8.6, -76.4], yaw: -0.3 },
+  // The watchtower.
+  // Off the sight line over the hill along z = −63.5 (world.test.ts), clear of its watchers.
+  { kind: 'crates', at: [42.3, -65.5], yaw: 0.2 },
+  { kind: 'barrels', at: [39.5, -66.0], yaw: 0 },
+  { kind: 'rack', at: [45.2, -65.8], face: [50, -71] },
+  { kind: 'woodpile', at: [33.4, -55.0], face: [26, -52] },
+];
+
+/** The clutter, as structures standing on `heightAt`, placed by `structures` where it stands by one. */
+export function placeClutter(structures: readonly Structure[], heightAt: (x: number, z: number) => number): Structure[] {
+  return CLUTTER.map((c) => {
+    let x: number;
+    let z: number;
+    let yaw: number;
+    if ('by' in c) {
+      const s = nearest(structures, c.by);
+      [x, z] = localToWorld(s, c.at[0], c.at[1]);
+      yaw = s.yaw + (c.turn ?? 0);
+    } else {
+      [x, z] = c.at;
+      yaw = c.face ? Math.atan2(c.face[0] - x, c.face[1] - z) : (c.yaw ?? 0);
+    }
+    const [hw, hd, solid] = CLUTTER_SIZE[c.kind];
+    return { kind: c.kind, x, z, yaw, y: heightAt(x, z), hw, hd, solid, variant: 0 };
+  });
+}
+
+/** The structure `by` names: of its kind (and variant), the one nearest its `near`. */
+function nearest(structures: readonly Structure[], by: { kind: StructureKind; variant?: number; near?: P2 }): Structure {
+  const near = by.near ?? [0, 0];
+  const s = structures
+    .filter((st) => st.kind === by.kind && (by.variant === undefined || st.variant === by.variant))
+    .sort((a, b) => Math.hypot(a.x - near[0], a.z - near[1]) - Math.hypot(b.x - near[0], b.z - near[1]))[0];
+  if (!s) throw new Error(`No ${by.kind} in Oakvale`);
+  return s;
 }
