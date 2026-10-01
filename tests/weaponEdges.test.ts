@@ -2,7 +2,7 @@ import { Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
 import { attackClip, type MutablePose } from '../src/inspector/clips';
-import { buildCharacter, type EnemyKind, type Family } from '../src/models/characters';
+import { buildCharacter, type HumanoidKind as EnemyKind, type Family } from '../src/models/characters';
 import { buildLongsword } from '../src/models/gear';
 
 // Blades should land edge first. These play each melee swing with the game's
@@ -10,7 +10,7 @@ import { buildLongsword } from '../src/models/gear';
 // the hand's -Z (see rig.ts), with the direction the blade is travelling. A
 // pose that swings the flat into the player, a slap, fails here.
 
-const WIELDERS: [string, EnemyKind, number, Family][] = [
+const WIELDERS: [string, EnemyKind, number, Family, string?][] = [
   ['grunt (sword)', 'grunt', 0, 'undead'],
   ['grunt (axe)', 'grunt', 1, 'undead'],
   ['brute', 'brute', 0, 'undead'],
@@ -22,6 +22,17 @@ const WIELDERS: [string, EnemyKind, number, Family][] = [
   ['bailiff (cudgel)', 'grunt', 0, 'corvane'],
   ['bailiff (iron-bound club)', 'grunt', 1, 'corvane'],
   ['bailiff shieldman (mace)', 'brute', 0, 'corvane'],
+  ['Lantern Man (cutlass)', 'grunt', 0, 'smuggler'],
+  ['Lantern Man (boat hook)', 'grunt', 1, 'smuggler'],
+  ['Lantern Men dredger (dredging hook)', 'brute', 0, 'smuggler'],
+  ['Lantern Men dredger (beetle)', 'brute', 1, 'smuggler'],
+  ['Lantern Men leader (boarding axe)', 'brute', 0, 'smuggler', 'leader'],
+  ['Captain Crake (long cutlass)', 'brute', 0, 'smuggler', 'crake'],
+  ['Undergate thief (long knife)', 'grunt', 0, 'undergate'],
+  ['fen raider (eel spear, four tines)', 'grunt', 0, 'raider'],
+  ['fen raider (eel spear, three tines)', 'grunt', 1, 'raider'],
+  ['fen raider peat cutter (peat spade)', 'brute', 0, 'raider'],
+  ['Abel Thatch (slasher)', 'brute', 0, 'raider', 'headman'],
   ['drowned (Deepking blade)', 'grunt', 0, 'drowned'],
   ['drowned (eel gaff)', 'grunt', 1, 'drowned'],
   ['drowned (cleaver)', 'grunt', 2, 'drowned'],
@@ -31,10 +42,10 @@ const WIELDERS: [string, EnemyKind, number, Family][] = [
 ];
 
 /** Angles (degrees) between the cutting side and the blade's travel, across the swing. */
-function edgeAngles(kind: EnemyKind, variant: number, family: Family, pose: string): number[] {
+function edgeAngles(kind: EnemyKind, variant: number, family: Family, pose: string, named?: string): number[] {
   const attack = CONFIG.enemies[kind].attacks.find((a) => a.pose === pose)!;
   const clip = attackClip(kind, attack);
-  const { rig, weapon } = buildCharacter(kind, { variant, family });
+  const { rig, weapon } = buildCharacter(kind, { variant, family, named });
   const bone = rig.bones[weapon.bone];
   const out: MutablePose = {};
   const mid = new Vector3();
@@ -55,11 +66,11 @@ function edgeAngles(kind: EnemyKind, variant: number, family: Family, pose: stri
   return angles;
 }
 
-describe.each(WIELDERS)('%s', (_name, kind, variant, family) => {
+describe.each(WIELDERS)('%s', (_name, kind, variant, family, named) => {
   const poses = [...new Set(CONFIG.enemies[kind].attacks.filter((a) => a.kind === 'melee').map((a) => a.pose))];
 
   it.each(poses)('%s leads with the edge, not the flat', (pose) => {
-    const angles = edgeAngles(kind, variant, family, pose);
+    const angles = edgeAngles(kind, variant, family, pose, named);
     const mean = angles.reduce((s, a) => s + a, 0) / angles.length;
     // 0° is edge first, 90° is flat first.
     expect(mean).toBeLessThan(40);
@@ -68,7 +79,7 @@ describe.each(WIELDERS)('%s', (_name, kind, variant, family) => {
 
   it('carries its striking end on the cutting side', () => {
     // An axe's bit, say: off the haft toward -Z, never behind it.
-    expect(buildCharacter(kind, { variant, family }).weapon.tip[2]).toBeLessThanOrEqual(0);
+    expect(buildCharacter(kind, { variant, family, named }).weapon.tip[2]).toBeLessThanOrEqual(0);
   });
 });
 

@@ -39,11 +39,12 @@ export class BlobShadows {
   readonly mesh: InstancedMesh;
   private n = 0;
 
-  constructor() {
+  /** Room for `most` blobs a frame. */
+  constructor(private readonly most = MAX) {
     this.mesh = new InstancedMesh(
       new PlaneGeometry(1, 1),
       new MeshBasicMaterial({ map: blobTexture(), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }),
-      MAX,
+      most,
     );
     this.mesh.instanceMatrix.setUsage(DynamicDrawUsage);
     this.mesh.frustumCulled = false;
@@ -56,7 +57,7 @@ export class BlobShadows {
 
   /** A blob on the ground at (x, y, z). */
   add(x: number, y: number, z: number, radius: number): void {
-    if (this.n >= MAX) return;
+    if (this.n >= this.most) return;
     _m.compose(_p.set(x, y + 0.012, z), _q, _s.set(radius * 2.4, radius * 2.4, 1));
     this.mesh.setMatrixAt(this.n++, _m);
   }
@@ -75,7 +76,8 @@ export class BlobShadows {
       // Not drawn (outdoors behind a shut door, or in a part of the mine that isn't): no blob either.
       if (!e.root.visible || e.root.parent?.visible === false) continue;
       const scale = e.state === 'rising' ? Math.min(1, e.stateTime * 1.5) : 1;
-      this.add(e.position.x, e.position.y, e.position.z, e.def.radius * 1.1 * scale);
+      // As wide as its body keeps you off it: a biter's is small, low on the ground.
+      this.add(e.position.x, e.position.y, e.position.z, (e.def.crowd ?? e.def.radius) * 1.1 * scale);
     }
     this.end();
   }

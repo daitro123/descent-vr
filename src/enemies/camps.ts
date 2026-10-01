@@ -1,7 +1,7 @@
 import { Group, Vector3 } from 'three';
 import { CONFIG } from '../config';
 import type { CampPlan, PostPlan } from '../maps/types';
-import { FAMILIES } from '../models/characters';
+import { FAMILIES, isFamily } from '../models/characters';
 import type { Interior } from '../save/record';
 import { NO_STORY, type Story, there } from '../story';
 import type { Ground } from '../world/ground';
@@ -468,8 +468,14 @@ export class Camps {
    * till you come near.
    */
   private raise(level: number, plan: PostPlan, post: EnemyPost, floor: Floor): Enemy {
-    const lurks = FAMILIES[plan.family].lurks ?? false;
-    const enemy = createEnemy(plan.behaviour, post.x, post.z, { level: plan.level ?? level, inCamp: true, family: plan.family, variant: Math.floor(Math.random() * 6), named: plan.named, lurks });
+    const enemy = createEnemy(plan.behaviour, post.x, post.z, {
+      level: plan.level ?? level,
+      inCamp: true,
+      family: plan.family,
+      variant: plan.variant ?? (plan.behaviour === 'biter' ? 0 : Math.floor(Math.random() * 6)),
+      named: plan.named,
+      lurks: isFamily(plan.family) && (FAMILIES[plan.family].lurks ?? false),
+    });
     enemy.post = post;
     enemy.chaseSpeed = CONFIG.camps.chaseSpeed;
     enemy.position.y = floor.ctx.ground.heightAt(post.x, post.z);

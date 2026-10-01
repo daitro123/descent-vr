@@ -1,4 +1,4 @@
-import { type EnemyKind, type FamilyDef, loincloth, skeleton, type SkeletonLook, type WeaponSpec } from './characters';
+import { type FamilyDef, type HumanoidKind, loincloth, skeleton, type SkeletonLook, type WeaponSpec } from './characters';
 import { bow } from './bow';
 import { type Look, skirt } from './human';
 import type { ModelBuilder, Vec3 } from './kit';
@@ -54,7 +54,7 @@ export const DROWNED_HUE = {
 } as const;
 
 /** Their bones: grunts, the archer and the brute in the undead's. The Reeve stands as the Bone Warden does. */
-export const DROWNED_PROPORTIONS: Record<EnemyKind, Proportions> = {
+export const DROWNED_PROPORTIONS: Record<HumanoidKind, Proportions> = {
   grunt: { hipY: 0.92, hipW: 0.09, spine: 0.44, shoulderW: 0.19, neck: 0.48, upperArm: 0.28, forearm: 0.25, thigh: 0.43, shin: 0.43 },
   archer: { hipY: 0.9, hipW: 0.09, spine: 0.43, shoulderW: 0.18, neck: 0.47, upperArm: 0.27, forearm: 0.25, thigh: 0.42, shin: 0.42 },
   // A big skeleton, not stitched flesh: the undead brute's lengths with a skull to match.

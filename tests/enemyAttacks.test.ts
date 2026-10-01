@@ -80,6 +80,8 @@ function player(dist: number, headY: number, shield?: Shield, sword?: [Vector3, 
     torsoTop: new Vector3(),
     torsoBottom: new Vector3(),
     torsoRadius: B.torsoRadius,
+    legsBottom: new Vector3(),
+    legsRadius: B.legsRadius,
     shieldInverse: inverse,
     shieldHalf: new Vector3(S.width / 2 + S.blockMargin, S.height / 2 + S.blockMargin, S.depth / 2 + S.blockMargin),
     swordBase: sword ? sword[0] : null,
@@ -94,6 +96,7 @@ function setHead(d: Defender, dist: number, headY: number): void {
   d.head.set(0, headY - B.headDrop, dist);
   d.torsoTop.set(0, headY - B.torsoTop, dist);
   d.torsoBottom.set(0, Math.max(0.2, headY - B.torsoBottom), dist);
+  d.legsBottom.set(0, B.ankles, dist);
 }
 
 interface Run {
@@ -155,6 +158,16 @@ describe.each([
   ['bailiff with a cudgel', () => new TestGrunt('grunt', 0, 0, { family: 'corvane' })],
   ['bailiff with an iron-bound club', () => new TestGrunt('grunt', 0, 0, { family: 'corvane', variant: 1 })],
   ['bailiff shieldman', () => new TestBrute('brute', 0, 0, { family: 'corvane' })],
+  ['Lantern Man with a cutlass', () => new TestGrunt('grunt', 0, 0, { family: 'smuggler' })],
+  ['Lantern Man with a boat hook', () => new TestGrunt('grunt', 0, 0, { family: 'smuggler', variant: 1 })],
+  ['Lantern Men dredger with a dredging hook', () => new TestBrute('brute', 0, 0, { family: 'smuggler' })],
+  ['Lantern Men dredger with a beetle', () => new TestBrute('brute', 0, 0, { family: 'smuggler', variant: 1 })],
+  ['Lantern Men leader', () => new TestBrute('brute', 0, 0, { family: 'smuggler', named: 'leader' })],
+  ['Captain Crake', () => new TestBrute('brute', 0, 0, { family: 'smuggler', named: 'crake' })],
+  ['Undergate thief', () => new TestGrunt('grunt', 0, 0, { family: 'undergate' })],
+  ['fen raider', () => new TestGrunt('grunt', 0, 0, { family: 'raider' })],
+  ['fen raider peat cutter', () => new TestBrute('brute', 0, 0, { family: 'raider' })],
+  ['Abel Thatch', () => new TestBrute('brute', 0, 0, { family: 'raider', named: 'headman' })],
   ['warden', () => new TestWarden('warden', 0, 0)],
 ] as const)('%s melee', (_name, make) => {
   const probe = make();
@@ -237,7 +250,7 @@ describe('slams and shots', () => {
     expect(r.slams[0].z).toBeGreaterThan(1.7);
   });
 
-  it.each(['undead', 'bandit', 'corvane'] as const)('an %s archer looses one arrow at full draw, from about head height', (family) => {
+  it.each(['undead', 'bandit', 'corvane', 'smuggler', 'undergate', 'raider'] as const)('an %s archer looses one arrow at full draw, from about head height', (family) => {
     const a = new TestArcher('archer', 0, 0, { family });
     const r = run(a, a.def.attacks[0], player(6, 1.6), 6);
     expect(r.shots).toHaveLength(1);
@@ -249,12 +262,20 @@ describe('slams and shots', () => {
 // The brute's reach (its attack range and body radius) was set for the undead
 // brute's bigger body; the bandit leader and Corvane's shieldman fight with the
 // same behaviour on the human body's big build, swinging a felling axe and a
-// long mace.
+// long mace, and so do the Sallows' brutes and leaders: the dredgers' hook and
+// beetle, the Lantern Men leader's boarding axe, Captain Crake's long cutlass,
+// the peat cutter's spade and Abel Thatch's slasher.
 describe.each([
   ['bandit leader', 'bandit'],
   ['bailiff shieldman', 'corvane'],
-] as const)("the %s's reach", (_name, family) => {
-  const make = () => new TestBrute('brute', 0, 0, { family });
+  ['Lantern Men dredger with a dredging hook', 'smuggler'],
+  ['Lantern Men dredger with a beetle', 'smuggler', 1],
+  ['Lantern Men leader', 'smuggler', 0, 'leader'],
+  ['Captain Crake', 'smuggler', 0, 'crake'],
+  ['fen raider peat cutter', 'raider'],
+  ['Abel Thatch', 'raider', 0, 'headman'],
+] as const)("the %s's reach", (_name, family, variant = 0, named?: string) => {
+  const make = () => new TestBrute('brute', 0, 0, { family, variant, named });
   const probe = make();
   /** As close as you can get: its body against yours. */
   const touching = probe.def.radius + CONFIG.player.bodyRadius;
@@ -276,7 +297,7 @@ describe.each([
   });
 });
 
-describe.each(['undead', 'bandit', 'corvane'] as const)('%s archer aim', (family) => {
+describe.each(['undead', 'bandit', 'corvane', 'smuggler', 'undergate', 'raider'] as const)('%s archer aim', (family) => {
   /**
    * Draw one arrow at a player whose head starts at `head` (and moves by
    * `move` per second), from an archer at the origin facing `yaw`. Returns how

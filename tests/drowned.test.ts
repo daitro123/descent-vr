@@ -6,7 +6,7 @@ import { createEnemy } from '../src/enemies/kinds';
 import { AttackTokens } from '../src/enemies/tokens';
 import { clipsFor } from '../src/inspector/clips';
 import { MIRE_KING } from '../src/models/bog';
-import { buildCharacter, type EnemyKind, FAMILIES, fighterOf, proportionsOf } from '../src/models/characters';
+import { buildCharacter, FAMILIES, fighterOf, type HumanoidKind, proportionsOf } from '../src/models/characters';
 import { Arena } from '../src/world/arena';
 import type { Ground } from '../src/world/ground';
 
@@ -54,8 +54,10 @@ const run = (e: Enemy, seconds: number, ctx: EnemyContext) => {
   for (let t = 0; t < seconds; t += DT) e.update(DT, ctx);
 };
 const top = (e: Enemy, bone: 'head' | 'spine' | 'hips') => e.rig.bones[bone].getWorldPosition(new Vector3()).y;
+/** Its hips' height, standing. */
+const hipHeight = (e: Enemy) => proportionsOf(e.kind as HumanoidKind, e.family as 'drowned' | 'bog', e.named ?? undefined).hipY;
 /** A camp's member, at its post facing south, lying in wait. */
-function lurker(kind: EnemyKind, family: 'drowned' | 'bog', named?: string): Enemy {
+function lurker(kind: HumanoidKind, family: 'drowned' | 'bog', named?: string): Enemy {
   const e = createEnemy(kind, 0, 0, { family, named, lurks: true, inCamp: true });
   e.post = { x: 0, z: 0, yaw: 0, evading: false };
   return e;
@@ -91,8 +93,8 @@ describe('the drowned and the bog’s beasts as families', () => {
 });
 
 /** Every drowned and bog body, with its cap: a drowned is a skeleton's, the big ones and the Reeve more, the lurkers less (they are lumps). */
-const BODIES: [string, EnemyKind, 'drowned' | 'bog', number, string | undefined, number][] = [
-  ...[0, 1, 2, 3, 4, 5].map((v): [string, EnemyKind, 'drowned', number, undefined, number] => [`drowned v${v}`, 'grunt', 'drowned', v, undefined, 1400]),
+const BODIES: [string, HumanoidKind, 'drowned' | 'bog', number, string | undefined, number][] = [
+  ...[0, 1, 2, 3, 4, 5].map((v): [string, HumanoidKind, 'drowned', number, undefined, number] => [`drowned v${v}`, 'grunt', 'drowned', v, undefined, 1400]),
   ['drowned archer', 'archer', 'drowned', 0, undefined, 1400],
   ['drowned lock-warden', 'brute', 'drowned', 0, undefined, 1700],
   ['Drowned Reeve', 'warden', 'drowned', 0, undefined, 2000],
@@ -135,7 +137,7 @@ describe('lying in wait', () => {
     run(e, 2, ctx);
     expect(e.state).not.toBe('rising');
     expect(e.hittable).toBe(true);
-    expect(top(e, 'hips')).toBeCloseTo(e.rig.proportions.hipY, 1);
+    expect(top(e, 'hips')).toBeCloseTo(hipHeight(e), 1);
   });
 
   it('its camp going to fight wakes it wherever you are', () => {
@@ -176,7 +178,7 @@ describe('lying in wait', () => {
       expect(e.lurking).toBe(true);
       expect(top(e, 'hips')).toBeLessThan(0);
       // The top of its spine (the hump with the reeds) is over the mud, but not by much.
-      const back = e.rig.bones.spine.localToWorld(new Vector3(0, e.rig.proportions.spine, 0)).y;
+      const back = e.rig.bones.spine.localToWorld(new Vector3(0, proportionsOf('brute', 'bog', named).spine, 0)).y;
       expect(back).toBeGreaterThan(0);
       expect(back).toBeLessThan(0.6 * (named ? 1.5 : 1));
     }
@@ -190,7 +192,7 @@ describe('lying in wait', () => {
     run(e, 3, ctx);
     expect(ctx.emerged).toEqual(['mud']);
     expect(e.state).not.toBe('rising');
-    expect(top(e, 'hips')).toBeCloseTo(e.rig.proportions.hipY, 1);
+    expect(top(e, 'hips')).toBeCloseTo(hipHeight(e), 1);
   });
 
   it('one not raised in a camp comes up at once, as the undead do', () => {
