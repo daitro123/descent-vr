@@ -8,8 +8,8 @@ import {
   HemisphereLight,
   Line,
   LineBasicMaterial,
-  Mesh,
   type Object3D,
+  Mesh,
   MeshBasicMaterial,
   MeshLambertMaterial,
   PlaneGeometry,
@@ -17,16 +17,19 @@ import {
   Vector3,
   type WebGLRenderer,
 } from 'three';
-import { buildCharacter, type EnemyKind, FAMILIES, type Family, type Fighter, type WeaponSpec } from '../models/characters';
+import { BIRD_LOOKS, type BirdLookId } from '../models/bird';
+import { buildCharacter, FAMILIES, type Family, type FamilyDef, type Fighter, type HumanoidKind, type WeaponSpec } from '../models/characters';
+import { CRAWLER_LOOKS, type CrawlerLook } from '../models/crawler';
+import { CRITTER_LOOKS, type CritterLook } from '../models/critters';
 import { createModelMaterial, type ModelMaterial } from '../models/materials';
 import { buildPerson, PEOPLE, type PersonId } from '../models/people';
 import type { Rig } from '../models/rig';
 import { XRInput } from '../player/input';
 import { TextPanel } from '../ui/panel';
 import { CAST, type CastId, Wardrobe } from '../people/cast';
-import { BIRD_LOOKS, type BirdLookId } from '../models/bird';
-import { BirdStand } from './birds';
 import { castClips, type Clip, clipsFor, type MutablePose, personClips } from './clips';
+import { birdShowpiece } from './birds';
+import { crawlerShowpiece, critterShowpiece, type Moment, type Showpiece } from './creatures';
 
 // `?inspect`: a turntable for every character. One at a time on a plinth in
 // front of you, looping any of its animations with the game's timings, with a
@@ -34,32 +37,39 @@ import { castClips, type Clip, clipsFor, type MutablePose, personClips } from '.
 // Works in the headset and on the desktop page.
 
 export type InspectorEntry =
-  /** An enemy: its behaviour, its family's body, and which of its looks. */
-  | { kind: EnemyKind; family: Family; variant: number; label: string }
+  /** An enemy: its behaviour, its family's body, and which of its looks (or which of its named fighters). */
+  | { kind: HumanoidKind; family: Family; variant: number; named?: string; label: string }
   /** A friendly character: Hale or one of Oakvale's villagers. */
   | { person: PersonId; label: string }
   /** One of the cast a zone places as a villager, beyond Oakvale's (people/cast.ts). */
   | { cast: CastId; label: string }
+  /** A critter: a hare, a frog, a rat (models/critters.ts), in its frames and moving as it does. */
+  | { critter: CritterLook; label: string }
+  /** A crawler: a leech or the adder (models/crawler.ts), crawling and fighting as a biter. */
+  | { crawler: CrawlerLook; label: string }
   /** A bird, alone on the turntable (models/bird.ts): a flock of one. */
   | { bird: BirdLookId; label: string };
 
-/** Each look of every enemy family's fighters: "Grunt v0" to "v5", "Archer". */
-const enemies = (Object.keys(FAMILIES) as Family[]).flatMap((family) =>
-  (Object.entries(FAMILIES[family].fights) as [EnemyKind, Fighter][]).flatMap(([kind, f]) =>
+/** Each look of every enemy family's fighters ("Grunt v0" to "v5", "Archer"), then its named fighters ("Captain Silas Crake"). */
+const enemies = (Object.keys(FAMILIES) as Family[]).flatMap((family) => [
+  ...(Object.entries(FAMILIES[family].fights) as [HumanoidKind, Fighter][]).flatMap(([kind, f]) =>
     Array.from({ length: f.looks }, (_, variant) => ({ kind, family, variant, label: f.looks > 1 ? `${f.label} v${variant}` : f.label })),
   ),
-);
+  ...Object.entries((FAMILIES[family] as FamilyDef).named ?? {}).map(([named, f]) => ({ kind: f.kind, family, variant: 0, named, label: f.label })),
+]);
 
 /**
  * Every model the game builds: each enemy family's (the undead's grunts in
  * six helmet, cloth and weapon combos, the bandits' thugs in six looks and
  * weapons, and so on), then Marshal Hale and the villagers, then the rest of
- * the cast zones place, then the birds.
+ * the cast zones place, the critters and crawlers, and the birds.
  */
 export const ENTRIES: InspectorEntry[] = [
   ...enemies,
   ...(Object.keys(PEOPLE) as PersonId[]).map((id) => ({ person: id, label: PEOPLE[id].label })),
   ...(Object.keys(CAST) as CastId[]).filter((id) => !(id in PEOPLE)).map((id) => ({ cast: id, label: CAST[id].label })),
+  ...CRITTER_LOOKS.map((look) => ({ critter: look, label: look.charAt(0).toUpperCase() + look.slice(1) })),
+  ...(Object.keys(CRAWLER_LOOKS) as CrawlerLook[]).map((look) => ({ crawler: look, label: CRAWLER_LOOKS[look].label })),
   ...(Object.keys(BIRD_LOOKS) as BirdLookId[]).map((id) => ({ bird: id, label: BIRD_LOOKS[id].label })),
 ];
 
@@ -77,18 +87,19 @@ const _b = new Vector3();
 
 interface Built {
   /** What stands on the turntable. */
-  mesh: Object3D;
-  /** Its rig, posed from the clip's frame; null for a bird, which its clips pose themselves. */
+  object: Object3D;
+  /** Its humanoid rig, for the guides; null for a creature built otherwise. */
   rig: Rig | null;
-  /** How much bigger than a man of average height (×1), and its triangles. */
-  height: number;
-  triangles: number;
-  /** How far the turntable zooms in on it at first. */
-  zoom: number;
   /** What it strikes with; friendly characters strike with nothing. */
   weapon: WeaponSpec | null;
   material: ModelMaterial;
-  clips: Clip[];
+  clips: readonly { readonly name: string; readonly duration: number; readonly attack?: Clip['attack'] }[];
+  /** Show clip `i` at `t` s into it. */
+  play(i: number, t: number): Moment;
+  /** What it costs to draw as it stands now. */
+  readonly triangles: number;
+  /** Its height against a skeleton grunt's. */
+  readonly height: number;
 }
 
 export class Inspector {
@@ -163,34 +174,67 @@ export class Inspector {
     if (!b) {
       const e = ENTRIES[index];
       const material = createModelMaterial();
-      const shown = (rig: Rig) => ({ mesh: rig.mesh, rig, height: rig.proportions.hipY / 0.92, triangles: rig.triangles, zoom: 1 });
-      if ('person' in e) b = { ...shown(buildPerson(e.person, material)), weapon: null, material, clips: personClips(e.person) };
-      else if ('cast' in e) b = { ...shown(new Wardrobe().dress(e.cast, material)), weapon: null, material, clips: castClips(e.cast) };
-      else if ('bird' in e) {
-        const bird = new BirdStand(e.bird, material);
-        b = { mesh: bird.flock.mesh, rig: null, height: 0, triangles: bird.triangles, zoom: bird.zoom, weapon: null, material, clips: bird.clips };
-      } else {
-        const { rig, weapon } = buildCharacter(e.kind, { material, family: e.family, variant: e.variant });
-        b = { ...shown(rig), weapon, material, clips: clipsFor(e.kind, e.family) };
+      if ('person' in e) b = this.rigged(buildPerson(e.person, material), null, material, personClips(e.person));
+      else if ('cast' in e) b = this.rigged(new Wardrobe().dress(e.cast, material), null, material, castClips(e.cast));
+      else if ('critter' in e) b = this.shown(critterShowpiece(e.critter, material), material);
+      else if ('crawler' in e) b = this.shown(crawlerShowpiece(e.crawler, material), material);
+      else if ('bird' in e) b = this.shown(birdShowpiece(e.bird, material), material);
+      else {
+        const { rig, weapon } = buildCharacter(e.kind, { material, family: e.family, variant: e.variant, named: e.named });
+        b = this.rigged(rig, weapon, material, clipsFor(e.kind, e.family, e.named));
       }
       this.built.set(index, b);
     }
     return b;
   }
 
+  /** A body on the humanoid rig, posed by its clips. */
+  private rigged(rig: Rig, weapon: WeaponSpec | null, material: ModelMaterial, clips: Clip[]): Built {
+    const pose = this.pose;
+    return {
+      object: rig.mesh,
+      rig,
+      weapon,
+      material,
+      clips,
+      play(i, t) {
+        const frame = clips[i].sample(t, pose);
+        rig.apply(frame.pose);
+        const hip = frame.hip ?? [0, frame.hipY, 0];
+        rig.setHipOffset(hip[0], hip[1], hip[2]);
+        return frame;
+      },
+      triangles: rig.triangles,
+      height: rig.proportions.hipY / 0.92,
+    };
+  }
+
+  /** A creature built without the humanoid rig, which plays its own clips. */
+  private shown(piece: Showpiece, material: ModelMaterial): Built {
+    return {
+      object: piece.object,
+      rig: null,
+      weapon: null,
+      material,
+      clips: piece.clips,
+      play: (i, t) => piece.play(i, t),
+      get triangles() {
+        return piece.triangles;
+      },
+      height: piece.height,
+    };
+  }
+
   /** Switch model, keeping the same animation by name when it has one. */
   show(index: number): void {
     const n = ENTRIES.length;
     const name = this.built.size ? this.current.clips[this.clip]?.name : undefined;
-    const zoomed = this.built.size ? this.current.zoom : 1;
-    this.turntable.remove(this.current.mesh);
+    this.turntable.remove(this.current.object);
     this.entry = ((index % n) + n) % n;
     const found = this.current.clips.findIndex((c) => c.name === name);
     this.clip = Math.max(0, found);
     this.time = 0;
-    this.turntable.add(this.current.mesh);
-    // Into a bird from a man (or back), zoom so it fills the plinth as he did.
-    if (this.current.zoom !== zoomed) this.scaled.scale.setScalar(this.current.zoom);
+    this.turntable.add(this.current.object);
   }
 
   playClip(index: number): void {
@@ -201,7 +245,7 @@ export class Inspector {
 
   reset(): void {
     this.turntable.rotation.y = 0;
-    this.scaled.scale.setScalar(this.current.zoom);
+    this.scaled.scale.setScalar(1);
   }
 
   private rotate(radians: number): void {
@@ -300,10 +344,7 @@ export class Inspector {
     const clip = b.clips[this.clip];
     if (this.playing) this.time = (this.time + dt * SPEEDS[this.speed]) % clip.duration;
 
-    const frame = clip.sample(this.time, this.pose);
-    b.rig?.apply(frame.pose);
-    const hip = frame.hip ?? [0, frame.hipY, 0];
-    b.rig?.setHipOffset(hip[0], hip[1], hip[2]);
+    const frame = b.play(this.clip, this.time);
     const tele = b.material.telegraph;
     if (frame.telegraph > 0 && clip.attack) {
       tele.copy(clip.attack.blockable ? _telegraphBlock : _telegraphUnblock).multiplyScalar(frame.telegraph);
@@ -315,10 +356,10 @@ export class Inspector {
     this.panel.draw(this.describe(b, clip));
   }
 
-  private updateGuides(b: Built, clip: Clip): void {
+  private updateGuides(b: Built, clip: Built['clips'][number]): void {
     this.guides.visible = this.showGuides;
     if (!this.showGuides) return;
-    const w = b.weapon;
+    const w = b.rig ? b.weapon : null;
     this.weaponLine.visible = w !== null;
     this.arrowLine.visible = false;
     if (!b.rig) return;
@@ -339,13 +380,13 @@ export class Inspector {
     }
   }
 
-  private describe(b: Built, clip: Clip): string[] {
+  private describe(b: Built, clip: Built['clips'][number]): string[] {
     const e = ENTRIES[this.entry];
     const a = clip.attack;
     const timing = a ? `wind ${a.windup}s  swing ${a.active}s  recover ${a.recover}s` : '';
-    const size = b.rig ? `×${b.height.toFixed(2)} height` : 'a flock of one';
+    const { height, triangles: tris } = b;
     return [
-      `${e.label.toUpperCase()}   ${this.entry + 1}/${ENTRIES.length}   ${size}   ${b.triangles} tris`,
+      `${e.label.toUpperCase()}   ${this.entry + 1}/${ENTRIES.length}   ×${height.toFixed(2)} height   ${tris} tris`,
       `${clip.name}   ${this.clip + 1}/${b.clips.length}   ${this.phase}`,
       `${this.time.toFixed(2)} / ${clip.duration.toFixed(2)} s   ${timing}`,
       `${this.playing ? 'playing' : 'PAUSED'}  ${SPEEDS[this.speed]}x   scale ${this.scaled.scale.x.toFixed(2)}   guides ${this.showGuides ? 'on' : 'off'}`,

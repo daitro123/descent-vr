@@ -105,8 +105,6 @@ export function buildForest(given?: ForestLayout): StartingZone {
     bounds: plan.walkable.bounds,
     landmarks: plan.landmarks,
     heightAt: plan.heightAt,
-    // The stream and the pond: every hollow below the one water line.
-    waterAt: (x, z) => (plan.ground.at(x, z) < FOREST.water ? FOREST.water : NaN),
     resolve: (p, radius) => plan.colliders.resolve(p, radius),
     collide: (p, radius) => plan.colliders.pushOut(p, radius),
     update(dt: number, camera: Camera) {

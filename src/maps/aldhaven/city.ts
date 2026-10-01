@@ -83,8 +83,8 @@ export function buildAldhaven(given?: AldhavenPlan): Zone {
     waterAt: (x, z) => {
       const { pond, land } = plan;
       const ground = plan.heightAt(x, z);
-      if (Math.hypot(x - pond.x, z - pond.z) < pond.r) return ground < pond.y ? pond.y : NaN;
-      return ground < ALDHAVEN.water || x > land.maxX ? ALDHAVEN.water : NaN;
+      if (Math.hypot(x - pond.x, z - pond.z) < pond.r) return ground < pond.y ? pond.y : null;
+      return ground < ALDHAVEN.water || x > land.maxX ? ALDHAVEN.water : null;
     },
     resolve: (p, radius) => plan.colliders.resolve(p, radius),
     collide: (p, radius) => plan.colliders.pushOut(p, radius),

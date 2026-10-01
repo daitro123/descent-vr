@@ -46,8 +46,7 @@ for (const [name, row, at] of [
     inspector.panel.mesh.visible = false;
     inspector.update(0);
     window.__lineup?.dispose();
-    const material = inspector.current.mesh.material;
-    const flock = new FlockMesh(row, Array.isArray(material) ? material[0] : material);
+    const flock = new FlockMesh(row, inspector.current.material);
     flock.mesh.matrixAutoUpdate = true;
     flock.mesh.frustumCulled = false;
     const floor = { heightAt: () => 0, waterAt: () => NaN };

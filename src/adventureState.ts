@@ -21,7 +21,7 @@ import { type ProfessionEffect, Professions, type ProfessionsSave, type RecipeId
 import { attributesAt, type ItemId, itemOf, type Worn, WORN_NOTHING } from './items';
 import { chestSeed, type Loot, rollChest, rollLoot, seeded } from './loot';
 import type { CampId } from './maps/types';
-import type { Family } from './models/characters';
+import type { EnemyFamily } from './models/characters';
 import { BARKS, type Chain, CHAINS, type GiverId, type Item, type Objective, type Place, type Quest, QUEST_ITEM, type QuestId, type QuestMoment, type Sword, SWORDS, type VillagerId } from './quests';
 import { fits, type Knobs, knobsOf, pointsAt, refusal, type Spent, spentAll, spentIn, type Talent, TALENT, talentAbilities, type TalentRefusal, tierOpen, type Tree } from './talents';
 
@@ -92,7 +92,7 @@ export type AdventureEvent =
       readonly level: number;
       readonly role: Role;
       /** Who it was, for the junk it drops. */
-      readonly family: Family;
+      readonly family: EnemyFamily;
       /** Its loot's seed: from the camp, the enemy and the time (loot.ts, lootSeed). */
       readonly seed: number;
     }

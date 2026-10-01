@@ -1,8 +1,8 @@
-import type { Material } from 'three';
+import { Group, type Material } from 'three';
 import { FlockMesh, newPose, type Placing } from '../birds/flock';
 import { type Carriage, calling, carriageOf, swimDepth, crouching, dabbling, flying, hissing, hopping, hovering, peck, plant, preening, squabbling, standing, striking, swimming, walking } from '../birds/poses';
 import { B, BIRD_LOOKS, type BirdLookId } from '../models/bird';
-import type { Clip } from './clips';
+import type { Moment, Showpiece } from './creatures';
 
 // The birds in the inspector: one bird of a look on the turntable (a flock of
 // one, drawn just as a flock is in the zones), looping each thing it does in
@@ -256,40 +256,47 @@ const CLIPS = {
 
 /**
  * A bird of `look` on the turntable, as the inspector's entry: its mesh, and
- * its clips as the inspector's own, each posing the bird as it's sampled.
+ * its clips, each posing the bird as it's played.
  */
-export class BirdStand {
+export class BirdStand implements Showpiece {
+  readonly object = new Group();
   readonly flock: FlockMesh;
-  readonly clips: Clip[];
-  /** Zoomed in, so a pigeon fills the plinth as a man does. */
-  readonly zoom: number;
+  readonly clips: readonly { readonly name: string; readonly duration: number }[];
+  /** Its length, bill to tail, against a skeleton grunt's height (as the critters' is). */
+  readonly height: number;
+  private readonly plays: readonly BirdClip[];
+  private readonly pose = newPose();
+  private readonly at: Placing = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, roll: 0 };
+  private readonly carriage: Carriage;
+  /** A swimmer sits this deep in the water: the plinth is the water. */
+  private readonly sink: number;
 
   constructor(readonly look: BirdLookId, material: Material) {
     this.flock = new FlockMesh([look], material);
     this.flock.mesh.matrixAutoUpdate = true;
+    this.object.add(this.flock.mesh);
     const body = BIRD_LOOKS[look].body;
-    const c = carriageOf(look);
-    const pose = newPose();
-    const at: Placing = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, roll: 0 };
-    const length = body.breast.z - body.rump.z + body.tail[0] + body.head[2] + body.beak[0];
-    this.zoom = Math.min(3, Math.max(1, 0.9 / length));
-    // A swimmer sits this deep in the water: the plinth is the water.
-    const sink = swimDepth(look);
-    this.clips = CLIPS[BIRD_LOOKS[look].family].map((clip) => ({
-      name: clip.name,
-      duration: clip.duration,
-      sample: (t: number) => {
-        Object.assign(at, { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, roll: 0 });
-        const phase = clip.sample(t, pose, at, c, body.leg, sink);
-        this.flock.pose(0, at, pose);
-        this.flock.bound(at.x, at.y, at.z, at.x, at.y, at.z);
-        this.flock.commit();
-        return { pose: {}, hipY: 0, phase, telegraph: 0 };
-      },
-    }));
+    this.height = (body.breast.z - body.rump.z + body.tail[0] + body.head[2] + body.beak[0]) / 1.74;
+    this.carriage = carriageOf(look);
+    this.sink = swimDepth(look);
+    this.plays = CLIPS[BIRD_LOOKS[look].family];
+    this.clips = this.plays.map(({ name, duration }) => ({ name, duration }));
+  }
+
+  play(clip: number, t: number): Moment {
+    const { at, pose } = this;
+    Object.assign(at, { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, roll: 0 });
+    const phase = this.plays[clip].sample(t, pose, at, this.carriage, BIRD_LOOKS[this.look].body.leg, this.sink);
+    this.flock.pose(0, at, pose);
+    this.flock.bound(at.x, at.y, at.z, at.x, at.y, at.z);
+    this.flock.commit();
+    return { phase, telegraph: 0 };
   }
 
   get triangles(): number {
     return this.flock.triangles;
   }
 }
+
+/** A bird of `look` for the inspector's turntable. */
+export const birdShowpiece = (look: BirdLookId, material: Material): Showpiece => new BirdStand(look, material);

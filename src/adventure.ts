@@ -63,6 +63,7 @@ import { Dropped } from './world/dropped';
 import { StashChest } from './world/stashChest';
 import type { Mine } from './world/mine';
 import { World } from './world/world';
+import { Critters } from './world/critters';
 import { pointsAt, type Talent, TALENT_POINT_LINE, type TalentRefusal } from './talents';
 
 const _a = new Vector3();
@@ -154,6 +155,8 @@ export class Adventure {
   private readonly peopleRoot: Object3D;
   /** Every zone's birds, flock by flock, built as you come near them (their root hidden with the outdoors). */
   readonly birds = new Birds((call, x, y, z) => sfx[call](new Vector3(x, y, z)));
+  /** Every zone's critters (hares, frogs, rats), living and drawn only near you. */
+  readonly critters: Critters;
   /** The alchemy bench in the house by the well; null in a zone without the house. The herbalist at its end is a villager. */
   readonly bench: AlchemyBench | null = null;
   /** The wind, the birds in the trees and each place's sound where it is. */
@@ -460,6 +463,9 @@ export class Adventure {
     scene.add(this.peopleRoot, this.birds.root);
     this.world.stageWith(null, this.peopleRoot);
     this.world.stageWith(null, this.birds.root);
+    this.critters = new Critters(this.world, new BlobShadows(CONFIG.critters.most));
+    scene.add(this.critters.root);
+    this.world.stageWith(null, this.critters.root);
     this.populate(zone, false);
     for (const n of neighbours) this.populate(n, true);
     // The smith's hammer rings on the anvil with each blow of their work.
@@ -552,6 +558,7 @@ export class Adventure {
   private populate(zone: Zone, lazy: boolean): void {
     this.people.add(zone.people);
     this.birds.add(zone.birds, surroundingsOf(zone));
+    this.critters.add(zone.critters ?? []);
     if (lazy) this.camps.add(zone.camps, this.world, true);
   }
 
@@ -563,7 +570,7 @@ export class Adventure {
     this.world.update(dt, player.camera);
     // With a door shut behind you, what stands outside isn't drawn either.
     const outdoors = this.world.outdoorsShown;
-    this.pickups.root.visible = this.villagers.root.visible = this.peopleRoot.visible = this.birds.root.visible = this.chests.outdoors.visible = outdoors;
+    this.pickups.root.visible = this.villagers.root.visible = this.peopleRoot.visible = this.birds.root.visible = this.critters.root.visible = this.chests.outdoors.visible = outdoors;
     // The starting zone's own people, out of doors, are drawn from another zone only near, as anyone's are.
     this.hale.root.visible = outdoors && this.drawn(this.distance(this.hale.root.position));
     for (const v of this.villagers.all) if (!v.spot.interior) v.root.visible = this.drawn(this.distance(v.root.position));
@@ -636,6 +643,7 @@ export class Adventure {
     this.villagers.update(dt, you.head, this.state);
     this.people.update(dt, you.head, this.crowdAt(you.head));
     this.birds.update(dt, you.head, this.birdsNear);
+    if (outdoors) this.critters.update(dt, you.head);
     // Talking to the herbalist holds the bench off: it takes your hands once the talk ends.
     this.bench?.update(dt, this.fighting, this.herbalistBoard.isOpen);
     this.pickUp();

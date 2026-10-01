@@ -51,7 +51,7 @@ for (const look of looks) {
         inspector.panel.mesh.visible = false;
         inspector.update(0);
         // Framed on the bird, wherever its clip has it: its posed vertices' box.
-        const mesh = b.mesh;
+        const mesh = b.object.children[0];
         mesh.updateMatrixWorld(true);
         const pos = mesh.geometry.getAttribute('position');
         const skin = mesh.geometry.getAttribute('skinIndex');

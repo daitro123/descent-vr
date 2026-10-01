@@ -8,7 +8,9 @@
 // Aldhaven and down into the Sallows (each zone's neighbours come in as you
 // stand in it). Each scene stands somewhere, looks at a flock (the headset
 // pitched up or down), lets it live a while, and takes a screenshot; some
-// walk into the flock and check what it does.
+// walk into the flock and check what it does. The shots are taken at a 45°
+// vertical field of view, half the emulated headset's, so a screenshot has
+// about the headset's pixels to a degree and a bird reads as it does there.
 //
 import { mkdirSync } from 'node:fs';
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
@@ -65,6 +67,27 @@ const flock = (id) =>
     return f.birds.map((b) => ({ x: b.at.x, y: b.at.y, z: b.at.z, doing: b.doing, perch: b.perch, leg: b.leg, act: b.act }));
   }, id);
 const zone = () => page.evaluate(() => window.__descent.world.zone.id);
+/** Stand `dist` m from (x, y, z), on the bearing `bearing` (rad from +Z, from it to you), looking at it. */
+const aimAt = async (x, y, z, dist, bearing, settle = 1) => {
+  await standLooking(x + Math.sin(bearing) * dist, z + Math.cos(bearing) * dist, x, z, settle);
+  await pitchTo(x, y, z);
+};
+/** Pitch the headset to look at (x, y, z). */
+const pitchTo = async (x, y, z) => {
+  const eye = await page.evaluate(() => {
+    const d = window.__descent;
+    const p = d.player.camera.getWorldPosition(d.player.camera.position.clone());
+    return { x: p.x, y: p.y, z: p.z };
+  });
+  await pitch(Math.atan2(y - eye.y, Math.hypot(x - eye.x, z - eye.z)));
+  await xrFrames(2);
+};
+/** The first of `spots` you could stand on in the zone you're in. */
+const standable = (spots) =>
+  page.evaluate((spots) => {
+    const { zone } = window.__descent.world;
+    return spots.find(([x, z]) => zone.walkable.contains(x, z) && !zone.collide({ x, y: 0, z }, 0.3)) ?? null;
+  }, spots);
 /**
  * Stand `dist` m from flock `id`'s birds' middle (on the bearing `bearing`,
  * rad from +Z, from them to you), looking at them, the headset pitched to
@@ -80,13 +103,7 @@ const frame = async (id, dist, bearing, settle = 1, aim = 0) => {
   let m = await mid();
   await standLooking(m.x + Math.sin(bearing) * dist, m.z + Math.cos(bearing) * dist, m.x, m.z, settle);
   m = await mid();
-  const eye = await page.evaluate(() => {
-    const d = window.__descent;
-    const p = d.player.camera.getWorldPosition(d.player.camera.position.clone());
-    return { x: p.x, y: p.y, z: p.z };
-  });
-  await pitch(Math.atan2(m.y + aim - eye.y, Math.hypot(m.x - eye.x, m.z - eye.z)));
-  await xrFrames(2);
+  await pitchTo(m.x, m.y + aim, m.z);
 };
 
 await page.goto(`${base}/?emulate&nodevui`);
@@ -101,6 +118,7 @@ await page.evaluate(() => {
   Object.assign(d.device.controllers.left.position, { x: -0.3, y: -1, z: 0.2 });
   Object.assign(d.device.controllers.right.position, { x: 0.3, y: -1, z: 0.2 });
   d.player.hp = 1e9;
+  d.device.fovy = Math.PI / 4;
 });
 const want = (name) => !only || only.some((o) => name.startsWith(o));
 
@@ -126,13 +144,14 @@ if (want('moor-hens')) {
 
 if (want('moor-ravens')) {
   await standLooking(56.5, 312, 56.5, 289.6, 4);
-  await standLooking(52, 300, 56.5, 289.6, 1);
-  await pitch(0.42);
+  // 12 m off, north-east of the stone: clear of the trees, outside a raven's 10 m.
+  await aimAt(56.5, 17.9, 289.6, 12, 0.8, 1);
   await shot('moor-ravens-stone');
   const r = await flock('brackenmoor-longstones-ravens');
   check(r?.[0].perch > 17 && Math.abs(r[0].y - r[0].perch - r[0].leg) < 0.01, `a raven on the third Long Stone's top (${r?.[0].y.toFixed(2)})`);
   await standLooking(56.5, 296, 56.5, 289.6, 1.5);
-  await pitch(0.6);
+  const flying = (await flock('brackenmoor-longstones-ravens'))[0];
+  await pitchTo(flying.x, flying.y, flying.z);
   await shot('moor-ravens-up');
   const up = await flock('brackenmoor-longstones-ravens');
   check(up[0].doing === 'fly' && up[1].doing === 'stand', `the near raven up as you come within 10 m, the far one (29 m off) still on its stone: ${up.map((b) => b.doing).join(', ')}`);
@@ -169,7 +188,7 @@ check((await zone()) === 'aldhaven', `on to Aldhaven (${await zone()})`);
 
 if (want('city-market')) {
   await standLooking(340, 352, 348, 340, 5);
-  await frame('aldhaven-market-pigeons', 4, -2.6, 1);
+  await frame('aldhaven-market-pigeons', 7, -2.6, 1);
   await shot('city-market-pigeons');
   const p = await flock('aldhaven-market-pigeons');
   check(p?.length === 10 && p.every((b) => b.doing === 'stand' || b.doing === 'walk'), `the market's pigeons feeding: ${p?.map((b) => b.doing).join(',')}`);
@@ -197,8 +216,10 @@ if (want('city-forecourt')) {
   const p = await flock('aldhaven-forecourt-pigeons');
   const m = p.reduce((a, b) => ({ x: a.x + b.x / p.length, z: a.z + b.z / p.length }), { x: 0, z: 0 });
   await standLooking(m.x, m.z, m.x, m.z - 4, 12);
-  await standLooking(m.x - 3, m.z + 8, 430, 336, 0.5);
-  await pitch(0.3);
+  // Back out to look at the statue and the walls, not under the south wall's pigeons.
+  const [vx, vz] = (await standable([[434, 350], [436, 347], [433, 351], [438, 344]])) ?? [434, 350];
+  await standLooking(vx, vz, 430, 336, 0.5);
+  await pitchTo(430, 11, 336);
   await shot('city-forecourt-perched');
   const perched = await flock('aldhaven-forecourt-pigeons');
   check(perched.every((b) => b.doing === 'stand' && b.perch > 8), `the forecourt's pigeons up on the statue and the walls: ${perched.map((b) => b.perch.toFixed(1)).join(',')}`);
@@ -222,9 +243,9 @@ if (want('city-hens')) {
 }
 
 if (want('city-harbour')) {
-  await standLooking(492, 382, 500, 389.2, 4);
-  await standLooking(493, 384.5, 505, 389.2, 1);
-  await pitch(-0.12);
+  // Along the Long Quay's edge from its west end, 8 m short of the first bollard (a gull's 7 m).
+  await standLooking(470, 386, 505, 389.2, 4);
+  await pitchTo(490, 3.2, 389.2);
   await shot('city-longquay-gulls');
   const g = await flock('aldhaven-longquay-gulls');
   check(g?.every((b) => b.doing === 'stand' && Math.abs(b.perch - 3.15) < 0.01), 'gulls on the Long Quay’s bollards');
@@ -260,13 +281,18 @@ if (want('fen-geese')) {
 }
 
 if (want('fen-heron')) {
-  await standLooking(403, 682, 403, 664, 4);
-  await frame('sallows-heron-south-lode', 14, 0, 1);
+  // The salt flats' heron and egret, out in the open shallows.
+  await standLooking(640, 905, 631.5, 892.5, 4);
+  await frame('sallows-heron-saltflats', 15, 0.8, 1, 0.5);
   await shot('fen-heron');
-  const h = await flock('sallows-heron-south-lode');
-  check(h?.[0].doing === 'stand', `a heron in the lode south of Reedholm (${h?.[0].doing})`);
-  await standLooking(h[0].x, h[0].z + 11, h[0].x, h[0].z, 1.2);
-  await pitch(0.25);
+  const h = await flock('sallows-heron-saltflats');
+  check(h?.[0].doing === 'stand', `a heron in the salt flats' shallows (${h?.[0].doing})`);
+  await frame('sallows-egret-saltflats', 14, -0.8, 1, 0.4);
+  await shot('fen-egret');
+  await standLooking(h[0].x + 6, h[0].z + 6, h[0].x, h[0].z, 1.2);
+  const up = (await flock('sallows-heron-saltflats'))[0];
+  check(up.doing === 'fly', `it flaps off as you wade within 12 m (${up.doing})`);
+  await pitchTo(up.x, up.y, up.z);
   await shot('fen-heron-up');
   await pitch(0);
 }
@@ -280,14 +306,16 @@ if (want('fen-ducks')) {
 
 if (want('fen-gibbet')) {
   await standLooking(334, 652, 323, 641, 4);
-  await pitch(0.2);
+  await aimAt(324.5, 7, 640.4, 13, 0.8, 1);
   await shot('fen-gibbet-crows');
+  const c = await flock('sallows-gibbet-crows');
+  check(c?.every((b) => b.doing === 'stand' && b.perch > 4), `crows on the gibbet tree: ${c?.map((b) => b.perch.toFixed(1)).join(',')}`);
   await pitch(0);
 }
 
 if (want('fen-hythe')) {
   await standLooking(704, 652, 694, 632, 4);
-  await pitch(-0.02);
+  await aimAt(694, 3.5, 632, 13, 2.4, 1);
   await shot('fen-hythe-gulls');
   await pitch(0);
 }

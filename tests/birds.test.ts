@@ -102,9 +102,9 @@ describe('the bird skeleton', () => {
     for (const look of LOOKS) {
       const stand = new BirdStand(look, material);
       expect(stand.clips.length, look).toBeGreaterThanOrEqual(8);
-      for (const clip of stand.clips) {
+      for (const [i, clip] of stand.clips.entries()) {
         for (let k = 0; k <= 6; k++) {
-          const f = clip.sample((k / 6) * clip.duration, {});
+          const f = stand.play(i, (k / 6) * clip.duration);
           expect(f.phase, `${look} ${clip.name}`).toBeTruthy();
           let [finite, reach] = [true, 0];
           stand.flock.vertices((x, y, z) => {

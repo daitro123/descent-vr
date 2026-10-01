@@ -1,5 +1,5 @@
 import { CONFIG } from './config';
-import type { Family } from './models/characters';
+import type { EnemyFamily } from './models/characters';
 
 // The item catalogue, as data, and the one rule that gives an item its
 // numbers from its item level and rarity. Nothing here is hand-tuned per item:
@@ -133,7 +133,27 @@ export const JUNK = {
     ['tithe-tally', 'Tithe Tally', 'tally'],
     ['key-badge', 'Black Key Badge', 'key-badge'],
   ],
-} as const satisfies Record<Family, readonly (readonly [string, string, string])[]>;
+  smuggler: [
+    ['tarred-twine', 'Tarred Twine', 'twine'],
+    ['lantern-shutter', 'Bent Lantern Shutter', 'shutter'],
+  ],
+  undergate: [
+    ['cellar-key', 'Rusted Cellar Key', 'cellar-key'],
+    ['loaded-dice', 'Loaded Dice', 'dice'],
+  ],
+  raider: [
+    ['eel-hook', 'Rusty Eel Hook', 'eel-hook'],
+    ['reed-charm', 'Plaited Reed Charm', 'reed-charm'],
+  ],
+  leech: [
+    ['leech-slime', 'Leech Slime', 'slime'],
+    ['leech-teeth', 'Leech Teeth', 'teeth'],
+  ],
+  snake: [
+    ['shed-adder-skin', 'Shed Adder Skin', 'snakeskin'],
+    ['adder-fang', 'Adder Fang', 'fang'],
+  ],
+} as const satisfies Record<EnemyFamily, readonly (readonly [string, string, string])[]>;
 
 /** Junk at every loot level: sold only, and worth its item level × `CONFIG.items.sell.grey`. */
 const junk = (): JunkItem[] =>

@@ -23,7 +23,7 @@ const _p = new Vector3();
 export function surroundingsOf(zone: Zone): Surroundings {
   return {
     heightAt: (x, z) => zone.heightAt(x, z),
-    waterAt: (x, z) => zone.waterAt(x, z),
+    waterAt: (x, z) => zone.waterAt?.(x, z) ?? NaN,
     clear: (x, z) => zone.walkable.contains(x, z) && !zone.collide(_p.set(x, 0, z), 0.2),
   };
 }

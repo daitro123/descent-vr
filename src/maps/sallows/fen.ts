@@ -64,7 +64,7 @@ export function buildSallows(given?: SallowsPlan): Zone {
     landmarks: plan.landmarks,
     heightAt: plan.heightAt,
     // The meres, the lodes and the channel: one water line over every hollow below it.
-    waterAt: (x, z) => (plan.ground.at(x, z) < SALLOWS.water ? SALLOWS.water : NaN),
+    waterAt: (x, z) => (plan.heightAt(x, z) < SALLOWS.water ? SALLOWS.water : null),
     resolve: (p, radius) => plan.colliders.resolve(p, radius),
     collide: (p, radius) => plan.colliders.pushOut(p, radius),
     update(dt: number, camera: Camera) {

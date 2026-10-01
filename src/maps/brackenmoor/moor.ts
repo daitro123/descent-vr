@@ -7,6 +7,7 @@ import { smokeFrom } from './buildings';
 import { buildMoorChunk, moorChunks, planMoor } from './chunks';
 import { MOOR_BUILD } from './palette';
 import { MOOR_BIRDS } from './birds';
+import { MOOR_CRITTERS } from './critters';
 import { MOOR_PEOPLE } from './people';
 import { MOOR, MOOR_ATMOSPHERE, type MoorPlan, type MoorStructure } from './plan';
 
@@ -49,6 +50,7 @@ export function buildBrackenmoor(given?: MoorPlan): Zone {
     villagers: [],
     people: MOOR_PEOPLE,
     birds: MOOR_BIRDS,
+    critters: MOOR_CRITTERS,
     // The east gate on the Kingsroad will have 35 within 100 m (brackenmoor-inhabitants.md).
     crowd: { near: 100, most: 35 },
     respawnPoints: [],
@@ -64,7 +66,7 @@ export function buildBrackenmoor(given?: MoorPlan): Zone {
     // The beck, its pools and the bog: the beck's level runs on over its banks, so only where the bed's under it.
     waterAt: (x, z) => {
       const level = plan.waterLevel(x, z);
-      return level > plan.ground.at(x, z) ? level : NaN;
+      return level > plan.heightAt(x, z) ? level : null;
     },
     resolve: (p, radius) => plan.colliders.resolve(p, radius),
     collide: (p, radius) => plan.colliders.pushOut(p, radius),
