@@ -12,15 +12,24 @@ import { type BoneName, type DressContext, type Proportions, Rig } from './rig';
 // the skeletons here (and the brute's stitched flesh), and bandits wear the
 // human body (people.ts).
 
-/** An enemy's behaviour: how it fights. */
-export type EnemyKind = 'grunt' | 'archer' | 'brute' | 'warden';
+/** An enemy's behaviour: how it fights. A biter strikes low at your legs (a leech, an adder). */
+export type EnemyKind = 'grunt' | 'archer' | 'brute' | 'warden' | 'biter';
 
-/** Who an enemy is, whatever its behaviour. The Warden is only ever undead. */
-export type Family = 'undead' | 'bandit';
+/** The behaviours fought on a human body or a skeleton: every one but the biter's, which only crawlers have. */
+export type HumanoidKind = Exclude<EnemyKind, 'biter'>;
+
+/**
+ * Who an enemy is, whatever its behaviour. The Warden is only ever undead;
+ * leeches and adders are crawlers (crawler.ts) and only ever biters.
+ */
+export type Family = 'undead' | 'bandit' | 'leech' | 'snake';
+
+/** The families on a human body or a skeleton. */
+export type HumanoidFamily = Extract<Family, 'undead' | 'bandit'>;
 
 /** The business end of a weapon, in its bone's space. Enemy strikes sweep this segment. */
-export interface WeaponSpec {
-  bone: BoneName;
+export interface WeaponSpec<B extends string = BoneName> {
+  bone: B;
   base: Vec3;
   tip: Vec3;
   radius: number;
@@ -198,7 +207,7 @@ function greatsword(ctx: DressContext): WeaponSpec {
 
 // ---------------------------------------------------------------- the bestiary
 
-export const PROPORTIONS: Record<EnemyKind, Proportions> = {
+export const PROPORTIONS: Record<HumanoidKind, Proportions> = {
   grunt: { hipY: 0.92, hipW: 0.09, spine: 0.44, shoulderW: 0.19, neck: 0.48, upperArm: 0.28, forearm: 0.25, thigh: 0.43, shin: 0.43 },
   archer: { hipY: 0.9, hipW: 0.09, spine: 0.43, shoulderW: 0.18, neck: 0.47, upperArm: 0.27, forearm: 0.25, thigh: 0.42, shin: 0.42 },
   brute: {
@@ -374,24 +383,24 @@ function dressWarden(ctx: DressContext): WeaponSpec {
 export interface BuildOptions {
   material?: Material;
   /** Its body: a skeleton (the default) or a bandit in the human body. */
-  family?: Family;
+  family?: HumanoidFamily;
   /** Varies helmets, cloth and weapons among grunts, and looks and weapons among thugs. */
   variant?: number;
 }
 
 /** The bone lengths of an enemy with this behaviour and family. */
-export function proportionsOf(kind: EnemyKind, family: Family = 'undead'): Proportions {
+export function proportionsOf(kind: HumanoidKind, family: HumanoidFamily = 'undead'): Proportions {
   if (family === 'undead') return PROPORTIONS[kind];
   return BUILDS[BANDIT_BUILDS[banditOnly(kind)]].proportions;
 }
 
 /** Bandits fight as thugs, archers and a leader; the Warden is only ever undead. */
-function banditOnly(kind: EnemyKind): BanditKind {
+function banditOnly(kind: HumanoidKind): BanditKind {
   if (kind === 'warden') throw new Error('The Warden is undead');
   return kind;
 }
 
-export function buildCharacter(kind: EnemyKind, opts: BuildOptions = {}): CharacterModel {
+export function buildCharacter(kind: HumanoidKind, opts: BuildOptions = {}): CharacterModel {
   let weapon: WeaponSpec | undefined;
   const variant = opts.variant ?? 0;
   const family = opts.family ?? 'undead';

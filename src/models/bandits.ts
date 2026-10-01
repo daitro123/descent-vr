@@ -1,5 +1,5 @@
 import { bow } from './bow';
-import type { EnemyKind, WeaponSpec } from './characters';
+import type { HumanoidKind, WeaponSpec } from './characters';
 import { type BuildName, body, HUE, head, hood, kerchief, type Look, quiver, sash, shade } from './human';
 import type { Vec3 } from './kit';
 import { PAL } from './palette';
@@ -13,7 +13,7 @@ const PI = Math.PI;
 const DOWN: Vec3 = [PI, 0, 0]; // taper parts grow along +Y; this flips them down a limb
 
 /** The behaviours a bandit fights with: the thug a grunt's, the archer an archer's, the leader a brute's. */
-export type BanditKind = Exclude<EnemyKind, 'warden'>;
+export type BanditKind = Exclude<HumanoidKind, 'warden'>;
 
 /** A short iron sword, in the hand along -Y, its edge to -Z. */
 function banditSword(ctx: DressContext): WeaponSpec {

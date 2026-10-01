@@ -5,6 +5,7 @@ import { createEnemy } from '../src/enemies/kinds';
 import { AttackTokens } from '../src/enemies/tokens';
 import { BANDIT_BUILDS } from '../src/models/bandits';
 import { BUILDS } from '../src/models/human';
+import type { Rig } from '../src/models/rig';
 import { Arena } from '../src/world/arena';
 import type { Ground } from '../src/world/ground';
 
@@ -49,7 +50,7 @@ describe.each(['grunt', 'archer', 'brute'] as const)('a bandit %s', (kind) => {
     bandit.update(DT, far());
     undead.update(DT, far());
     expect(bandit.hittable).toBe(true);
-    expect(hipsY(bandit)).toBeCloseTo(bandit.rig.proportions.hipY, 1);
+    expect(hipsY(bandit)).toBeCloseTo((bandit.rig as Rig).proportions.hipY, 1);
     expect(undead.hittable).toBe(false);
     expect(hipsY(undead)).toBeLessThan(0);
   });

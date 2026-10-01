@@ -3,6 +3,7 @@ import type { Role } from '../adventureState';
 import type { RoadPoint } from '../enemies/patrol';
 import type { Item, Place, VillagerId } from '../quests';
 import type { EnemyKind, Family } from '../models/characters';
+import type { CritterLook } from '../models/critters';
 import type { CastId } from '../people/cast';
 import type { WorkName } from '../people/work';
 import type { PlaceSound, TreeCover, ZoneAmbience } from '../world/ambience';
@@ -90,6 +91,21 @@ export interface PersonPlan {
    * to walk: a street, a road, a quay.
    */
   readonly route?: readonly RoadPoint[];
+}
+
+/**
+ * A critter a zone places by data (world/critters.ts): a hare on the moor, a
+ * frog at a pool's edge, a rat along a wall. It lives round its spot by its
+ * family's rule and runs from you, so `yaw` says which way: a frog leaps the
+ * way it faces, into the water; a rat runs along its wall this way or back.
+ */
+export interface CritterPlan {
+  readonly look: CritterLook;
+  /** Its spot, in world metres (x east, z south). */
+  readonly x: number;
+  readonly z: number;
+  /** As a model turns: its front faces (sin yaw, cos yaw), so 0 faces +Z. */
+  readonly yaw: number;
 }
 
 /**
@@ -287,6 +303,10 @@ export interface Zone extends MapBase {
   readonly villagers: readonly VillagerSpot[];
   /** Its other villagers, placed by data and built as you come near them. */
   readonly people: readonly PersonPlan[];
+  /** Its critters, placed by data, living and drawn only while you're near (world/critters.ts). */
+  readonly critters?: readonly CritterPlan[];
+  /** The water's surface at (x, z) where water stands over the ground, or null where it's dry (Ground.waterAt). Without it, the zone is dry. */
+  waterAt?(x: number, z: number): number | null;
   /**
    * Where you wake after dying in it, out of doors: the one nearest where you
    * fell. None, and you wake by Oakvale's inn hearth (a death in the mine

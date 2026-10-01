@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CONFIG, type EnemyConfig } from '../src/config';
 import { IDLE } from '../src/enemies/poses';
 import { castClips, clipsFor, type MutablePose, personClips } from '../src/inspector/clips';
-import type { EnemyKind } from '../src/models/characters';
+import type { HumanoidKind as EnemyKind } from '../src/models/characters';
 import { PEOPLE, type PersonId } from '../src/models/people';
 import { BONES } from '../src/models/rig';
 import { CAST, type CastId } from '../src/people/cast';

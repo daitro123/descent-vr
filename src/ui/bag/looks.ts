@@ -79,6 +79,10 @@ const MODELS: Readonly<Record<string, ItemLook>> = {
   cloth: { look: 'cloth', tint: 0x8a6a5a },
   charm: { look: 'charm', tint: PAL.bone },
   dust: { look: 'dust', tint: 0x9a9488 },
+  slime: { look: 'dust', tint: 0x4a5a34 },
+  teeth: { look: 'charm', tint: 0xd8cfb0 },
+  snakeskin: { look: 'cloth', tint: 0x8a7e66 },
+  fang: { look: 'charm', tint: 0xe8e0c8 },
   // Professions' materials and what they make (the pouch stands in for ore, stone, bars and herbs).
   'ore-copper': { look: 'pouch', tint: 0xb8733a },
   'stone-rough': { look: 'pouch', tint: 0x8a8680 },
