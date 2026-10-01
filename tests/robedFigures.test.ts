@@ -71,7 +71,7 @@ describe('the robed and named figures', () => {
     const skin = robe.mesh.geometry.getAttribute('skinIndex');
     const hidden = (['upperArmL', 'upperArmR', 'thighL', 'thighR'] as const).map((b) => BONES.indexOf(b));
     for (let i = 0; i < skin.count; i++) expect(hidden).not.toContain(skin.getX(i));
-    // A short gown shows the thighs below it, so it keeps them.
+    // A gown to the knee hides the thighs too; a doublet's skirt shows them below it, so they're built.
     expect(robed(0.3).thighs).toBe(true);
     expect(robed(0.45).thighs).toBe(false);
   });

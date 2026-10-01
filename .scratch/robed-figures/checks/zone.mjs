@@ -77,7 +77,7 @@ const ours = () =>
             sole = Math.min(sole, v.y);
           }
           const bones = o.skeleton.bones;
-          for (const n of ['forearmR', 'forearmL', 'upperArmR', 'spine', 'head']) {
+          for (const n of ['forearmR', 'forearmL', 'upperArmR', 'handR', 'handL', 'spine', 'head']) {
             const b = bones.find((b) => b.name === n);
             if (b) arm += b.rotation.x * 7 + b.rotation.y * 3 + b.rotation.z;
           }
@@ -103,7 +103,11 @@ const SPOTS = [
     eye: [402.6, 274.6],
     at: [399.5, 272.9],
   },
-  { name: 'aldhaven-harrowgate-steps', people: [{ cast: 'ladyHarrowgate', x: 461.5, z: 307.2, yaw: S }], eye: [462.3, 310.2], at: [461.5, 307.2] },
+  // Her spec spot (461.5, 307.2), Rook's (475, 264.5) and the cathedral's
+  // (430, 350) and (429.5, 346.5) are on their doors' built steps, which the
+  // ground's height doesn't know: there they stand sunk in them. So they
+  // stand at the steps' foot here.
+  { name: 'aldhaven-harrowgate-steps', people: [{ cast: 'ladyHarrowgate', x: 461.5, z: 310.8, yaw: S }], eye: [462.4, 313.7], at: [461.5, 310.8] },
   {
     name: 'aldhaven-crown-terrace',
     people: [
@@ -113,16 +117,18 @@ const SPOTS = [
     eye: [421, 317.2],
     at: [420.7, 314.3],
   },
-  { name: 'aldhaven-barracks-yard', people: [{ cast: 'sergeantRook', x: 475, z: 264.5, yaw: S, work: 'form' }], eye: [475.8, 267.4], at: [475, 264.5] },
+  { name: 'aldhaven-barracks-yard', people: [{ cast: 'sergeantRook', x: 475, z: 267.2, yaw: S, work: 'form' }], eye: [475.8, 270.1], at: [475, 267.2] },
   { name: 'aldhaven-kings-garden-range', people: [{ cast: 'lodgemasterAshgrove', x: 332, z: 269, yaw: E, work: 'loose' }], eye: [334.8, 268], at: [332, 269] },
   {
     name: 'aldhaven-cathedral-west-door',
+    // The west steps reach to within a metre of the close's wall (x 428), so
+    // the pair stand just north of them, seen from the close's west gate.
     people: [
-      { cast: 'motherYsolde', x: 430, z: 350, yaw: W, work: 'pray' },
-      { cast: 'dawnPriest', x: 429.5, z: 346.5, yaw: W, work: 'read' },
+      { cast: 'motherYsolde', x: 430, z: 343.8, yaw: W, work: 'pray' },
+      { cast: 'dawnPriest', x: 430.3, z: 341.6, yaw: W + 0.3, work: 'read' },
     ],
-    eye: [427.4, 351.4],
-    at: [429.8, 348.4],
+    eye: [426.6, 344.6],
+    at: [430.1, 342.7],
   },
   { name: 'aldhaven-almonry', people: [{ cast: 'sisterAgna', x: 438, z: 370.5, yaw: N, work: 'alms' }], eye: [438.4, 367.7], at: [438, 370.5] },
   {
@@ -158,16 +164,18 @@ const SPOTS = [
   { name: 'fellgate-porch', people: [{ cast: 'sirDunmore', x: 160, z: 325.6, yaw: S }], eye: [160.4, 328.4], at: [160, 325.6] },
   { name: 'fellgate-forecourt', people: [{ cast: 'stewardPell', x: 165, z: 336, yaw: S, work: 'ledger' }], eye: [165.4, 338.8], at: [165, 336] },
   { name: 'reedholm-hask-office', people: [{ cast: 'joryHask', x: 402.8, z: 616.8, yaw: W, work: 'ledger' }], eye: [400, 617.2], at: [402.8, 616.8] },
+  // The trainers stand at the moot hall island's corners, facing west over the
+  // plank square; you look from the island's west rim, clear of the hall.
   {
     name: 'reedholm-moot-island',
     people: [
-      { cast: 'warriorTrainer', x: 417.5, z: 604.5, yaw: N + 0.3, work: 'form' },
-      { cast: 'mageTrainer', x: 424, z: 604.3, yaw: N - 0.3, work: 'read' },
+      { cast: 'warriorTrainer', x: 417.5, z: 604.5, yaw: W + 0.3, work: 'form' },
+      { cast: 'mageTrainer', x: 424, z: 604.3, yaw: W - 0.3, work: 'read' },
     ],
-    eye: [420.8, 601.2],
-    at: [420.8, 604.4],
+    eye: [415.3, 607.4],
+    at: [420.5, 604.4],
   },
-  { name: 'reedholm-moot-island-south', people: [{ cast: 'rangerTrainer', x: 417.5, z: 617.5, yaw: SW, work: 'fletch' }], eye: [415.4, 619.6], at: [417.5, 617.5] },
+  { name: 'reedholm-moot-island-south', people: [{ cast: 'rangerTrainer', x: 417.5, z: 617.5, yaw: W, work: 'fletch' }], eye: [415.3, 614.8], at: [417.5, 617.5] },
   { name: 'saint-odo-churchyard-gate', people: [{ cast: 'brotherAnsgar', x: 308, z: 824, yaw: SW, work: 'salt' }], eye: [306, 826], at: [308, 824] },
 ];
 
