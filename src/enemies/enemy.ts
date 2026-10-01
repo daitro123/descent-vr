@@ -198,7 +198,7 @@ export abstract class Enemy {
   readonly family: EnemyFamily;
   /** What its family is made of: how it comes and goes, and what flies when it's hit. */
   readonly body: EnemyBody;
-  /** Which of its family's named it is (a rare, a boss), or null for an ordinary fighter. */
+  /** Which of its family's named fighters it is (FamilyDef.named), or null for an ordinary fighter. */
   readonly named: string | null;
   /** Lying hidden where it was raised, still to rise: until you come near or its camp fights. */
   lurking: boolean;
@@ -353,9 +353,8 @@ export abstract class Enemy {
       copyPose(this.idlePose(), this.pose);
     }
 
-    // A boss (the Warden, the Reeve) has its name over a long bar; a named rare over a red one a little longer than the rest.
+    // A boss (the Warden, the Reeve) has its name over a long bar; a named fighter with a title (the Mire King) over a red one a little longer than the rest.
     const big = kind === 'warden';
-    // A boss (the Warden, the Reeve) has its name over a long bar; a rare over a red one a little longer than the rest.
     const title = kind !== 'biter' && isFamily(family) ? fighterOf(kind, family, named).title?.toUpperCase() : undefined;
     this.healthBar = big ? new HealthBar(1.4, 0.1, 0x6ad0ff, title) : title ? new HealthBar(0.7, 0.06, 0xc81e1e, title) : new HealthBar(0.5, 0.05, 0xc81e1e);
     this.healthBar.root.position.y = this.barHeight() + (title && !big ? 0.06 : 0);

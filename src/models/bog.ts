@@ -273,8 +273,9 @@ function dressSewerBeast(ctx: DressContext): WeaponSpec {
 /**
  * The bog's beasts: mud, so they lie sunk in it as mounds until something
  * comes near, and heave up. The lurker fights as a brute (the mire toads,
- * four-legged, are another thread's grunts); the Mire King is the rare, the
- * sewer beast a lurker that crawled into Aldhaven's drains.
+ * four-legged, are another thread's grunts). Its named fighters: the Mire
+ * King, half again a lurker's size, in the Mire's heart (the zone spec's
+ * rare), and the sewer beast, a lurker that crawled into Aldhaven's drains.
  */
 export const BOG: FamilyDef = {
   body: 'mud',

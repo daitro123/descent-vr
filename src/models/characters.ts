@@ -54,7 +54,7 @@ export interface Fighter {
   readonly proportions: Proportions;
   /** Dress it in look `variant` (any whole number: it wraps), and say what it strikes with. */
   dress(ctx: DressContext, variant: number): WeaponSpec;
-  /** Its name over its health bar, if it goes by one: the bosses and the rares. */
+  /** Its name over its health bar, if it goes by one: the bosses, and named fighters the fen tales name (the Mire King). */
   readonly title?: string;
 }
 

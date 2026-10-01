@@ -457,7 +457,7 @@ function dressReeve(ctx: DressContext): WeaponSpec {
 }
 
 /**
- * The Old Lantern Man, the drowned thing the fen tale is named for (a rare):
+ * The Old Lantern Man, the drowned thing the fen tale is named for (the zone spec's rare):
  * a grunt in a ragged hooded oilskin, its marsh-light lantern lit in its left
  * hand, an eel gaff in its right.
  */
@@ -502,7 +502,7 @@ export const DROWNED: FamilyDef = {
     warden: { label: 'Drowned Reeve', looks: 1, proportions: DROWNED_PROPORTIONS.warden, dress: dressReeve, title: 'The Drowned Reeve' },
   },
   named: {
-    /** The rare the fen tale is about: a drowned grunt with a lantern. */
+    /** The one the fen tale is about, on the Gibbet Willow's holm: a drowned grunt with a lantern. */
     oldLanternMan: { kind: 'grunt', label: 'The Old Lantern Man', title: 'The Old Lantern Man', looks: 1, proportions: DROWNED_PROPORTIONS.grunt, dress: dressLanternMan },
   },
 };
