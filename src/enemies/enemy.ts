@@ -64,6 +64,8 @@ export interface EnemyTraits {
   family?: Family;
   /** Which of its family's looks for its behaviour. */
   variant?: number;
+  /** One of its family's named fighters, dressed for one place: a leader, a boss (FamilyDef.named). */
+  named?: string;
   /** Its numbers, already made at its level. */
   def?: EnemyConfig;
   /** Its level, which `def`'s numbers were made at: what its kill pays for. */
@@ -272,14 +274,14 @@ export abstract class Enemy {
     z: number,
     traits: EnemyTraits = {},
   ) {
-    const { family = 'undead', variant = 0, def = CONFIG.enemies[kind], level = 1 } = traits;
+    const { family = 'undead', variant = 0, named, def = CONFIG.enemies[kind], level = 1 } = traits;
     this.family = family;
     this.body = FAMILIES[family].body;
     this.def = def;
     this.level = level;
     this.hp = this.maxHp = this.def.hp;
     this.material = createModelMaterial();
-    const model = buildCharacter(kind, { material: this.material, family, variant });
+    const model = buildCharacter(kind, { material: this.material, family, variant, named });
     this.rig = model.rig;
     this.weapon = model.weapon;
     this.position = this.root.position;
