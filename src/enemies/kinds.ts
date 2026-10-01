@@ -236,6 +236,8 @@ interface CrawlerPoses {
 }
 /** m inside its full reach a biter starts its lunge from, so a lunge at someone standing still lands. */
 const BITE_MARGIN = 0.08;
+/** How much of its height a biter swimming keeps under the surface: it rides on the water, its back well clear, so you see it coming. */
+const AWASH = 0.25;
 
 const CRAWLER_POSES: Record<CrawlerKind, CrawlerPoses> = {
   leech: { rest: restPose('leech'), recoil: recoilPose('leech'), curl: curlPose('leech'), strike: strikePoses('leech') },
@@ -306,7 +308,7 @@ export class Biter extends MeleeEnemy {
   protected standY(ground: Ground, x: number, z: number): number {
     const bed = ground.heightAt(x, z);
     const water = ground.waterAt?.(x, z) ?? null;
-    return water === null ? bed : Math.max(bed, water - this.build.height * 0.6);
+    return water === null ? bed : Math.max(bed, water - this.build.height * AWASH);
   }
 
   /** Light: blows knock it about. */

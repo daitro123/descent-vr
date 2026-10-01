@@ -2,8 +2,10 @@ import { Matrix4, Quaternion, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { type Contact, type Defender, sweepStrike } from '../src/combat/strike';
 import { CONFIG } from '../src/config';
+import { Camps } from '../src/enemies/camps';
 import { type Enemy, type EnemyContext, keepApart } from '../src/enemies/enemy';
 import { Biter, createEnemy } from '../src/enemies/kinds';
+import type { PostPlan } from '../src/maps/types';
 import { AttackTokens } from '../src/enemies/tokens';
 import { buildCrawler, CRAWLER_LOOKS, type CrawlerLook, crawlerLook, restPose, strikeReach } from '../src/models/crawler';
 import { Arena } from '../src/world/arena';
@@ -158,12 +160,13 @@ describe.each(LOOKS)('a %s', (_name, family, variant) => {
     expect(r).toBeGreaterThan(0.05);
   });
 
-  it('swims at the surface of water over it, its back awash, and lies on the ground where it is dry', () => {
+  it('swims on the surface of water over it, its belly awash and its back clear, and lies on the ground where it is dry', () => {
     const e = make();
     const wet: Ground = { ...openGround, heightAt: () => -0.6, waterAt: (x) => (x < 5 ? 0 : null) };
     e.update(DT, { ...quiet(), ground: wet });
     const h = CRAWLER_LOOKS[crawlerLook(family, variant)].build.height;
-    expect(e.position.y).toBeCloseTo(-h * 0.6, 3);
+    expect(e.position.y).toBeLessThan(0);
+    expect(e.position.y).toBeGreaterThan(-h * 0.4);
     e.position.x = 6;
     e.update(DT, { ...quiet(), ground: wet });
     expect(e.position.y).toBe(-0.6);
@@ -220,5 +223,19 @@ describe('the crawler body', () => {
     expect(reach('motherLeech')).toBeGreaterThan(reach('mireLeech'));
     expect(reach('mireLeech')).toBeGreaterThan(reach('fenLeech'));
     for (const look of Object.keys(CRAWLER_LOOKS) as CrawlerLook[]) expect(reach(look)).toBeGreaterThan(CRAWLER_LOOKS[look].build.length / 2);
+  });
+});
+
+describe('a camp of biters', () => {
+  it('raises its leeches as mire leeches, unless a post sets its look: the fen leech, or the Old Mother', () => {
+    const post = (x: number, variant?: number): PostPlan => ({ behaviour: 'biter', family: 'leech', x, z: 0, yaw: 0, variant });
+    const camps = new Camps(
+      [{ id: 'fen-leeches', place: { x: 0, z: 0, r: 6 }, level: 10, posts: [post(0), post(2), post(4, 1), post(6, 2)] }],
+      openGround,
+      { sweep: () => null, slam: () => {}, shoot: () => {}, nock: () => {}, telegraph: () => {} },
+    );
+    const lengths = camps.enemies.map((e) => (e.rig.proportions as { length: number }).length);
+    const L = (look: CrawlerLook) => CRAWLER_LOOKS[look].build.length;
+    expect(lengths).toEqual([L('mireLeech'), L('mireLeech'), L('fenLeech'), L('motherLeech')]);
   });
 });

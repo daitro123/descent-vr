@@ -139,8 +139,14 @@ export interface PostPlan {
   readonly role?: Extract<Role, 'leader' | 'deepBrute'>;
   /** Its level, if not its camp's (the mine's deep brutes). */
   readonly level?: number;
-  /** Who it is: bandits wear the human body, the undead are skeletons. */
+  /** Who it is: bandits wear the human body, the undead are skeletons, leeches and adders are crawlers. */
   readonly family: Family;
+  /**
+   * Which of its family's looks, if a set one. A leech's are 0 the black mire
+   * leech, 1 the pale fen leech and 2 the Old Mother Leech. Unset, a person or
+   * skeleton takes one at random and a leech is a mire leech.
+   */
+  readonly variant?: number;
   readonly x: number;
   readonly z: number;
   /** As a model turns about +Y: its front faces (sin yaw, cos yaw), so 0 faces +Z. */

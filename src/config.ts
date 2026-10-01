@@ -982,7 +982,7 @@ export const CONFIG = {
   // run away from you, never towards you.
   critters: {
     near: 40, // m: critters this near you move and are drawn; farther ones wait unseen where they are
-    most: 24, // of one look in one frame drawn at once, the nearest first
+    most: 24, // critters drawn at once in all, the nearest first
     // Hares and rabbits sit, graze, sit up and hop about their spot, sit up to watch you within `notice` m, and bolt
     // within `flee`, zig-zagging (each hop up to `zig` rad off straight away) until you're `safe` m off.
     rabbit: {
