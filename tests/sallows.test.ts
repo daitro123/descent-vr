@@ -241,7 +241,7 @@ describe('what stands in the Sallows', () => {
         const d = Math.min(...road.line.filter(([x, z]) => inside(x, z)).map(([x, z]) => Math.hypot(x - s.x, z - s.z)));
         expect(d - road.width / 2, `${s.kind} at (${s.x.toFixed(1)}, ${s.z.toFixed(1)}) by ${road.id}`).toBeGreaterThan(Math.min(s.w, s.d) / 2);
       }
-      // The forge stands on its own stone footing, the lanterns on the walkways' edges, the market's stalls and crates round the square's edges.
+      // The forge stands on its own stone footing, the lanterns on the walkways' edges, the market's stalls, crates and tables round the square's edges.
       const square = plan.decks.find((d) => d.x === REEDHOLM.square.x && d.z === REEDHOLM.square.z);
       for (const deck of s.kind === 'forge' || s.kind === 'lanternPost' ? [] : plan.decks) {
         const dx = s.x - deck.x;
@@ -250,7 +250,7 @@ describe('what stands in the Sallows', () => {
         const lz = dx * Math.sin(deck.yaw) + dz * Math.cos(deck.yaw);
         const on = Math.abs(lx) < deck.hw && Math.abs(lz) < deck.hd;
         // Well off the main walkway across the square's middle.
-        if ((s.kind === 'stall' || s.kind === 'crates') && deck === square) expect(on && Math.abs(s.z - REEDHOLM.square.z) < 4, `${s.kind} at (${s.x.toFixed(1)}, ${s.z.toFixed(1)}) in the square's way`).toBe(false);
+        if ((s.kind === 'stall' || s.kind === 'crates' || s.kind === 'trestle') && deck === square) expect(on && Math.abs(s.z - REEDHOLM.square.z) < 4, `${s.kind} at (${s.x.toFixed(1)}, ${s.z.toFixed(1)}) in the square's way`).toBe(false);
         else expect(on, `${s.kind} at (${s.x.toFixed(1)}, ${s.z.toFixed(1)}) on a deck`).toBe(false);
       }
     }
