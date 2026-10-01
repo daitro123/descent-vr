@@ -6,6 +6,7 @@ import { buildWaterSheet } from '../waterSheet';
 import { smokeFrom } from './buildings';
 import { buildMoorChunk, moorChunks, planMoor } from './chunks';
 import { MOOR_BUILD } from './palette';
+import { MOOR_BIRDS } from './birds';
 import { MOOR_ANIMALS } from './animals';
 import { MOOR_CRITTERS } from './critters';
 import { MOOR_PEOPLE } from './people';
@@ -16,9 +17,9 @@ import { MOOR, MOOR_ATMOSPHERE, type MoorPlan, type MoorStructure } from './plan
  * Oakvale's crest, its chunk builder (chunks.ts), and the extras built once on
  * the main thread: the water of the beck, the Blackmire's pools and Beck's
  * Foot as one sheet, and the peat smoke over Cairnford's and the crofts'
- * chimneys. Its villagers (people.ts) and its sheep, dogs and horses
- * (animals.ts) are built as you come near them; nothing can hurt you yet, so
- * it has no camps and nowhere to wake.
+ * chimneys. Its villagers (people.ts), its sheep, dogs and horses (animals.ts)
+ * and its birds (birds.ts) are built as you come near them; nothing can hurt
+ * you yet, so it has no camps and nowhere to wake.
  */
 export function buildBrackenmoor(given?: MoorPlan): Zone {
   const plan = given ?? planMoor();
@@ -50,6 +51,7 @@ export function buildBrackenmoor(given?: MoorPlan): Zone {
     mine: null,
     villagers: [],
     people: MOOR_PEOPLE,
+    birds: MOOR_BIRDS,
     critters: MOOR_CRITTERS,
     // The east gate on the Kingsroad will have 35 within 100 m (brackenmoor-inhabitants.md).
     crowd: { near: 100, most: 35 },
@@ -64,6 +66,7 @@ export function buildBrackenmoor(given?: MoorPlan): Zone {
     bounds: plan.walkable.bounds,
     landmarks: plan.landmarks,
     heightAt: plan.heightAt,
+    // The beck, its pools and the bog: the beck's level runs on over its banks, so only where the bed's under it.
     waterAt: (x, z) => {
       const level = plan.waterLevel(x, z);
       return level > plan.heightAt(x, z) ? level : null;

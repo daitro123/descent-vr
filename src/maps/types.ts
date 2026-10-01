@@ -2,6 +2,7 @@ import type { Camera, Object3D, Vector3 } from 'three';
 import type { Role } from '../adventureState';
 import type { RoadPoint } from '../enemies/patrol';
 import type { Item, Place, QuestMoment, VillagerId } from '../quests';
+import type { BirdLookId } from '../models/bird';
 import type { EnemyFamily, EnemyKind } from '../models/characters';
 import type { CritterLook } from '../models/critters';
 import type { CastId } from '../people/cast';
@@ -114,6 +115,65 @@ export interface PersonPlan {
 export interface Crowd {
   readonly near: number;
   readonly most: number;
+}
+
+/**
+ * How a flock of birds lives (birds/ways.ts), as the inhabitant specs ask:
+ * - `peck`: feeds about its patch of ground; runs off from you and wanders back (hens).
+ * - `graze`: feeds about its patch; one hisses at you while the rest waddle off (geese).
+ * - `flush`: feeds about its patch; bursts up all at once as you come through,
+ *   settles on its perches, and drops back down once you've gone (pigeons).
+ * - `covey`: hidden in cover until you're nearly on it, then bursts up and flies
+ *   off low a long way before dropping back in; home again later (grouse).
+ * - `perch`: each bird on its own perch; flies off as you come near, circles
+ *   overhead and lands again once you've gone (ravens, crows, gulls on bollards).
+ * - `circle`: circles overhead, never landing (gulls over a harbour).
+ * - `swim`: paddles about its stretch of water and dabbles; flies off as you
+ *   wade in and comes back down onto it later (ducks), or paddles away (swans).
+ * - `wade`: stands in the shallows and strikes at the water; flies off as you
+ *   near, a long way, and comes home again later (herons, egrets).
+ */
+export type BirdWays = 'peck' | 'graze' | 'flush' | 'covey' | 'perch' | 'circle' | 'swim' | 'wade';
+
+/**
+ * Where a bird can sit: the perch's top (world metres; none, the ground
+ * there) and which way birds there face; a ridge or a rail holds them in a
+ * row `w` m long, across the way they face.
+ */
+export interface Perch {
+  readonly x: number;
+  readonly y?: number;
+  readonly z: number;
+  readonly yaw?: number;
+  readonly w?: number;
+}
+
+/**
+ * A flock of birds a zone places by data (birds/birds.ts): which birds, how
+ * they live and where. One flock is one mesh and one draw call however many
+ * birds are in it. Built as you come within CONFIG.birds.near and dropped as
+ * you go, like the villagers; back home and at peace when it's built again.
+ */
+export interface BirdFlockPlan {
+  /** Unique across the world, prefixed with the place: 'aldhaven-market-pigeons'. */
+  readonly id: string;
+  readonly ways: BirdWays;
+  /** Its birds, one look each (models/bird.ts BIRD_LOOKS), in order: a drake and a duck, a cock among hens. */
+  readonly birds: readonly BirdLookId[];
+  /**
+   * Where it keeps (world metres, x east, z south): the middle of the ground
+   * or water it feeds on and how far round it goes; a covey's or a heron's
+   * spot; the middle of where perchers or gulls circle, and how wide.
+   */
+  readonly x: number;
+  readonly z: number;
+  readonly r: number;
+  /** A percher's perches (one per bird, in turn), or where a flushed flock settles. */
+  readonly perches?: readonly Perch[];
+  /** How near you come before it takes fright, if not its kind's (m). */
+  readonly shy?: number;
+  /** Circling, how high over the ground or water it goes, lowest and highest (m). */
+  readonly high?: readonly [number, number];
 }
 
 /**
@@ -408,6 +468,8 @@ export interface Zone extends MapBase {
   readonly villagers: readonly VillagerSpot[];
   /** Its other villagers, placed by data and built as you come near them. */
   readonly people: readonly PersonPlan[];
+  /** Its birds, flock by flock, placed by data and built as you come near them. */
+  readonly birds: readonly BirdFlockPlan[];
   /** The water's surface at (x, z) where water stands over the ground, or null where it's dry (Ground.waterAt). Without it, the zone is dry. */
   waterAt?(x: number, z: number): number | null;
   /** How near you villagers are built while you're in it, and how many at once. */

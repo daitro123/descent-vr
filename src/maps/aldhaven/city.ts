@@ -4,6 +4,7 @@ import { Glows } from '../../world/glows';
 import { fbm, lerp, smoothstep } from '../forest/noise';
 import { MeshBuffer } from '../forest/terrain';
 import type { Zone } from '../types';
+import { ALDHAVEN_BIRDS } from './birds';
 import { aldhavenChunks, buildAldhavenChunk } from './chunks';
 import { CITY_GROUND, CITY_WATER } from './palette';
 import { ALDHAVEN, ALDHAVEN_ATMOSPHERE, type AldhavenPlan, planAldhaven } from './plan';
@@ -64,6 +65,7 @@ export function buildAldhaven(given?: AldhavenPlan): Zone {
     mine: null,
     villagers: [],
     people: [],
+    birds: ALDHAVEN_BIRDS,
     // Within 100 m the cathedral front and the Aldbridge break the frame budget; within 50 m every
     // spot fits, and the busiest circle has 45 people (aldhaven-inhabitants.md).
     crowd: { near: 50, most: 45 },
@@ -78,6 +80,13 @@ export function buildAldhaven(given?: AldhavenPlan): Zone {
     bounds: plan.walkable.bounds,
     landmarks: plan.landmarks,
     heightAt: plan.heightAt,
+    // The King's Garden's pond at its own height; else the river, the harbour and the sea, out past the land east.
+    waterAt: (x, z) => {
+      const { pond, land } = plan;
+      const ground = plan.heightAt(x, z);
+      if (Math.hypot(x - pond.x, z - pond.z) < pond.r) return ground < pond.y ? pond.y : null;
+      return ground < ALDHAVEN.water || x > land.maxX ? ALDHAVEN.water : null;
+    },
     resolve: (p, radius) => plan.colliders.resolve(p, radius),
     collide: (p, radius) => plan.colliders.pushOut(p, radius),
     update(dt, camera) {
