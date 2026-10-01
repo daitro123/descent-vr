@@ -183,6 +183,10 @@ export const JUNK = {
     ['shed-adder-skin', 'Shed Adder Skin', 'snakeskin'],
     ['adder-fang', 'Adder Fang', 'fang'],
   ],
+  wolf: [
+    ['wolf-pelt', 'Wolf Pelt', 'pelt'],
+    ['wolf-fang', 'Wolf Fang', 'fang'],
+  ],
 } as const satisfies Record<EnemyFamily, readonly (readonly [string, string, string])[]>;
 
 /** Junk at every loot level: sold only, and worth its item level × `CONFIG.items.sell.grey`. */

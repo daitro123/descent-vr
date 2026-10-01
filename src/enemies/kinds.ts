@@ -24,8 +24,11 @@ import {
   strikeReach,
 } from '../models/crawler';
 import { blendPoses } from '../models/rig';
+import { gait } from '../animals/poses';
+import { QUAD_BONES } from '../models/quadruped';
 import type { Ground } from '../world/ground';
 import { type BodyPose, Enemy, type EnemyContext, numbersOf } from './enemy';
+import { buildWolf, WOLF_DEAD, WOLF_HEAD, WOLF_HEIGHT, WOLF_IDLE, WOLF_MIDDLE, WOLF_STAGGER, WOLF_STRIDE, WOLF_SWING, wolfBite, type WolfStrike, wolfStrike } from './wolf';
 
 // Each enemy type exists to test the player in a different way:
 //   grunt   directional melee: read the wind-up, block on the right side, or hit first
@@ -33,6 +36,8 @@ import { type BodyPose, Enemy, type EnemyContext, numbersOf } from './enemy';
 //   brute   armour and a slam you can't block: patience, then punish the stuck maul
 //   warden  the boss: a three-hit combo to block in turn, a slam, and summoned help
 //   biter   small and low (a leech, an adder): lunges at your legs, so you look down and block low
+// and wolves fight as grunts do, taking turns, but on four legs (Wolf): they
+// spring at you from a few metres out and snap at your legs up close.
 
 const _dir = new Vector3();
 const _scratch: Record<string, [number, number, number]> = {};
@@ -221,7 +226,7 @@ export interface EnemyOptions {
   level?: number;
   /** In a camp, it's stronger again (`CONFIG.camps.strength`). */
   inCamp?: boolean;
-  /** Who it is: the undead (skeletons, the default), a family in the human body, or a crawler's (leeches, adders: biters only). */
+  /** Who it is: the undead (skeletons, the default), a family in the human body, a crawler's (leeches, adders: biters only), or the wolves (grunts only). */
   family?: EnemyFamily;
   /** Which of its family's looks for its behaviour. */
   variant?: number;
@@ -359,6 +364,109 @@ export class Biter extends MeleeEnemy {
   }
 }
 
+// ---------------------------------------------------------------- wolves
+
+const easeIn = (t: number) => t * t;
+
+/**
+ * A wolf (CONFIG.wolf), on the four-legged body (enemies/wolf.ts): a grunt's
+ * turn-taking, but each of its attacks starts from its own distance, the
+ * spring from a few metres out (`from` to `reach`) and the bite up close. It
+ * makes up its mind which as it comes in, and closes in till it's there, so a
+ * wolf meaning to bite runs on through its spring's distance. The spring
+ * carries it at you (its `surge`, in Enemy) and up off the ground (`leap`,
+ * here). Struck dead, it rolls onto its side.
+ */
+export class Wolf extends MeleeEnemy {
+  /** m it's up off the ground, mid-spring. */
+  private lift = 0;
+  /** The attack it means to make this turn, chosen as it comes in. */
+  private meant: AttackConfig | null = null;
+
+  protected chooseAttack(dist: number): AttackConfig | null {
+    const fits = (a: AttackConfig) => dist >= (a.from ?? 0) && dist <= (a.reach ?? this.def.attackRange);
+    const meant = (this.meant ??= this.pick(this.def.attacks));
+    // Already too close for a spring: whatever it can do from here.
+    const now = fits(meant) ? meant : dist < (meant.from ?? 0) ? this.def.attacks.find(fits) : undefined;
+    if (!now) return null;
+    this.meant = null;
+    return now;
+  }
+
+  protected barHeight(): number {
+    return WOLF_HEIGHT + 0.28;
+  }
+
+  protected idlePose(): BodyPose {
+    return WOLF_IDLE;
+  }
+
+  protected staggerPose(): BodyPose {
+    return WOLF_STAGGER;
+  }
+
+  protected attackPoses(attack: AttackConfig): WolfStrike {
+    return wolfStrike(attack);
+  }
+
+  /** It trots: diagonal pairs of legs together. */
+  protected walkOffsets(phase: number, amount: number, out: Record<string, [number, number, number]>): void {
+    gait(phase, amount, WOLF_SWING, 1, out);
+  }
+
+  protected strideRate(): number {
+    return (2 * Math.PI * this.def.speed) / WOLF_STRIDE;
+  }
+
+  /** A blow that doesn't stagger it throws its head up. */
+  protected flinchBy(amount: number): void {
+    this.rig.bones.neck.rotation.x -= amount * 1.2;
+  }
+
+  /** Bobbing as it trots, and up off the ground at the height of its spring. */
+  protected placeRoot(bob: number, dt: number): void {
+    const a = this.attack;
+    if (this.state === 'attack' && a?.leap && this.phase === 'active') this.lift = a.leap * Math.sin(Math.PI * this.phaseProgress);
+    else this.lift *= Math.exp(-14 * dt);
+    this.rig.setHipOffset(0, bob + this.lift, 0);
+  }
+
+  /** Light: blows knock it about. */
+  protected knockbackScale(): number {
+    return 1.2;
+  }
+
+  /** Its hurt capsule runs along its back, from its hips to its head. */
+  capsule(outBottom: Vector3, outTop: Vector3): void {
+    this.rig.bones.hips.getWorldPosition(outBottom);
+    this.rig.bones.head.getWorldPosition(outTop);
+  }
+
+  /** Its head, for a crit. */
+  headSphere(outCentre: Vector3): number {
+    outCentre.set(...WOLF_HEAD.centre).applyMatrix4(this.rig.bones.head.matrixWorld);
+    return WOLF_HEAD.radius;
+  }
+
+  /** Rolled over onto its side, legs loose, then gone into the ground. */
+  protected updateDeath(dt: number): boolean {
+    const t = this.stateTime;
+    this.material.emissive.setRGB(0, 0, 0);
+    this.material.telegraph.setRGB(0, 0, 0);
+    this.healthBar.root.visible = false;
+    this.rig.apply(blendPoses(this.pose, WOLF_DEAD, 1 - Math.exp(-6 * dt), _scratch, QUAD_BONES));
+    for (const [bone, turn] of Object.entries(_scratch)) this.pose[bone] = [...turn];
+    this.lift *= Math.exp(-14 * dt);
+    this.rig.setHipOffset(0, this.lift, 0);
+    // Over about its length, slid back under where it stood, its middle kept a little off the ground as it lies.
+    const roll = (Math.PI / 2) * 0.95 * easeIn(Math.min(1, t / 0.8));
+    this.visual.rotation.z = roll;
+    this.visual.position.x = WOLF_MIDDLE * Math.sin(roll);
+    this.visual.position.y = 0.1 * Math.sin(roll) - (t > 1.6 ? (t - 1.6) * 0.5 : 0);
+    return t < 3.4;
+  }
+}
+
 /**
  * An enemy with the behaviour `kind` and its family's body, standing at (x, z),
  * at its level and in a camp or not. The arena's are undead, level 1 and in no
@@ -366,6 +474,12 @@ export class Biter extends MeleeEnemy {
  */
 export function createEnemy(kind: EnemyKind, x: number, z: number, options: EnemyOptions = {}): Enemy {
   const { level = 1, inCamp = false, family = 'undead', variant = 0, named, lurks } = options;
+  if (family === 'wolf') {
+    // Wolves fight as grunts, with their own numbers, in one of their coats.
+    if (kind !== 'grunt') throw new Error(`Wolves fight as grunts, not as a ${kind}`);
+    const def = enemyNumbers(options.def ?? CONFIG.wolf, level, inCamp);
+    return new Wolf(kind, x, z, { family, variant, level, def, model: (material) => ({ rig: buildWolf(variant, material), weapon: wolfBite() }) });
+  }
   const traits = { family, variant, named, lurks, level, def: enemyNumbers(options.def ?? numbersOf(kind, family, named), level, inCamp) };
   switch (kind) {
     case 'grunt':

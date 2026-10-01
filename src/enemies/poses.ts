@@ -422,6 +422,6 @@ export const ATTACK_POSES: Record<HumanoidAttack, AttackPoses> = {
 
 /** The keyframes `attack` swings with on the human body or a skeleton; a lunge is only a crawler's (crawler.ts). */
 export function humanoidAttack(attack: AttackConfig): AttackPoses {
-  if (attack.pose === 'lunge') throw new Error('A lunge is a crawler’s attack');
+  if (attack.pose === 'lunge' || attack.pose === 'bite') throw new Error(`A ${attack.pose} is a crawler’s or a wolf’s attack`);
   return ATTACK_POSES[attack.pose];
 }

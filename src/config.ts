@@ -9,8 +9,11 @@ import type { Grade, RecipeRow, SpotKindRow } from './professions/professions';
 /** Which keyframe pair (enemies/poses.ts) an attack animates between. */
 /** The attacks a human body or a skeleton swings (poses.ts). */
 export type HumanoidAttack = 'chop' | 'slashR' | 'slashL' | 'slam' | 'draw' | 'summon';
-/** Which keyframes an attack plays: a humanoid's swing, or a crawler's lunge at your legs (crawler.ts). */
-export type AttackPoseName = HumanoidAttack | 'lunge';
+/**
+ * Which keyframes an attack plays: a humanoid's swing, a crawler's lunge at
+ * your legs (crawler.ts), or a wolf's bite or spring (enemies/wolf.ts).
+ */
+export type AttackPoseName = HumanoidAttack | 'lunge' | 'bite';
 
 export interface AttackConfig {
   pose: AttackPoseName;
@@ -40,6 +43,14 @@ export interface AttackConfig {
   low?: boolean;
   /** Weapon stuck in the floor after the blow: a window of bonus damage. */
   exposeOnRecover?: boolean;
+  /** The nearest it starts this attack from (m, its feet to yours): a spring needs a run-up. 0 without. */
+  from?: number;
+  /** The farthest it starts this one from, if not its `attackRange`. */
+  reach?: number;
+  /** m it's carried at you along the way it faces as the blow falls (a wolf's spring), no nearer than your body. */
+  surge?: number;
+  /** m it leaps up off the ground at the height of the blow (a wolf's spring; the body that leaps lifts itself). */
+  leap?: number;
 }
 
 /** Raising the weapon to block the player's sword (see CONFIG.guard). */
@@ -1393,6 +1404,32 @@ export const CONFIG = {
       attacks: [{ pose: 'lunge', kind: 'melee', windup: 0.7, active: 0.16, recover: 0.75, damage: 9, blockable: true, low: true, weight: 1 }],
     },
   } satisfies Record<EnemyKind, EnemyConfig>,
+
+  // Wolves (enemies/wolf.ts): a pack on the four-legged body, fighting as grunts
+  // do, taking turns. They circle, spring at your chest from a few metres out
+  // (block it high), and snap at your legs up close (block it low). Quick, and
+  // light: a blow staggers them.
+  wolf: {
+    hp: 30,
+    radius: 0.32,
+    speed: 2.4,
+    turnSpeed: 7,
+    poise: 0,
+    attackRange: 1.05, // the bite's: its middle to your feet
+    holdDistance: 3.2,
+    attackCooldown: [1.0, 2.0],
+    staggerTime: 0.45,
+    blockStagger: 0.6,
+    parryStagger: 1.4,
+    exposedTime: 1.4,
+    critMultiplier: 1.6, // its head
+    orbChance: 0.25,
+    death: 'topple', // onto its side (Wolf)
+    attacks: [
+      { pose: 'bite', kind: 'melee', windup: 0.5, active: 0.16, recover: 0.55, damage: 8, blockable: true, low: true, surge: 0.25, weight: 2 },
+      { pose: 'lunge', kind: 'melee', windup: 0.7, active: 0.3, recover: 0.75, damage: 13, blockable: true, from: 1.6, reach: 2.7, surge: 1.9, leap: 0.3, weight: 1 },
+    ],
+  } satisfies EnemyConfig,
 
   warden: {
     summonAt: [0.7, 0.4], // HP fractions at which it raises grunts

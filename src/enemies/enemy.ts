@@ -3,7 +3,7 @@ import { closestSegmentSegment, type SegmentHit } from '../combat/geometry';
 import type { BladeTarget } from '../combat/strike';
 import type { AttackConfig, EnemyConfig } from '../config';
 import { CONFIG } from '../config';
-import { buildCharacter, type EnemyBody, type EnemyFamily, type EnemyKind, FAMILIES, type Fighter, fighterOf, isFamily, type WeaponSpec } from '../models/characters';
+import { bodyOf, buildCharacter, type EnemyBody, type EnemyFamily, type EnemyKind, type Fighter, fighterOf, isFamily, type WeaponSpec } from '../models/characters';
 import { createModelMaterial, type ModelMaterial } from '../models/materials';
 import { BONES, type BoneName, blendPoses, type PoseOf, type Rig, type SkeletonRig } from '../models/rig';
 import { HealthBar } from '../ui/healthBar';
@@ -68,8 +68,9 @@ export type BodyPose = PoseOf<string>;
 
 /**
  * A body other than its family's human body or skeleton, built for it in its
- * material (createEnemy): a crawler's (crawler.ts). Its rig is on a skeleton
- * of its own, and its weapon is whatever part of it strikes (the jaws).
+ * material (createEnemy): a crawler's (crawler.ts) or a wolf's (wolf.ts). Its
+ * rig is on a skeleton of its own, and its weapon is whatever part of it
+ * strikes (the jaws).
  */
 export interface EnemyModel {
   readonly rig: SkeletonRig<string, unknown>;
@@ -78,7 +79,7 @@ export interface EnemyModel {
 
 /** What sets an enemy apart from others with its behaviour: its family and look, its numbers and level (createEnemy fills it in). */
 export interface EnemyTraits {
-  /** Who it is: the undead (the default) are skeletons; the bandits and House Corvane's men wear the human body; leeches and adders are crawlers. */
+  /** Who it is: the undead (the default) are skeletons; the bandits and House Corvane's men wear the human body; leeches and adders are crawlers; wolves are beasts. */
   family?: EnemyFamily;
   /** Which of its family's looks for its behaviour. */
   variant?: number;
@@ -88,7 +89,7 @@ export interface EnemyTraits {
   def?: EnemyConfig;
   /** Its level, which `def`'s numbers were made at: what its kill pays for. */
   level?: number;
-  /** Its body, if not its family's human body or skeleton: built in the material given. A crawler's needs it. */
+  /** Its body, if not its family's human body or skeleton: built in the material given. A crawler's and a wolf's need it. */
   model?: (material: ModelMaterial) => EnemyModel;
   /** Lie hidden where it's raised until you come near or it's called to fight (a camp's, of a family that lurks). */
   lurks?: boolean;
@@ -207,7 +208,7 @@ export function numbersOf(kind: EnemyKind, family: EnemyFamily = 'undead', named
 export abstract class Enemy {
   readonly root = new Group();
   readonly position: Vector3; // feet, alias of root.position
-  /** Who it is: the undead, the bandits, House Corvane's men, leeches, adders. */
+  /** Who it is: the undead, the bandits, House Corvane's men, leeches, adders, wolves. */
   readonly family: EnemyFamily;
   /** What its family is made of: how it comes and goes, and what flies when it's hit. */
   readonly body: EnemyBody;
@@ -335,7 +336,7 @@ export abstract class Enemy {
     const { family = 'undead', variant = 0, named, def = numbersOf(kind, family, named), level = 1, lurks = false } = traits;
     this.family = family;
     this.variant = variant;
-    this.body = isFamily(family) ? FAMILIES[family].body : 'crawler';
+    this.body = bodyOf(family);
     this.fighter = `${family}:${kind}:${named ?? variant}`;
     this.named = named ?? null;
     this.lurking = lurks;
@@ -970,6 +971,14 @@ export abstract class Enemy {
     }
     if (this.phase === 'active') {
       blendPoses(this.windupPose, this.strikePose, easeIn(k), this.pose, bones);
+      // A spring (a wolf's): it's carried at you the way it faces as the blow falls, up to your body.
+      if (a.surge && this.rootedFor <= 0 && _to.subVectors(ctx.playerFeet, this.position).setY(0).length() > this.def.radius + CONFIG.player.bodyRadius) {
+        const step = (a.surge * dt) / this.phaseDuration;
+        const yaw = this.root.rotation.y;
+        this.position.x += Math.sin(yaw) * step;
+        this.position.z += Math.cos(yaw) * step;
+        ctx.ground.resolve(this.position, this.def.radius);
+      }
       if (k >= 1) {
         this.finishSwing(ctx);
         if (this.attack) this.nextPhase('recover', a.recover);

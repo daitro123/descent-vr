@@ -37,9 +37,10 @@ export type HumanoidKind = Exclude<EnemyKind, 'biter'>;
 /**
  * What an enemy is made of: the dead are skeletons, the living wear the human
  * body, the bog's dead are whole bodies kept by the peat (corpses), the bog's
- * beasts are mud, and leeches and adders are crawlers (crawler.ts).
+ * beasts are mud, leeches and adders are crawlers (crawler.ts), and wolves are
+ * beasts on the four-legged body (quadruped.ts).
  */
-export type EnemyBody = 'skeleton' | 'human' | 'corpse' | 'mud' | 'crawler';
+export type EnemyBody = 'skeleton' | 'human' | 'corpse' | 'mud' | 'crawler' | 'beast';
 
 /** The business end of a weapon, in its bone's space. Enemy strikes sweep this segment. */
 export interface WeaponSpec<B extends string = BoneName> {
@@ -99,7 +100,7 @@ export interface Fighter {
  * Warden.
  */
 export interface FamilyDef {
-  readonly body: Exclude<EnemyBody, 'crawler'>;
+  readonly body: Exclude<EnemyBody, 'crawler' | 'beast'>;
   readonly fights: Partial<Record<HumanoidKind, Fighter>>;
   /**
    * Its named fighters: each dressed apart from the rest, for one place, and
@@ -437,12 +438,22 @@ export const FAMILIES = {
 /** Who an enemy on a skeleton or the human body is, whatever its behaviour: one of FAMILIES. */
 export type Family = keyof typeof FAMILIES;
 
-/** Who an enemy is: one of FAMILIES, or the crawlers' leeches and adders, which are only ever biters (crawler.ts). */
-export type EnemyFamily = Family | 'leech' | 'snake';
+/**
+ * Who an enemy is: one of FAMILIES, the crawlers' leeches and adders, which
+ * are only ever biters (crawler.ts), or the wolves, which fight as grunts on
+ * the four-legged body (enemies/wolf.ts).
+ */
+export type EnemyFamily = Family | 'leech' | 'snake' | 'wolf';
 
-/** Is it one of FAMILIES, on a skeleton or the human body (not a crawler)? */
+/** Is it one of FAMILIES, on a skeleton or the human body (not a crawler or a beast)? */
 export function isFamily(family: EnemyFamily): family is Family {
   return family in FAMILIES;
+}
+
+/** What an enemy of `family` is made of. */
+export function bodyOf(family: EnemyFamily): EnemyBody {
+  if (isFamily(family)) return FAMILIES[family].body;
+  return family === 'wolf' ? 'beast' : 'crawler';
 }
 
 export interface BuildOptions {

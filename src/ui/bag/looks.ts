@@ -83,6 +83,7 @@ const MODELS: Readonly<Record<string, ItemLook>> = {
   teeth: { look: 'charm', tint: 0xd8cfb0 },
   snakeskin: { look: 'cloth', tint: 0x8a7e66 },
   fang: { look: 'charm', tint: 0xe8e0c8 },
+  pelt: { look: 'cloth', tint: 0x6e6658 },
   // House Corvane's bailiffs' junk: a notched tally of the tithes owed, and the house's pewter badge.
   tally: { look: 'charm', tint: 0x9a7a4a },
   'key-badge': { look: 'trinket', tint: 0x4a4a52 },
