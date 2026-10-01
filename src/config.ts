@@ -85,6 +85,8 @@ export interface EnemyConfig {
   guard?: GuardConfig;
   /** How much of a root's or freeze's length (`hold`, 0: immune) and of a slow's strength (`slow`) it takes. All of both without one. */
   takes?: { hold: number; slow: number };
+  /** How far a blow's push moves it, 1 for a grunt: heavy ones barely budge. Without one, by its behaviour. */
+  knockback?: number;
 }
 
 export const CONFIG = {

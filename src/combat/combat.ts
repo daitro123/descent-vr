@@ -76,14 +76,16 @@ const HUMAN_BLOOD = 0x7a1812;
 const MUD = 0x3a3022;
 /** What flies from the living that aren't people: a leech's the blood it drank, darkened; an adder's. */
 const CREATURE_BLOOD: Partial<Record<Enemy['family'], number>> = { leech: 0x3a0e0c, snake: 0x6a1410 };
+/** What flies off a body of stone when it's struck: the Keyward's black basalt. */
+const STONE_CHIPS = 0x4a4752;
 
-/** The blood that flies from `enemy`, or null for the dead, who are bones (bar the brute's and the bog's corpses' dark ichor, the default). */
+/** The blood that flies from `enemy`, or null for what doesn't bleed: bone, and stone (bar the undead brute's stitched flesh and the bog's corpses, which bleed dark ichor, the default). */
 function bloodOf(enemy: Enemy): number | undefined | null {
   if (enemy.body === 'human') return HUMAN_BLOOD;
   if (enemy.body === 'mud') return MUD;
   if (enemy.body === 'corpse') return undefined;
   if (enemy.body === 'crawler') return CREATURE_BLOOD[enemy.family];
-  return enemy.kind === 'brute' ? undefined : null;
+  return enemy.made === 'flesh' ? undefined : null;
 }
 const _to = new Vector3();
 const _p = new Vector3();
@@ -854,12 +856,13 @@ export class Combat implements ArrowResolver {
     this.fx.text.spawn('Evade', at.clone().setY(at.y + 0.2), { color: '#c0c0c0', scale: 0.16 });
   }
 
-  /** Red from the living, leeches and adders, mud from the bog's beasts, dark ichor from the undead brute, bone chips from skeletons; sparks on crits. */
+  /** Red from the living, leeches and adders, mud from the bog's beasts, dark ichor from the undead brute, bone chips from skeletons, grit from stone; sparks on crits. */
   private impactFx(enemy: Enemy, at: Vector3, dir: Vector3, bright: boolean): void {
     _vel.copy(dir).normalize();
     const blood = bloodOf(enemy);
-    if (blood === null) this.fx.particles.burst('bone', at, 6, _vel);
-    else this.fx.particles.burst('blood', at, enemy.kind === 'brute' ? 10 : 8, _vel, blood);
+    if (blood !== null) this.fx.particles.burst('blood', at, enemy.kind === 'brute' ? 10 : 8, _vel, blood);
+    else if (enemy.made === 'stone') this.fx.particles.burst('bone', at, 8, _vel, STONE_CHIPS);
+    else this.fx.particles.burst('bone', at, 6, _vel);
     if (bright) this.fx.particles.burst('sparks', at, 14, _vel);
   }
 
@@ -875,12 +878,13 @@ export class Combat implements ArrowResolver {
     enemy.capsule(_a, _b);
     _a.lerp(_b, 0.5);
     const blood = bloodOf(enemy);
-    sfx.death(_a, { big: enemy.kind === 'warden' || enemy.kind === 'brute', bones: enemy.body === 'skeleton' });
-    if (blood === null) this.fx.particles.burst('bone', _a, enemy.kind === 'warden' ? 40 : 14);
-    else this.fx.particles.burst('blood', _a, enemy.kind === 'brute' ? 24 : enemy.kind === 'biter' ? 8 : 12, undefined, blood);
-    if (enemy.kind === 'warden') {
-      this.fx.particles.burst('magic', _a, 60);
-      this.fx.shockwaves.trigger(enemy.position, 5, 0x6ad0ff, 0.9);
+    sfx.death(_a, { big: enemy.boss !== undefined || enemy.kind === 'brute', bones: enemy.body === 'skeleton' });
+    if (blood !== null) this.fx.particles.burst('blood', _a, enemy.kind === 'brute' ? 24 : enemy.kind === 'biter' ? 8 : 12, undefined, blood);
+    else if (enemy.made === 'stone') this.fx.particles.burst('bone', _a, 40, undefined, STONE_CHIPS);
+    else this.fx.particles.burst('bone', _a, enemy.boss ? 40 : 14);
+    if (enemy.boss) {
+      this.fx.particles.burst('magic', _a, 60, undefined, enemy.boss.colour);
+      this.fx.shockwaves.trigger(enemy.position, 5, enemy.boss.colour, 0.9);
     }
     this.fx.particles.burst('dust', enemy.position, 8);
   }

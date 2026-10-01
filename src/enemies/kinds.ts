@@ -25,7 +25,7 @@ import {
 } from '../models/crawler';
 import { blendPoses } from '../models/rig';
 import type { Ground } from '../world/ground';
-import { type BodyPose, Enemy, type EnemyContext } from './enemy';
+import { type BodyPose, Enemy, type EnemyContext, numbersOf } from './enemy';
 
 // Each enemy type exists to test the player in a different way:
 //   grunt   directional melee: read the wind-up, block on the right side, or hit first
@@ -100,8 +100,12 @@ export class Grunt extends MeleeEnemy {}
 export class Brute extends MeleeEnemy {
   protected chooseAttack(dist: number): AttackConfig | null {
     const [heavy, slam] = this.def.attacks;
-    // The slam lands a maul-length away, so it's the answer to a player who keeps their distance.
-    if (dist > 1.2 && dist < 2.3 && Math.random() < 0.5) return slam;
+    // The slam lands a maul-length away, so it's the answer to a player who
+    // keeps their distance: that far for a brute's reach, further for a giant's.
+    const k = this.def.attackRange / CONFIG.enemies.brute.attackRange;
+    // A giant's slash sweeps over anyone in closer than a brute's reach from it, scaled: it slams them instead.
+    if (k > 1 && dist < (CONFIG.enemies.brute.radius + CONFIG.player.bodyRadius) * k) return slam;
+    if (dist > 1.2 * k && dist < 2.3 * k && Math.random() < 0.5) return slam;
     return dist <= this.def.attackRange ? (Math.random() < 0.75 ? heavy : slam) : null;
   }
 }
@@ -362,7 +366,7 @@ export class Biter extends MeleeEnemy {
  */
 export function createEnemy(kind: EnemyKind, x: number, z: number, options: EnemyOptions = {}): Enemy {
   const { level = 1, inCamp = false, family = 'undead', variant = 0, named, lurks } = options;
-  const traits = { family, variant, named, lurks, level, def: enemyNumbers(options.def ?? CONFIG.enemies[kind], level, inCamp) };
+  const traits = { family, variant, named, lurks, level, def: enemyNumbers(options.def ?? numbersOf(kind, family, named), level, inCamp) };
   switch (kind) {
     case 'grunt':
       return new Grunt(kind, x, z, traits);

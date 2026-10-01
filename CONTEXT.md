@@ -93,11 +93,11 @@ How an enemy fights, and so what it tests in the player: the grunt (reading a sw
 _Avoid_: kind, type, class, AI
 
 **Family**:
-Who an enemy is, whatever its behaviour: the bandits, House Corvane's bailiffs, the Lantern Men, the undead, the drowned, the bog dead, the bog's beasts, leeches or adders. A bandit archer and an undead archer share a behaviour but not a family. A family wears one body, the human body, the skeleton, a corpse (the bog dead), mud (the bog's beasts) or the crawler, and fields a look for each behaviour it fights with (leeches and adders only bite, the bog's beasts only fight as brutes). The drowned are the dead of Vellmar, skeletons stained peat brown, and their Warden is the Drowned Reeve.
+Who an enemy is, whatever its behaviour: the bandits, House Corvane's bailiffs, the Lantern Men, the undead, the barrow dead, the vault dead, the drowned, the bog dead, the bog's beasts, leeches or adders. A bandit archer and an undead archer share a behaviour but not a family. A family wears one body, the human body, the skeleton, a corpse (the bog dead), mud (the bog's beasts) or the crawler, and fields a look for each behaviour it fights with (leeches and adders only bite, the bog's beasts only fight as brutes). The drowned are the dead of Vellmar, skeletons stained peat brown, and their Warden is the Drowned Reeve. The barrow dead are the Deepkings' war-band laid in Brackenmoor's barrows, in green bronze, and their Warden is the Barrow Thane; the vault dead are the Deepkings' guard sealed under Aldhaven's cathedral, in black basalt cut with glowing glyphs.
 _Avoid_: faction, race, type
 
 **Named fighter**:
-One of a family's fighters dressed for one place, and never one of its everyday looks: a camp's leader (the Lantern Men's bosun in his woad sash, Abel Thatch at Cockle End) or a named enemy such as Captain Silas Crake, the Old Lantern Man or the Mire King. It fights with an ordinary behaviour, at the post in its camp that names it; a boss fight of its own, as the Warden's, is something else.
+One of a family's fighters dressed for one place, and never one of its everyday looks: a camp's leader (the Lantern Men's bosun in his woad sash, Abel Thatch at Cockle End) or a named enemy such as Captain Silas Crake, the Old Lantern Man, the Mire King or the Keyward. It fights with an ordinary behaviour, at the post in its camp that names it; a boss fight of its own, as the Warden's, is something else.
 _Avoid_: unique, elite, rare, champion
 
 **Lying in wait**:
@@ -123,6 +123,10 @@ _Avoid_: uniform, faction colours, team
 **Build**:
 A human body's size and shape, and the walk that goes with it (its gait): average, stout, broad or big for grown men; woman; elder and elder woman, stooped; child.
 _Avoid_: body type, size
+
+**Giant build**:
+The size of a giant on the same skeleton as a person's, about 5 m to the crown: the Keyward stands on it, and the Hollow North's giants can.
+_Avoid_: titan, colossus, big (one of the human builds)
 
 **Four-legged body**:
 The one body every animal stands on, sheep, dogs, horses and wolves alike, each at its own size and shape and dressed per look. In the code, the quadruped skeleton.
