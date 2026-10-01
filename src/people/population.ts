@@ -227,6 +227,7 @@ export function villagersOn(
           build: BUILDS[person.look.build],
           label: plan.label ?? person.label,
           stand: person.stand,
+          carry: person.carry,
           work: WORKS[plan.work ?? 'stand'](person.stand, turn),
           start: startOf(plan.id),
           gives: false,

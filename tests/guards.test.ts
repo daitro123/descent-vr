@@ -1,5 +1,6 @@
 import { Color, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
+import { castClips, type MutablePose } from '../src/inspector/clips';
 import type { PersonPlan } from '../src/maps/types';
 import { buildCharacter, type EnemyKind, FAMILIES } from '../src/models/characters';
 import { GUARDS, LIVERY } from '../src/models/guards';
@@ -61,6 +62,21 @@ describe('a guard’s polearm', () => {
       expect(heights.filter((h) => Math.abs(h) < 0.03).length).toBeGreaterThan(heights.length * 0.8);
     },
   );
+
+  it.each(POLEARMS)('%s walking carries it upright, clear of the ground and not swinging', (id) => {
+    const rig = new Wardrobe().dress(id);
+    const walk = castClips(id).find((c) => c.name === 'walk')!;
+    const out: MutablePose = {};
+    const lows: number[] = [];
+    for (let i = 0; i < 48; i++) {
+      const frame = walk.sample((walk.duration * i) / 48, out);
+      lows.push(butt(rig, frame.pose, frame.hip ?? [0, frame.hipY, 0]));
+      const up = new Vector3().setFromMatrixColumn(rig.bones.handR.matrixWorld, 2).normalize();
+      expect(up.y, `${i}/48`).toBeGreaterThan(0.98);
+    }
+    expect(Math.min(...lows)).toBeGreaterThan(0.02);
+    expect(Math.max(...lows)).toBeLessThan(0.25);
+  });
 
   it.each(['tollMan', 'tollSergeant'] as const)('%s leaning on it keeps its butt on the ground, both hands on the shaft', (id) => {
     const rig = new Wardrobe().dress(id);

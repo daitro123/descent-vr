@@ -7,14 +7,7 @@ import { BUILDS } from '../models/human';
 import { PEOPLE, type Person } from '../models/people';
 import { Rig } from '../models/rig';
 
-/**
- * Every friendly character a zone can place as a villager (maps/types.ts
- * `PersonPlan`), by name: Oakvale's four at their trades, the plain
- * villagers, and the guards (models/guards.ts). Each is a body, its clothes, the pose it stands in and its name
- * over a bark; one of the cast can stand in many places at once (two
- * goodwives at a market). A model family adds its looks here.
- */
-export const CAST = {
+const MEMBERS = {
   innkeeper: PEOPLE.innkeeper,
   smith: PEOPLE.smith,
   farmer: PEOPLE.farmer,
@@ -26,7 +19,18 @@ export const CAST = {
 } satisfies Record<string, Person>;
 
 /** One of the cast, by name. */
-export type CastId = keyof typeof CAST;
+export type CastId = keyof typeof MEMBERS;
+
+/**
+ * Every friendly character a zone can place as a villager (maps/types.ts
+ * `PersonPlan`), by name: Oakvale's four at their trades, the plain
+ * villagers, the guards (models/guards.ts), and the dead who lie where they
+ * fell (`fallen`: models/diggers.ts, models/bogDead.ts). Each is a body, its clothes,
+ * the pose it stands in and its name over a bark; one of the cast can stand
+ * in many places at once (two goodwives at a market). A model family adds its
+ * looks here.
+ */
+export const CAST: Readonly<Record<CastId, Person>> = MEMBERS;
 
 /**
  * The cast's bodies, each built once and shared by everyone wearing it while
