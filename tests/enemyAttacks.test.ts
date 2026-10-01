@@ -171,6 +171,15 @@ describe.each([
   ['fen raider', () => new TestGrunt('grunt', 0, 0, { family: 'raider' })],
   ['fen raider peat cutter', () => new TestBrute('brute', 0, 0, { family: 'raider' })],
   ['Abel Thatch', () => new TestBrute('brute', 0, 0, { family: 'raider', named: 'headman' })],
+  ['moor thug with a billhook', () => new TestGrunt('grunt', 0, 0, { family: 'moorBandit' })],
+  ['moor thug with a long knife', () => new TestGrunt('grunt', 0, 0, { family: 'moorBandit', variant: 1 })],
+  ['Kerchief digger', () => new TestBrute('brute', 0, 0, { family: 'moorBandit' })],
+  ['Red Annis', () => new TestBrute('brute', 0, 0, { family: 'moorBandit', named: 'annis' })],
+  ['lamp crew pick', () => new TestGrunt('grunt', 0, 0, { family: 'lampCrew' })],
+  ['lamp crew sledge', () => new TestBrute('brute', 0, 0, { family: 'lampCrew' })],
+  ['bog dead with a stake', () => new TestGrunt('grunt', 0, 0, { family: 'bogDead' })],
+  ['bog dead with an old blade', () => new TestGrunt('grunt', 0, 0, { family: 'bogDead', variant: 1 })],
+  ['bog dead brute', () => new TestBrute('brute', 0, 0, { family: 'bogDead' })],
   ['barrow dead with a leaf blade', () => new TestGrunt('grunt', 0, 0, { family: 'barrow' })],
   ['barrow dead with a bronze axe', () => new TestGrunt('grunt', 0, 0, { family: 'barrow', variant: 1 })],
   ['barrow champion', () => new TestBrute('brute', 0, 0, { family: 'barrow' })],
@@ -261,7 +270,7 @@ describe('slams and shots', () => {
     expect(r.slams[0].z).toBeGreaterThan(1.7);
   });
 
-  it.each(['undead', 'bandit', 'corvane', 'smuggler', 'undergate', 'raider', 'barrow', 'vault'] as const)('an %s archer looses one arrow at full draw, from about head height', (family) => {
+  it.each(['undead', 'bandit', 'corvane', 'smuggler', 'undergate', 'raider', 'moorBandit', 'lampCrew', 'barrow', 'vault'] as const)('an %s archer looses one arrow at full draw, from about head height', (family) => {
     const a = new TestArcher('archer', 0, 0, { family });
     const r = run(a, a.def.attacks[0], player(6, 1.6), 6);
     expect(r.shots).toHaveLength(1);
@@ -275,7 +284,11 @@ describe('slams and shots', () => {
 // same behaviour on the human body's big build, swinging a felling axe and a
 // long mace, and so do the Sallows' brutes and leaders: the dredgers' hook and
 // beetle, the Lantern Men leader's boarding axe, Captain Crake's long cutlass,
-// the peat cutter's spade and Abel Thatch's slasher.
+// the peat cutter's spade and Abel Thatch's slasher. On Brackenmoor, the
+// Kerchiefs' digger and Corvane's lamp crews swing a pick and a sledge on the
+// big build; Red Annis fights with it on a woman's build, her crook-blade's
+// long staff making up the difference; the bog dead's brute is the undead
+// brute's body in peat.
 describe.each([
   ['bandit leader', 'bandit'],
   ['bailiff shieldman', 'corvane'],
@@ -285,6 +298,10 @@ describe.each([
   ['Captain Crake', 'smuggler', 0, 'crake'],
   ['fen raider peat cutter', 'raider'],
   ['Abel Thatch', 'raider', 0, 'headman'],
+  ['Kerchief digger', 'moorBandit'],
+  ['Red Annis', 'moorBandit', 0, 'annis'],
+  ['lamp crew sledge', 'lampCrew'],
+  ['bog dead brute', 'bogDead'],
   ['barrow champion', 'barrow'],
   ['vault brute', 'vault'],
 ] as const)("the %s's reach", (_name, family, variant = 0, named?: string) => {
@@ -346,7 +363,7 @@ describe("the Keyward's reach", () => {
   });
 });
 
-describe.each(['undead', 'bandit', 'corvane', 'smuggler', 'undergate', 'raider', 'barrow', 'vault'] as const)('%s archer aim', (family) => {
+describe.each(['undead', 'bandit', 'corvane', 'smuggler', 'undergate', 'raider', 'moorBandit', 'lampCrew', 'barrow', 'vault'] as const)('%s archer aim', (family) => {
   /**
    * Draw one arrow at a player whose head starts at `head` (and moves by
    * `move` per second), from an archer at the origin facing `yaw`. Returns how

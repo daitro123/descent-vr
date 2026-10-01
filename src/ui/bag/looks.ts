@@ -86,11 +86,9 @@ const MODELS: Readonly<Record<string, ItemLook>> = {
   // House Corvane's bailiffs' junk: a notched tally of the tithes owed, and the house's pewter badge.
   tally: { look: 'charm', tint: 0x9a7a4a },
   'key-badge': { look: 'trinket', tint: 0x4a4a52 },
-  // The barrow dead's: a scale off a grave shirt, gone green, and an amber bead from a grave's necklace.
+  // The barrow dead's: a scale off a grave shirt, gone green (their bead looks as the Kerchiefs' grave bead does).
   'green-scale': { look: 'charm', tint: 0x5c8a6c },
-  'barrow-bead': { look: 'trinket', tint: 0xc08a3a },
-  // The vault dead's: a flake of basalt plate with a glyph still in it, and a bronze rivet out of their armour.
-  'glyph-shard': { look: 'charm', tint: 0x45424d },
+  // The vault dead's: a bronze rivet out of their armour (their glyph shard looks as the lamp crews' glyph-cut chip does).
   'deep-rivet': { look: 'trinket', tint: 0x8c6a3c },
   // The smugglers' junk: the Lantern Men's tarred twine and a lantern's bent shutter, the Undergate's cellar key and dice.
   twine: { look: 'cloth', tint: 0x3a322a },
@@ -100,6 +98,15 @@ const MODELS: Readonly<Record<string, ItemLook>> = {
   // The fen raiders' junk: a rusty eel hook, and a charm of plaited reed.
   'eel-hook': { look: 'trinket', tint: 0x8a4e2a },
   'reed-charm': { look: 'charm', tint: 0xa89d62 },
+  // The moor's Kerchiefs: a hank of fleece off a sheep they took; from their diggers, a bead out of a barrow and the tip of a pick broken on its stones.
+  fleece: { look: 'cloth', tint: 0xcbbf9f },
+  'grave-bead': { look: 'trinket', tint: 0x6a8a5a },
+  'pick-tip': { look: 'charm', tint: 0x5a5c62 },
+  // Corvane's lamp crews: a chip of the Deepkings' black stone with part of a glyph on it.
+  'glyph-chip': { look: 'charm', tint: 0x2e2e36 },
+  // The bog dead: a length of the rope that hanged them, and a torc gone black in the peat.
+  rope: { look: 'cloth', tint: 0x7a6440 },
+  torc: { look: 'trinket', tint: 0x4a3a22 },
   // The drowned's junk and the bog beasts'.
   'deep-coin': { look: 'trinket', tint: 0x5a8670 },
   'silted-bone': { look: 'charm', tint: 0x9a8762 },

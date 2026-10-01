@@ -11,9 +11,11 @@ import { Wardrobe } from '../src/people/cast';
 
 // The human body (models/human.ts) and everyone who wears it: the families of
 // the living who fight you (the bandits, models/bandits.ts, House Corvane's
-// bailiffs, models/bailiffs.ts, and the Sallows' smugglers and fen raiders,
-// models/smugglers.ts and models/raiders.ts), the friendly characters
-// (models/people.ts) and the guards (models/guards.ts).
+// bailiffs, models/bailiffs.ts, the Sallows' smugglers and fen raiders,
+// models/smugglers.ts and models/raiders.ts, and on Brackenmoor the moor's
+// bandits, models/moorBandits.ts, and the lamp crews, models/diggers.ts), the bog
+// dead (models/bogDead.ts), the friendly characters (models/people.ts) and the
+// guards (models/guards.ts).
 // These check what a player would notice of a body: it stands on its soles at
 // its height, it plays every enemy animation as the skeletons do, and each
 // character stays inside the triangle budget.
@@ -33,8 +35,11 @@ function plain(build: BuildName): Rig {
 /** The families who wear the human body. */
 const LIVING = (Object.keys(FAMILIES) as Family[]).filter((f) => FAMILIES[f].body === 'human');
 
-/** Every fighter of the living, dressed: each look of each kind each family fields, and its named fighters (a leader, a boss). */
-const FIGHTERS: [string, Family, EnemyKind, number, string?][] = LIVING.flatMap((family) => [
+/** The families of the dead who are bodies, not bones (Brackenmoor's bog dead): made on the human rig too. */
+const CORPSES = (Object.keys(FAMILIES) as Family[]).filter((f) => FAMILIES[f].body === 'corpse');
+
+/** Every fighter of the living and the bodies, dressed: each look of each kind each family fields, and its named fighters (a leader, a boss). */
+const FIGHTERS: [string, Family, EnemyKind, number, string?][] = [...LIVING, ...CORPSES].flatMap((family) => [
   ...(Object.entries(FAMILIES[family].fights) as [EnemyKind, { label: string; looks: number }][]).flatMap(([kind, f]) =>
     Array.from({ length: f.looks }, (_, v): [string, Family, EnemyKind, number] => [f.looks > 1 ? `${f.label} v${v}` : f.label, family, kind, v]),
   ),
@@ -118,12 +123,15 @@ describe('the human body', () => {
   });
 });
 
-describe('every fighter of the living', () => {
-  it('counts the bandits and House Corvane’s bailiffs among them', () => {
-    expect(LIVING).toEqual(expect.arrayContaining(['bandit', 'corvane']));
+describe('every fighter of the living, and the bodies of the dead', () => {
+  it('counts the bandits and House Corvane’s bailiffs among the living, and the bog dead among the bodies', () => {
+    expect(LIVING).toEqual(expect.arrayContaining(['bandit', 'corvane', 'moorBandit', 'lampCrew']));
+    expect(CORPSES).toEqual(['bogDead']);
   });
 
-  it.each(FIGHTERS)('%s plays each of its animations dressed, feet where a skeleton’s go', (_name, family, kind, variant, named) => {
+  // The bog dead's brute is the undead brute's body (its bones, not a build's), so it moves as that brute does instead.
+  const onABuild = new Set<unknown>(Object.values(BUILDS).map((b) => b.proportions));
+  it.each(FIGHTERS.filter(([, family, kind, , named]) => onABuild.has(proportionsOf(kind, family, named))))('%s plays each of its animations dressed, feet where a skeleton’s go', (_name, family, kind, variant, named) => {
     playsLikeASkeleton(buildCharacter(kind, { family, variant, named }).rig, kind, clipsFor(kind, family, named));
   });
 });

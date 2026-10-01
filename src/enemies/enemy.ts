@@ -362,8 +362,8 @@ export abstract class Enemy {
     this.root.add(this.visual);
     this.visual.add(this.rig.mesh);
     this.riseTime = this.boss ? 2.4 : 1.1;
-    if (this.body === 'skeleton' || this.body === 'mud') {
-      // The dead claw their way up out of the ground (or the water they lie in), the bog's beasts heave up out of the mud: out of sight till then.
+    if (this.body === 'skeleton' || this.body === 'corpse' || this.body === 'mud') {
+      // The dead claw their way up out of the ground (or the water they lie in; the bog's dead out of the peat), the bog's beasts heave up out of the mud: out of sight till then.
       this.visual.position.y = -RISE_DEPTH * this.heightScale;
       // copies: poses are shared constants, and this.pose is eased in place
       copyPose(this.body === 'mud' ? MOUND : lurks ? SURFACE : RISE, this.pose);

@@ -79,10 +79,11 @@ const CREATURE_BLOOD: Partial<Record<Enemy['family'], number>> = { leech: 0x3a0e
 /** What flies off a body of stone when it's struck: the Keyward's black basalt. */
 const STONE_CHIPS = 0x4a4752;
 
-/** The blood that flies from `enemy`, or null for what doesn't bleed: bone, and stone (bar the undead brute's stitched flesh, which bleeds dark ichor, the default). */
+/** The blood that flies from `enemy`, or null for what doesn't bleed: bone, and stone (bar the undead brute's stitched flesh and the bog's corpses, which bleed dark ichor, the default). */
 function bloodOf(enemy: Enemy): number | undefined | null {
   if (enemy.body === 'human') return HUMAN_BLOOD;
   if (enemy.body === 'mud') return MUD;
+  if (enemy.body === 'corpse') return undefined;
   if (enemy.body === 'crawler') return CREATURE_BLOOD[enemy.family];
   return enemy.made === 'flesh' ? undefined : null;
 }

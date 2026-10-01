@@ -135,10 +135,10 @@ export const JUNK = {
   ],
   barrow: [
     ['green-scale', 'Green Bronze Scale', 'green-scale'],
-    ['barrow-bead', 'Barrow Bead', 'barrow-bead'],
+    ['barrow-bead', 'Barrow Bead', 'grave-bead'],
   ],
   vault: [
-    ['glyph-shard', 'Glyph Shard', 'glyph-shard'],
+    ['glyph-shard', 'Glyph Shard', 'glyph-chip'],
     ['deep-rivet', 'Deepking Rivet', 'deep-rivet'],
   ],
   smuggler: [
@@ -152,6 +152,20 @@ export const JUNK = {
   raider: [
     ['eel-hook', 'Rusty Eel Hook', 'eel-hook'],
     ['reed-charm', 'Plaited Reed Charm', 'reed-charm'],
+  ],
+  moorBandit: [
+    ['matted-fleece', 'Matted Fleece', 'fleece'],
+    ['tarnished-earring', 'Tarnished Earring', 'trinket'],
+    ['grave-bead', 'Grave Bead', 'grave-bead'],
+    ['broken-pick-tip', 'Broken Pick Tip', 'pick-tip'],
+  ],
+  lampCrew: [
+    ['lamp-wick', 'Spent Lamp Wick', 'cloth'],
+    ['glyph-chip', 'Glyph-cut Chip', 'glyph-chip'],
+  ],
+  bogDead: [
+    ['frayed-rope', 'Frayed Rope', 'rope'],
+    ['blackened-torc', 'Blackened Torc', 'torc'],
   ],
   drowned: [
     ['corroded-deep-coin', 'Corroded Deepking Coin', 'deep-coin'],

@@ -4,6 +4,9 @@ import { BANDITS } from './bandits';
 import { BAILIFFS } from './bailiffs';
 import { BARROW_LIGHT, dressBarrowArcher, dressBarrowBrute, dressBarrowGrunt, dressBarrowThane } from './barrow';
 import { BOG } from './bog';
+import { BOG_DEAD } from './bogDead';
+import { LAMP_CREWS } from './diggers';
+import { MOOR_BANDITS } from './moorBandits';
 import { RAIDERS } from './raiders';
 import { LANTERN_MEN, UNDERGATE } from './smugglers';
 import { bow } from './bow';
@@ -33,9 +36,10 @@ export type HumanoidKind = Exclude<EnemyKind, 'biter'>;
 
 /**
  * What an enemy is made of: the dead are skeletons, the living wear the human
- * body, the bog's beasts are mud, and leeches and adders are crawlers (crawler.ts).
+ * body, the bog's dead are whole bodies kept by the peat (corpses), the bog's
+ * beasts are mud, and leeches and adders are crawlers (crawler.ts).
  */
-export type EnemyBody = 'skeleton' | 'human' | 'mud' | 'crawler';
+export type EnemyBody = 'skeleton' | 'human' | 'corpse' | 'mud' | 'crawler';
 
 /** The business end of a weapon, in its bone's space. Enemy strikes sweep this segment. */
 export interface WeaponSpec<B extends string = BoneName> {
@@ -88,9 +92,11 @@ export interface Fighter {
  * An enemy family: who an enemy is, whatever its behaviour. Its body decides
  * how it comes and goes and what flies when it's hit: the dead claw up out of
  * the ground (or come up out of the water) and fall to pieces, the living are
- * simply standing there and fall whole, the bog's beasts lie sunk in the mud
- * as mounds until they heave up. A family fights only with the behaviours it
- * dresses for: only the undead and the drowned have a Warden.
+ * simply standing there and fall whole, corpses claw up as the dead do but
+ * fall whole, leaking dark ichor rather than bone chips, and the bog's beasts
+ * lie sunk in the mud as mounds until they heave up. A family fights only
+ * with the behaviours it dresses for: only the undead and the drowned have a
+ * Warden.
  */
 export interface FamilyDef {
   readonly body: Exclude<EnemyBody, 'crawler'>;
@@ -423,6 +429,9 @@ export const FAMILIES = {
   raider: RAIDERS,
   drowned: DROWNED,
   bog: BOG,
+  moorBandit: MOOR_BANDITS,
+  lampCrew: LAMP_CREWS,
+  bogDead: BOG_DEAD,
 } satisfies Record<string, FamilyDef>;
 
 /** Who an enemy on a skeleton or the human body is, whatever its behaviour: one of FAMILIES. */
