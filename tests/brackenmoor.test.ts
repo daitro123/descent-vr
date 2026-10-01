@@ -503,12 +503,11 @@ describe("Brackenmoor's chunks", () => {
     }
   }, 60000);
 
-  it('makes stand-ins cheaper than full detail, and keeps every full chunk within what an Oakvale chunk costs', () => {
+  it("makes stand-ins cheaper than full detail, and keeps every full chunk within the chunk budget's triangles", () => {
     for (const key of moorChunks()) {
       const full = buildMoorChunk(moor, key, 'full').position.length;
       expect(buildMoorChunk(moor, key, 'standIn').position.length, key).toBeLessThan(full);
-      // Oakvale's busiest full chunks come to about 16k triangles.
-      expect(full / 9, key).toBeLessThan(16000);
+      expect(full / 9, key).toBeLessThan(CONFIG.streaming.budget.chunk);
     }
   }, 60000);
 
