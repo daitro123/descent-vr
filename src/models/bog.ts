@@ -167,10 +167,17 @@ function reedsOnBack(ctx: DressContext, k: number, n: number, iris: boolean): vo
     const h = (0.45 + ((i * 0.29) % 0.35)) * k;
     const y = L + (0.26 - r * 0.5) * k;
     // Back against the hunch, so they stand up from the mound when it crouches, and fan out.
-    const lean: Vec3 = [-0.6 + Math.sin(a) * 0.2, 0, -x * 1.2];
-    b.box(0.022 * k, h, 0.022 * k, { at: [x * k, y + h / 2 - 0.05 * k, z * k], rot: lean, color: BOG_HUE.reed[i % 3] });
-    if (i % 3 === 0) b.box(0.04 * k, 0.14 * k, 0.04 * k, { at: [x * k - Math.sin(lean[2]) * h, y + h * 0.9, z * k + Math.sin(lean[0]) * h], rot: lean, color: BOG_HUE.reedHead });
-    else if (iris && i % 3 === 1) b.box(0.07 * k, 0.05 * k, 0.07 * k, { at: [x * k - Math.sin(lean[2]) * h * 0.8, y + h * 0.75, z * k + Math.sin(lean[0]) * h * 0.8], rot: lean, color: BOG_HUE.iris });
+    const lean: Vec3 = [-0.8 + Math.sin(a) * 0.2, 0, -x * 1.2];
+    const base: Vec3 = [x * k, y - 0.05 * k, z * k];
+    // A point `f` of the way up the reed (its box turns about its middle, Euler XYZ).
+    const up = (f: number): Vec3 => {
+      const [rx, , rz] = lean;
+      const d = f * h;
+      return [base[0] - d * Math.sin(rz), base[1] + d * Math.cos(rz) * Math.cos(rx), base[2] + d * Math.cos(rz) * Math.sin(rx)];
+    };
+    b.box(0.022 * k, h, 0.022 * k, { at: up(0.5), rot: lean, color: BOG_HUE.reed[i % 3] });
+    if (i % 3 === 0) b.box(0.04 * k, 0.14 * k, 0.04 * k, { at: up(0.92), rot: lean, color: BOG_HUE.reedHead });
+    else if (iris && i % 3 === 1) b.box(0.07 * k, 0.05 * k, 0.07 * k, { at: up(0.78), rot: lean, color: BOG_HUE.iris });
   }
 }
 

@@ -378,26 +378,25 @@ export const SURFACE: Pose = {
 };
 
 /**
- * Crouched low as a mound, waiting (a bog lurker): knees drawn up under it,
- * its back humped over them, its head down and its arms folded in, so all
- * that shows is the mud of its back and the reeds out of it. Goes with
- * MOUND_DROP.
+ * Sunk in the mud as a mound, waiting (a bog lurker): squatting, its back
+ * bowed level and its head tucked under, its arms down at its sides. Goes
+ * with MOUND_DROP, which sinks it to the shoulders, so all that shows above
+ * the mud is the hump of its back and the reeds out of it.
  */
 export const MOUND: Pose = {
-  spine: [0.8, 0, 0],
-  head: [0.55, 0, 0],
-  upperArmR: [-0.55, 0, -0.25],
-  forearmR: [-1.2, 0, 0],
-  handR: [-0.2, 0, 0],
-  upperArmL: [-0.55, 0, 0.25],
-  forearmL: [-1.2, 0, 0],
-  thighL: [-1.75, 0, 0.35],
-  shinL: [2.3, 0, 0],
-  thighR: [-1.75, 0, -0.35],
-  shinR: [2.3, 0, 0],
+  spine: [1.15, 0, 0],
+  head: [0.75, 0, 0],
+  upperArmR: [-1.1, 0, -0.15],
+  forearmR: [-0.3, 0, 0],
+  upperArmL: [-1.1, 0, 0.15],
+  forearmL: [-0.3, 0, 0],
+  thighL: [-2.0, 0, 0.35],
+  shinL: [2.5, 0, 0],
+  thighR: [-2.0, 0, -0.35],
+  shinR: [2.5, 0, 0],
 };
-/** Hip drop that goes with MOUND, as a fraction of hip height. */
-export const MOUND_DROP = 0.6;
+/** Hip drop that goes with MOUND, as a fraction of hip height: below the mud. */
+export const MOUND_DROP = 1.15;
 
 /** Walk cycle offsets, added on top of a base pose. `phase` in radians, `amount` 0–1. */
 export function walkOffsets(phase: number, amount: number, out: Record<string, [number, number, number]>): void {
