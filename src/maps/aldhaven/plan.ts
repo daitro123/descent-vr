@@ -167,6 +167,8 @@ export interface Street {
   readonly line: readonly P2[];
   readonly width: number;
   readonly dirt: boolean;
+  /** A dirt road that leaves another: its mouth splays out over that road (see addRoads). */
+  readonly flare?: { readonly extra: number; readonly length: number };
 }
 
 export interface AldhavenPlan {
@@ -208,6 +210,8 @@ export interface Surface {
   readonly street: boolean;
   /** A back yard behind the houses: packed earth and grass, not setts. */
   readonly yard: boolean;
+  /** Under a dirt road's middle: earth, so nothing green shows through the road or where it meets a bridge. */
+  readonly road: boolean;
 }
 
 const PI = Math.PI;
@@ -363,13 +367,13 @@ function deckAtCity(x: number, z: number): number | null {
 
 // ------------------------------------------------------------------ streets
 
-/** The streets and roads, in the city's frame: [points, width, dirt?]. */
-const STREETS: readonly (readonly [readonly P2[], number, boolean?])[] = [
+/** The streets and roads, in the city's frame: [points, width, dirt?, mouth splayed into the road it leaves?]. */
+const STREETS: readonly (readonly [readonly P2[], number, boolean?, Street['flare']?])[] = [
   // The Kingsroad, from the moor's crest down to the Kingsbridge, over the Ald to the Kingsgate, and in through it to the market.
   [[[-162, -24], [-151, -22.6], [-141, -18.6], [-134, -15.3], [-124, -15], [-113, -15], [-108, -15]], 5.5, true],
   [[[-112, -15], [-90, -15]], 7],
   // The farm track off it, down the Ald's west bank to the barn and the windmill in the river's bend.
-  [[[-136, -16], [-136.5, -4], [-136, 24], [-133, 50], [-129.5, 70], [-127, 88]], 3, true],
+  [[[-136, -16], [-136.5, -4], [-136, 24], [-133, 50], [-129.5, 70], [-127, 88]], 3, true, { extra: 3, length: 9 }],
   // High Street, the market to the cathedral's west gate.
   [[[-50, -15], [-20, -16], [6, -15]], 7],
   // The Crown terrace: from the market up round the hill's south face and down to the harbour.
@@ -523,7 +527,7 @@ const HOUSES: Readonly<Record<District, { w: P2; d: P2; storeys: P2 }>> = {
 export function planAldhaven(): AldhavenPlan {
   const { land, cell, at } = ALDHAVEN;
   const rand = mulberry32(1871);
-  const streets: Street[] = STREETS.map(([pts, width, dirt]) => ({ line: sampleCurve(pts, 1), width, dirt: dirt ?? false }));
+  const streets: Street[] = STREETS.map(([pts, width, dirt, flare]) => ({ line: sampleCurve(pts, 1), width, dirt: dirt ?? false, ...(flare ? { flare } : {}) }));
 
   // ---- The ground first: the city's own, blended at its edges to its neighbours', the roads outside the walls laid into it.
   const ox = at.x;
@@ -544,10 +548,16 @@ export function planAldhaven(): AldhavenPlan {
   const plot = new Plot(land.minX, land.minZ, land.maxX, land.maxZ);
   plot.mark(land.minX, land.maxX, land.minZ, land.maxZ, (x, z) => !insideWalls(x, z, wall.thick / 2 + 0.6) || inRiver(x, z, 1.5) || (Math.abs(x - bridge.x) < bridge.width / 2 + 1 && z > 30 && z < 90));
   const worn = new Plot(land.minX, land.minZ, land.maxX, land.maxZ);
+  /** The dirt roads' middles, kept well inside their edges, off the bridges' decks. */
+  const bed = new Plot(land.minX, land.minZ, land.maxX, land.maxZ);
   for (const s of streets) {
     const r = s.width / 2 + 0.4;
     for (const [px, pz] of s.line) plot.mark(px - r, px + r, pz - r, pz + r, (x, z) => Math.hypot(x - px, z - pz) < r);
-    if (s.dirt) continue;
+    if (s.dirt) {
+      const m = s.width / 2 - 0.5;
+      for (const [px, pz] of s.line) bed.mark(px - m, px + m, pz - m, pz + m, (x, z) => Math.hypot(x - px, z - pz) < m && deckAtCity(x, z) === null);
+      continue;
+    }
     const m = s.width / 2 - 1;
     for (const [px, pz] of s.line) worn.mark(px - m, px + m, pz - m, pz + m, (x, z) => Math.hypot(x - px, z - pz) < m);
   }
@@ -1217,7 +1227,8 @@ export function planAldhaven(): AldhavenPlan {
     const street = paved && inside && k >= 0 && worn.taken[k] === 1;
     const westBank = x < -127 && x > ESCARPMENT && z > -106 && z < 34 && offAld(x, z) > 2.5 && Math.abs(z + 17) > 5;
     const inBend = x < wall.west - 3 && x > -126 && z > 82 && z < 111 && offAld(x, z) > 2.5;
-    return { paved, basalt, garden, field: !inside && (westBank || inBend), street, yard };
+    const road = !paved && k >= 0 && bed.taken[k] === 1;
+    return { paved, basalt, garden, field: !inside && (westBank || inBend), street, yard, road };
   };
   const west = kingsroadSeam([-1, 0]);
   const westSeam: SideSeam = { ...west, heights: west.heights.map((_, k) => ground.get(0, k)) };

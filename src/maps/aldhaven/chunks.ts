@@ -2,8 +2,9 @@ import { BufferAttribute, type BufferGeometry, Color, Matrix4, Quaternion, Vecto
 import { CONFIG } from '../../config';
 import { type ChunkData, type ChunkKey, chunkBounds, chunkCoord, chunkKey, type Detail, sphereAround } from '../../world/chunks';
 import { plantPrototypes, type Prototypes } from '../forest/nature';
+import { EARTH } from '../forest/palette';
 import { hash01, smoothstep, valueNoise } from '../forest/noise';
-import { addRoads, addSkirt, faceUp, MeshBuffer, type Region } from '../forest/terrain';
+import { addRoads, addSkirt, MeshBuffer, type Region } from '../forest/terrain';
 import { buildPiece } from './buildings';
 import { CITY_GROUND, CITY_TREES } from './palette';
 import { ALDHAVEN, type AldhavenPlan, type CityPlantKind, planAldhaven, SMALL, UNDERGROWTH } from './plan';
@@ -160,12 +161,15 @@ function addCityGround(raw: MeshBuffer, plan: AldhavenPlan, region: Region, coar
     graniteDark: c(CITY_GROUND.graniteDark),
     yard: c(CITY_GROUND.yard),
     yardDark: c(CITY_GROUND.yardDark),
+    dirt: c(EARTH.dirt),
+    dirtDark: c(EARTH.dirtDark),
   };
   const color = new Color();
   const tint = new Color();
   const water = ALDHAVEN.water;
 
-  const colourAt = (x: number, z: number, h: number, ny: number, jitter: number): Color => {
+  /** The ground's colour at (x, z), `h` high, its slope's normal `ny` up. */
+  const colourAt = (x: number, z: number, h: number, ny: number): Color => {
     const here = plan.surface(x, z);
     if (here.paved && h > water + 0.6) {
       if (here.basalt) color.copy(G.basalt).lerp(G.basaltDark, valueNoise(x * 0.6, z * 0.6, 301));
@@ -178,6 +182,9 @@ function addCityGround(raw: MeshBuffer, plan: AldhavenPlan, region: Region, coar
       // A back yard: packed earth, grass coming through at its edges.
       color.copy(G.yard).lerp(G.yardDark, valueNoise(x * 0.7, z * 0.7, 321) * 0.7);
       color.lerp(G.grass, smoothstep(0.55, 0.8, valueNoise(x * 0.35, z * 0.35, 323)) * 0.7);
+    } else if (here.road) {
+      // Under a dirt road: its earth, in case the land shows through the ribbon laid over it.
+      color.copy(G.dirt).lerp(G.dirtDark, valueNoise(x * 0.4, z * 0.4, 325) * 0.5);
     } else if (here.field) {
       const strip = Math.floor((z + 2 * Math.floor(x / 22)) / 7) & 1;
       color.copy(strip ? G.field : G.fieldGold).lerp(G.grass, valueNoise(x * 0.1, z * 0.1, 307) * 0.4);
@@ -190,26 +197,30 @@ function addCityGround(raw: MeshBuffer, plan: AldhavenPlan, region: Region, coar
     // Steep ground is rock: the fells' and the escarpment's granite in its beds, the river's banks; grass holds on its ledges.
     tint.copy(G.granite).lerp(G.graniteDark, valueNoise(x * 0.05, z * 0.05, 311)).multiplyScalar(0.9 + 0.12 * Math.sin(h * 1.7 + valueNoise(x * 0.1, z * 0.1, 313) * 3));
     color.lerp(tint, smoothstep(0.78, 0.5, ny) * (0.55 + 0.45 * smoothstep(0.35, 0.6, valueNoise(x * 0.18, z * 0.18, 315))));
-    return color.multiplyScalar(0.95 + jitter * 0.1);
+    return color;
   };
   const v = (i: number, j: number): [number, number, number] => [ground.x(i), ground.get(i, j), ground.z(j)];
+  const shade = new Color();
   for (let j = j0; j < j1; j += step) {
     for (let i = i0; i < i1; i += step) {
       const a = v(i, j);
       const b = v(i + step, j);
       const cc = v(i, j + step);
       const d = v(i + step, j + step);
+      // One colour to a cell, from its middle and its mean slope, so the edge of a field, a sandy bank or a rock face
+      // runs along the cells rather than in teeth through their halves; each half only a shade lighter or darker.
+      const span = d[0] - a[0];
+      const gx = (b[1] + d[1] - a[1] - cc[1]) / (2 * span);
+      const gz = (cc[1] + d[1] - a[1] - b[1]) / (2 * span);
+      const base = colourAt((a[0] + d[0]) / 2, (a[2] + d[2]) / 2, (a[1] + b[1] + cc[1] + d[1]) / 4, 1 / Math.hypot(gx, gz, 1));
       // The same split as HeightGrid.at: a-b-c and b-d-c.
       for (const [p, q, r, t] of [
         [a, b, cc, 0],
         [b, d, cc, 1],
       ] as const) {
-        const cx = (p[0] + q[0] + r[0]) / 3;
-        const cz = (p[2] + q[2] + r[2]) / 3;
-        const cy = (p[1] + q[1] + r[1]) / 3;
-        raw.tri(p, q, r, colourAt(cx, cz, cy, faceUp(p, q, r), hash01(i, j, 377 + t + (coarse ? 2 : 0))));
+        raw.tri(p, q, r, shade.copy(base).multiplyScalar(0.95 + hash01(i, j, 377 + t + (coarse ? 2 : 0)) * 0.1));
       }
     }
   }
-  if (coarse) addSkirt(raw, ground, [i0, i1, j0, j1], step, (x, z, y) => colourAt(x, z, y, 1, 0.5));
+  if (coarse) addSkirt(raw, ground, [i0, i1, j0, j1], step, (x, z, y) => colourAt(x, z, y, 1));
 }
