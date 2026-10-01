@@ -11,6 +11,7 @@ import { Walkable } from '../walkable';
 import { Colliders } from './colliders';
 import { HOUSE, planHouse } from './house';
 import { INN, planInn } from './inn';
+import { breakUpRidge, DOORSTEP, easeRailBank, planFootpaths, roundTowerHill } from './dressing';
 import { mineCamp, mineChest, mineClumps, mineRespawn, mineVeins, mouthColliders, mouthOf, planMine } from './mine';
 import { SMITHY, smithyColliders } from './smithy';
 import { fbm, lerp, mulberry32, nearestOnPolyline, type P2, sampleCurve, smoothstep, valueNoise } from './noise';
@@ -97,12 +98,18 @@ export const NORTH_PASS = {
   cairn: { x: 8.4, z: -77.6, h: 1.25 },
 } as const;
 
-const PATHS: { id: string; width: number; pts: P2[] }[] = [
-  { id: 'main', width: 4, pts: MAIN_ROAD },
-  { id: 'east', width: 3.4, pts: [[1, -1], [12, -2], [26, 3], [38, 12], [47, 20], [54, 26]] },
-  { id: 'west', width: 2.4, pts: [[-1, 3], [-14, 5], [-26, 12], [-34, 19], [-39, 24]] },
-  { id: 'tower', width: 2.2, pts: [[-5, -43], [6, -49], [18, -54], [28, -57], [35, -58]] },
-  { id: 'camp', width: 2.2, pts: [[-7, -50], [-20, -47], [-32, -44], [-42, -42]] },
+/**
+ * The roads. Each side road starts on the main road's middle, its mouth
+ * splayed out into it (`flare`); those that end in a yard (the farm road, the
+ * watchtower's, the lumber camp's, and the main road at the mine's front) wear
+ * away into its earth over their last few metres (`fade`).
+ */
+const PATHS: { id: string; width: number; pts: P2[]; flare?: Path['flare']; fade?: number }[] = [
+  { id: 'main', width: 4, pts: MAIN_ROAD, fade: 5 },
+  { id: 'east', width: 3.4, pts: [[1, -1], [12, -2], [26, 3], [38, 12], [47, 20], [54, 26]], flare: { extra: 3, length: 7 }, fade: 6 },
+  { id: 'west', width: 2.4, pts: [[-1, 3], [-14, 5], [-26, 12], [-34, 19], [-39, 24]], flare: { extra: 2.6, length: 6 } },
+  { id: 'tower', width: 2.2, pts: [[-5, -43], [6, -49], [18, -54], [28, -57], [35, -58]], flare: { extra: 2.6, length: 6 }, fade: 4 },
+  { id: 'camp', width: 2.2, pts: [[-7, -50], [-20, -47], [-32, -44], [-42, -42]], flare: { extra: 2.6, length: 6 }, fade: 5 },
 ];
 
 const STREAM: P2[] = [
@@ -445,8 +452,8 @@ const STRUCTURES: Spec[] = [
   { kind: 'windmill', x: 73, z: 40, yaw: facing(73, 40, 56, 34), hw: 2.6, hd: 2.6 },
   { kind: 'haybale', x: 60.5, z: 27.5, yaw: 0.4, hw: 0.9, hd: 0.6 },
   { kind: 'haybale', x: 62.5, z: 25.5, yaw: 1.3, hw: 0.9, hd: 0.6 },
-  { kind: 'haybale', x: 59, z: 30, yaw: 2.2, hw: 0.9, hd: 0.6 },
-  { kind: 'trough', x: 50, z: 31, yaw: 0.6, hw: 1.1, hd: 0.45 },
+  { kind: 'haybale', x: 63.8, z: 28.6, yaw: 2.2, hw: 0.9, hd: 0.6 },
+  { kind: 'trough', x: 46.2, z: 29.6, yaw: 0.8, hw: 1.1, hd: 0.45 },
   { kind: 'scarecrow', x: 58, z: 47, yaw: facing(58, 47, 56, 36), hw: 0.3, hd: 0.3 },
   // Watchtower on its hill, lumber camp, the old mine, the standing stones.
   { kind: 'tower', x: 40, z: -58, yaw: facing(40, -58, 34, -58), hw: 3.4, hd: 3.4 },
@@ -497,6 +504,13 @@ export interface Path {
   line: P2[];
   /** Ground height along the centre line. */
   heights: number[];
+  /** A trodden footpath to a door or a gate (dressing.ts): no ruts, laid under the roads and yards it leaves. */
+  foot?: boolean;
+  /** Its mouth splayed into the road it leaves, and its end worn away into a yard (as `addRoads` lays it). */
+  flare?: { readonly extra: number; readonly length: number };
+  fade?: number;
+  /** How far above the ground it's laid, if not by its place in the list. */
+  lift?: number;
 }
 
 /** A deck you walk on above the terrain: its centre line runs along its own Z. */
@@ -685,7 +699,7 @@ export function buildLayout(): ForestLayout {
     heights = heights.map((h) => Math.max(h, water + 0.5));
     // Up the pass, no steeper than PASS.grade.
     if (spec.id === 'main') heights = easeGrade(line, heights, line.findIndex(([, z]) => z <= play), PASS.grade);
-    const path = { id: spec.id, width: spec.width, line, heights };
+    const path: Path = { id: spec.id, width: spec.width, line, heights, flare: spec.flare, fade: spec.fade };
     flattenAlong(ground, path);
     return path;
   });
@@ -710,6 +724,8 @@ export function buildLayout(): ForestLayout {
   // The mine is dug into the ridge: its floor is level with the ground at its mouth.
   const mine = structures.find((s) => s.kind === 'mine')!;
   mine.y = ground.at(mine.x, mine.z + mine.hd + 0.5);
+  // The ground as it lay before anything was levelled for a building: the finishing touches ease back to it.
+  const unlevelled = ground.data.slice();
   // Level a bed for the rails out of the mouth, so they don't hang over the dip in front.
   levelRect(ground, mine, mine.y, -2.8, 2.8, mine.hd - 0.3, mine.hd + 9, 3);
   // The watchtower's hilltop is levelled to its base, so the road climbs to its door
@@ -823,13 +839,21 @@ export function buildLayout(): ForestLayout {
   const naturalRoads = new DistanceField(half);
   for (const p of paths) naturalRoads.stamp(p.line, p.width / 2 + 6, p.width / 2);
   const planted = structures.slice();
+  // The finishing touches to the ground (dressing.ts), before the pass is cut through the ridge they break up.
+  roundTowerHill(ground, unlevelled, tower);
+  easeRailBank(ground, unlevelled, mine);
+  breakUpRidge(ground, mine);
   cutNorthPass(ground);
   const cartRoad = northPassRoad(ground);
   paths.push(cartRoad);
   const slide = northPassSlide(ground);
   structures.push(...northPassPieces(ground));
+  // The footpaths to every door and gate, laid over the ground as it's finished (dressing.ts).
+  const footpaths = planFootpaths(ground, paths, structures);
+  paths.push(...footpaths);
   const roadDistance = new DistanceField(half);
-  for (const p of paths) roadDistance.stamp(p.line, p.width / 2 + 6, p.width / 2);
+  // A footpath's last stretch runs up to a door or a gate, which stands on it: that isn't road to keep things off.
+  for (const p of paths) roadDistance.stamp(p.foot ? p.line.slice(0, -DOORSTEP) : p.line, p.width / 2 + 6, p.width / 2);
   // The veins out of doors: what grows there is thinned away after it's placed (so nothing else moves), and they're solid.
   const veins: SpotPlan[] = VEINS.outdoors.map((v) => ({
     id: v.id,
@@ -857,6 +881,8 @@ export function buildLayout(): ForestLayout {
     plants.length,
     ...plants
       .filter((p) => !inNorthPass(p.x, p.z, 2.5) && nearestOnPolyline(cartRoad.line, p.x, p.z).d > cartRoad.width / 2 + (TREE_HEIGHT[p.kind] ? 1.6 : 0.4) && Math.hypot(p.x - cairn.x, p.z - cairn.z) > 1.4)
+      // Nor on the footpaths: trees and rocks keep back from their edges, the grass from their middles.
+      .filter((p) => footpaths.every((f) => nearestOnPolyline(f.line, p.x, p.z).d > (TREE_HEIGHT[p.kind] ? f.width / 2 + 1.2 : p.kind === 'grass' || p.kind === 'flower' ? f.width / 2 - 0.1 : f.width / 2 + 0.5)))
       .map((p) => ({ ...p, y: p.y + ground.at(p.x, p.z) - natural.at(p.x, p.z) })),
   );
   plants.push(...passEdges(ground, main.line));

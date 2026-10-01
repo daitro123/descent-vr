@@ -2,7 +2,8 @@ import { BufferAttribute, BufferGeometry, Color, Matrix4, Vector3 } from 'three'
 import { CONFIG } from '../../config';
 import type { HeightGrid } from '../heightGrid';
 import { FOREST, type ForestLayout, northPassScar, worldToLocal } from './layout';
-import { hash01, mulberry32, smoothstep, valueNoise } from './noise';
+import { YARDS } from './dressing';
+import { hash01, lerp, smoothstep, valueNoise } from './noise';
 import { EARTH, GREEN } from './palette';
 
 // Ground and dirt roads, a chunk at a time. The ground is a height-field mesh
@@ -166,7 +167,7 @@ function canopy(kind: string, scale: number): number {
  * strays from the full ground beside it, so no crack opens between the two.
  */
 export function addGround(raw: MeshBuffer, layout: ForestLayout, region: Region, coarse: boolean): void {
-  const { ground, fields, plants, mine } = layout;
+  const { ground, plants, mine } = layout;
   const { n, cell, half } = ground;
   const { water } = FOREST;
   const step = coarse ? Math.round(CONFIG.streaming.standIn.cell / cell) : 1;
@@ -207,7 +208,6 @@ export function addGround(raw: MeshBuffer, layout: ForestLayout, region: Region,
   const rock = new Color(EARTH.rock);
   const sand = new Color(EARTH.sand);
   const mud = new Color(EARTH.mud);
-  const soil = new Color(EARTH.soil);
   const snow = new Color(EARTH.snow);
   const color = new Color();
 
@@ -229,10 +229,6 @@ export function addGround(raw: MeshBuffer, layout: ForestLayout, region: Region,
     if (coarse && layout.roadDistance.at(x, z) < 0) color.lerp(dirt, 0.85);
     color.lerp(sand, smoothstep(water + 0.4, water + 0.1, h));
     color.lerp(mud, smoothstep(water - 0.05, water - 0.4, h));
-    for (const f of fields) {
-      const [lx, lz] = worldToLocal(f, x, z);
-      if (Math.abs(lx) < f.hw + 0.4 && Math.abs(lz) < f.hd + 0.4) color.copy(soil);
-    }
     return color.multiplyScalar((1 - Math.min(0.25, sh * 0.1)) * (0.95 + jitter * 0.1));
   };
 
@@ -337,17 +333,30 @@ export function addPaths(raw: MeshBuffer, layout: ForestLayout, region: Region):
   addRoads(raw, ground, layout.paths, region, GREEN.grass, onBridge);
 }
 
+/** A path as `addRoads` lays it: its centre line and width, and how its ends and height above the ground go. */
+export interface RoadRibbon {
+  readonly line: readonly (readonly [number, number])[];
+  readonly width: number;
+  /** Where it leaves another road: its edges splay out by `extra` m at its start, back to its width `length` m on, so it opens into the road it joins. */
+  readonly flare?: { readonly extra: number; readonly length: number };
+  /** Its last `fade` m wear into plain trodden earth (no ruts, no verge), where it ends in a yard. */
+  readonly fade?: number;
+  /** How far above the ground it's laid; by default each path in the list a little lower than the one before. */
+  readonly lift?: number;
+}
+
 /**
  * Each path is a ribbon laid a few centimetres above the ground: edges
  * blending into the land's `verge` colour, darker wheel ruts on the wider
  * roads, a lighter crown. A stretch goes in the chunk its start is in, but
  * where `skip` says. A path's ends are cut square, so a road carried on over
- * a seam meets its other half.
+ * a seam meets its other half; one that starts on another road can splay its
+ * mouth into it, and one that ends in a yard can wear away into its earth.
  */
 export function addRoads(
   raw: MeshBuffer,
   ground: Pick<HeightGrid, 'at'>,
-  paths: readonly { readonly line: readonly (readonly [number, number])[]; readonly width: number }[],
+  paths: readonly RoadRibbon[],
   region: Region,
   verge: number,
   skip: (x: number, z: number) => boolean = () => false,
@@ -358,10 +367,14 @@ export function addRoads(
   const light = new Color(EARTH.dirtLight);
   const col = new Color();
   paths.forEach((path, pi) => {
-    const lift = 0.07 - pi * 0.006;
+    const lift = path.lift ?? 0.07 - pi * 0.006;
     const wide = path.width > 3;
     const across = wide ? [-0.5, -0.36, -0.25, 0.25, 0.36, 0.5] : [-0.5, -0.3, 0.3, 0.5];
     const strips = wide ? [edge, rut, crown, rut, edge] : [edge, crown, edge];
+    // How far along the line each sample is, for a splayed mouth and a worn end.
+    const along = [0];
+    for (let i = 1; i < path.line.length; i++) along.push(along[i - 1] + Math.hypot(path.line[i][0] - path.line[i - 1][0], path.line[i][1] - path.line[i - 1][1]));
+    const total = along[along.length - 1];
     const row = (i: number) => {
       const [x, z] = path.line[i];
       const [px, pz] = path.line[Math.max(0, i - 1)];
@@ -369,13 +382,18 @@ export function addRoads(
       const len = Math.hypot(nx - px, nz - pz) || 1;
       const sx = -(nz - pz) / len;
       const sz = (nx - px) / len;
+      // A mouth splays out and lies over the road it leaves (it starts on that road's middle), so it opens out of it.
+      const splay = path.flare ? path.flare.extra * smoothstep(path.flare.length, 0, along[i]) : 0;
+      const over = path.flare ? 1 - smoothstep(path.flare.length * 0.6, path.flare.length, along[i]) : 0;
+      const y = lerp(lift, 0.075 + pi * 0.001, over);
       return across.map((f, k) => {
         const end = i === 0 || i === path.line.length - 1;
-        const ragged = !end && (k === 0 || k === across.length - 1) ? hash01(pi * 4096 + i, k, 5) * 0.35 : 0;
-        const off = f * path.width + Math.sign(f) * ragged;
+        const outer = k === 0 || k === across.length - 1;
+        const ragged = !end && outer ? hash01(pi * 4096 + i, k, 5) * 0.35 : 0;
+        const off = f * (path.width + splay) + Math.sign(f) * ragged;
         const vx = x + sx * off;
         const vz = z + sz * off;
-        return [vx, ground.at(vx, vz) + lift, vz];
+        return [vx, ground.at(vx, vz) + y, vz];
       });
     };
     for (let i = 0; i < path.line.length - 1; i++) {
@@ -383,9 +401,13 @@ export function addRoads(
       if (!region.owns(x, z)) continue;
       if (skip(x, z) || skip(...path.line[i + 1])) continue;
       const [here, next] = [row(i), row(i + 1)];
+      // Worn smooth where it ends in a yard, and in its mouth, where wheels and feet cut the corner (no ruts there).
+      const worn = path.fade ? smoothstep(total - path.fade, total, along[i]) : 0;
+      const mouth = path.flare ? smoothstep(path.flare.length, path.flare.length * 0.3, along[i]) : 0;
       for (let k = 0; k < strips.length; k++) {
         col.copy(strips[k]);
         if (strips[k] === crown) col.lerp(light, valueNoise(x * 0.3, z * 0.3, 3) * 0.6);
+        else col.lerp(crown, Math.max(worn, strips[k] === rut ? mouth : mouth * 0.5));
         col.multiplyScalar(0.94 + hash01(pi * 4096 + i, k, 6) * 0.12);
         raw.tri(here[k], next[k], here[k + 1], col);
         raw.tri(here[k + 1], next[k], next[k + 1], col);
@@ -394,40 +416,38 @@ export function addRoads(
   });
 }
 
-/** Worn earth where people gather: the village square, the farmyard, the camp. */
-const PATCHES: readonly (readonly [number, number, number])[] = [
-  [0, 0, 7.5],
-  [54, 27, 7],
-  [-48, -42, 5],
-  [40, -58, 5.5],
-  [-14, -73.5, 4.5],
-  [-30, 52, 3],
-];
-
-/** Each patch of worn earth whose middle is in `region`. */
-export function addPatches(raw: MeshBuffer, layout: ForestLayout, region: Region): void {
+/**
+ * Each yard of worn earth (see `YARDS`) whose middle is in `region`: trodden
+ * bare in the middle, its edge wandering in and out (smoothly, so it reads as
+ * worn rather than cut) and wearing off into the grass.
+ */
+export function addYards(raw: MeshBuffer, layout: ForestLayout, region: Region): void {
   const dirt = new Color(EARTH.dirt);
   const light = new Color(EARTH.dirtLight);
-  const edge = new Color(EARTH.dirt).lerp(new Color(GREEN.grass), 0.4);
+  const grass = new Color(GREEN.grass);
   const col = new Color();
-  PATCHES.forEach(([cx, cz, r], index) => {
-    if (!region.owns(cx, cz)) return;
-    const rand = mulberry32(9 + index * 7919);
-    const segs = 28;
-    const rings = [0, 0.45, 0.8, 1];
+  const segs = 40;
+  const rings = [0, 0.25, 0.5, 0.78, 1];
+  YARDS.forEach((yard, index) => {
+    if (!region.owns(yard.x, yard.z)) return;
+    const angle = (s: number) => (s / segs) * Math.PI * 2;
+    const reach = Array.from({ length: segs }, (_, s) => yard.r * (0.82 + 0.36 * valueNoise(Math.cos(angle(s)) * 1.6 + index * 7.3, Math.sin(angle(s)) * 1.6, 151)));
     const pts = rings.map((f) =>
-      Array.from({ length: segs }, (_, s) => {
-        const a = (s / segs) * Math.PI * 2;
-        const rr = r * f * (f === 1 ? 0.9 + rand() * 0.2 : 1);
-        const x = cx + Math.cos(a) * rr;
-        const z = cz + Math.sin(a) * rr;
+      reach.map((rr, s) => {
+        const x = yard.x + Math.cos(angle(s)) * rr * f;
+        const z = yard.z + Math.sin(angle(s)) * rr * f;
         return [x, layout.ground.at(x, z) + 0.04, z];
       }),
     );
     for (let ring = 0; ring < rings.length - 1; ring++) {
       for (let s = 0; s < segs; s++) {
         const t = (s + 1) % segs;
-        col.copy(ring === rings.length - 2 ? edge : dirt).lerp(light, ring === 0 ? 0.3 : rand() * 0.3).multiplyScalar(0.94 + rand() * 0.12);
+        const [x, , z] = pts[ring + 1][s];
+        col.copy(dirt).lerp(light, valueNoise(x * 0.3, z * 0.3, 3) * 0.5);
+        // The outer ring is the edge, half worn back to grass; the one inside it only a little.
+        if (ring === rings.length - 2) col.lerp(grass, 0.3 + 0.25 * valueNoise(x * 0.5, z * 0.5, 153));
+        else if (ring === rings.length - 3) col.lerp(grass, 0.08);
+        col.multiplyScalar(0.96 + hash01(index * 512 + ring * 64 + s, 0, 7) * 0.08);
         raw.tri(pts[ring][s], pts[ring + 1][s], pts[ring + 1][t], col);
         if (ring > 0) raw.tri(pts[ring][s], pts[ring + 1][t], pts[ring][t], col);
       }

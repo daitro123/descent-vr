@@ -1,4 +1,4 @@
-import { type BufferGeometry, DodecahedronGeometry, Euler, IcosahedronGeometry, Matrix4, Vector3 } from 'three';
+import { BufferAttribute, BufferGeometry, Color, DodecahedronGeometry, Euler, IcosahedronGeometry, Matrix4, Vector3 } from 'three';
 import { ModelBuilder, type PartOpts, type Vec3 } from '../../models/kit';
 import { PAL } from '../../models/palette';
 import type { Boulder, Deck, Field, ForestLayout, Structure } from './layout';
@@ -628,11 +628,50 @@ function trough(b: ModelBuilder): void {
   for (const x of [-0.8, 0.8]) b.box(0.12, 0.2, 0.9, { at: [x, 0.1, 0], color: BUILD.timber });
 }
 
+/** A field's tilled bed: how far above the ground it's laid, how far it runs past its crops, and its furrows' spacing. */
+const BED = { lift: 0.05, margin: 0.4, furrow: 0.375, piece: 3.5 } as const;
+
+/**
+ * The bed a field's crops grow in: furrows along its rows (alternate ridges
+ * and troughs), its margin half grown over, laid over the ground in pieces up
+ * to `piece` m long (the fields lie on ground that's all but flat). Its edges
+ * are the field's own, square and straight, not the ground's triangles.
+ */
+function soilBed(b: ModelBuilder, f: Field, heightAt: (x: number, z: number) => number): void {
+  const { lift, margin, furrow, piece } = BED;
+  const across = (half: number, step: number) => {
+    const n = Math.max(1, Math.round((half * 2) / step));
+    return [-half - margin, ...Array.from({ length: n + 1 }, (_, i) => -half + (i * half * 2) / n), half + margin];
+  };
+  const [xs, zs] = [across(f.hw, piece), across(f.hd, furrow)];
+  const at = (lx: number, lz: number) => {
+    const [x, z] = localToWorld(f, lx, lz);
+    return [x, heightAt(x, z) + lift, z];
+  };
+  const ridge: number[] = [];
+  const trough: number[] = [];
+  const rim: number[] = [];
+  for (let j = 0; j < zs.length - 1; j++) {
+    for (let i = 0; i < xs.length - 1; i++) {
+      const edge = j === 0 || j === zs.length - 2 || i === 0 || i === xs.length - 2;
+      const [p, q, r, s] = [at(xs[i], zs[j]), at(xs[i + 1], zs[j]), at(xs[i], zs[j + 1]), at(xs[i + 1], zs[j + 1])];
+      (edge ? rim : j % 2 ? trough : ridge).push(...p, ...r, ...q, ...q, ...r, ...s);
+    }
+  }
+  const rimColour = new Color(EARTH.soil).lerp(new Color(GREEN.grass), 0.35).getHex();
+  for (const [pts, color] of [[ridge, EARTH.soil], [trough, EARTH.soilDark], [rim, rimColour]] as const) {
+    const g = new BufferGeometry();
+    g.setAttribute('position', new BufferAttribute(new Float32Array(pts), 3));
+    b.shape(g, { color, jitter: 0.05 });
+  }
+}
+
 export function buildField(b: ModelBuilder, f: Field, heightAt: (x: number, z: number) => number): void {
   const rand = mulberry32(Math.floor(f.x * 31 + f.z * 17));
+  soilBed(b, f, heightAt);
   const place = (lx: number, lz: number): Vec3 => {
     const [x, z] = localToWorld(f, lx, lz);
-    return [x, heightAt(x, z), z];
+    return [x, heightAt(x, z) + BED.lift, z];
   };
   if (f.crop === 'wheat') {
     for (let lz = -f.hd + 0.4; lz <= f.hd - 0.3; lz += 0.75) {

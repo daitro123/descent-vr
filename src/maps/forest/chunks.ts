@@ -5,7 +5,7 @@ import { type ChunkData, type ChunkKey, chunkBounds, chunkCoord, chunkIndex, chu
 import { buildFence, buildField, buildStructure } from './buildings';
 import { FOREST, type ForestLayout, type PlantKind, planOakvale } from './layout';
 import { plantPrototypes, type Prototypes } from './nature';
-import { addGround, addPaths, addPatches, MeshBuffer, type Region } from './terrain';
+import { addGround, addPaths, addYards, MeshBuffer, type Region } from './terrain';
 
 // Oakvale's chunk builder: one 40 m chunk of its plan at full detail or as a
 // stand-in, as plain arrays. Free of the DOM, so it runs in tests and in its
@@ -89,7 +89,7 @@ export function buildOakvaleChunk(plan: ForestLayout, key: ChunkKey, detail: Det
   addGround(raw, plan, region, !full);
   if (full) {
     addPaths(raw, plan, region);
-    addPatches(raw, plan, region);
+    addYards(raw, plan, region);
   }
 
   // Plants are stamped from prototypes; the mountains past where you can walk, deep in the woods and

@@ -22,6 +22,7 @@ export const EARTH = {
   mud: 0x5e4a34,
   sand: 0x9a8a5e,
   soil: 0x5a3e28,
+  soilDark: 0x46301f,
   rock: 0x7f7a72,
   rockDark: 0x66625c,
   cliff: 0x6e6860,
