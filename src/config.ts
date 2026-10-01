@@ -1091,6 +1091,12 @@ export const CONFIG = {
     // full chunk's trees are the far set too. Past where you can walk, in the ring
     // of chunks round the zone's edge, one tree in `thin` is kept.
     trees: { clearing: 6, thin: 2 },
+    // The triangle budget (docs/quest-3-browser-performance-budget.md), as
+    // renderer.info counts it in XR, both eyes: `frame` for a whole frame and
+    // `chunk` for one full-detail chunk. Doubled from 300k and 16k on Tom's call
+    // (2026-10-01) and not yet measured on the headset: the check is `?perf` at
+    // Oakvale's mine front holding 72 fps on the Quest.
+    budget: { frame: 600_000, chunk: 32_000 },
   },
 
   // The old mine (world/mine.ts): you're in it once you walk in through its
@@ -1341,6 +1347,28 @@ export const CONFIG = {
         last: 3, // s a call holds its slot
         level: 1,
         ref: 30, // m within which it isn't quieter for distance: it carries
+      },
+    },
+    // Aldhaven's own ambience, placed nowhere: a steady wind off the sea over
+    // the surf's slow swell, and gulls crying now and then over the harbour
+    // and the roofs (the quays' lapping and the river are placed, as places).
+    harbour: {
+      wind: {
+        level: 0.6,
+        band: [320, 440], // Hz: each side's band's middle, between the woods' and the moor's
+        gust: [0.06, 0.1], // Hz: steadier than the moor's
+        depth: 0.5,
+        // The surf under it: noise below `cutoff` Hz, `level` as loud as a side's band, swelling at `swell` Hz by `depth` of that.
+        surf: { cutoff: 300, level: 0.5, swell: 0.11, depth: 0.6 },
+      },
+      call: {
+        every: [4, 13], // s between cries (random in range)
+        near: 15, // m off, at the nearest…
+        far: 45, // …and the farthest
+        height: [6, 18], // m over your head
+        last: 2.5, // s a cry holds its slot
+        level: 0.9,
+        ref: 20, // m within which it isn't quieter for distance
       },
     },
     // Birdsong: now and then a call from a tree `near` to `far` m off. Each try

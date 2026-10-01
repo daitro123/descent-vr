@@ -12,7 +12,8 @@ import { type ChunkReply, type ChunkServerScope, serveChunks } from '../src/worl
 // Aldhaven, the capital, as scenery only: its walls, streets, buildings,
 // harbour and trees, and nobody in it yet. Its chunks build the same
 // everywhere, its walls hold but for the gates, and you can walk from the
-// Kingsroad to every landmark.
+// Kingsroad to every landmark. The Ald comes down out of the north-west gorge
+// past the shut Gorgegate, under the Kingsbridge, into the city.
 
 let plan: AldhavenPlan;
 let city: Zone;
@@ -43,9 +44,19 @@ describe('Aldhaven, as the registry lists it', () => {
     expect(city).toMatchObject({ kind: 'zone', id: 'aldhaven', label: 'Aldhaven', seams: [plan.southSeam], sideSeams: [plan.westSeam] });
   });
 
-  it('is scenery only: no camps, people, pickups, chests, wake spots, sounds, interiors or mine', () => {
-    for (const k of ['camps', 'villagers', 'pickups', 'chests', 'spots', 'sounds', 'interiors'] as const) expect(city[k], k).toEqual([]);
+  it('is scenery only: no camps, people, pickups, chests, wake spots, interiors or mine', () => {
+    for (const k of ['camps', 'villagers', 'pickups', 'chests', 'spots', 'interiors'] as const) expect(city[k], k).toEqual([]);
     expect(city.mine).toBeNull();
+  });
+
+  it("sounds like a port: the harbour's air, and the river, the quays, the forge and the windmill where they are", () => {
+    expect(city.ambience).toBe('harbour');
+    const ids = new Set(city.sounds.map((s) => s.id));
+    expect([...ids].sort()).toEqual(['dock', 'forge', 'stream', 'windmill']);
+    for (const s of city.sounds) {
+      expect(s.interior, s.id).toBeNull();
+      expect(s.x >= city.land.minX && s.x <= city.land.maxX && s.z >= city.land.minZ && s.z <= city.land.maxZ, s.id).toBe(true);
+    }
   });
 
   it('starts ?map=aldhaven on the Kingsroad, outside the Kingsgate, looking at it', () => {
@@ -103,6 +114,42 @@ describe("Aldhaven's walls", () => {
   }, 30000);
 });
 
+describe('the Ald above the city', () => {
+  const { ald, kingsbridge, gorge, land, water } = ALDHAVEN;
+  // The ground, not a deck over it.
+  const h = (x: number, z: number) => plan.ground.at(x + at.x, z + at.z);
+
+  it('comes out of the gorge in the north-west and runs down past the west wall to the water gate', () => {
+    // Under water all the way down its line, from the north edge to the bend into the water gate.
+    for (let z = land.minZ; z < 50; z += 2) {
+      const n = ald.line.findIndex(([, lz]) => lz > z);
+      const [[ax, az], [bx, bz]] = [ald.line[n - 1], ald.line[n]];
+      const x = ax + ((bx - ax) * (z - az)) / (bz - az);
+      expect(h(x, z), `z ${z}`).toBeLessThan(water - 1);
+    }
+    // Not out of the west any more: the land along the west edge is dry from end to end.
+    for (let z = land.minZ + 2; z < ALDHAVEN.wall.south; z += 2) expect(h(land.minX + 1, z), `z ${z}`).toBeGreaterThan(water + 1);
+  });
+
+  it('carries the Kingsroad over it on the Kingsbridge, the deck under your feet as built', () => {
+    const z = kingsbridge.z + at.z;
+    for (let x = kingsbridge.x0 + 0.5; x < kingsbridge.x1; x += 0.5) {
+      const deck = plan.deckAt(x + at.x, z);
+      expect(deck, `x ${x}`).not.toBeNull();
+      expect(plan.heightAt(x + at.x, z)).toBe(deck);
+      expect(deck!).toBeGreaterThan(water + 3);
+      expect(free(x + at.x, z), `x ${x}`).toBe(true);
+    }
+    // And the water's under it.
+    expect(plan.ground.at(-123 + at.x, z)).toBeLessThan(water - 1);
+  });
+
+  it('stops you at the shut Gorgegate, the valley road open up to it', () => {
+    expect(free(gorge.road + at.x, gorge.gate + 4 + at.z)).toBe(true);
+    expect(free(gorge.road + at.x, gorge.gate - 3 + at.z)).toBe(false);
+  });
+});
+
 describe("Aldhaven's chunks", () => {
   it('builds each chunk the same every time, whatever was built before', () => {
     const keys = aldhavenChunks();
@@ -129,9 +176,11 @@ describe("Aldhaven's chunks", () => {
     }
   }, 60000);
 
-  it('makes stand-ins cheaper than full detail', () => {
+  it("makes stand-ins cheaper than full detail, and keeps every full chunk within the chunk budget's triangles", () => {
     for (const key of aldhavenChunks()) {
-      expect(buildAldhavenChunk(plan, key, 'standIn').position.length, key).toBeLessThan(buildAldhavenChunk(plan, key, 'full').position.length);
+      const full = buildAldhavenChunk(plan, key, 'full').position.length;
+      expect(buildAldhavenChunk(plan, key, 'standIn').position.length, key).toBeLessThan(full);
+      expect(full / 9, key).toBeLessThan(CONFIG.streaming.budget.chunk);
     }
   }, 30000);
 

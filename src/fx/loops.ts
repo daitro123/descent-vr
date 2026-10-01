@@ -99,6 +99,16 @@ const LOOPS = {
     const { cutoff, level, gust, depth } = rules.rumble;
     return [...gusts(kit, into, rules), ...band(kit, into, 'lowpass', cutoff, 0.8, 0.32 * level, gust, 0.32 * level * depth)];
   },
+  /** Aldhaven's wind off the sea: a steadier, brighter wind than the moor's, over the surf's slow swell and the hiss of it breaking. */
+  seaWind(kit, into) {
+    const rules = CONFIG.sound.harbour.wind;
+    const { cutoff, level, swell, depth } = rules.surf;
+    return [
+      ...gusts(kit, into, rules),
+      ...band(kit, into, 'lowpass', cutoff, 0.7, 0.32 * level, swell, 0.32 * level * depth),
+      ...band(kit, into, 'bandpass', 1800, 0.6, 0.05 * level, swell * 1.3, 0.045 * level),
+    ];
+  },
   /** The stream running under the bridge: a broad rush, a low burble and a glinting top. */
   stream(kit, into) {
     return [
