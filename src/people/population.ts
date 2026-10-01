@@ -2,6 +2,7 @@ import { Group, type Material, type Vector3 } from 'three';
 import { CONFIG } from '../config';
 import type { FileSpot, PatrolWalk } from '../enemies/patrol';
 import type { PersonPlan } from '../maps/types';
+import { BUILDS } from '../models/human';
 import { sharedModelMaterial } from '../models/materials';
 import type { Ground } from '../world/ground';
 import { BarkRule } from './barks';
@@ -75,7 +76,8 @@ export class Population<P extends Placed = Villager<string>> {
   /** Take in a zone's villagers (as it's loaded): none is built until you come near. */
   add(people: readonly PersonPlan[]): void {
     for (const plan of people) {
-      const stroll = plan.route?.length ? strollFrom(plan.x, plan.z, plan.route) : null;
+      // Each strolls at their build's pace: an elder slower than a grown man or a child.
+      const stroll = plan.route?.length ? strollFrom(plan.x, plan.z, plan.route, BUILDS[CAST[plan.cast].look.build].gait.speed) : null;
       this.slots.push({ plan, stroll, person: null, next: 0, far: Infinity, rank: Infinity });
     }
     this.rule.grow(people.length);
@@ -202,7 +204,15 @@ export function villagersOn(
       const turn = plan.turn ?? 0;
       const villager = new Villager(
         { id: plan.id, x: plan.x, z: plan.z, yaw: plan.yaw, interior: null, turn },
-        { rig, label: plan.label ?? person.label, stand: person.stand, work: WORKS[plan.work ?? 'stand'](person.stand, turn), start: startOf(plan.id), gives: false },
+        {
+          rig,
+          build: BUILDS[person.look.build],
+          label: plan.label ?? person.label,
+          stand: person.stand,
+          work: WORKS[plan.work ?? 'stand'](person.stand, turn),
+          start: startOf(plan.id),
+          gives: false,
+        },
         streets,
         stroll,
       );

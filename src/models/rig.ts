@@ -1,13 +1,17 @@
 import { Bone, type BufferGeometry, type Material, Skeleton, SkinnedMesh, Vector3 } from 'three';
 import { ModelBuilder } from './kit';
 
-// A humanoid skeleton shared by every enemy. The character faces +Z, so its
-// right side is -X. Rotations use Euler order YXZ, which makes poses readable:
+// A humanoid skeleton shared by every enemy and person. The character faces
+// +Z, so its right side is -X. Rotations use Euler order YXZ, which makes
+// poses readable:
 //   arms (hanging along -Y):  x < 0 raises forward, y swings the raised arm
 //                             round the body (+ toward the character's left),
 //                             z abducts (right arm: z < 0 lifts it outward)
 //   legs:                     x < 0 swings forward;  shins: x > 0 bends the knee
+//   feet (at the ankle):      x > 0 points the toe down
 //   spine:                    x > 0 leans forward;   y < 0 turns the chest to its right
+// The feet came last, for the people's walk (people/walk.ts): the human
+// body's soles hang from them; the skeletons' feet are still on their shins.
 // Weapons are held along the hand's -Y (continuing the arm), cutting edge
 // facing -Z: down in the guard, leading on the chop, and leading on the slashes
 // once their pose rolls the hand (poses.ts).
@@ -27,6 +31,8 @@ export const BONES = [
   'shinL',
   'thighR',
   'shinR',
+  'footL',
+  'footR',
 ] as const;
 export type BoneName = (typeof BONES)[number];
 
@@ -40,10 +46,18 @@ export interface Proportions {
   forearm: number;
   thigh: number;
   shin: number;
-  /** Skull scale (moves the jaw hinge). Default 1. */
+  /** Where the jaw hinges, as a share of an average skull (the skeletons draw their skulls this big). Default 1. */
   head?: number;
   /** Head pivot pushed forward, for hunched brutes. Default 0. */
   headZ?: number;
+  /**
+   * The back bent forward at the waist, rad, at bind: an elder's stoop. The
+   * arms still hang and the face still looks ahead, and every pose plays on
+   * top of it. Default 0.
+   */
+  stoop?: number;
+  /** The head, and all that's on it, scaled at bind: a child's head is a bigger share of them. Default 1. */
+  headSize?: number;
 }
 
 /** Bone name → Euler (YXZ) offset from the bind pose. Missing bones stay at bind. */
@@ -64,7 +78,16 @@ const PARENT: Record<BoneName, BoneName | null> = {
   shinL: 'thighL',
   thighR: 'hips',
   shinR: 'thighR',
+  footL: 'shinL',
+  footR: 'shinR',
 };
+
+/** Bones turned at bind, which poses turn on from: the stoop. */
+function bindTurns(p: Proportions): Pose {
+  const s = p.stoop ?? 0;
+  if (!s) return {};
+  return { spine: [s, 0, 0], head: [-s, 0, 0], upperArmL: [-s, 0, 0], upperArmR: [-s, 0, 0] };
+}
 
 function bindOffsets(p: Proportions): Record<BoneName, [number, number, number]> {
   return {
@@ -82,6 +105,8 @@ function bindOffsets(p: Proportions): Record<BoneName, [number, number, number]>
     shinL: [0, -p.thigh, 0],
     thighR: [-p.hipW, -0.02, 0],
     shinR: [0, -p.thigh, 0],
+    footL: [0, -p.shin, 0],
+    footR: [0, -p.shin, 0],
   };
 }
 
@@ -108,10 +133,12 @@ export class Rig {
   readonly bones: Record<BoneName, Bone>;
   readonly proportions: Proportions;
   private readonly bind: Record<BoneName, Vector3>;
+  private readonly turns: Pose;
 
   constructor(p: Proportions, dress: Dresser | BufferGeometry, material?: Material, seed = 1) {
     this.proportions = p;
     const offsets = bindOffsets(p);
+    const turns = bindTurns(p);
     const bones = {} as Record<BoneName, Bone>;
     const bind = {} as Record<BoneName, Vector3>;
     for (const name of BONES) {
@@ -119,11 +146,15 @@ export class Rig {
       bone.name = name;
       bone.rotation.order = 'YXZ';
       bone.position.set(...offsets[name]);
+      const turn = turns[name];
+      if (turn) bone.rotation.set(turn[0], turn[1], turn[2]);
       bind[name] = bone.position.clone();
       bones[name] = bone;
       const parent = PARENT[name];
       if (parent) bones[parent].add(bone);
     }
+    // A bigger head scales its face, hair and hat, and the jaw with it.
+    bones.head.scale.setScalar(p.headSize ?? 1);
     bones.hips.updateMatrixWorld(true);
 
     let geometry: BufferGeometry;
@@ -146,6 +177,7 @@ export class Rig {
     this.mesh.frustumCulled = false;
     this.bones = bones;
     this.bind = bind;
+    this.turns = turns;
   }
 
   /**
@@ -167,11 +199,13 @@ export class Rig {
     return this.mesh.geometry.getAttribute('position').count / 3;
   }
 
-  /** Set every bone from a pose; bones the pose omits return to bind. */
+  /** Set every bone from a pose, turned on from bind (a stoop stays stooped); bones the pose omits return to bind. */
   apply(pose: Pose): void {
     for (const name of BONES) {
       const r = pose[name];
-      if (r) this.bones[name].rotation.set(r[0], r[1], r[2]);
+      const b = this.turns[name];
+      if (b) this.bones[name].rotation.set(b[0] + (r?.[0] ?? 0), b[1] + (r?.[1] ?? 0), b[2] + (r?.[2] ?? 0));
+      else if (r) this.bones[name].rotation.set(r[0], r[1], r[2]);
       else this.bones[name].rotation.set(0, 0, 0);
     }
   }
@@ -186,7 +220,8 @@ export class Rig {
     for (const name of BONES) {
       const bone = this.bones[name];
       bone.position.copy(this.bind[name]);
-      bone.rotation.set(0, 0, 0);
+      const b = this.turns[name];
+      bone.rotation.set(b?.[0] ?? 0, b?.[1] ?? 0, b?.[2] ?? 0);
     }
   }
 }

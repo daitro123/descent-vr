@@ -281,7 +281,8 @@ export class Inspector {
 
     const frame = clip.sample(this.time, this.pose);
     b.rig.apply(frame.pose);
-    b.rig.setHipOffset(0, frame.hipY, 0);
+    const hip = frame.hip ?? [0, frame.hipY, 0];
+    b.rig.setHipOffset(hip[0], hip[1], hip[2]);
     const tele = b.material.telegraph;
     if (frame.telegraph > 0 && clip.attack) {
       tele.copy(clip.attack.blockable ? _telegraphBlock : _telegraphUnblock).multiplyScalar(frame.telegraph);

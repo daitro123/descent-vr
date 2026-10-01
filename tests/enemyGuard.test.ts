@@ -346,6 +346,8 @@ describe('the duelist (?duel)', () => {
     let raised = 0;
     for (let i = 0; i < 100; i++) {
       const e = spawn(make());
+      // Each read rolls from the i-th of them, however many building the body took (three.js rolls an id per bone).
+      n = i;
       e.update(DT, context(WINDUP.left));
       if (e.guarding) raised++;
     }
