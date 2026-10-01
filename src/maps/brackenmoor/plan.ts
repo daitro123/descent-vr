@@ -1,7 +1,7 @@
 import { CONFIG } from '../../config';
 import type { Tree, PlaceSound } from '../../world/ambience';
 import type { Atmosphere } from '../../world/atmosphere';
-import { Colliders } from '../forest/colliders';
+import { Colliders, toLocal } from '../forest/colliders';
 import { PASS } from '../forest/layout';
 import { fbm, lerp, mulberry32, nearestOnPolyline, type P2, sampleCurve, smoothstep, valueNoise } from '../forest/noise';
 import { type Deck, deckBetween, Decks } from '../decks';
@@ -38,12 +38,19 @@ export const MOOR = {
   blend: 40,
   /** The pass carries on `corridor` m past the crest before the moor opens out. */
   opening: { corridor: 24 },
-  /** The road over the moor, the main road's width; the other roads and the tracks. */
-  road: { width: 4 },
+  /**
+   * The road over the moor, the main road's width; anything narrower than
+   * `track` is a track. A road climbs no steeper than `grade` (as the pass
+   * does), a track no steeper than `trackGrade`, cut into the hill where the
+   * land is steeper.
+   */
+  road: { width: 4, track: 3, grade: 0.2, trackGrade: 0.33 },
   /** The rockfall across the Sunreach road where you can walk no farther: rocks this many m across. */
   rockfall: { count: 16, spread: 9, scale: [1.4, 3.2] },
   /** A lone pine's lean, downwind (to the north-east), as run over rise. */
   lean: 0.4,
+  /** The Rockfall Gap's notch in the south ridge: its middle's x, where its floor starts, its floor's half width, and how steeply it climbs to the saddle. */
+  gap: { x: -20, from: 540, half: 6, climb: 0.45 },
   /** The Blackmire's bog: its middle, its half sizes, and its pools' one level. */
   bog: { x: -138, z: 400, rx: 62, rz: 66, level: 8.2 },
   /** Cairnford's market square: its middle and half sizes. */
@@ -73,7 +80,7 @@ export const MOOR_ATMOSPHERE: Atmosphere = {
 };
 
 /** What grows or lies on the moor. Bracken, heather, cotton grass and reeds are undergrowth, too small for a stand-in. */
-export type MoorKind = 'bracken' | 'heather' | 'bush' | 'gorse' | 'rock' | 'pine' | 'hawthorn' | 'rowan' | 'reed' | 'cotton';
+export type MoorKind = 'bracken' | 'heather' | 'bush' | 'gorse' | 'rock' | 'pine' | 'hawthorn' | 'rowan' | 'reed' | 'cotton' | 'cypress';
 
 export interface MoorPlant {
   readonly kind: MoorKind;
@@ -181,7 +188,7 @@ const ROADS: { id: string; width: number; pts: P2[] }[] = [
   { id: 'hob', width: 2.2, pts: [[-1, 215], [-12, 219], [-24, 223]] },
   { id: 'oldFold', width: 2.2, pts: [[3, 250], [-9, 272], [-22, 297], [-33, 318]] },
   { id: 'scar', width: 2.2, pts: [[-40, 322], [-62, 300], [-88, 277], [-112, 257], [-132, 243]] },
-  { id: 'turfmoss', width: 2.2, pts: [[25, 378], [0, 375], [-30, 369], [-60, 361], [-86, 352]] },
+  { id: 'turfmoss', width: 2.2, pts: [[26, 381], [12, 381.5], [0, 378], [-30, 369], [-60, 361], [-86, 352]] },
   { id: 'fells', width: 2.2, pts: [[112, 361], [122, 333], [138, 302], [152, 270], [168, 242], [184, 222]] },
 ];
 
@@ -265,6 +272,20 @@ function rimHeight(x: number, z: number, out: number): number {
   return h;
 }
 
+/**
+ * The Rockfall Gap: a notch cut through the south ridge where the Sunreach
+ * road leaves, its floor climbing from where the road ends to a saddle on the
+ * land's edge, so from the moor you look up through it at the sky over
+ * Sunreach, past the rocks that fill it.
+ */
+function gapNotch(x: number, z: number, h: number): number {
+  const { x: gx, from, half, climb } = MOOR.gap;
+  const w = smoothstep(half + 9, half, Math.abs(x - gx - Math.sin(z * 0.08) * 2)) * smoothstep(from - 16, from, z);
+  if (w <= 0) return h;
+  const floor = moorHeight(gx, from) + Math.max(0, z - from - 14) * climb;
+  return lerp(h, Math.min(h, floor), w);
+}
+
 /** Raven Scar's pit: how deep the quarry is cut at (x, z), and 1 on its floor. Its mouth opens to the south-east. */
 function scarCut(x: number, z: number): number {
   const { scar } = MOOR;
@@ -300,7 +321,7 @@ export function planBrackenmoor(crest: Seam): MoorPlan {
     let h = moorHeight(x, z);
     const cut = scarCut(x, z);
     if (cut > 0) h -= MOOR.scar.depth * cut;
-    ground.data[k] = h + rimHeight(x, z, walkable.distance(x, z));
+    ground.data[k] = gapNotch(x, z, h + rimHeight(x, z, walkable.distance(x, z)));
   });
 
   // 2. The beck: a channel down its line, its water falling all the way from the bog to the fens.
@@ -320,8 +341,9 @@ export function planBrackenmoor(crest: Seam): MoorPlan {
       const b = nearestOnPolyline(beckLine, x, z).d;
       return b < BECK_SHAPE.half + 3 ? Math.max(h, along(levels, nearestBeck(beckLine, x, z)) + 0.9) : h;
     });
-    const heights = smoothHeights(raw, 5, 4, { first: r.id === 'pass', last: r.id === 'fen' });
-    if (r.id === 'fen') heights[heights.length - 1] = FEN_ROAD.road.y;
+    const smooth = smoothHeights(raw, 5, 4, { first: r.id === 'pass', last: r.id === 'fen' });
+    if (r.id === 'fen') smooth[smooth.length - 1] = FEN_ROAD.road.y;
+    const heights = regrade(r.line, smooth, r.width >= MOOR.road.track ? MOOR.road.grade : MOOR.road.trackGrade, r.id === 'fen');
     flattenTo(ground, field, heights, r.width / 2 + 0.6, 3);
     roads.push({ id: r.id, line: r.line, width: r.width, heights });
     fields.push(field);
@@ -339,9 +361,16 @@ export function planBrackenmoor(crest: Seam): MoorPlan {
   // 5. Last, the edges blend to the neighbours' heights, so the zones agree exactly on their lines.
   meetCrest(ground, crest);
   meetFenRoad(ground);
+  // The fens' blend mustn't fill the beck's channel on its way out: cut it again, and hold the seam's own heights on its line.
+  carveBeck(ground, beckField, levels);
+  holdFenSeam(ground);
 
   // The structures stand on the ground as it ends up.
-  const placed = structures.map((s) => ({ ...s, y: s.kind === 'bridge' ? s.y : ground.at(s.x, s.z) }));
+  const beckWater = { line: beckLine, levels, half: BECK_SHAPE.half };
+  const waterLevel = (x: number, z: number) => waterAt(beckWater, x, z);
+  // A boat floats, and a jetty stands from the water, wherever the bed under them is.
+  const afloat = (x: number, z: number) => Math.max(ground.at(x, z), waterLevel(x, z) || -Infinity);
+  const placed = structures.map((s) => ({ ...s, y: s.kind === 'bridge' ? s.y : s.kind === 'boat' ? afloat(s.x, s.z) - 0.08 : s.kind === 'jetty' ? afloat(s.x, s.z) : ground.at(s.x, s.z) }));
 
   const roadDistance = new Float32Array(ground.data.length).fill(Infinity);
   roads.forEach((r, i) => {
@@ -366,13 +395,14 @@ export function planBrackenmoor(crest: Seam): MoorPlan {
   for (const w of walls) addWallColliders(colliders, w);
 
   const rockfall = roads.find((r) => r.id === 'sunreach')!.line.at(-1)!;
-  const beckWater = { line: beckLine, levels, half: BECK_SHAPE.half };
-  const waterLevel = (x: number, z: number) => waterAt(beckWater, x, z);
-  const plants = placePlants(ground, walkable, colliders, roadDistance, stone, rockfall, beckWater, deckIndex);
-  for (const p of plants) {
+  const plants = placePlants(ground, walkable, colliders, roadDistance, stone, rockfall, beckWater, deckIndex).filter((p) => {
     const r = TRUNK[p.kind];
-    if (r && walkable.distance(p.x, p.z) <= 2) colliders.addCircle({ x: p.x, z: p.z, r: r * p.scale });
-  }
+    if (!r || walkable.distance(p.x, p.z) > 2) return true;
+    // A trunk or rock that would leave a gap too narrow for the widest body beside another is left out, so no pocket is shut in.
+    if (narrowGap(colliders, p.x, p.z, r * p.scale)) return false;
+    colliders.addCircle({ x: p.x, z: p.z, r: r * p.scale });
+    return true;
+  });
 
   const at = (z: number): P2 => pass.reduce((best, p) => (Math.abs(p[1] - z) < Math.abs(best[1] - z) ? p : best));
   const [sx, sz] = at(land.minZ + 6);
@@ -409,12 +439,45 @@ export function planBrackenmoor(crest: Seam): MoorPlan {
       { label: 'Raven Scar', x: -150, z: 226 },
       { label: 'Hollowhill', x: 188, z: 222 },
       { label: "Beck's Foot", x: 226, z: 524 },
-      { label: 'The Rockfall Gap', x: rockfall[0] + 2, z: rockfall[1] - 6 },
+      { label: 'The Rockfall Gap', x: rockfall[0] + 2, z: rockfall[1] - 12 },
     ],
     trees,
     sounds: [{ id: 'stream', x: BRIDGE.x, y: along(levels, nearestBeck(beckLine, BRIDGE.x, 393)), z: 393, interior: null }],
     heightAt,
   };
+}
+
+/** The widest body's width, and a little over: the narrowest gap left between two things you can't walk through. */
+const GAP = 2 * Math.max(CONFIG.player.bodyRadius, ...Object.values(CONFIG.enemies).map((e) => e.radius)) + 0.1;
+
+/** Would a circle of radius `r` at (x, z) stand within GAP of a collider without touching it? */
+function narrowGap(colliders: Colliders, x: number, z: number, r: number): boolean {
+  for (const c of colliders.circles) {
+    const gap = Math.hypot(x - c.x, z - c.z) - r - c.r;
+    if (gap > 0 && gap < GAP) return true;
+  }
+  for (const b of colliders.boxes) {
+    const [lx, lz] = toLocal(b, x, z);
+    const gap = Math.hypot(Math.max(Math.abs(lx) - b.hw, 0), Math.max(Math.abs(lz) - b.hd, 0)) - r;
+    if (gap > 0 && gap < GAP) return true;
+  }
+  return false;
+}
+
+/**
+ * A road's heights eased to climb no steeper than `grade` anywhere: from its
+ * first point on, and back from its last too if `last` is held (the Fen road
+ * meets the seam's bank), so it cuts into a slope too steep for it.
+ */
+function regrade(line: readonly P2[], heights: readonly number[], grade: number, last: boolean): number[] {
+  const h = [...heights];
+  const run = (i: number) => Math.hypot(line[i][0] - line[i - 1][0], line[i][1] - line[i - 1][1]) * grade;
+  for (let i = 1; i < h.length; i++) h[i] = Math.max(h[i - 1] - run(i), Math.min(h[i - 1] + run(i), h[i]));
+  if (last) {
+    h[h.length - 1] = heights[heights.length - 1];
+    for (let i = h.length - 1; i > 1; i--) h[i - 1] = Math.max(h[i] - run(i), Math.min(h[i] + run(i), h[i - 1]));
+  }
+  return h;
 }
 
 /** Where along the beck's line (index + fraction) is nearest (x, z). */
@@ -534,6 +597,13 @@ function meetFenRoad(ground: HeightGrid): void {
       ground.data[k] = i === last && on ? target : lerp(ground.data[k], lerp(ground.data[k], target, w), 1 - t);
     }
   }
+}
+
+/** Set the east edge's heights along the Fen road's line to the seam's exactly. */
+function holdFenSeam(ground: HeightGrid): void {
+  const { minZ, maxZ } = FEN_ROAD;
+  const last = ground.cols - 1;
+  for (let j = ground.row(minZ); j <= ground.row(maxZ); j++) ground.data[j * ground.cols + last] = fenRoadHeight(ground.z(j));
 }
 
 /**
@@ -718,11 +788,13 @@ function placeStructures(ground: HeightGrid, roads: readonly MoorRoad[]): MoorSt
   add('cairn', 59, 391, 0, 1, 1, 1.4, 1);
   add('signpost', 52, 408, 0, 1, 1, 1, 1);
   add('signpost', 30, 366, 0, 1, 1, 1, 2);
+  // The flat-boat to Reedholm, moored at the bridge's foot.
+  add('boat', 60, 396.2, Math.PI / 2 + 0.12, 1, 4.2, 1);
   add('bridge', BRIDGE.x, (BRIDGE.from + BRIDGE.to) / 2, 0, BRIDGE.width, BRIDGE.to - BRIDGE.from, BRIDGE.rise);
   // The houses: two storeys of grey stone up the market street, along the Kingsroad and over the bridge.
   const houses: [number, number, number, number][] = [
     [27, 338, 6, 7], [27, 349, 6, 6], [46, 336, 7, 6], [15, 356, 7, 6], [63, 343, 7, 6],
-    [84, 356, 8, 6], [104, 353, 7, 6], [90, 377, 7, 6], [62, 414, 7, 6], [34, 433, 6, 6], [67, 428, 6, 6], [8, 388, 6, 6],
+    [84, 356, 8, 6], [104, 353, 7, 6], [90, 377, 7, 6], [64, 405, 7, 6], [22, 441, 6, 6], [67, 428, 6, 6], [8, 388, 6, 6],
   ];
   const nearestRoad = (x: number, z: number): P2 => {
     let best: P2 = [x, z + 1];
@@ -843,8 +915,11 @@ function planWalls(roads: readonly MoorRoad[], decks: readonly Deck[]): MoorWall
   const dressed: P2[][] = [
     // The enclosure: its outer wall and the fields inside it.
     [[118, 258], [218, 258], [218, 425], [118, 425], [118, 258]],
-    [[118, 300], [218, 300]],
-    [[118, 392], [218, 392]],
+    // The fields' cross walls, each with a gate gap.
+    [[118, 300], [148, 300]],
+    [[154, 300], [218, 300]],
+    [[118, 392], [182, 392]],
+    [[188, 392], [218, 392]],
     [[170, 300], [170, 340]],
   ];
   const sq = MOOR.square;
@@ -990,6 +1065,8 @@ function placePlants(
     const z = scar.z + az * (scar.hd + 0.5) * (0.92 + rand() * 0.12);
     add('rock', x, z, 1.5 + rand() * 1.3);
   }
+  // Through the gap, on its saddle: the first dark cypresses of Sunreach.
+  for (const [dx, z, sc] of [[-3.5, 574, 1.1], [2.5, 577, 0.9], [6, 573, 0.75]] as const) add('cypress', MOOR.gap.x + dx, z, sc);
   // The rockfall: big rocks piled across the Sunreach road's end and the gap either side.
   const [ex, ez] = rockfall;
   for (let i = 0; i < MOOR.rockfall.count; i++) {

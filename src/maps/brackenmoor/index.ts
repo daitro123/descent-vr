@@ -5,6 +5,6 @@ export const map: MapInfo = {
   id: 'brackenmoor',
   label: 'Brackenmoor',
   origin: { x: 0, z: 0 },
-  neighbours: ['forest'],
+  neighbours: ['forest', 'sallows'],
   load: () => import('./moor').then((m) => m.buildBrackenmoor()),
 };

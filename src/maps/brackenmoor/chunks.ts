@@ -69,6 +69,8 @@ function moorPrototypes(oak: Prototypes): MoorPrototypes {
     gorse: oak.bush.map((g, v) => fleck(recolour(g, MOOR_TREES.gorse[v % 2]), MOOR_TREES.gorseFlower, v)),
     rock: recolourEach(oak.rock, [MOOR_PLANTS.lichen]),
     pine: recolourEach(oak.pine, MOOR_PLANTS.pine),
+    // Sunreach's cypresses, seen through the Rockfall Gap: Oakvale's pines drawn up tall and narrow, a dark warm green.
+    cypress: recolourEach(oak.pine, MOOR_TREES.cypress),
     // The hawthorns and rowans are Oakvale's young trees, the rowans flecked with their berries.
     hawthorn: recolourEach(oak.young, MOOR_TREES.hawthorn),
     rowan: oak.young.map((g, v) => fleck(recolour(g, MOOR_TREES.rowan[v % 2]), MOOR_TREES.rowanBerry, v + 5)),
@@ -143,7 +145,8 @@ export function buildMoorChunk(plan: MoorPlan, key: ChunkKey, detail: Detail): C
     if (!full && UNDERGROWTH.has(p.kind)) continue;
     const variants = (full ? near : far)[p.kind];
     // Bracken is Oakvale's grass grown tall; heather its rocks' shapes, purple, low and rounded.
-    s.set(p.scale, p.scale * (SQUASH[p.kind] ?? 1), p.scale);
+    const thin = p.kind === 'cypress' ? 0.4 : 1;
+    s.set(p.scale * thin, p.scale * thin * (SQUASH[p.kind] ?? 1), p.scale * thin);
     m.compose(new Vector3(p.x, p.y, p.z), q.setFromAxisAngle(UP, p.yaw), s);
     // Every pine leans the same way, bent by the wind.
     if (p.kind === 'pine') m.premultiply(new Matrix4().makeTranslation(-p.x, -p.y, -p.z)).premultiply(lean).premultiply(new Matrix4().makeTranslation(p.x, p.y, p.z));
@@ -188,7 +191,7 @@ export function buildMoorChunk(plan: MoorPlan, key: ChunkKey, detail: Detail): C
 }
 
 /** How much flatter than it's wide a plant stands. */
-const SQUASH: Partial<Record<MoorKind, number>> = { heather: 0.45, cotton: 0.7, gorse: 1.15 };
+const SQUASH: Partial<Record<MoorKind, number>> = { heather: 0.45, cotton: 0.7, gorse: 1.15, cypress: 3.2 };
 
 /** The border stone, modelled once. */
 let stoneModel: BufferGeometry | null = null;

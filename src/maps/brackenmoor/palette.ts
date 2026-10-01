@@ -40,6 +40,7 @@ export const MOOR_TREES = {
   rowan: [0x5a7a34, 0x66803a] as const,
   cotton: [0x9a9a6a, 0xb2ae80] as const,
   reed: [0x9a9a52, 0x8a8a46] as const,
+  cypress: [0x3a4a24, 0x44502a] as const,
   gorseFlower: 0xd8b830,
   cottonHead: 0xf0ece0,
   rowanBerry: 0xc0382a,

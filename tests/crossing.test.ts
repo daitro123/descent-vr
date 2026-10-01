@@ -118,7 +118,7 @@ describe('the current zone', () => {
 
 describe('the air over the seam', () => {
   it('finds the one crossing between the loaded zones, along the crest, Oakvale north and Brackenmoor south', () => {
-    expect(crossings([oakvale, brackenmoor])).toEqual([{ z: CREST.z, minX: -100, maxX: 100, north: oakvale, south: brackenmoor }]);
+    expect(crossings([oakvale, brackenmoor])).toEqual([{ z: CREST.z, minX: CREST.minX, maxX: CREST.maxX, north: oakvale, south: brackenmoor }]);
     expect(crossings([brackenmoor, oakvale])).toHaveLength(1);
     expect(crossings([oakvale])).toEqual([]);
   });
@@ -222,9 +222,9 @@ describe("the streamer's decisions over the pass", () => {
     expect(MOOR_ATMOSPHERE.fog.far).toBe(OAKVALE_ATMOSPHERE.fog.far);
   });
 
-  it("at the crest has all of the moor in and Oakvale's south at full detail", () => {
+  it("at the crest has the moor in as far as the fog reaches, and Oakvale's south at full detail", () => {
     const at = decide(roadX(), CREST.z, all(), new Map(), reach);
-    expect(of(at, moorChunks()).none).toBe(0);
+    for (const k of moorChunks()) expect(at.has(k), k).toBe(chunkDistance(k, roadX(), CREST.z) <= reach.far + reach.hysteresis);
     expect(of(at, moorChunks()).full).toBeGreaterThan(0);
     expect(at.get('0,3')).toBe('full');
     expect(of(at, oakKeys()).full).toBeGreaterThan(0);

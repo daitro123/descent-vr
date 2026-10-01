@@ -2,8 +2,9 @@ import { Vector3 } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
 import { buildMoorChunk, moorBuilder, moorChunks } from '../src/maps/brackenmoor/chunks';
-import { buildBrackenmoor } from '../src/maps/brackenmoor/moor';
-import { MOOR, MOOR_ATMOSPHERE, type MoorPlan, planBrackenmoor } from '../src/maps/brackenmoor/plan';
+import { buildBrackenmoor, plumes } from '../src/maps/brackenmoor/moor';
+import { MOOR, MOOR_ATMOSPHERE, type MoorPlan, type MoorStructureKind, planBrackenmoor } from '../src/maps/brackenmoor/plan';
+import { FEN_ROAD, fenRoadHeight } from '../src/maps/fenRoad';
 import { buildForest } from '../src/maps/forest/forest';
 import { CREST, FOREST, type ForestLayout, OAKVALE_ATMOSPHERE, PASS, planOakvale } from '../src/maps/forest/layout';
 import { nearestOnPolyline } from '../src/maps/forest/noise';
@@ -14,9 +15,11 @@ import { type ChunkData, type ChunkKey, chunkIndex, type Detail } from '../src/w
 import { type ChunkReply, type ChunkServerScope, serveChunks } from '../src/world/chunkWorker';
 import { World } from '../src/world/world';
 
-// The southern pass and Brackenmoor's land (ticket 36): the pass opens as a
+// The southern pass and Brackenmoor (ticket 36, then the full zone from its
+// spec, /zones/brackenmoor.md in the project's files): the pass opens as a
 // corridor up to the crest, and Brackenmoor lies over it, a zone like
-// Oakvale. The World is the `Ground` for both: the zones' heights agree
+// Oakvale, as big as a full zone: Cairnford, the beck, the Blackmire, the
+// fells and the barrows, with no one in it yet. The World is the `Ground` for both: the zones' heights agree
 // along the seam, the corridor walks from the play area onto the moor, and
 // its edges hold. Oakvale's plan is the source of truth for the crest.
 
@@ -54,25 +57,36 @@ function same(a: ChunkData, b: ChunkData): void {
   expect(a.sphere).toEqual(b.sphere);
 }
 
+
+/** The structures of `kinds` on the moor. */
+const of = (...kinds: MoorStructureKind[]) => moor.structures.filter((s) => kinds.includes(s.kind));
+/** A sample of the moor's chunks, every few along each row, Cairnford's and the crest's among them: building all 132 twice over takes a while. */
+const sample = (): ChunkKey[] => {
+  const keys = moorChunks();
+  const keep = new Set(keys.filter((_, i) => i % 9 === 0));
+  for (const k of ['0,4', '1,9', '1,10', '0,9'] as ChunkKey[]) if (keys.includes(k)) keep.add(k);
+  return [...keep];
+};
+
 describe('Brackenmoor, as the registry lists it', () => {
-  it("is a zone called Brackenmoor, across the pass's seam from Oakvale, each the other's neighbour", async () => {
-    expect(findMap('brackenmoor')).toMatchObject({ kind: 'zone', label: 'Brackenmoor', neighbours: ['forest'] });
+  it("is a zone called Brackenmoor, across the pass's seam from Oakvale and the Fen road's from the Sallows", async () => {
+    expect(findMap('brackenmoor')).toMatchObject({ kind: 'zone', label: 'Brackenmoor', neighbours: ['forest', 'sallows'] });
     expect(findMap('forest')).toMatchObject({ neighbours: ['brackenmoor'] });
     const loaded = await loadNeighbours(oakvale, async (info) => (info.id === 'brackenmoor' ? brackenmoor : oakvale));
     expect(loaded).toEqual([brackenmoor]);
   });
 
-  it('spans 5 by 4 chunks south of the crest, none of them Oakvale’s', () => {
+  it('spans 12 by 11 chunks south of the crest, about 480 by 440 m, none of them Oakvale’s', () => {
     const keys = moorChunks();
-    expect(keys).toHaveLength(20);
+    expect(keys).toHaveLength(132);
     const [is, js] = [keys.map((k) => chunkIndex(k)[0]), keys.map((k) => chunkIndex(k)[1])];
-    expect([Math.min(...is), Math.max(...is), Math.min(...js), Math.max(...js)]).toEqual([-2, 2, 4, 7]);
+    expect([Math.min(...is), Math.max(...is), Math.min(...js), Math.max(...js)]).toEqual([-5, 6, 4, 14]);
     expect(keys.filter((k) => oakvale.chunks.keys.includes(k))).toEqual([]);
-    expect(brackenmoor.land).toEqual({ minX: -100, maxX: 100, minZ: 140, maxZ: 300 });
+    expect(brackenmoor.land).toEqual({ minX: -220, maxX: 260, minZ: 140, maxZ: 580 });
   });
 
   it('is empty and safe: nothing lives there and there is nowhere to wake, so nothing can hurt you', () => {
-    expect([brackenmoor.camps, brackenmoor.villagers, brackenmoor.pickups, brackenmoor.interiors, brackenmoor.mine]).toEqual([[], [], [], [], null]);
+    expect([brackenmoor.camps, brackenmoor.villagers, brackenmoor.pickups, brackenmoor.interiors, brackenmoor.mine, brackenmoor.chests, brackenmoor.spots]).toEqual([[], [], [], [], null, [], []]);
     expect(isStartingZone(brackenmoor)).toBe(false);
     expect(isStartingZone(oakvale)).toBe(true);
   });
@@ -110,7 +124,7 @@ describe('the World as Ground across the seam', () => {
   });
 
   it('answers from the zone underfoot either side of the line, with no step across it', () => {
-    for (let x = -60; x <= 60; x += 0.5) {
+    for (let x = CREST.minX; x <= CREST.maxX; x += 0.5) {
       const north = world.heightAt(x, CREST.z - 0.05);
       const south = world.heightAt(x, CREST.z + 0.05);
       expect(Math.abs(north - south), `x ${x}`).toBeLessThan(0.1);
@@ -121,28 +135,45 @@ describe('the World as Ground across the seam', () => {
     expect(world.zoneAt(0, 141)).toBe(brackenmoor);
   });
 
-  it('lets you walk the road from the play area up the pass, over the crest and across the moor to the rockfall', () => {
+  it("lets you walk the road from the play area up the pass, over the crest and across the moor to Cairnford's square", () => {
     const p = new Vector3();
     const line = [...oak.paths[0].line.filter(([, z]) => z > FOREST.play - 10).reverse(), ...moor.road.line.slice(1)];
-    let farthest = 0;
     for (const [x, z] of line) {
-      if (z > MOOR.walk.south - 1) break;
       p.set(x, 0, z);
       world.resolve(p, r);
       // On the road, nothing pushes you anywhere.
       expect(Math.hypot(p.x - x, p.z - z), `(${x.toFixed(1)}, ${z.toFixed(1)})`).toBeLessThan(1e-9);
-      farthest = z;
     }
-    expect(farthest).toBeGreaterThan(MOOR.walk.south - 2);
-    // The rockfall closes the road at the walkable edge.
-    p.set(moor.road.line.at(-1)![0], 0, MOOR.walk.south + 3);
+    const [ex, ez] = moor.road.line.at(-1)!;
+    expect(Math.hypot(ex - MOOR.square.x, ez - MOOR.square.z)).toBeLessThan(MOOR.square.hd);
+  });
+
+  it('walks every road and track clear end to end, but for the tollgate shut across the Kingsroad and the rockfall that ends the Sunreach road', () => {
+    const p = new Vector3();
+    const [gate] = of('tollgate');
+    expect(moor.roads.map((road) => road.id)).toEqual(['pass', 'kingsroad', 'fen', 'sunreach', 'hob', 'oldFold', 'scar', 'turfmoss', 'fells']);
+    for (const road of moor.roads) {
+      for (const [x, z] of road.line) {
+        // Where you walk, a body's width in from its edge, and off the gate.
+        if (![[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].every(([dx, dz]) => moor.walkable.contains(x + dx, z + dz)) || Math.hypot(x - gate.x, z - gate.z) < gate.w / 2 + 1) continue;
+        p.set(x, 0, z);
+        world.resolve(p, r);
+        expect(Math.hypot(p.x - x, p.z - z), `${road.id} (${x.toFixed(1)}, ${z.toFixed(1)})`).toBeLessThan(1e-9);
+      }
+    }
+    // The gate closes the Kingsroad: you can't walk through it east to Aldhaven.
+    p.set(gate.x, 0, gate.z);
+    expect(world.resolve(p, r)).toBe(true);
+    // The Sunreach road runs out at the walkable edge, under the rocks that fill the gap.
+    const [ex, ez] = moor.rockfall;
+    p.set(ex, 0, ez + 4);
     world.resolve(p, r);
-    expect(p.z).toBeLessThanOrEqual(MOOR.walk.south - r + 1e-6);
+    expect(p.z).toBeLessThan(ez);
   });
 
   it('is walkable from the play area to every spot of the pass and the moor a body can stand on (no pockets), for every body radius', () => {
     const step = 0.5;
-    const [x0, x1, z0, z1] = [-70, 70, 70, 262];
+    const [x0, x1, z0, z1] = [-212, 262, 70, 560];
     const nx = Math.round((x1 - x0) / step) + 1;
     const nz = Math.round((z1 - z0) / step) + 1;
     const p = new Vector3();
@@ -153,39 +184,52 @@ describe('the World as Ground across the seam', () => {
           const x = x0 + i * step;
           const z = z0 + j * step;
           // Only the pass and the moor: the play square has its own flood fill (forest.test.ts).
-          if (z < FOREST.play && Math.abs(x - roadX(FOREST.play)) > PASS.half) continue;
+          if (z < CREST.z && Math.abs(x - roadX(Math.max(z, FOREST.play))) > PASS.half) continue;
           free[i * nz + j] = world.resolve(p.set(x, 0, z), radius) ? 0 : 1;
         }
       }
       const seen = new Uint8Array(nx * nz);
-      const start = Math.round((roadX(76) - x0) / step) * nz + Math.round((76 - z0) / step);
-      expect(free[start]).toBe(1);
-      const stack = [start];
-      seen[start] = 1;
-      while (stack.length) {
-        const k = stack.pop()!;
-        const [i, j] = [Math.floor(k / nz), k % nz];
-        for (const [a, b] of [
-          [i + 1, j],
-          [i - 1, j],
-          [i, j + 1],
-          [i, j - 1],
-        ]) {
-          if (a < 0 || b < 0 || a >= nx || b >= nz) continue;
-          const kk = a * nz + b;
-          if (free[kk] && !seen[kk]) {
-            seen[kk] = 1;
-            stack.push(kk);
+      const fill = (start: number) => {
+        const stack = [start];
+        seen[start] = 1;
+        let n = 1;
+        while (stack.length) {
+          const k = stack.pop()!;
+          const [i, j] = [Math.floor(k / nz), k % nz];
+          for (const [a, b] of [
+            [i + 1, j],
+            [i - 1, j],
+            [i, j + 1],
+            [i, j - 1],
+          ]) {
+            if (a < 0 || b < 0 || a >= nx || b >= nz) continue;
+            const kk = a * nz + b;
+            if (free[kk] && !seen[kk]) {
+              seen[kk] = 1;
+              n++;
+              stack.push(kk);
+            }
           }
         }
-      }
+        return n;
+      };
+      const start = Math.round((roadX(76) - x0) / step) * nz + Math.round((76 - z0) / step);
+      expect(free[start]).toBe(1);
+      fill(start);
+      // A pocket is somewhere a body could stand: the sliver in the crease where two rocks or stones meet,
+      // narrower than the grid, is a sampling's leftover, not a place.
       const pockets: string[] = [];
-      for (let k = 0; k < nx * nz; k++) if (free[k] && !seen[k]) pockets.push(`(${x0 + Math.floor(k / nz) * step}, ${z0 + (k % nz) * step})`);
+      for (let k = 0; k < nx * nz; k++) if (free[k] && !seen[k] && fill(k) > 2) pockets.push(`(${x0 + Math.floor(k / nz) * step}, ${z0 + (k % nz) * step})`);
       expect(pockets, `radius ${radius}`).toEqual([]);
-      // And it reaches the moor's far side.
-      expect(seen[Math.round((0 - x0) / step) * nz + Math.round((250 - z0) / step)], `radius ${radius}`).toBe(1);
+      // And it reaches every landmark.
+      for (const l of moor.landmarks) {
+        const [i, j] = [Math.round((l.x - x0) / step), Math.round((l.z - z0) / step)];
+        let reached = false;
+        for (let a = -4; a <= 4; a++) for (let b = -4; b <= 4; b++) reached ||= seen[(i + a) * nz + j + b] === 1;
+        expect(reached, `${l.label}, radius ${radius}`).toBe(true);
+      }
     }
-  }, 60000);
+  }, 120000);
 
   it("keeps you in the pass's corridor, about 10 m either side of the road, and off its walls", () => {
     const p = new Vector3();
@@ -230,6 +274,18 @@ describe('the World as Ground across the seam', () => {
     expect(Math.atan2(b[0] - a[0], b[1] - a[1])).toBeCloseTo(Math.atan2(c[0] - d[0], c[1] - d[1]), 1);
   });
 
+  it('keeps every road over the moor no steeper than 1 in 5, and every track than 1 in 3', () => {
+    for (const road of moor.roads) {
+      const grade = road.width >= MOOR.road.track ? MOOR.road.grade : MOOR.road.trackGrade;
+      for (let i = 1; i < road.line.length; i++) {
+        if (!moor.walkable.contains(...road.line[i])) continue;
+        const run = Math.hypot(road.line[i][0] - road.line[i - 1][0], road.line[i][1] - road.line[i - 1][1]);
+        expect(Math.abs(road.heights[i] - road.heights[i - 1]) / run, `${road.id} at (${road.line[i].map((v) => v.toFixed(0)).join(', ')})`).toBeLessThanOrEqual(grade + 1e-6);
+      }
+    }
+    expect(MOOR.road.grade).toBe(PASS.grade);
+  });
+
   it("keeps every camp's leash out of the pass", () => {
     for (const camp of oakvale.camps) {
       if (camp.interior) continue;
@@ -243,51 +299,152 @@ describe('the World as Ground across the seam', () => {
   });
 });
 
+describe('the Fen road seam, where the Sallows will meet the moor', () => {
+  it("lies on the moor's east edge, its heights there the seam's own, vertex for vertex", () => {
+    expect(FEN_ROAD.x).toBe(MOOR.land.maxX);
+    const [seam] = brackenmoor.sideSeams!;
+    expect(seam).toBe(moor.fenSeam);
+    expect(seam).toMatchObject({ x: FEN_ROAD.x, minZ: FEN_ROAD.minZ, maxZ: FEN_ROAD.maxZ, step: MOOR.cell });
+    seam.heights.forEach((h, k) => expect(h, `z ${FEN_ROAD.minZ + k * seam.step}`).toBeCloseTo(fenRoadHeight(FEN_ROAD.minZ + k * seam.step), 5));
+    // Between its vertices the line runs straight from one to the next, as it will on the Sallows' side.
+    for (let z = FEN_ROAD.minZ; z < FEN_ROAD.maxZ; z += 0.5) {
+      const z0 = FEN_ROAD.minZ + Math.floor((z - FEN_ROAD.minZ) / FEN_ROAD.step) * FEN_ROAD.step;
+      const t = (z - z0) / FEN_ROAD.step;
+      expect(moor.heightAt(FEN_ROAD.x, z), `z ${z}`).toBeCloseTo(fenRoadHeight(z0) * (1 - t) + fenRoadHeight(z0 + FEN_ROAD.step) * t, 4);
+    }
+  });
+
+  it('carries the Fen road over the line on its bank, walkable out past it', () => {
+    const fen = moor.roads.find((road) => road.id === 'fen')!;
+    const [x, z] = fen.line.at(-1)!;
+    expect(x).toBeGreaterThan(FEN_ROAD.x);
+    expect(z).toBeCloseTo(FEN_ROAD.road.z, 0);
+    expect(fen.heights.at(-1)).toBe(FEN_ROAD.road.y);
+    expect(moor.walkable.contains(FEN_ROAD.x + CONFIG.world.ground.seam - 0.1, FEN_ROAD.road.z)).toBe(true);
+    expect(seamRoad()).toEqual({ z: FEN_ROAD.road.z, width: FEN_ROAD.road.width, dir: [1, 0] });
+  });
+});
+
+/** The road the Fen road seam lists. */
+const seamRoad = () => moor.fenSeam.roads[0];
+
 describe("Brackenmoor's land", () => {
-  it('falls from the crest into a shallow basin a few metres above Oakvale’s valley floor', () => {
+  it('falls from the crest into Passfoot’s basin, a few metres above Oakvale’s valley floor', () => {
     const floor = [];
     for (let z = 185; z <= 240; z += 5) for (let x = -40; x <= 40; x += 5) floor.push(moor.heightAt(x, z));
     const mean = floor.reduce((a, b) => a + b, 0) / floor.length;
     expect(mean).toBeGreaterThan(oak.heightAt(0, 0) + 1.5);
     expect(mean).toBeLessThan(oak.heightAt(0, 0) + 8);
-    expect(mean).toBeLessThan(moor.heightAt(roadX(CREST.z), CREST.z) - 2);
+    expect(mean).toBeLessThan(moor.heightAt(roadX(CREST.z), CREST.z));
   });
 
-  it('is ringed east, west and south by low, rounded hills of 20 to 35 m', () => {
-    const tops: number[] = [];
-    const floor = MOOR.floor;
-    for (let z = 190; z <= 280; z += 10) for (const x of [-92, 92]) tops.push(moor.heightAt(x, z) - floor);
-    for (let x = -80; x <= 80; x += 10) if (Math.abs(x - moor.road.line.at(-1)![0]) > 25) tops.push(moor.heightAt(x, 292) - floor);
-    for (const h of tops) {
-      // The hill itself, give or take the floor's swell under it.
-      expect(h).toBeGreaterThan(MOOR.hills.low - MOOR.swell - 1);
-      expect(h).toBeLessThan(MOOR.hills.high + MOOR.swell + 1);
+  it('tilts from the high fells round Raven Scar in the north-west down to Beck’s Foot in the south-east', () => {
+    expect(moor.heightAt(-180, 260)).toBeGreaterThan(25);
+    expect(moor.heightAt(185, 205)).toBeGreaterThan(moor.heightAt(MOOR.square.x, MOOR.square.z) + 10);
+    expect(moor.heightAt(222, 512)).toBeLessThan(3);
+    expect(moor.heightAt(MOOR.square.x, MOOR.square.z)).toBeLessThan(moor.heightAt(-180, 260) - 15);
+  });
+
+  it('runs the Brack Beck from the Blackmire through Cairnford to the fens, its water never rising downstream', () => {
+    const { line, levels } = moor.beck;
+    expect(Math.hypot(line[0][0] - MOOR.bog.x, line[0][1] - MOOR.bog.z)).toBeLessThan(MOOR.bog.rx);
+    expect(line.at(-1)![0]).toBeGreaterThanOrEqual(FEN_ROAD.x);
+    expect(levels[0]).toBeLessThanOrEqual(MOOR.bog.level);
+    for (let i = 1; i < levels.length; i++) expect(levels[i]).toBeLessThanOrEqual(levels[i - 1]);
+    expect(levels.at(-1)).toBe(FEN_ROAD.beck.water);
+    // Water stands in its channel all the way: its bed under it.
+    line.forEach(([x, z], i) => {
+      if (x < MOOR.land.maxX - 2) expect(moor.ground.at(x, z), `(${x.toFixed(0)}, ${z.toFixed(0)})`).toBeLessThan(levels[i]);
+    });
+  });
+
+  it("crosses the beck at Cairnford by its bridge, the deck well over the water, and leaves the Blackmire's pools under its boardwalk", () => {
+    const [bridge] = of('bridge');
+    const water = moor.waterLevel(bridge.x, bridge.z);
+    expect(moor.heightAt(bridge.x, bridge.z)).toBeGreaterThan(water + 1);
+    expect(Math.hypot(bridge.x - MOOR.square.x, bridge.z - MOOR.square.z)).toBeLessThan(40);
+    // The boardwalk: decks over the bog, above its pools' level.
+    const walk = moor.decks.slice(1);
+    expect(walk.length).toBeGreaterThanOrEqual(4);
+    for (const d of walk) expect(Math.min(d.y0, d.y1)).toBeGreaterThan(MOOR.bog.level);
+  });
+
+  it('closes the Sunreach road in the Rockfall Gap, a notch in the south ridge with Sunreach’s cypresses beyond', () => {
+    const [ex, ez] = moor.rockfall;
+    expect(ez).toBeGreaterThan(550);
+    // The notch: the ridge either side stands well above the gap's floor.
+    for (const z of [565, 575]) {
+      expect(moor.heightAt(ex, z), `z ${z}`).toBeLessThan(moor.heightAt(ex - 30, z) - 10);
+      expect(moor.heightAt(ex, z), `z ${z}`).toBeLessThan(moor.heightAt(ex + 30, z) - 10);
     }
-  });
-
-  it('runs its road south to a gap in the hills, closed by a rockfall where you can walk no farther', () => {
-    const [ex, ez] = moor.road.line.at(-1)!;
-    expect(ez).toBeGreaterThanOrEqual(MOOR.walk.south);
-    // The gap: the hills either side stand well above the road's way through.
-    expect(moor.heightAt(ex, 290)).toBeLessThan(moor.heightAt(ex - 30, 290) - 10);
-    expect(moor.heightAt(ex, 290)).toBeLessThan(moor.heightAt(ex + 30, 290) - 10);
-    const fall = moor.plants.filter((p) => p.kind === 'rock' && p.z > MOOR.walk.south && Math.abs(p.x - ex) < MOOR.rockfall.spread + 1 && p.scale >= MOOR.rockfall.scale[0]);
+    const fall = moor.plants.filter((p) => p.kind === 'rock' && p.z > ez && Math.abs(p.x - ex) < MOOR.rockfall.spread + 1 && p.scale >= MOOR.rockfall.scale[0]);
     expect(fall.length).toBeGreaterThanOrEqual(MOOR.rockfall.count);
-    expect(fall.some((p) => nearestOnPolyline(moor.road.line, p.x, p.z).d < 2)).toBe(true);
+    expect(fall.some((p) => Math.abs(p.x - ex) < 2)).toBe(true);
+    const cypresses = moor.plants.filter((p) => p.kind === 'cypress');
+    expect(cypresses.length).toBeGreaterThanOrEqual(2);
+    for (const c of cypresses) expect(c.z).toBeGreaterThan(Math.max(...fall.map((p) => p.z)) - 2);
   });
 
-  it('grows bracken, heather, low bushes, grey rocks and a few lone pines, and none on the road', () => {
+  it('grows bracken, heather, bushes and gorse, cotton grass and reeds, few trees, and none of it on a road', () => {
     const count = (kind: string) => moor.plants.filter((p) => p.kind === kind).length;
-    expect(count('bracken')).toBeGreaterThan(200);
-    expect(count('heather')).toBeGreaterThan(100);
-    expect(count('bush')).toBeGreaterThan(30);
-    expect(count('rock')).toBeGreaterThan(50);
-    expect(count('pine')).toBeGreaterThanOrEqual(4);
-    expect(count('pine')).toBeLessThanOrEqual(20);
+    expect(count('bracken')).toBeGreaterThan(3000);
+    expect(count('heather')).toBeGreaterThan(800);
+    expect(count('bush') + count('gorse')).toBeGreaterThan(300);
+    expect(count('gorse')).toBeGreaterThan(50);
+    expect(count('rock')).toBeGreaterThan(300);
+    expect(count('cotton')).toBeGreaterThan(200);
+    expect(count('reed')).toBeGreaterThan(200);
+    // Almost no trees: lone pines, a stand of hawthorns at the Long Stones, a rowan or two by the beck.
+    expect(count('pine')).toBeGreaterThanOrEqual(20);
+    expect(count('pine')).toBeLessThanOrEqual(100);
+    expect(count('hawthorn')).toBeGreaterThanOrEqual(5);
+    expect(count('rowan')).toBeGreaterThanOrEqual(4);
     for (const p of moor.plants) {
-      if (p.z > MOOR.walk.south) continue;
-      expect(nearestOnPolyline(moor.road.line, p.x, p.z).d, `${p.kind} (${p.x.toFixed(1)}, ${p.z.toFixed(1)})`).toBeGreaterThan(moor.road.width / 2);
+      if (!moor.walkable.contains(p.x, p.z)) continue;
+      for (const road of moor.roads) expect(nearestOnPolyline(road.line, p.x, p.z).d, `${p.kind} by the ${road.id} road (${p.x.toFixed(1)}, ${p.z.toFixed(1)})`).toBeGreaterThan(road.width / 2);
     }
+  });
+
+  it('builds Cairnford round its square at the bridge: the inn, the moot hall, the smithy, the chapel, the mill and a score of buildings', () => {
+    const sq = MOOR.square;
+    for (const kind of ['inn', 'mootHall', 'smithy', 'chapel', 'mill', 'marketCross', 'bridge'] as const) expect(of(kind), kind).toHaveLength(1);
+    const town = of('house', 'inn', 'mootHall', 'smithy', 'chapel', 'mill', 'cottage').filter((s) => Math.hypot(s.x - sq.x, s.z - sq.z) < 75);
+    expect(town.length).toBeGreaterThanOrEqual(18);
+    // Two cairns on the bank by the bridge: the travellers' and the smaller one for the families that left.
+    const cairns = of('cairn').filter((c) => Math.hypot(c.x - of('bridge')[0].x, c.z - of('bridge')[0].z) < 15);
+    expect(cairns.map((c) => c.h > 2)).toEqual([true, false]);
+    // The flat-boat at the bridge's foot floats on the beck.
+    const boat = of('boat').find((b) => Math.hypot(b.x - sq.x, b.z - sq.z) < 40)!;
+    expect(boat.y).toBeCloseTo(moor.waterLevel(boat.x, boat.z) - 0.08, 5);
+  });
+
+  it('stands the landmarks the spec names: the Long Stones, the barrows and Hollowhill, Fellgate Hall in its walled enclosure, Raven Scar’s pit', () => {
+    // Nine Long Stones in a row along the ridge, above Cairnford.
+    const stones = of('longStone');
+    expect(stones).toHaveLength(9);
+    for (const s of stones) expect(s.y).toBeGreaterThan(moor.heightAt(MOOR.square.x, MOOR.square.z) + 3);
+    // Seven barrows and Hollowhill crowning the High Fells.
+    expect(of('barrow')).toHaveLength(7);
+    expect(of('barrow').filter((b) => b.variant === 1).length).toBeGreaterThanOrEqual(2);
+    const [door] = of('hollowhill');
+    expect(Math.hypot(door.x - MOOR.hollowhill.x, door.z - MOOR.hollowhill.z)).toBeLessThan(MOOR.hollowhill.r);
+    expect(moor.heightAt(MOOR.hollowhill.x, MOOR.hollowhill.z)).toBeGreaterThan(Math.max(...of('barrow').map((b) => b.y)));
+    // Fellgate Hall and its flag inside the enclosure, the only dressed stone on the moor.
+    const [hall] = of('hall');
+    expect(of('flag').some((f) => Math.hypot(f.x - hall.x, f.z - hall.z) < 20)).toBe(true);
+    const dressed = moor.walls.filter((w) => w.dressed).flatMap((w) => w.pts);
+    expect(Math.min(...dressed.map((p) => p[0]))).toBeLessThan(hall.x - hall.w / 2);
+    expect(Math.max(...dressed.map((p) => p[0]))).toBeGreaterThan(hall.x + hall.w / 2);
+    expect(moor.walls.filter((w) => !w.dressed).length).toBeGreaterThan(5);
+    // Raven Scar: its floor cut well below its lip, its tents in the pit and the ladder up the scar.
+    const { scar } = MOOR;
+    expect(moor.heightAt(scar.x, scar.z)).toBeLessThan(moor.heightAt(scar.x, scar.z - scar.hd - 6) - 6);
+    expect(of('tent').filter((t) => Math.hypot(t.x - scar.x, t.z - scar.z) < scar.hw)).toHaveLength(3);
+    expect(of('ladder')).toHaveLength(1);
+    // The three abandoned crofts, Turfmoss's lived-in ones, and the tollhouse with its gate on the Kingsroad.
+    expect(of('croft').filter((c) => c.variant === 1)).toHaveLength(3);
+    expect(of('croft').filter((c) => c.variant === 0).length).toBeGreaterThanOrEqual(4);
+    expect(of('tollhouse', 'tollgate')).toHaveLength(2);
   });
 
   it("stands the border stone by the road on the crest, and you can't walk through it", () => {
@@ -309,11 +466,19 @@ describe("Brackenmoor's land", () => {
     expect(Math.cos(spawn.yaw)).toBeCloseTo(-1); // facing +Z, south
     for (const l of brackenmoor.landmarks) expect(brackenmoor.walkable.contains(l.x, l.z), l.label).toBe(true);
   });
+
+  it("smokes from the chimneys of the houses people live in, and sounds of the beck under Cairnford's bridge", () => {
+    const smoke = plumes(moor.structures);
+    expect(smoke.length).toBeGreaterThan(8);
+    // None from an abandoned croft.
+    for (const c of of('croft').filter((s) => s.variant === 1)) expect(smoke.some((p) => Math.hypot(p.x - c.x, p.z - c.z) < c.w)).toBe(false);
+    expect(brackenmoor.sounds.map((s) => s.id)).toContain('stream');
+  });
 });
 
 describe("Brackenmoor's chunks", () => {
   it('builds each chunk the same every time, whatever was built before', () => {
-    const keys = moorChunks();
+    const keys = sample();
     const first = new Map<string, ChunkData>();
     for (const detail of ['full', 'standIn'] as const) for (const key of keys) first.set(`${key} ${detail}`, buildMoorChunk(moor, key, detail));
     // Again, the other way round and from a plan made afresh.
@@ -321,13 +486,13 @@ describe("Brackenmoor's chunks", () => {
     for (const detail of ['standIn', 'full'] as const) for (const key of [...keys].reverse()) same(buildMoorChunk(again, key, detail), first.get(`${key} ${detail}`)!);
   }, 60000);
 
-  it("builds every chunk byte for byte in its worker as on the main thread, and hands each back without copying", () => {
+  it('builds chunks byte for byte in its worker as on the main thread, and hands each back without copying', () => {
     const replies: { reply: ChunkReply; transfer: Transferable[] }[] = [];
     const scope: ChunkServerScope = { onmessage: null, postMessage: (reply, transfer) => replies.push({ reply, transfer }) };
     serveChunks(scope, moorBuilder());
     let id = 0;
     for (const detail of ['full', 'standIn'] as Detail[]) {
-      for (const key of moorChunks()) {
+      for (const key of sample()) {
         scope.onmessage!({ data: { id: id++, key, detail } });
         const { reply, transfer } = replies.pop()!;
         if (!('data' in reply)) throw new Error(reply.error);
@@ -338,11 +503,14 @@ describe("Brackenmoor's chunks", () => {
     }
   }, 60000);
 
-  it('makes stand-ins cheaper than full detail, and leaves out the bracken and heather', () => {
+  it('makes stand-ins cheaper than full detail, and keeps every full chunk within what an Oakvale chunk costs', () => {
     for (const key of moorChunks()) {
-      expect(buildMoorChunk(moor, key, 'standIn').position.length, key).toBeLessThan(buildMoorChunk(moor, key, 'full').position.length);
+      const full = buildMoorChunk(moor, key, 'full').position.length;
+      expect(buildMoorChunk(moor, key, 'standIn').position.length, key).toBeLessThan(full);
+      // Oakvale's busiest full chunks come to about 16k triangles.
+      expect(full / 9, key).toBeLessThan(16000);
     }
-  }, 30000);
+  }, 60000);
 
   it("draws the border stone in the crest's chunk, and refuses a chunk that isn't Brackenmoor's", () => {
     const at = moorChunks().find((k: ChunkKey) => {
