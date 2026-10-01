@@ -6,6 +6,7 @@ import { PASS } from '../forest/layout';
 import { fbm, lerp, mulberry32, nearestOnPolyline, type P2, sampleCurve, smoothstep, valueNoise } from '../forest/noise';
 import { type Deck, deckBetween, Decks } from '../decks';
 import { FEN_ROAD, fenRoadHeight, fenRoadSeam } from '../fenRoad';
+import { KINGSROAD, kingsroadHeight, kingsroadSeam } from '../kingsroad';
 import { HeightGrid } from '../heightGrid';
 import { along, flattenTo, heightsAlong, type LineField, lineField, smoothHeights } from '../lines';
 import type { Seam, SideSeam, Spot } from '../types';
@@ -20,7 +21,8 @@ import { MOOR_LIGHT, MOOR_SKY } from './palette';
 // in the west with Turfmoss's crofts on its edge, and runs east through the
 // town and south-east to Beck's Foot, where the Fen road leaves for the
 // Sallows. The Kingsroad climbs east through the landlord's walled enclosure
-// past Fellgate Hall to a tollhouse on the escarpment; the Sunreach road runs
+// past Fellgate Hall to a tollhouse on the escarpment, and on through a
+// cutting in the ridge down to Aldhaven; the Sunreach road runs
 // south to the Rockfall Gap in the south ridge, closed by a rockfall. The fells
 // rise in the north-west round Raven Scar's old quarry, and in the north-east
 // the High Fells carry the barrows and Hollowhill. Nothing lives here yet.
@@ -140,12 +142,14 @@ export interface MoorWall {
 }
 
 export interface MoorPlan {
-  /** Where you can walk: on from the crest's corridor, then the moor, and over the Fen road into the Sallows. */
+  /** Where you can walk: on from the crest's corridor, then the moor, and over the Kingsroad into Aldhaven and the Fen road into the Sallows. */
   readonly walkable: Walkable;
   /** Its heights along the crest: Oakvale's own, which it meets exactly. */
   readonly seam: Seam;
   /** Its heights along the Fen road's line, which the Sallows meet exactly. */
   readonly fenSeam: SideSeam;
+  /** Its heights along the Kingsroad's seam, where Aldhaven meets its east edge north of the Fen road's. */
+  readonly kingsSeam: SideSeam;
   readonly ground: HeightGrid;
   /** The pass road, from the crest to Cairnford's square: the road you come in on. */
   readonly road: MoorRoad;
@@ -182,7 +186,7 @@ export interface MoorPlan {
 
 /** Roads' and tracks' centre lines, before they're sampled. The pass road's first points come from the crest. */
 const ROADS: { id: string; width: number; pts: P2[] }[] = [
-  { id: 'kingsroad', width: 4, pts: [[52, 369], [72, 367], [96, 364], [120, 360], [145, 356], [170, 351], [195, 345], [215, 338], [232, 331], [244, 327], [252, 318], [256, 304]] },
+  { id: 'kingsroad', width: 4, pts: [[52, 369], [72, 367], [96, 364], [120, 360], [145, 356], [170, 351], [195, 345], [215, 338], [232, 331], [244, 331], [254, 334], [KINGSROAD.x, KINGSROAD.road.z]] },
   { id: 'fen', width: 3.4, pts: [[46, 405], [70, 420], [100, 432], [130, 446], [160, 466], [190, 492], [215, 515], [238, 532], [252, 540], [262, FEN_ROAD.road.z]] },
   { id: 'sunreach', width: 3.4, pts: [[46, 405], [37, 428], [24, 460], [8, 492], [-6, 520], [-15, 545], [-20, 562]] },
   { id: 'hob', width: 2.2, pts: [[-1, 215], [-12, 219], [-24, 223]] },
@@ -341,9 +345,10 @@ export function planBrackenmoor(crest: Seam): MoorPlan {
       const b = nearestOnPolyline(beckLine, x, z).d;
       return b < BECK_SHAPE.half + 3 ? Math.max(h, along(levels, nearestBeck(beckLine, x, z)) + 0.9) : h;
     });
-    const smooth = smoothHeights(raw, 5, 4, { first: r.id === 'pass', last: r.id === 'fen' });
-    if (r.id === 'fen') smooth[smooth.length - 1] = FEN_ROAD.road.y;
-    const heights = regrade(r.line, smooth, r.width >= MOOR.road.track ? MOOR.road.grade : MOOR.road.trackGrade, r.id === 'fen');
+    const seamY = r.id === 'fen' ? FEN_ROAD.road.y : r.id === 'kingsroad' ? KINGSROAD.road.y : undefined;
+    const smooth = smoothHeights(raw, 5, 4, { first: r.id === 'pass', last: seamY !== undefined });
+    if (seamY !== undefined) smooth[smooth.length - 1] = seamY;
+    const heights = regrade(r.line, smooth, r.width >= MOOR.road.track ? MOOR.road.grade : MOOR.road.trackGrade, seamY !== undefined);
     flattenTo(ground, field, heights, r.width / 2 + 0.6, 3);
     roads.push({ id: r.id, line: r.line, width: r.width, heights });
     fields.push(field);
@@ -360,10 +365,12 @@ export function planBrackenmoor(crest: Seam): MoorPlan {
 
   // 5. Last, the edges blend to the neighbours' heights, so the zones agree exactly on their lines.
   meetCrest(ground, crest);
-  meetFenRoad(ground);
-  // The fens' blend mustn't fill the beck's channel on its way out: cut it again, and hold the seam's own heights on its line.
+  // Along the Kingsroad's stretch the blend leaves the road's own bed be: the seam's cutting meets it on the line.
+  const kingsroad = roads.find((r) => r.id === 'kingsroad')!;
+  meetEast(ground, fields[roads.indexOf(kingsroad)], kingsroad.width);
+  // The fens' blend mustn't fill the beck's channel on its way out: cut it again, and hold the seams' own heights on their line.
   carveBeck(ground, beckField, levels);
-  holdFenSeam(ground);
+  holdEastSeams(ground);
 
   // The structures stand on the ground as it ends up.
   const beckWater = { line: beckLine, levels, half: BECK_SHAPE.half };
@@ -408,10 +415,12 @@ export function planBrackenmoor(crest: Seam): MoorPlan {
   const [sx, sz] = at(land.minZ + 6);
   const trees = plants.filter((p) => TREE_HEIGHT[p.kind]).map((p) => ({ x: p.x, y: p.y, z: p.z, height: TREE_HEIGHT[p.kind]! * p.scale }));
   const fen = fenRoadSeam();
+  const kings = kingsroadSeam([1, 0]);
   return {
     walkable,
     seam: { ...crest, heights: crest.heights.map((_, i) => ground.at(crest.minX + i * cell, crest.z)) },
     fenSeam: { ...fen, heights: fen.heights.map((_, i) => ground.at(fen.x, fen.minZ + i * fen.step)) },
+    kingsSeam: { ...kings, heights: kings.heights.map((_, i) => ground.at(kings.x, kings.minZ + i * kings.step)) },
     ground,
     road: roads[0],
     roads,
@@ -578,39 +587,54 @@ function meetCrest(ground: HeightGrid, crest: Seam): void {
   }
 }
 
-/** Blend the last MOOR.blend m of columns, along the Fen road's stretch of the east edge, to its heights: exactly them on the line. */
-function meetFenRoad(ground: HeightGrid): void {
-  const { x, minZ, maxZ } = FEN_ROAD;
+/** The east edge's heights where a neighbour meets it: Aldhaven's along the Kingsroad's seam, the Sallows' along the Fen road's. */
+function eastEdgeHeight(z: number): number {
+  return z <= KINGSROAD.maxZ ? kingsroadHeight(z) : fenRoadHeight(z);
+}
+
+/**
+ * Blend the last MOOR.blend m of columns, along the seams of the east edge
+ * (the Kingsroad's, then the Fen road's), to their heights: exactly them on
+ * the line, fading over a band north of the Kingsroad's end. Within a few
+ * metres of the Kingsroad (`road`, its line's field) the road's own bed is
+ * left be: the seam's cutting meets it on the line.
+ */
+function meetEast(ground: HeightGrid, road: LineField, width: number): void {
+  const { x } = FEN_ROAD;
+  const minZ = KINGSROAD.minZ;
+  const maxZ = FEN_ROAD.maxZ;
   const last = ground.cols - 1;
-  if (ground.x(last) !== x) throw new Error("Brackenmoor's east edge must be the Fen road's line");
+  if (ground.x(last) !== x || KINGSROAD.x !== x) throw new Error("Brackenmoor's east edge must be the Kingsroad's and the Fen road's line");
   for (let j = 0; j < ground.rows; j++) {
     const z = ground.z(j);
-    // Fully along the seam, fading over a band past either end of it.
+    // Fully along the seams, fading over a band past either end of them.
     const w = smoothstep(minZ - 24, minZ, z) * smoothstep(maxZ + 24, maxZ, z);
     if (w <= 0) continue;
-    const target = fenRoadHeight(Math.max(minZ, Math.min(maxZ, z)));
+    const target = eastEdgeHeight(Math.max(minZ, Math.min(maxZ, z)));
     for (let i = last; i >= 0; i--) {
       const t = smoothstep(0, MOOR.blend, x - ground.x(i));
       if (t >= 1) break;
       const k = j * ground.cols + i;
       const on = z >= minZ && z <= maxZ;
-      ground.data[k] = i === last && on ? target : lerp(ground.data[k], lerp(ground.data[k], target, w), 1 - t);
+      const keep = smoothstep(width / 2 + 4, width / 2 + 1, road.d[k]) * (i === last ? 0 : 1);
+      const blended = i === last && on ? target : lerp(ground.data[k], lerp(ground.data[k], target, w), 1 - t);
+      ground.data[k] = lerp(blended, ground.data[k], keep);
     }
   }
 }
 
-/** Set the east edge's heights along the Fen road's line to the seam's exactly. */
-function holdFenSeam(ground: HeightGrid): void {
-  const { minZ, maxZ } = FEN_ROAD;
+/** Set the east edge's heights along both seams' line to the seams' exactly. */
+function holdEastSeams(ground: HeightGrid): void {
   const last = ground.cols - 1;
-  for (let j = ground.row(minZ); j <= ground.row(maxZ); j++) ground.data[j * ground.cols + last] = fenRoadHeight(ground.z(j));
+  for (let j = ground.row(KINGSROAD.minZ); j <= ground.row(FEN_ROAD.maxZ); j++) ground.data[j * ground.cols + last] = eastEdgeHeight(ground.z(j));
 }
 
 /**
  * Where you can walk: the pass's corridor on over the crest from
  * CONFIG.world.ground.seam before it (overlapping Oakvale's), along the road
- * until the moor opens, then the moor itself, and out over the Fen road's
- * line by CONFIG.world.ground.seam into the Sallows. Convex areas that
+ * until the moor opens, then the moor itself, and out over the east edge by
+ * CONFIG.world.ground.seam: along the Kingsroad into Aldhaven, along the Fen
+ * road into the Sallows. Convex areas that
  * overlap where they join.
  */
 function walkableAreas(crossX: number, line: readonly P2[]): P2[][] {
@@ -651,6 +675,13 @@ function walkableAreas(crossX: number, line: readonly P2[]): P2[][] {
       [238, 552],
       [-200, 556],
       [-210, 300],
+    ],
+    // Out along the Kingsroad through the cutting, over the seam into Aldhaven.
+    [
+      [228, 322],
+      [over, 328],
+      [over, 344],
+      [228, 340],
     ],
     // Out along the Fen road over the seam.
     [
@@ -702,7 +733,9 @@ function addStructureColliders(c: Colliders, s: MoorStructure): void {
       box(0.6, 0.6, s.w / 2, 0);
       break;
     case 'tollgate':
-      box(s.w / 2, 0.25);
+      // Its posts either side of the road; the bar is raised.
+      box(0.2, 0.2, -s.w / 2, 0);
+      box(0.2, 0.2, s.w / 2, 0);
       break;
     case 'cairn': case 'longStone': case 'borderStone': case 'marketCross':
       c.addCircle({ x: s.x, z: s.z, r: s.kind === 'cairn' ? 0.5 + s.h * 0.25 : 0.55 });
@@ -829,10 +862,10 @@ function placeStructures(ground: HeightGrid, roads: readonly MoorRoad[]): MoorSt
   add('gatehouse', 160, 342, 0, 6, 1, 1);
   add('flag', 172, 326, 0, 1, 1, 9);
 
-  // The Kingsroad's tollhouse at the escarpment's top, its gate shut across the road (Aldhaven waits beyond).
+  // The Kingsroad's tollhouse at the escarpment's top, its gate's bar raised: the road runs on through the cutting to Aldhaven.
   add('tollhouse', 223, 322, facing(223, 322, 232, 331), 6, 5, 1);
   const gate = road('kingsroad').line.reduce((best, p) => (Math.abs(p[0] - 238) < Math.abs(best[0] - 238) ? p : best));
-  add('tollgate', gate[0], gate[1], 0.35 + Math.PI / 2, 6, 1, 1);
+  add('tollgate', gate[0], gate[1], Math.PI / 2, 6, 1, 1);
 
   // Turfmoss, the peat cutters' crofts on the Blackmire's edge; their stacks, and the banks they cut.
   add('croft', -94, 340, facing(-94, 340, -86, 352), 8, 4.4, 1);

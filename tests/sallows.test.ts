@@ -51,8 +51,8 @@ function walksFreely(line: readonly (readonly [number, number])[]): string | nul
 }
 
 describe('the Sallows, as the registry lists it', () => {
-  it('is a zone called the Sallows, with no neighbours loaded beside it until Brackenmoor and Aldhaven reach it', () => {
-    expect(findMap('sallows')).toMatchObject({ kind: 'zone', label: 'The Sallows', neighbours: [] });
+  it('is a zone called the Sallows, beside Brackenmoor over the Fen road and Aldhaven over the causeway', () => {
+    expect(findMap('sallows')).toMatchObject({ kind: 'zone', label: 'The Sallows', neighbours: ['brackenmoor', 'aldhaven'] });
   });
 
   it("spans 12 by 11 chunks east of Brackenmoor's Fen road and south of Aldhaven, none of them another zone's", () => {

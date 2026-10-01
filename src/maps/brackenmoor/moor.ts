@@ -37,7 +37,7 @@ export function buildBrackenmoor(given?: MoorPlan): Zone {
     walkable: plan.walkable,
     land: MOOR.land,
     seams: [plan.seam],
-    sideSeams: [plan.fenSeam],
+    sideSeams: [plan.fenSeam, plan.kingsSeam],
     atmosphere: MOOR_ATMOSPHERE,
     spawn: plan.spawn,
     camps: [],

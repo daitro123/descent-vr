@@ -6,7 +6,7 @@ export const map: MapInfo = {
   label: 'Aldhaven',
   // Its plan is laid out in the city's own frame and moved to ALDHAVEN.at itself.
   origin: { x: 0, z: 0 },
-  // Its seams with Brackenmoor, the Sallows and Greyfell wait for those zones.
-  neighbours: [],
+  // Brackenmoor over the Kingsroad (west), the Sallows over the causeway (south). Greyfell, north, waits for that zone.
+  neighbours: ['brackenmoor', 'sallows'],
   load: () => import('./city').then((m) => m.buildAldhaven()),
 };

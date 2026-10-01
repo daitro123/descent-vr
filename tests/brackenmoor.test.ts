@@ -69,8 +69,8 @@ const sample = (): ChunkKey[] => {
 };
 
 describe('Brackenmoor, as the registry lists it', () => {
-  it("is a zone called Brackenmoor, across the pass's seam from Oakvale and the Fen road's from the Sallows", async () => {
-    expect(findMap('brackenmoor')).toMatchObject({ kind: 'zone', label: 'Brackenmoor', neighbours: ['forest', 'sallows'] });
+  it("is a zone called Brackenmoor, across the pass's seam from Oakvale, the Fen road's from the Sallows and the Kingsroad's from Aldhaven", async () => {
+    expect(findMap('brackenmoor')).toMatchObject({ kind: 'zone', label: 'Brackenmoor', neighbours: ['forest', 'sallows', 'aldhaven'] });
     expect(findMap('forest')).toMatchObject({ neighbours: ['brackenmoor'] });
     const loaded = await loadNeighbours(oakvale, async (info) => (info.id === 'brackenmoor' ? brackenmoor : oakvale));
     expect(loaded).toEqual([brackenmoor]);
@@ -148,22 +148,22 @@ describe('the World as Ground across the seam', () => {
     expect(Math.hypot(ex - MOOR.square.x, ez - MOOR.square.z)).toBeLessThan(MOOR.square.hd);
   });
 
-  it('walks every road and track clear end to end, but for the tollgate shut across the Kingsroad and the rockfall that ends the Sunreach road', () => {
+  it('walks every road and track clear end to end, through the tollgate standing open on the Kingsroad, but for the rockfall that ends the Sunreach road', () => {
     const p = new Vector3();
     const [gate] = of('tollgate');
     expect(moor.roads.map((road) => road.id)).toEqual(['pass', 'kingsroad', 'fen', 'sunreach', 'hob', 'oldFold', 'scar', 'turfmoss', 'fells']);
     for (const road of moor.roads) {
       for (const [x, z] of road.line) {
-        // Where you walk, a body's width in from its edge, and off the gate.
-        if (![[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].every(([dx, dz]) => moor.walkable.contains(x + dx, z + dz)) || Math.hypot(x - gate.x, z - gate.z) < gate.w / 2 + 1) continue;
+        // Where you walk, a body's width in from its edge.
+        if (![[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].every(([dx, dz]) => moor.walkable.contains(x + dx, z + dz))) continue;
         p.set(x, 0, z);
         world.resolve(p, r);
         expect(Math.hypot(p.x - x, p.z - z), `${road.id} (${x.toFixed(1)}, ${z.toFixed(1)})`).toBeLessThan(1e-9);
       }
     }
-    // The gate closes the Kingsroad: you can't walk through it east to Aldhaven.
+    // The gate's bar is raised: you walk through it east to Aldhaven.
     p.set(gate.x, 0, gate.z);
-    expect(world.resolve(p, r)).toBe(true);
+    expect(world.resolve(p, r)).toBe(false);
     // The Sunreach road runs out at the walkable edge, under the rocks that fill the gap.
     const [ex, ez] = moor.rockfall;
     p.set(ex, 0, ez + 4);

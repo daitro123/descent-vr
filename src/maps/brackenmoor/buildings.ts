@@ -294,12 +294,13 @@ function tollhouse(b: ModelBuilder, w: number, d: number): void {
   b.taper(2.0, 1.1, 2.0, 0.1, 0.5, { at: [w / 4, 2.0, d / 2 + 0.45], color: B.slate });
 }
 
-/** The toll gate, shut across the road: two posts, a beam and a painted bar. */
+/** The toll gate, open: two posts either side of the road and its painted bar raised. */
 function tollgate(b: ModelBuilder, w: number): void {
   for (const s of [-1, 1]) b.box(0.3, 1.6, 0.3, { at: [(s * w) / 2, 0.8, 0], color: PAL.woodDark });
-  b.box(w + 0.2, 0.2, 0.2, { at: [0, 1.15, 0], color: B.wool }).box(w * 0.2, 0.22, 0.22, { at: [-w * 0.2, 1.15, 0], color: B.crimson });
-  b.box(w * 0.2, 0.22, 0.22, { at: [w * 0.2, 1.15, 0], color: B.crimson });
-  b.box(w, 0.12, 0.12, { at: [0, 0.6, 0], color: PAL.woodDark });
+  // The bar, raised upright beside its post, so the road is open.
+  const x = -w / 2 + 0.3;
+  b.box(0.2, w + 0.2, 0.2, { at: [x, 1.15 + w / 2, 0], color: B.wool }).box(0.22, w * 0.2, 0.22, { at: [x, 1.15 + w * 0.3, 0], color: B.crimson });
+  b.box(0.22, w * 0.2, 0.22, { at: [x, 1.15 + w * 0.7, 0], color: B.crimson });
 }
 
 /** A weathered painted map on a board, two legs, a little roof; its face left plain. */

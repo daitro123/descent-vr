@@ -1,9 +1,12 @@
+import { CONFIG } from '../../config';
 import type { Tree } from '../../world/ambience';
 import type { Atmosphere } from '../../world/atmosphere';
 import { type Box, Colliders } from '../forest/colliders';
 import { fbm, lerp, mulberry32, nearestOnPolyline, type P2, sampleCurve, smoothstep } from '../forest/noise';
 import { HeightGrid } from '../heightGrid';
-import type { Spot } from '../types';
+import { KINGSROAD, kingsroadHeight, kingsroadSeam } from '../kingsroad';
+import { CAUSEWAY, northEdgeHeight } from '../sallows/plan';
+import type { Seam, SideSeam, Spot } from '../types';
 import { Walkable } from '../walkable';
 import { CITY_LIGHT, CITY_SKY, type District } from './palette';
 
@@ -23,13 +26,14 @@ import { CITY_LIGHT, CITY_SKY, type District } from './palette';
 // No three.js meshes, so it runs in tests and in its worker. Everything is
 // laid out in the city's own frame (x east, z south, metres from the city's
 // middle) and moved to its place on the world's chunk grid, `ALDHAVEN.at`, at
-// the end. It joins no neighbour yet: its seams with Brackenmoor (the
-// Kingsroad, west), the Sallows (the causeway, south) and Greyfell (the
-// Gorgegate, north) wait for those zones.
+// the end. Its west edge is Brackenmoor's east, along the Kingsroad's seam
+// (src/maps/kingsroad.ts); its south edge is the Sallows' north, where the
+// causeway runs on. Its seam with Greyfell (the Gorgegate, north) waits for
+// that zone.
 
 export const ALDHAVEN = {
-  /** Where the city's middle sits in the world: east of Brackenmoor's moor, with unzoned land between. */
-  at: { x: 540, z: 360 },
+  /** Where the city's middle sits in the world: its west edge on Brackenmoor's east (x = 260), its south edge on the Sallows' north (z = 500). */
+  at: { x: 420, z: 360 },
   /** The land: 8 by 7 chunks, in the city's frame. */
   land: { minX: -160, maxX: 160, minZ: -140, maxZ: 140 },
   cell: 2,
@@ -55,12 +59,23 @@ export const ALDHAVEN = {
   bridge: { x: -30, width: 14, road: 7, from: 40, to: 80, rise: 1.5 },
   /** The mole out to the harbour light. */
   mole: { line: [[111, 24], [146, 38], [150, 45]] as const, width: 7, height: 2.3 },
-  /** The Delta causeway south over the tidal flats, and the flats' depth under the water. */
-  causeway: { x: -21, width: 8, height: 1.9 },
+  /**
+   * The Delta causeway south over the tidal flats from the south gate, and the
+   * flats' depth under the water. It bends south-west to cross into the
+   * Sallows where their causeway meets it, at CAUSEWAY.x in the world.
+   */
+  causeway: { x: -21, width: 8, height: 1.9, line: [[-21, 110], [-21, 121], [-40, 133], [-40, 142]] as const },
   flats: -0.5,
   /** The gorge's mouth: the valley road between cliffs, north of the North Gate. */
   gorge: { x: 25, half: 22, from: -118, cliff: 28 },
+  /** Over this many metres in from a seam the land blends to the seam's heights: Brackenmoor's ridge west, the Sallows' fen south. */
+  blend: { west: 30, south: 24 },
 } as const;
+
+if (ALDHAVEN.causeway.line.at(-1)![0] + ALDHAVEN.at.x !== CAUSEWAY.x) throw new Error("Aldhaven's causeway must cross into the Sallows on theirs");
+if (ALDHAVEN.land.minX + ALDHAVEN.at.x !== KINGSROAD.x || ALDHAVEN.land.minZ + ALDHAVEN.at.z !== KINGSROAD.minZ || ALDHAVEN.land.maxZ + ALDHAVEN.at.z !== KINGSROAD.maxZ) {
+  throw new Error("Aldhaven's west edge must be the Kingsroad's seam");
+}
 
 /** Aldhaven's air and light: the clearest sky since Oakvale, a pale sea-blue haze, and morning gold off the sea. */
 export const ALDHAVEN_ATMOSPHERE: Atmosphere = {
@@ -135,6 +150,10 @@ export interface AldhavenPlan {
   readonly land: { readonly minX: number; readonly maxX: number; readonly minZ: number; readonly maxZ: number };
   readonly walkable: Walkable;
   readonly ground: HeightGrid;
+  /** Its heights along its west edge, the Kingsroad's seam with Brackenmoor (src/maps/kingsroad.ts), which it meets exactly. */
+  readonly westSeam: SideSeam;
+  /** Its heights along its south edge, the Sallows' north edge, which it meets exactly; the causeway crosses it. */
+  readonly southSeam: Seam;
   readonly streets: readonly Street[];
   readonly pieces: readonly Piece[];
   readonly plants: readonly CityPlant[];
@@ -162,6 +181,11 @@ export interface Surface {
 
 const PI = Math.PI;
 const { river, coast, hill, wall, gates, bridge, mole, causeway, gorge } = ALDHAVEN;
+
+/** How far (x, z) is from the causeway's line, in the city's frame. */
+function offCauseway(x: number, z: number): number {
+  return nearestOnPolyline(causeway.line, x, z).d;
+}
 
 // ------------------------------------------------------------------ the lie of the land
 
@@ -211,8 +235,8 @@ function cityHeight(x: number, z: number): number {
   const nearRiver = Math.min(Math.abs(z - northEdge(x)), Math.abs(z - southEdge(x)));
   h = lerp(ALDHAVEN.quay, h, smoothstep(4, 16, nearRiver));
   h += crownHill(x, z);
-  // The land climbs west to the moor, and rises at the land's other edges so its end is never seen.
-  h += 13 * smoothstep(-112, -162, x) * (0.8 + 0.4 * fbm(x * 0.03, z * 0.03, 203));
+  // The land climbs west toward the moor's ridge (its last stretch blends to the ridge's heights, src/maps/kingsroad.ts).
+  h += 7 * smoothstep(-112, -162, x) * (0.8 + 0.4 * fbm(x * 0.03, z * 0.03, 203));
   // The gorge's mouth: cliffs either side of the valley road, which climbs gently north.
   const north = smoothstep(gorge.from + 2, gorge.from - 14, z);
   const valley = smoothstep(gorge.half, gorge.half - 10, Math.abs(x - gorge.x));
@@ -234,7 +258,7 @@ function cityHeight(x: number, z: number): number {
   // Raised ways over the water: the mole and the causeway.
   const m = nearestOnPolyline(mole.line, x, z).d;
   h = lerp(h, mole.height, smoothstep(mole.width / 2 + 1.5, mole.width / 2, m));
-  if (z > wall.south - 2) h = lerp(h, causeway.height, smoothstep(causeway.width / 2 + 1.5, causeway.width / 2, Math.abs(x - causeway.x)));
+  if (z > wall.south - 2) h = lerp(h, causeway.height, smoothstep(causeway.width / 2 + 1.5, causeway.width / 2, offCauseway(x, z)));
   return h;
 }
 
@@ -290,8 +314,8 @@ const STREETS: readonly (readonly [readonly P2[], number, boolean?])[] = [
   [[[-108, 86], [-40, 86], [40, 86], [54, 95]], 7],
   [[[-108, 99.5], [-40, 99], [40, 99.5]], 4.5],
   [[[-30, 80], [-26, 96], [-21, 108], [-21, 114]], 7],
-  // The Delta causeway, paved, south over the flats.
-  [[[-21, 112], [-21, 142]], 6],
+  // The Delta causeway, paved, south over the flats and bending to meet the Sallows' causeway.
+  [[[-21, 112], ...causeway.line.slice(1)], 6],
 ];
 
 // ------------------------------------------------------------------ what stands where
@@ -409,9 +433,6 @@ export function planAldhaven(): AldhavenPlan {
   const { land, cell, at } = ALDHAVEN;
   const rand = mulberry32(1871);
   const streets: Street[] = STREETS.map(([pts, width, dirt]) => ({ line: sampleCurve(pts, 1), width, dirt: dirt ?? false }));
-
-  // The ground, in the city's frame for now.
-  const local = (x: number, z: number) => (onBridge(x, z) ? deckHeight(z) : cityHeight(x, z));
 
   // ---- Where houses may not stand.
   const plot = new Plot(land.minX, land.minZ, land.maxX, land.maxZ);
@@ -775,7 +796,12 @@ export function planAldhaven(): AldhavenPlan {
   const rows = Math.round((land.maxZ - land.minZ) / cell) + 1;
   const ground = new HeightGrid(worldLand.minX, worldLand.minZ, cols, rows, cell);
   ground.each((x, z, k) => (ground.data[k] = cityHeight(x - ox, z - oz)));
+  // The edges blend to the neighbours' heights, so the zones agree exactly on their lines.
+  meetWest(ground);
+  meetSouth(ground);
   const heightAt = (x: number, z: number) => (onBridge(x - ox, z - oz) ? deckHeight(z - oz) : ground.at(x, z));
+  // What stands and grows stands on the ground as it ends up, the edges' blends and all.
+  const ground0 = (x: number, z: number) => (onBridge(x, z) ? deckHeight(z) : ground.at(x + ox, z + oz));
   const move = (p: P2): P2 => [p[0] + ox, p[1] + oz];
 
   const walkable = new Walkable(walkableAreas().map((area) => area.map(move)));
@@ -787,27 +813,39 @@ export function planAldhaven(): AldhavenPlan {
     if (p.kind === 'bridge' || p.kind === 'ship' || p.kind === 'boat' || p.kind === 'waterGate') return ALDHAVEN.water;
     if (p.kind === 'quay') return ALDHAVEN.quay;
     if (onBridge(p.x, p.z)) return deckHeight(p.z);
-    if (p.kind === 'wall' || p.kind === 'tower') return Math.min(...Plot.samples(p, 0).map(([x, z]) => local(x, z)));
+    if (p.kind === 'wall' || p.kind === 'tower') return Math.min(...Plot.samples(p, 0).map(([x, z]) => ground0(x, z)));
     // A building stands on the highest corner of its plot, its plinth showing down the slope; a prop on the ground under it.
-    if (SMALL.has(p.kind) || p.kind === 'gatehouse' || p.kind === 'gorgegate') return local(p.x, p.z);
-    return Math.max(...Plot.samples(p, 0).map(([x, z]) => local(x, z)));
+    if (SMALL.has(p.kind) || p.kind === 'gatehouse' || p.kind === 'gorgegate') return ground0(p.x, p.z);
+    return Math.max(...Plot.samples(p, 0).map(([x, z]) => ground0(x, z)));
   };
   const placed: Piece[] = pieces.map((p) => ({ ...p, y: footY(p), x: p.x + ox, z: p.z + oz }));
-  const grown: CityPlant[] = plants.map((p) => ({ ...p, y: local(p.x, p.z), x: p.x + ox, z: p.z + oz }));
+  const grown: CityPlant[] = plants.map((p) => ({ ...p, y: ground0(p.x, p.z), x: p.x + ox, z: p.z + oz }));
   const TREE_HEIGHT: Partial<Record<CityPlantKind, number>> = { plane: 9, oak: 9, pine: 8, orchard: 4 };
   const trees = grown.filter((p) => TREE_HEIGHT[p.kind]).map((p) => ({ x: p.x, y: p.y, z: p.z, height: (TREE_HEIGHT[p.kind] ?? 0) * p.scale }));
 
   const surface = (x: number, z: number): Surface => surfaceAt(x - ox, z - oz);
+  const west = kingsroadSeam([-1, 0]);
+  const westSeam: SideSeam = { ...west, heights: west.heights.map((_, k) => ground.get(0, k)) };
+  const southSeam: Seam = {
+    z: worldLand.maxZ,
+    minX: worldLand.minX,
+    maxX: worldLand.maxX,
+    step: cell,
+    heights: Array.from({ length: cols }, (_, i) => ground.get(i, rows - 1)),
+    roads: [{ x: CAUSEWAY.x, width: CAUSEWAY.width, dir: [0, 1] }],
+  };
   const landmark = (label: string, x: number, z: number) => ({ label, x: x + ox, z: z + oz });
   return {
     land: worldLand,
     walkable,
     ground,
+    westSeam,
+    southSeam,
     streets: streets.map((s) => ({ ...s, line: s.line.map(move) })),
     pieces: placed,
     plants: grown,
     colliders,
-    pond: { x: pond.x + ox, z: pond.z + oz, r: pond.r, y: local(pond.x, pond.z) + 0.55 },
+    pond: { x: pond.x + ox, z: pond.z + oz, r: pond.r, y: ground0(pond.x, pond.z) + 0.55 },
     spawn: { x: -146 + ox, z: -21.5 + oz, yaw: -PI / 2 - 0.08 },
     landmarks: [
       landmark('The Kingsroad', -146, -21.5),
@@ -824,7 +862,7 @@ export function planAldhaven(): AldhavenPlan {
       landmark("The King's Garden", -82, -62),
       landmark('The North Gate', 20, -106),
       landmark('The Gorgegate', 25, -121),
-      landmark('The Delta causeway', -21, 130),
+      landmark('The Delta causeway', -30.5, 127),
     ],
     trees,
     surface,
@@ -832,10 +870,48 @@ export function planAldhaven(): AldhavenPlan {
   };
 }
 
+/**
+ * Blend the first ALDHAVEN.blend.west m of columns to the Kingsroad seam's
+ * heights (src/maps/kingsroad.ts): exactly them on the line, all the city's
+ * own a band on. The ridge closes the river's head; the road comes down
+ * through the cutting.
+ */
+function meetWest(ground: HeightGrid): void {
+  if (ground.x0 !== KINGSROAD.x) throw new Error("Aldhaven's west edge must be the Kingsroad's line");
+  for (let i = 0; i < ground.cols; i++) {
+    const t = smoothstep(0, ALDHAVEN.blend.west, ground.x(i) - ground.x0);
+    if (t >= 1) break;
+    for (let j = 0; j < ground.rows; j++) {
+      const k = j * ground.cols + i;
+      const edge = kingsroadHeight(ground.z(j));
+      ground.data[k] = i === 0 ? edge : lerp(edge, ground.data[k], t);
+    }
+  }
+}
+
+/**
+ * Blend the last ALDHAVEN.blend.south m of rows to the Sallows' north edge
+ * (northEdgeHeight): exactly it on the line. The west column is the
+ * Kingsroad seam's, which meets the Sallows' at the corner (both are the Fen
+ * road seam's north hill there).
+ */
+function meetSouth(ground: HeightGrid): void {
+  const last = ground.rows - 1;
+  for (let j = last; j >= 0; j--) {
+    const t = smoothstep(0, ALDHAVEN.blend.south, ground.z(last) - ground.z(j));
+    if (t >= 1) break;
+    for (let i = 1; i < ground.cols; i++) {
+      const k = j * ground.cols + i;
+      const edge = northEdgeHeight(ground.x(i));
+      ground.data[k] = j === last ? edge : lerp(edge, ground.data[k], t);
+    }
+  }
+}
+
 /** What the ground is at (x, z), in the city's frame. */
 function surfaceAt(x: number, z: number): Surface {
   const inGarden = (x > -108 && x < -58 && z > -108 && z < -52) || (x > 8 && x < 64 && z > -36 && z < 16);
-  const quays = nearestOnPolyline(mole.line, x, z).d < mole.width / 2 + 0.5 || (z > wall.south - 2 && Math.abs(x - causeway.x) < causeway.width / 2 + 0.3);
+  const quays = nearestOnPolyline(mole.line, x, z).d < mole.width / 2 + 0.5 || (z > wall.south - 2 && offCauseway(x, z) < causeway.width / 2 + 0.3);
   const paved = (insideWalls(x, z, -2) && !inGarden) || quays;
   const basalt = paved && districtAt(x, z) === 'oldTown';
   const field = !insideWalls(x, z, -4) && x < wall.west - 6 && x > -158 && (z < river.north - 4 || (z > river.south + 4 && z < wall.south)) && Math.abs(z + 18) > 6;
@@ -845,7 +921,8 @@ function surfaceAt(x: number, z: number): Surface {
 /**
  * Where you can walk, in the city's frame: the north bank (inside and out,
  * to the gorge's cliffs), the valley road up between them, the south bank,
- * the Aldbridge, the mole and the causeway. Convex areas that overlap where
+ * the Aldbridge, the mole, the causeway and the Kingsroad's last stretch,
+ * the two reaching over their seams. Convex areas that overlap where
  * they join; the river, the harbour and the sea are outside them all, and
  * the walls keep you to the gates.
  */
@@ -867,6 +944,9 @@ function walkableAreas(): P2[][] {
     ];
   };
   const [m0, m1, m2] = mole.line;
+  const [, c1, c2, c3] = causeway.line;
+  const { land } = ALDHAVEN;
+  const kz = KINGSROAD.road.z - ALDHAVEN.at.z;
   return [
     // The north bank, from the gorge's cliffs down to the river streets.
     [[westEdge, gorge.from], [70, gorge.from], [108, -90], [coast - e, wall.ne[3]], [coast - e, basin.north - e], [westEdge, basin.north - e]],
@@ -876,8 +956,12 @@ function walkableAreas(): P2[][] {
     // The south bank.
     [[westEdge, river.south + e], [basin.from, river.south + e], [basin.to, basin.south + e + 1], [westEdge, basin.south + e + 1]],
     [[westEdge, basin.south + e], [coast - e, basin.south + e], [coast - e, wall.south - 1], [westEdge, wall.south - 1]],
-    // The causeway over the flats.
-    [[causeway.x - 3.2, wall.south - 3], [causeway.x + 3.2, wall.south - 3], [causeway.x + 3.2, ALDHAVEN.land.maxZ - 4], [causeway.x - 3.2, ALDHAVEN.land.maxZ - 4]],
+    // The causeway over the flats, on over the seam into the Sallows by CONFIG.world.ground.seam.
+    moleArea([causeway.x, wall.south - 2], c1, 3.2),
+    moleArea(c1, c2, 3.2),
+    moleArea(c2, [c3[0], ALDHAVEN.land.maxZ + CONFIG.world.ground.seam - 1], 3.2),
+    // The Kingsroad's last stretch, on over the seam into Brackenmoor by CONFIG.world.ground.seam.
+    [[land.minX - CONFIG.world.ground.seam, kz - 8], [westEdge + 4, kz - 7], [westEdge + 4, kz + 9], [land.minX - CONFIG.world.ground.seam, kz + 8]],
     // The Aldbridge's roadway.
     [[bridge.x - bridge.road / 2 + 0.3, river.north - 3], [bridge.x + bridge.road / 2 - 0.3, river.north - 3], [bridge.x + bridge.road / 2 - 0.3, river.south + 3], [bridge.x - bridge.road / 2 + 0.3, river.south + 3]],
     // The mole, out to the harbour light.

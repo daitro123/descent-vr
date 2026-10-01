@@ -15,7 +15,8 @@ import { ALDHAVEN, ALDHAVEN_ATMOSPHERE, type AldhavenPlan, planAldhaven } from '
  * and the King's Garden's pond) and the glows of the harbour light, the
  * Collegium's lamp room, the Great Forge's hearth and the cathedral's gilt
  * sunburst. Nothing lives here yet and nothing can hurt you: no camps, no
- * people, nowhere to wake, no interiors. It joins no neighbour yet.
+ * people, nowhere to wake, no interiors. It meets Brackenmoor on its west
+ * edge, over the Kingsroad, and the Sallows on its south, over the causeway.
  */
 export function buildAldhaven(given?: AldhavenPlan): Zone {
   const plan = given ?? planAldhaven();
@@ -51,7 +52,8 @@ export function buildAldhaven(given?: AldhavenPlan): Zone {
     },
     walkable: plan.walkable,
     land: plan.land,
-    seams: [],
+    seams: [plan.southSeam],
+    sideSeams: [plan.westSeam],
     atmosphere: ALDHAVEN_ATMOSPHERE,
     spawn: plan.spawn,
     camps: [],
@@ -79,8 +81,8 @@ export function buildAldhaven(given?: AldhavenPlan): Zone {
 /**
  * The water: one flat sheet at the water line over every stretch of ground
  * below it (merged along each row of the height grid), deeper the darker;
- * the open sea east, and the fens' water south, on out past the land into
- * the fog; and the pond in the King's Garden at its own height.
+ * the open sea east, on out past the land into the fog; and the pond in the
+ * King's Garden at its own height.
  */
 function buildWater(plan: AldhavenPlan): Mesh {
   const { ground, land, pond } = plan;
@@ -111,13 +113,12 @@ function buildWater(plan: AldhavenPlan): Mesh {
     }
     flush(ground.cols - 1);
   }
-  // On past the land: the sea to the east (and round its corners), the fens' water to the south.
+  // On past the land: the sea to the east and round its north-east corner. South is the Sallows, with its own water.
   const far = 500;
   const sea = shades[3];
   const coast = land.minX + (ALDHAVEN.coast - ALDHAVEN.land.minX) + 4;
-  quad(land.maxX, land.minZ - far, land.maxX + far, land.maxZ + far, sea);
+  quad(land.maxX, land.minZ - far, land.maxX + far, land.maxZ, sea);
   quad(coast, land.minZ - far, land.maxX, land.minZ, sea);
-  quad(land.minX - far, land.maxZ, land.maxX, land.maxZ + far, shades[1]);
   // The pond, a disc at its own height.
   const col = new Color(CITY_WATER.harbour).lerp(new Color(0x4f7a5a), smoothstep(0, 1, 0.4));
   const n = 16;
