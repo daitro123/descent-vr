@@ -165,16 +165,9 @@ const SPOTS = [
   { name: 'fellgate-forecourt', people: [{ cast: 'stewardPell', x: 165, z: 336, yaw: S, work: 'ledger' }], eye: [165.4, 338.8], at: [165, 336] },
   { name: 'reedholm-hask-office', people: [{ cast: 'joryHask', x: 402.8, z: 616.8, yaw: W, work: 'ledger' }], eye: [400, 617.2], at: [402.8, 616.8] },
   // The trainers stand at the moot hall island's corners, facing west over the
-  // plank square; you look from the island's west rim, clear of the hall.
-  {
-    name: 'reedholm-moot-island',
-    people: [
-      { cast: 'warriorTrainer', x: 417.5, z: 604.5, yaw: W + 0.3, work: 'form' },
-      { cast: 'mageTrainer', x: 424, z: 604.3, yaw: W - 0.3, work: 'read' },
-    ],
-    eye: [415.3, 607.4],
-    at: [420.5, 604.4],
-  },
+  // plank square; you look from the island's rim, clear of the hall.
+  { name: 'reedholm-moot-island', people: [{ cast: 'warriorTrainer', x: 417.5, z: 604.5, yaw: W + 0.3, work: 'form' }], eye: [415.3, 607.4], at: [417.5, 604.5] },
+  { name: 'reedholm-moot-island-east', people: [{ cast: 'mageTrainer', x: 424, z: 604.3, yaw: W - 0.3, work: 'read' }], eye: [426.3, 607.1], at: [424, 604.3] },
   { name: 'reedholm-moot-island-south', people: [{ cast: 'rangerTrainer', x: 417.5, z: 617.5, yaw: W, work: 'fletch' }], eye: [415.3, 614.8], at: [417.5, 617.5] },
   { name: 'saint-odo-churchyard-gate', people: [{ cast: 'brotherAnsgar', x: 308, z: 824, yaw: SW, work: 'salt' }], eye: [306, 826], at: [308, 824] },
 ];
