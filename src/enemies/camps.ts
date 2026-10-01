@@ -2,6 +2,7 @@ import { Group, Vector3 } from 'three';
 import { CONFIG } from '../config';
 import type { CampPlan, PostPlan } from '../maps/types';
 import type { Interior } from '../save/record';
+import { NO_STORY, type Story, there } from '../story';
 import type { Ground } from '../world/ground';
 import { type Enemy, type EnemyContext, type EnemyPost, keepApart, type PlayerSword } from './enemy';
 import { createEnemy } from './kinds';
@@ -18,7 +19,8 @@ import { AttackTokens } from './tokens';
 // `standDown` and `chaseSpeed` hooks. The starting zone's camps stand from the
 // start; any other zone's are raised a member a frame as you come near and laid
 // to rest once you've gone and they're calm, the way the chunks round you are
-// built and dropped (CONFIG.population).
+// built and dropped (CONFIG.population). A camp can come or go with the quests,
+// or leave you be until one turns it (story.ts).
 
 /** What a camp's member is doing. */
 export type Mind = 'idle' | 'fight' | 'home' | 'dead';
@@ -84,6 +86,8 @@ export class Camp {
     private readonly ground: Ground,
     /** Raised only while you're near, a member at a time (another zone's than the starting zone's); asleep until then. */
     readonly lazy = false,
+    /** Where the quests stand: whether it's there, and whether it leaves you be. */
+    private readonly story: Story = NO_STORY,
   ) {
     this.root.name = plan.id;
     this.patrol = plan.road ? new PatrolWalk(plan.road, plan.posts.length) : null;
@@ -104,6 +108,11 @@ export class Camp {
   /** Is every member that's raised at their post or fallen: nobody fighting or walking home? */
   get calm(): boolean {
     return this.members.every((m) => m.mind === 'idle' || m.mind === 'dead');
+  }
+
+  /** Is it there, as the quests stand (its plan's `from` and `until`)? */
+  get there(): boolean {
+    return there(this.plan, this.story);
   }
 
   /** How many of its members are still to be raised while it fills: a lazy camp's, a member a frame. */
@@ -173,6 +182,9 @@ export class Camp {
     const { notice, leash, home, stuck } = CONFIG.camps;
     // It fights you only where it is: out of doors, or in the mine.
     const here = you.alive && you.interior === (this.plan.interior ?? null);
+    // Until its quest turns it, it notices you only once you hurt it.
+    const { neutralUntil } = this.plan;
+    const wary = !neutralUntil || this.story.reached(neutralUntil);
     for (const m of this.members) {
       const e = m.enemy;
       if (m.mind === 'dead') continue;
@@ -185,7 +197,7 @@ export class Camp {
       m.hp = e.hp;
       switch (m.mind) {
         case 'idle':
-          if (here && (hurt || (flat(e.position, you.feet) < notice && this.sees(e.position, you.feet)))) this.engage(m);
+          if (here && (hurt || (wary && flat(e.position, you.feet) < notice && this.sees(e.position, you.feet)))) this.engage(m);
           // Home still wounded, it heals once the wound ends.
           else if (e.heals && e.hp < e.maxHp) e.hp = m.hp = e.maxHp;
           break;
@@ -274,9 +286,9 @@ export class Camp {
     const { refillTime, refillAway } = CONFIG.camps;
     this.refillIn = Math.max(0, (this.refillIn ?? refillTime) - dt);
     const away = this.away(you.feet);
-    // The mine's only once you've also left it.
+    // The mine's only once you've also left it; one gone with its quest, never.
     const inside = this.plan.interior !== undefined && you.interior === this.plan.interior;
-    if (this.refillIn <= 0 && away >= refillAway && !inside) this.fill();
+    if (this.refillIn <= 0 && away >= refillAway && !inside && this.there) this.fill();
   }
 }
 
@@ -310,6 +322,8 @@ export class Camps {
     ground: Ground | ((plan: CampPlan) => Ground),
     private readonly hooks: CampHooks,
     private readonly events: CampEvents = {},
+    /** Where the quests stand: which camps are there, and which leave you be. */
+    private readonly story: Story = NO_STORY,
   ) {
     this.root.name = 'camps';
     this.add(plans, ground);
@@ -322,12 +336,14 @@ export class Camps {
 
   /**
    * Add camps: a zone's, as it's loaded. `lazy` ones (any zone's but the
-   * starting zone's) sleep until you come near them.
+   * starting zone's, and any that comes or goes with a quest) sleep until you
+   * come near them.
    */
   add(plans: readonly CampPlan[], ground: Ground | ((plan: CampPlan) => Ground), lazy = false): void {
     for (const plan of plans) {
       const floor = this.floorOf(typeof ground === 'function' ? ground(plan) : ground);
-      const camp = new Camp(plan, (post, at) => this.raise(plan.level, post, at, floor), this.events, floor.ctx.ground, lazy);
+      const comesAndGoes = plan.from !== undefined || plan.until !== undefined;
+      const camp = new Camp(plan, (post, at) => this.raise(plan.level, post, at, floor), this.events, floor.ctx.ground, lazy || comesAndGoes, this.story);
       this.root.add(camp.root);
       this.list.push(camp);
     }
@@ -360,7 +376,7 @@ export class Camps {
   /** Wake every lazy camp near `you` and raise it whole at once (loading in, waking after a death). */
   fill(you: { readonly x: number; readonly z: number }): void {
     for (const camp of this.list) {
-      if (!camp.lazy || camp.away(you) >= CONFIG.population.near) continue;
+      if (!camp.lazy || !camp.there || camp.away(you) >= CONFIG.population.near) continue;
       if (!camp.awake) camp.wake();
       while (camp.raiseNext());
     }
@@ -391,9 +407,10 @@ export class Camps {
   }
 
   /**
-   * The lazy camps: each wakes as you come within CONFIG.population.near and
-   * sleeps once you're `hysteresis` farther and it's calm. Waking camps are
-   * raised a few members a frame between them, nearest camp first.
+   * The lazy camps: each that's there wakes as you come within
+   * CONFIG.population.near, and sleeps once it's calm and you're `hysteresis`
+   * farther (or it's gone with its quest and its fallen have fallen). Waking
+   * camps are raised a few members a frame between them, nearest camp first.
    */
   private wakeAndSleep(dt: number, you: Vector3): void {
     const { near, hysteresis, perFrame } = CONFIG.population;
@@ -401,10 +418,14 @@ export class Camps {
     for (const camp of this.list) {
       if (!camp.lazy) continue;
       const away = camp.away(you);
+      const present = camp.there;
       if (!camp.awake) {
-        if (away < near) camp.wake();
+        if (present && away < near) camp.wake();
         else camp.doze(dt);
-      } else if (away >= near + hysteresis && camp.calm) this.sleep(camp);
+      } else if (camp.calm && (present ? away >= near + hysteresis : !this.falling(camp))) {
+        // Far off; or gone with its quest, once its fallen have fallen, in view or not.
+        this.sleep(camp);
+      }
     }
     while (budget > 0) {
       let next: Camp | null = null;
@@ -413,6 +434,11 @@ export class Camps {
       next.raiseNext();
       budget--;
     }
+  }
+
+  /** Is any of `camp`'s fallen still falling (toppling, sinking, its bones flying)? */
+  private falling(camp: Camp): boolean {
+    return camp.members.some((m) => !m.enemy.alive && this.enemies.includes(m.enemy));
   }
 
   /** Lay `camp` to rest: its bodies, standing or fallen, are taken away. */

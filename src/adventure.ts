@@ -18,7 +18,7 @@ import type { Refusal, Where } from './inventory';
 import { itemOf, type ItemId } from './items';
 import { lootSeed } from './loot';
 import { findMap } from './maps/registry';
-import type { Respawn, StartingZone, Zone } from './maps/types';
+import type { Crowd, Respawn, StartingZone, Zone } from './maps/types';
 import { Hale } from './people/hale';
 import { type Population, worldPopulation } from './people/population';
 import { Villagers } from './people/villagers';
@@ -74,6 +74,7 @@ const _spot = new Object3D();
 const _vendor: { -readonly [K in keyof VendorAt]: VendorAt[K] } = { id: 'smith', feet: new Vector3(), head: new Vector3() };
 const _float = new Vector3();
 const _look = new Quaternion();
+const _crowd: { -readonly [K in keyof Crowd]: Crowd[K] } = { near: 0, most: 0 };
 const _turn = new Euler();
 
 type FloatStyle = Parameters<FloatingText['spawn']>[2];
@@ -216,6 +217,8 @@ export class Adventure {
   /** The edges of your view darkening while you run. */
   private readonly runVignette: RunVignette;
   private readonly you: You = { feet: new Vector3(), head: new Vector3(), sword: null, alive: true, interior: null };
+  /** The starting zone's id: its own people and camps are drawn all over it, as they always were. */
+  private readonly home: string;
   private readonly sword = { base: new Vector3(), tip: new Vector3(), speed: 0, swing: 0 };
   /** The edge a whetstone is rubbed along this frame: the blade, or the ranger's bow. */
   private readonly edge = { base: new Vector3(), tip: new Vector3() };
@@ -254,6 +257,7 @@ export class Adventure {
     cap?: number,
   ) {
     const { key, record, who } = played;
+    this.home = zone.id;
     this.state = new AdventureState(record ?? undefined, CHAINS, { class: who.class, character: key, cap });
     const { inventory } = this.state;
     this.board.describe = (id) => cardText(id, 1, inventory.wearing, inventory.gear);
@@ -390,9 +394,13 @@ export class Adventure {
         sfx.windup(_b, a.blockable);
       },
     };
-    this.camps = new Camps(zone.camps, (plan) => (plan.interior === 'mine' && below ? below : this.world), hooks, {
-      onKill: (camp, member) => this.onKill(camp, member),
-    });
+    this.camps = new Camps(
+      zone.camps,
+      (plan) => (plan.interior === 'mine' && below ? below : this.world),
+      hooks,
+      { onKill: (camp, member) => this.onKill(camp, member) },
+      this.state,
+    );
     scene.add(this.camps.root);
     // The Warden stands on the mine's ground too, and shares the camps' attack pools.
     this.throne =
@@ -443,7 +451,7 @@ export class Adventure {
     this.villagers.warm(renderer, camera, scene);
     // Every zone's own villagers, and every other zone's camps, are built as you come near them;
     // a zone loaded later (fetched over a seam) brings its own as it comes.
-    const people = worldPopulation(this.world);
+    const people = worldPopulation(this.world, this.state);
     this.people = people.population;
     this.peopleRoot = people.root;
     scene.add(this.peopleRoot);
@@ -500,7 +508,7 @@ export class Adventure {
     this.lastHp = this.player.hp;
     // Whoever lives round where you stand, there before the first frame (and uploaded with the chunks).
     this.camps.fill(_a.set(x, 0, z));
-    this.people.fill(_a, this.peopleNear);
+    this.people.fill(_a, this.crowdAt(_a));
     // Oakvale round where you stand, all at once behind the page, and compiled now rather than when
     // it first comes into view (the World does that with the first fill). A save made over the pass
     // loads there, in Brackenmoor's air, with Oakvale streaming in behind you.
@@ -518,9 +526,12 @@ export class Adventure {
     };
   }
 
-  /** How near villagers are built: CONFIG.population.near, or only as far as you can see through the fog (in a fen). */
-  private get peopleNear(): number {
-    return Math.min(CONFIG.population.near, this.world.outdoorsSeen);
+  /** How many villagers are built round `at`, and how near: the crowd of the zone it's in, no farther than you can see through the fog (in a fen). */
+  private crowdAt(at: Vector3): Crowd {
+    const { near, most } = this.world.zoneAt(at.x, at.z)?.crowd ?? CONFIG.population;
+    _crowd.near = Math.min(near, this.world.outdoorsSeen);
+    _crowd.most = most;
+    return _crowd;
   }
 
   /**
@@ -541,7 +552,10 @@ export class Adventure {
     this.world.update(dt, player.camera);
     // With a door shut behind you, what stands outside isn't drawn either.
     const outdoors = this.world.outdoorsShown;
-    this.pickups.root.visible = this.hale.root.visible = this.villagers.root.visible = this.peopleRoot.visible = this.chests.outdoors.visible = outdoors;
+    this.pickups.root.visible = this.villagers.root.visible = this.peopleRoot.visible = this.chests.outdoors.visible = outdoors;
+    // The starting zone's own people, out of doors, are drawn from another zone only near, as anyone's are.
+    this.hale.root.visible = outdoors && this.drawn(this.distance(this.hale.root.position));
+    for (const v of this.villagers.all) if (!v.spot.interior) v.root.visible = this.drawn(this.distance(v.root.position));
     for (const { mesh, interior } of this.gathering.meshes) if (interior === null) mesh.visible = outdoors;
     if (this.anvil) this.anvil.frame.visible = outdoors;
     this.showCamps(outdoors);
@@ -609,7 +623,7 @@ export class Adventure {
     this.updateAnvil(dt);
     this.updateBag(dt);
     this.villagers.update(dt, you.head, this.state);
-    this.people.update(dt, you.head, this.peopleNear);
+    this.people.update(dt, you.head, this.crowdAt(you.head));
     // Talking to the herbalist holds the bench off: it takes your hands once the talk ends.
     this.bench?.update(dt, this.fighting, this.herbalistBoard.isOpen);
     this.pickUp();
@@ -685,10 +699,25 @@ export class Adventure {
       if (interior === 'mine') mesh.visible = !!mine && spots.some((s) => mine.drawn[mine.partAt(s.x, s.z)]);
     }
     for (const camp of this.camps.camps) {
-      if (camp.plan.interior !== 'mine' || !mine) camp.root.visible = outdoors;
+      if (camp.plan.interior !== 'mine' || !mine) camp.root.visible = outdoors && (camp.lazy || this.drawn(camp.away(this.you.feet)));
       else showInMine(mine, camp.root);
     }
     if (this.throne && mine) showInMine(mine, this.throne.root);
+  }
+
+  /**
+   * Is the starting zone's own character (Hale, its villagers, its camps)
+   * `away` m off drawn? All over the starting zone, as they always were; from
+   * another, only as near as anyone's built there (CONFIG.population).
+   */
+  private drawn(away: number): boolean {
+    const { near, hysteresis } = CONFIG.population;
+    return this.world.zone?.id === this.home || away < near + hysteresis;
+  }
+
+  /** How far `at` is from your feet, on the floor plane. */
+  private distance(at: { readonly x: number; readonly z: number }): number {
+    return Math.hypot(at.x - this.you.feet.x, at.z - this.you.feet.z);
   }
 
   /** The Warden stands up off its throne as you come through the gate, with a roar. */
@@ -1374,7 +1403,7 @@ export class Adventure {
     this.player.reset(x, z, yaw);
     // Behind the fade, who lives round where you wake and the chunks round it, at once.
     this.camps.fill(_a.set(x, 0, z));
-    this.people.fill(_a, this.peopleNear);
+    this.people.fill(_a, this.crowdAt(_a));
     this.world.fill(x, z);
     this.lastHp = this.player.hp;
     this.combat.clear();

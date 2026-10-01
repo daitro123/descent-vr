@@ -235,6 +235,12 @@ export const VILLAGERS = ['innkeeper', 'smith', 'farmer', 'herbalist'] as const;
 
 export type VillagerId = (typeof VILLAGERS)[number];
 
+/** A moment in a quest: when `quest` reaches `stage` (adventureState.ts STAGES), and from then on. */
+export interface QuestMoment {
+  readonly quest: QuestId;
+  readonly stage: Stage;
+}
+
 /**
  * A line a villager barks: from the moment `from`'s quest reaches its stage
  * (from the start, without one), and once you've `learned` a profession
@@ -242,7 +248,7 @@ export type VillagerId = (typeof VILLAGERS)[number];
  */
 export interface Bark {
   readonly line: string;
-  readonly from?: { readonly quest: QuestId; readonly stage: Stage };
+  readonly from?: QuestMoment;
   readonly learned?: Profession;
 }
 
