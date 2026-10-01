@@ -62,6 +62,7 @@ export function buildSallows(given?: SallowsPlan): Zone {
     bounds: plan.walkable.bounds,
     landmarks: plan.landmarks,
     heightAt: plan.heightAt,
+    waterAt: (x, z) => (plan.heightAt(x, z) < SALLOWS.water ? SALLOWS.water : null),
     resolve: (p, radius) => plan.colliders.resolve(p, radius),
     collide: (p, radius) => plan.colliders.pushOut(p, radius),
     update(dt: number, camera: Camera) {

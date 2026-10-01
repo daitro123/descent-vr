@@ -37,7 +37,7 @@ for (const label of labels.filter((l) => filter.split(',').some((f) => l.include
       inspector.scaled.scale.setScalar(zoom);
       inspector.showGuides = true;
       inspector.update(0);
-      return { tris: b.rig.triangles };
+      return { tris: b.triangles };
     }, { label, clip, turn, zoom, at });
     if (!info) continue;
     await page.waitForTimeout(150);

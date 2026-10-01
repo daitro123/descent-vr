@@ -9,6 +9,7 @@ import { RAIDER_BUILDS } from '../src/models/raiders';
 import { LANTERN_BUILDS, UNDERGATE_BUILDS } from '../src/models/smugglers';
 import { type EnemyKind, FAMILIES, type Family } from '../src/models/characters';
 import { BUILDS } from '../src/models/human';
+import type { Rig } from '../src/models/rig';
 import { Arena } from '../src/world/arena';
 import type { Ground } from '../src/world/ground';
 
@@ -71,7 +72,7 @@ describe.each(LIVING)('a %s %s', (family, kind) => {
     living.update(DT, far());
     undead.update(DT, far());
     expect(living.hittable).toBe(true);
-    expect(hipsY(living)).toBeCloseTo(living.rig.proportions.hipY, 1);
+    expect(hipsY(living)).toBeCloseTo((living.rig as Rig).proportions.hipY, 1);
     expect(undead.hittable).toBe(false);
     expect(hipsY(undead)).toBeLessThan(0);
   });

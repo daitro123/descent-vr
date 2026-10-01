@@ -158,6 +158,8 @@ async function startAdventure(
     people: adventure.people,
     /** Every zone's animals placed by data: `herds.built` are those near you. */
     herds: adventure.herds,
+    /** Every zone's critters: `critters.shown` are those drawn now, nearest first. */
+    critters: adventure.critters,
     /** What the fighting has come to: hits, kills, blocks, bolts, freezes. */
     combatStats,
     /** Resolves once no save write is in flight. */

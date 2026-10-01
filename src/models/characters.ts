@@ -17,15 +17,21 @@ import { type BoneName, type DressContext, type Proportions, Rig } from './rig';
 // (raiders.ts) wear the human body (human.ts). Every family is an entry in
 // FAMILIES.
 
-/** An enemy's behaviour: how it fights. */
-export type EnemyKind = 'grunt' | 'archer' | 'brute' | 'warden';
+/** An enemy's behaviour: how it fights. A biter strikes low at your legs (a leech, an adder). */
+export type EnemyKind = 'grunt' | 'archer' | 'brute' | 'warden' | 'biter';
 
-/** What an enemy family is made of: the dead are skeletons, the living wear the human body. */
-export type EnemyBody = 'skeleton' | 'human';
+/** The behaviours fought on a human body or a skeleton: every one but the biter's, which only crawlers have. */
+export type HumanoidKind = Exclude<EnemyKind, 'biter'>;
+
+/**
+ * What an enemy is made of: the dead are skeletons, the living wear the human
+ * body, and leeches and adders are crawlers (crawler.ts).
+ */
+export type EnemyBody = 'skeleton' | 'human' | 'crawler';
 
 /** The business end of a weapon, in its bone's space. Enemy strikes sweep this segment. */
-export interface WeaponSpec {
-  bone: BoneName;
+export interface WeaponSpec<B extends string = BoneName> {
+  bone: B;
   base: Vec3;
   tip: Vec3;
   radius: number;
@@ -56,8 +62,8 @@ export interface Fighter {
  * the undead have a Warden.
  */
 export interface FamilyDef {
-  readonly body: EnemyBody;
-  readonly fights: Partial<Record<EnemyKind, Fighter>>;
+  readonly body: Exclude<EnemyBody, 'crawler'>;
+  readonly fights: Partial<Record<HumanoidKind, Fighter>>;
   /**
    * Its named fighters: each dressed apart from the rest, for one place, and
    * asked for there by name (a camp post's `named`): the Lantern Men's leaders
@@ -71,7 +77,7 @@ export interface FamilyDef {
 
 /** A family's fighter for one place, a leader or a boss, fighting with the behaviour `kind`. */
 export interface NamedFighter extends Fighter {
-  readonly kind: EnemyKind;
+  readonly kind: HumanoidKind;
 }
 
 const PI = Math.PI;
@@ -241,7 +247,7 @@ function greatsword(ctx: DressContext): WeaponSpec {
 
 // ---------------------------------------------------------------- the bestiary
 
-export const PROPORTIONS: Record<EnemyKind, Proportions> = {
+export const PROPORTIONS: Record<HumanoidKind, Proportions> = {
   grunt: { hipY: 0.92, hipW: 0.09, spine: 0.44, shoulderW: 0.19, neck: 0.48, upperArm: 0.28, forearm: 0.25, thigh: 0.43, shin: 0.43 },
   archer: { hipY: 0.9, hipW: 0.09, spine: 0.43, shoulderW: 0.18, neck: 0.47, upperArm: 0.27, forearm: 0.25, thigh: 0.42, shin: 0.42 },
   brute: {
@@ -440,8 +446,16 @@ export const FAMILIES = {
   raider: RAIDERS,
 } satisfies Record<string, FamilyDef>;
 
-/** Who an enemy is, whatever its behaviour: one of FAMILIES. */
+/** Who an enemy on a skeleton or the human body is, whatever its behaviour: one of FAMILIES. */
 export type Family = keyof typeof FAMILIES;
+
+/** Who an enemy is: one of FAMILIES, or the crawlers' leeches and adders, which are only ever biters (crawler.ts). */
+export type EnemyFamily = Family | 'leech' | 'snake';
+
+/** Is it one of FAMILIES, on a skeleton or the human body (not a crawler)? */
+export function isFamily(family: EnemyFamily): family is Family {
+  return family in FAMILIES;
+}
 
 export interface BuildOptions {
   material?: Material;
@@ -458,7 +472,7 @@ export interface BuildOptions {
  * there's none of some (only the undead have a Warden), and a named fighter
  * fights only with its own behaviour.
  */
-export function fighterOf(kind: EnemyKind, family: Family = 'undead', named?: string): Fighter {
+export function fighterOf(kind: HumanoidKind, family: Family = 'undead', named?: string): Fighter {
   if (named !== undefined) {
     const own: NamedFighter | undefined = (FAMILIES[family] as FamilyDef).named?.[named];
     if (!own) throw new Error(`No ${named} among the ${family} family`);
@@ -471,11 +485,11 @@ export function fighterOf(kind: EnemyKind, family: Family = 'undead', named?: st
 }
 
 /** The bone lengths of an enemy with this behaviour and family (or this named fighter of it). */
-export function proportionsOf(kind: EnemyKind, family: Family = 'undead', named?: string): Proportions {
+export function proportionsOf(kind: HumanoidKind, family: Family = 'undead', named?: string): Proportions {
   return fighterOf(kind, family, named).proportions;
 }
 
-export function buildCharacter(kind: EnemyKind, opts: BuildOptions = {}): CharacterModel {
+export function buildCharacter(kind: HumanoidKind, opts: BuildOptions = {}): CharacterModel {
   const variant = opts.variant ?? 0;
   const family = opts.family ?? 'undead';
   const fighter = fighterOf(kind, family, opts.named);
