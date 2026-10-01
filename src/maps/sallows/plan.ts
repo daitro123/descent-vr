@@ -67,7 +67,8 @@ export const SALLOWS_ATMOSPHERE: Atmosphere = {
 /** What grows or lies in the fens. */
 export type FenKind =
   | 'reed' | 'sedge' | 'willow' | 'pollard' | 'alder' | 'lily' | 'deadTree' | 'juniper'
-  | 'samphire' | 'cotton' | 'rock' | 'chalkRock' | 'rubble';
+  | 'samphire' | 'cotton' | 'rock' | 'chalkRock' | 'rubble'
+  | 'tussock' | 'loosestrife' | 'iris' | 'meadowsweet' | 'marigold';
 
 export interface FenPlant {
   readonly kind: FenKind;
@@ -80,7 +81,7 @@ export interface FenPlant {
 }
 
 /** Too small to see from a stand-in's distance. */
-export const UNDERGROWTH: ReadonlySet<FenKind> = new Set(['sedge', 'lily', 'samphire', 'cotton', 'rock']);
+export const UNDERGROWTH: ReadonlySet<FenKind> = new Set(['sedge', 'lily', 'samphire', 'cotton', 'rock', 'tussock', 'loosestrife', 'iris', 'meadowsweet', 'marigold']);
 
 /** Trunk radius for what you can't walk through (scaled by the plant's scale). */
 const TRUNK: Partial<Record<FenKind, number>> = {
@@ -96,7 +97,7 @@ export type FenStructureKind =
   | 'raft' | 'mapboard' | 'signpost' | 'lanternPost' | 'lastStone'
   | 'tollHouse' | 'tollGate' | 'customsRuin' | 'watchPost'
   | 'chapel' | 'grave' | 'sunkCottage' | 'hide' | 'decoys' | 'gibbet' | 'kiln' | 'chalkBank'
-  | 'smokehouse' | 'crates' | 'cog' | 'tent'
+  | 'smokehouse' | 'crates' | 'cog' | 'tent' | 'lookout'
   | 'sluice' | 'sluiceTower' | 'sluiceGate' | 'deepWall' | 'deepArch' | 'deepRoof' | 'drownedTower' | 'bellTower' | 'floodWall'
   | 'bridge'
   | 'stall' | 'revetment' | 'banner' | 'peatStack' | 'fencePosts' | 'plankBridge' | 'column' | 'deepHead' | 'brazier' | 'churchyard'
@@ -224,6 +225,12 @@ export const PLACES = {
   hythe: { x: 684, z: 622 },
   kiln: { x: 294, z: 895 },
 } as const;
+
+/** How far out across Reedholm's pool (x, z) is: 0 in its middle, 1 at its rim, which wanders in and out a few metres so it's no drawn oval. */
+function inPool(x: number, z: number): number {
+  const { pool } = REEDHOLM;
+  return Math.hypot((x - pool.x) / pool.rx, (z - pool.z) / pool.rz) + (valueNoise(x * 0.045, z * 0.045, 213) - 0.5) * 0.16;
+}
 
 /** The Sluice House's tower, on the Great Channel's west bank, its door on the lock's walkway. */
 const SLUICE_TOWER = { x: 453.5, z: 697.5, w: 7 } as const;
@@ -462,8 +469,7 @@ function fenHeight(x: number, z: number): number {
   h = lerp(h, 0.08 + (valueNoise(x * 0.35, z * 0.35, 207) - 0.5) * 0.8, mire);
   for (const p of HOLLOWS) h = lerp(h, p.h + (valueNoise(x * 0.2, z * 0.2, 209) - 0.5) * 0.2, smoothstep(p.r, p.r * 0.6, Math.hypot(x - p.x, z - p.z)));
   // Reedholm's pool: flat and knee deep under the whole town, banking up only at its rim.
-  const { pool } = REEDHOLM;
-  h = lerp(h, -0.55 + (valueNoise(x * 0.2, z * 0.2, 209) - 0.5) * 0.12, smoothstep(1, 0.74, Math.hypot((x - pool.x) / pool.rx, (z - pool.z) / pool.rz)));
+  h = lerp(h, -0.55 + (valueNoise(x * 0.2, z * 0.2, 209) - 0.5) * 0.12, smoothstep(1, 0.74, inPool(x, z)));
   for (const p of HOLMS) h = Math.max(h, lerp(h, p.h + (valueNoise(x * 0.3, z * 0.3, 211) - 0.5) * (p.steep ? 0.05 : 0.12), smoothstep(p.r, p.steep ? p.r - 2 : p.r * 0.55, Math.hypot(x - p.x, z - p.z))));
   // Kiln Edge: the fen dries onto chalk in the south-west, in low banks.
   const chalk = smoothstep(350, 320, x) * smoothstep(850, 880, z);
@@ -889,7 +895,7 @@ function placeStructures(ground: (x: number, z: number) => number, fields: Field
     const [bx, bz] = [PLACES.cockleEnd.x + cockle[b][0], PLACES.cockleEnd.z + cockle[b][1]];
     add('plankBridge', (ax + bx) / 2, (az + bz) / 2, Math.atan2(bx - ax, bz - az), { y: SALLOWS.water + 1.55, w: 0.9, d: Math.hypot(bx - ax, bz - az) - 4.4 });
   }
-  for (const [x, z, yaw, w] of [[310, 702, 1.2, 9], [294, 726, 0.2, 11], [282, 711, 1.7, 7]] as const) add('fencePosts', x, z, yaw, { y: SALLOWS.water, w });
+  for (const [x, z, yaw, w] of [[310, 702, 1.2, 9], [294, 726, 0.2, 11], [312, 721, 2.3, 7]] as const) add('fencePosts', x, z, yaw, { y: SALLOWS.water, w });
   add('washLine', PLACES.cockleEnd.x - 8, PLACES.cockleEnd.z + 1.5, 1.3, { y: SALLOWS.water, w: 5 });
   add('punt', PLACES.cockleEnd.x + 4, PLACES.cockleEnd.z - 3, 0.9, { y: SALLOWS.water, d: 4.6, variant: 1 });
 
@@ -968,6 +974,15 @@ function placeStructures(ground: (x: number, z: number) => number, fields: Field
       }
     }
   }
+  // Columns fallen across the crossroads, their drums half under the water.
+  const fallen = mulberry32(912);
+  for (let u = -35; u <= 35; u += 14) {
+    for (let v = -35; v <= 35; v += 14) {
+      const [x, z] = plot(u, v);
+      if (fallen() > 0.4 || Math.hypot(u, v) > 50 || !clearOf(x, z) || !free(x, z, 3)) continue;
+      add('column', x, z, grid + (fallen() < 0.5 ? 0 : Math.PI / 2) + (fallen() - 0.5) * 0.5, { y: sunk(x, z), h: 1, solid: true, w: 1.2, d: 6, variant: 2 });
+    }
+  }
   // The carved faces of the Deepkings' magistrates, fallen in the streets.
   for (const [u, v, yaw] of [[7, 14, 2.2], [-21, 21, 0.6]] as const) {
     const [x, z] = plot(u, v);
@@ -984,7 +999,14 @@ function placeStructures(ground: (x: number, z: number) => number, fields: Field
   add('crates', PLACES.hythe.x + 1, PLACES.hythe.z - 7, 0.3, { solid: true, w: 2.2, d: 2.2 });
   add('crates', PLACES.hythe.x + 6.5, PLACES.hythe.z - 2.5, 2.0, { solid: true, w: 2.2, d: 2.2 });
   add('brazier', PLACES.hythe.x - 2.5, PLACES.hythe.z + 0.5, 0, { solid: true, w: 0.7, d: 0.7 });
-  add('washLine', PLACES.hythe.x - 6, PLACES.hythe.z + 5, 0.3, { w: 4.5 });
+  add('washLine', PLACES.hythe.x - 9, PLACES.hythe.z - 8, 0.3, { w: 4.5 });
+  // Their lookout on the bank's seaward edge, a shed for what they land, nets drying, peat stacked for the brazier.
+  for (const [kind, x, z, yaw, o] of [
+    ['lookout', PLACES.hythe.x + 8, PLACES.hythe.z - 12, 0.4, { h: 5.5, w: 3.2, d: 3.2, solid: true }],
+    ['smokeShed', PLACES.hythe.x - 10, PLACES.hythe.z + 2, 1.9, { w: 3.4, d: 3, h: 2.6, solid: true }],
+    ['netRack', PLACES.hythe.x + 2, PLACES.hythe.z - 12, 0.2, { w: 4 }],
+    ['peatStack', PLACES.hythe.x - 4, PLACES.hythe.z - 8.5, 0.6, { w: 2.4, d: 1.4, h: 1.2, solid: true }],
+  ] as const) if (free(x, z, Math.max(o.w, 'd' in o ? o.d : 0) / 2)) add(kind, x, z, yaw, o);
   for (const [x, z] of [[PLACES.hythe.x + 4, PLACES.hythe.z - 1.5], [HYTHE_JETTY[1][0] - 0.6, HYTHE_JETTY[1][1] - 1]] as const) {
     add('lanternPost', x, z, -Math.PI / 2, { y: Math.max(SALLOWS.deck, ground(x, z)), solid: true, w: 0.25, d: 0.25 });
   }
@@ -1033,6 +1055,11 @@ function lightsAndSmoke(structures: readonly FenStructure[]): { lights: FenGlow[
           const [gx, gy, gz] = at(s, lx, s.h - 1.6, lz);
           lights.push({ x: gx, y: gy, z: gz, size: 0.8, color: amber });
         }
+        break;
+      }
+      case 'lookout': {
+        const [x, y, z] = at(s, 1.0, s.h + 1.35, 0.9);
+        lights.push({ x, y, z, size: 0.9, color: amber });
         break;
       }
       case 'forge': {
@@ -1130,8 +1157,7 @@ function placePlants(ground: HeightGrid, walkable: Walkable, fields: Fields, roa
       for (let gx = land.minX + spacing / 2; gx < land.maxX; gx += spacing) fn(gx + (rand() - 0.5) * spacing, gz + (rand() - 0.5) * spacing);
     }
   };
-  const { pool } = REEDHOLM;
-  const reedholm = (x: number, z: number) => Math.hypot((x - pool.x) / pool.rx, (z - pool.z) / pool.rz) < 0.92;
+  const reedholm = (x: number, z: number) => inPool(x, z) < 0.92;
   // The Gibbet Willow stands alone on its holm, nothing else as tall near it.
   const gibbet = (x: number, z: number) => Math.hypot(x - PLACES.gibbet.x, z - PLACES.gibbet.z) < 24;
   const mire = (x: number, z: number) => Math.hypot(x - PLACES.mire.x, z - PLACES.mire.z) < 36;
@@ -1172,8 +1198,8 @@ function placePlants(ground: HeightGrid, walkable: Walkable, fields: Fields, roa
   });
   // Rubble of the Deepkings' green-black stone round the drowned town.
   scatter(6, (x, z) => {
-    if (Math.hypot(x - PLACES.drownedTown.x, z - PLACES.drownedTown.z) > 58 || rand() > 0.12 || !clear(x, z, 1)) return;
-    add('rubble', x, z, 0.4 + rand() * 0.8);
+    if (Math.hypot(x - PLACES.drownedTown.x, z - PLACES.drownedTown.z) > 58 || rand() > 0.3 || !clear(x, z, 1)) return;
+    add('rubble', x, z, 0.4 + rand() * 0.9);
   });
   // Reed beds, tall as hedges, over the margins and the shallows, never in the Great Channel or on a road or deck.
   scatter(2.4, (x, z) => {
@@ -1191,10 +1217,26 @@ function placePlants(ground: HeightGrid, walkable: Walkable, fields: Fields, roa
     } else if (x < 320 && roll < 0.1) add('cotton', x, z, 0.8 + rand() * 0.4);
     else if (roll < 0.32) add('sedge', x, z, 1.1 + rand() * 0.6);
   });
-  // Lilies on the still pools: not the channel, not under Reedholm's walkways.
-  scatter(3.2, (x, z) => {
+  // Tussocks of rough grass over the wet meadows and the dykes' sides, thick in places and thin in others.
+  scatter(2.8, (x, z) => {
     const h = ground.at(x, z);
-    if (h > -0.15 || h < -1.2 || inChannel(x, z) || rand() > 0.3 * smoothstep(0.45, 0.6, fbm(x * 0.05, z * 0.05, 225)) || !clear(x, z, 0.5)) return;
+    if (h < 0.08 || x > 640 || kilnEdge(x, z) || rand() > 0.55 * smoothstep(0.3, 0.6, fbm(x * 0.04, z * 0.04, 231)) || !clear(x, z, 0.4)) return;
+    add('tussock', x, z, 0.8 + rand() * 0.6);
+  });
+  // The fen's flowers in drifts: flag iris and marsh marigold at the water's edge, loosestrife along the reeds' margins, meadowsweet on the damp banks.
+  scatter(1.9, (x, z) => {
+    const drift = fbm(x * 0.06, z * 0.06, 241);
+    if (drift < 0.58 || x > 640 || kilnEdge(x, z) || rand() > 0.6 * smoothstep(0.58, 0.72, drift) || inChannel(x, z) || !clear(x, z, 0.4)) return;
+    const h = ground.at(x, z);
+    const roll = rand();
+    if (h > -0.15 && h < 0.12) add(roll < 0.55 ? 'iris' : 'marigold', x, z, 0.8 + rand() * 0.5, Math.max(h, SALLOWS.water - 0.05));
+    else if (h >= 0.12 && h < 0.45) add(roll < 0.6 ? 'loosestrife' : 'meadowsweet', x, z, 0.85 + rand() * 0.4);
+    else if (h >= 0.45 && h < 1.6) add(roll < 0.75 ? 'meadowsweet' : 'loosestrife', x, z, 0.8 + rand() * 0.4);
+  });
+  // Lilies on the still pools, Reedholm's among them: not the channel, not under a walkway or a house.
+  scatter(2.8, (x, z) => {
+    const h = ground.at(x, z);
+    if (h > -0.15 || h < -1.2 || inChannel(x, z) || rand() > 0.45 * smoothstep(0.4, 0.58, fbm(x * 0.05, z * 0.05, 225)) || !clear(x, z, 0.5)) return;
     add('lily', x, z, 0.8 + rand() * 0.6, SALLOWS.water + 0.02);
   });
   // A scatter of grey stones where you walk.

@@ -1,4 +1,4 @@
-import { type BufferGeometry, ConeGeometry, Matrix4 } from 'three';
+import { type BufferGeometry, ConeGeometry, IcosahedronGeometry, Matrix4 } from 'three';
 import { ModelBuilder, type PartOpts, type Vec3 } from '../../models/kit';
 import { PAL } from '../../models/palette';
 import { standingStone } from '../forest/buildings';
@@ -77,6 +77,7 @@ export function buildFenStructure(s: FenStructure): BufferGeometry {
     case 'crates': crates(b, rand); break;
     case 'cog': cog(b, s.w, s.d, s.h); break;
     case 'tent': tent(b, s.w, s.d, s.h); break;
+    case 'lookout': lookout(b, s.h); break;
     case 'sluice': sluice(b, s.w, s.d, rand); break;
     case 'sluiceTower': sluiceTower(b, s.w, s.h); break;
     case 'sluiceGate': sluiceGate(b, s.w); break;
@@ -144,10 +145,35 @@ function stiltHouse(b: ModelBuilder, w: number, d: number, h: number, variant: n
     b.on(0, new Matrix4());
     // A wattle hood over the smoke hole in the ridge.
     b.box(0.6, 0.5, 0.6, { at: [0, floor + wall + h * 0.95 + 0.2, -d / 4], color: B.thatchDark });
-  } else gableRoof(b, w, d, floor + wall, h * 0.95, 0.6, roof);
+  } else {
+    gableRoof(b, w, d, floor + wall, h * 0.95, 0.6, roof);
+    // A wattle hood over the smoke hole at one end of the ridge.
+    b.box(0.6, 0.5, 0.6, { at: [-w / 4, floor + wall + h * 0.95 + 0.25, 0], color: B.thatchDark });
+  }
   const doorX = (variant & 1 ? -1 : 1) * w * 0.2;
+  // The frame showing through the daub: a sill beam and studs front and back, a brace by the door.
+  for (const z of [-d / 2 - 0.03, d / 2 + 0.03]) {
+    b.box(w, 0.14, 0.06, { at: [0, floor + 0.07, z], color: B.timberDark, jitter: 0.1 });
+    for (let x = -w / 2 + 1.1; x < w / 2 - 0.5; x += 1.1) if (z < 0 || Math.abs(x - doorX) > 0.75) b.box(0.12, wall, 0.06, { at: [x, floor + wall / 2, z], color: B.timberDark, jitter: 0.1 });
+  }
+  b.box(0.1, wall * 1.1, 0.06, { at: [-doorX * 0.35, floor + wall / 2, d / 2 + 0.04], rot: [0, 0, doorX > 0 ? 0.5 : -0.5], color: B.timberDark, jitter: 0.1 });
   doorAt(b, doorX, floor, d / 2, 0.9, 1.6);
   windowOn(b, [-doorX * 1.2, floor + 1.1, d / 2], [0, 1], 0.45, look === 1 ? B.warmWindow : B.window, B.timberDark);
+  // A shuttered window in each side wall, one shutter hanging open.
+  for (const sx of gable ? [-1] : [-1, 1]) {
+    const z = (rand() - 0.5) * d * 0.3;
+    windowOn(b, [sx * (w / 2), floor + 1.15, z], [sx, 0], 0.4, look === 1 && sx > 0 ? B.warmWindow : B.window, B.timberDark);
+    b.box(0.05, 0.5, 0.26, { at: [sx * (w / 2 + 0.16), floor + 1.15, z + 0.38], rot: [0, sx * 0.9, 0], color: B.plank, jitter: 0.1 });
+  }
+  // A bench against the front wall, the other side of the door from the window.
+  b.box(1.1, 0.08, 0.32, { at: [doorX + (doorX > 0 ? 1.0 : -1.0), floor + 0.42, d / 2 + 0.25], color: B.plank, jitter: 0.08 });
+  for (const e of [-0.45, 0.45]) b.box(0.08, 0.4, 0.26, { at: [doorX + (doorX > 0 ? 1.0 : -1.0) + e, floor + 0.2, d / 2 + 0.25], color: B.timberDark });
+  if (look === 1 || (gable && look === 0)) {
+    // Eels and fish hung to dry on a pole under the side eaves.
+    const sx = gable ? -1 : 1;
+    b.box(0.06, 0.06, d * 0.8, { at: [sx * (w / 2 + 0.35), floor + wall - 0.1, 0], color: B.timber });
+    for (let z = -d * 0.35; z <= d * 0.35; z += 0.32) b.box(0.05, 0.42 + rand() * 0.2, 0.09, { at: [sx * (w / 2 + 0.35), floor + wall - 0.4, z], color: rand() < 0.5 ? 0x6a6450 : 0x8a8064, jitter: 0.1 });
+  }
   if (look === 0) {
     // A woad-blue pennant on a pole at the gable.
     b.box(0.08, 2.2, 0.08, { at: [w / 2 + 0.1, floor + wall + 1.1, 0], color: B.timber });
@@ -388,6 +414,13 @@ function plankBridge(b: ModelBuilder, w: number, len: number, rand: () => number
 
 /** A Deepking column standing out of the water: eight-sided, banded, its top broken off or (variant 1) still under its capital. `wl` is the water's height in its frame. */
 function column(b: ModelBuilder, h: number, variant: number, wl: number, rand: () => number): void {
+  if (variant === 2) {
+    // Fallen: its drums lying along the street where they rolled, half under the water, its capital beyond them.
+    const n = 3 + Math.floor(rand() * 2);
+    for (let i = 0; i < n; i++) b.cyl(0.58, 0.58, 1.3, 8, { at: [(rand() - 0.5) * 0.4, wl + 0.05, -2 + i * 1.42], rot: [PI / 2, 0, (rand() - 0.5) * 0.3], color: rand() < 0.3 ? B.deepLight : B.deep, jitter: 0.1 });
+    b.box(1.5, 0.45, 1.5, { at: [0.5, wl + 0.1, -2 + n * 1.42 + 0.3], rot: [0.3, 0.4, 0.2], color: B.deepLight });
+    return;
+  }
   b.cyl(0.55, 0.62, h + 2, 8, { at: [0, h / 2 - 1, 0], color: B.deep, jitter: 0.1 });
   for (let y = 0.6; y < h - 0.4; y += 1.4) b.cyl(0.6, 0.6, 0.14, 8, { at: [0, y, 0], color: B.deepDark });
   b.cyl(0.66, 0.66, 0.3, 8, { at: [0, wl, 0], color: B.weed, jitter: 0.25 });
@@ -765,6 +798,30 @@ function tent(b: ModelBuilder, w: number, d: number, h: number): void {
   for (const z of [-d / 2 - 0.1, d / 2 + 0.1]) b.box(0.08, h, 0.08, { at: [0, h / 2, z], color: B.timber });
 }
 
+/** The smugglers' lookout over the sea: four poles lashed into a tower, braced, a platform at the top behind a reed hurdle, a ladder up and a shuttered lamp. */
+function lookout(b: ModelBuilder, h: number): void {
+  const [base, top] = [1.4, 0.8];
+  const r = (y: number) => base + ((top - base) * (y + 0.4)) / (h + 1.4);
+  const t: PartOpts = { color: B.timber, jitter: 0.1 };
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) b.bar([sx * base, -0.4, sz * base], [sx * top, h + 1.0, sz * top], 0.1, 0.1, t);
+  // Braces across each side, crossed low and straight higher up.
+  for (const [ax, az, bx, bz] of [[-1, -1, 1, -1], [1, -1, 1, 1], [1, 1, -1, 1], [-1, 1, -1, -1]] as const) {
+    b.bar([ax * r(0.4), 0.4, az * r(0.4)], [bx * r(h * 0.5), h * 0.5, bz * r(h * 0.5)], 0.06, 0.06, { color: B.timberDark });
+    b.bar([ax * r(h * 0.62), h * 0.62, az * r(h * 0.62)], [bx * r(h * 0.62), h * 0.62, bz * r(h * 0.62)], 0.06, 0.06, { color: B.timberDark });
+  }
+  const p = top + 0.35;
+  b.box(p * 2, 0.12, p * 2, { at: [0, h, 0], color: B.plank, jitter: 0.12 });
+  // The hurdle round three sides, the ladder's side open.
+  for (const [nx, nz] of [[0, 1], [0, -1], [-1, 0]] as const) b.box(nz === 0 ? 0.08 : p * 2, 0.85, nz === 0 ? p * 2 : 0.08, { at: [nx * p, h + 0.45, nz * p], color: FEN_PLANTS.reed[1], jitter: 0.2 });
+  b.box(p * 2 + 0.5, 0.1, p * 2 + 0.5, { at: [0, h + 2.0, 0], rot: [0, 0, 0.12], color: B.thatchDark, jitter: 0.12 });
+  for (const [x, z] of [[-p + 0.1, -p + 0.1], [-p + 0.1, p - 0.1]] as const) b.box(0.08, 1.1, 0.08, { at: [x, h + 1.45, z], color: B.timber });
+  b.box(0.3, 0.36, 0.3, { at: [p - 0.2, h + 1.35, p - 0.25], color: B.warmWindow, jitter: 0 });
+  // The ladder up the open side.
+  const lx = (y: number) => r(y) + 0.3;
+  for (const z of [-0.28, 0.28]) b.bar([lx(-0.3), -0.3, z], [lx(h), h + 0.1, z], 0.06, 0.06, t);
+  for (let y = 0.3; y < h; y += 0.45) b.box(0.05, 0.05, 0.56, { at: [lx(y), y, 0], color: B.timber });
+}
+
 // ------------------------------------------------------------------ the Deepkings'
 
 /** Carved channels cut into a face: the Deepkings' sign on everything they built. */
@@ -878,10 +935,11 @@ function sluiceTower(b: ModelBuilder, w: number, h: number): void {
     for (const a of [-1, 0, 1]) b.box(0.22, 0.22, 1.6, { at: [nx * (ht - 0.6) + nz * a * ht * 0.8, hy - 0.2, nz * (ht - 0.6) + nx * a * ht * 0.8], rot: [0, yaw, 0], color: B.timberDark });
     b.box(ht * 2 + 0.2, 1.7, 0.14, { at: [nx * ht, hy + 0.75, nz * ht], rot: [0, yaw, 0], color: B.timber, jitter: 0.12 });
     b.box(ht * 2 + 0.2, 0.1, 1.4, { at: [nx * (ht - 0.6), hy, nz * (ht - 0.6)], rot: [0, yaw, 0], color: B.plank, jitter: 0.1 });
-    b.box(ht * 2 + 0.7, 0.14, 1.7, { at: [nx * (ht - 0.45), hy + 1.95, nz * (ht - 0.45)], rot: [nz !== 0 ? -0.45 * nz : 0, yaw, nx !== 0 ? 0.45 * nx : 0], color: B.thatchDark, jitter: 0.1 });
     // A shutter propped open, the lamp's light behind it.
     b.box(0.7, 0.6, 0.06, { at: [nx * (ht + 0.06), hy + 0.95, nz * (ht + 0.06)], rot: [0, yaw, 0], color: B.warmWindow, jitter: 0 });
   }
+  // Its roof: a skirt of old thatch from the hoarding's top in to the tower's wall.
+  b.taper(ht * 2 + 0.8, ht * 2 + 0.8, half(h) * 2 + 0.1, half(h) * 2 + 0.1, h - hy - 1.6, { at: [0, hy + 1.6, 0], color: B.thatchDark, jitter: 0.1 });
   b.taper(w * 0.88, w * 0.88, w * 0.88, w * 0.88, 0.5, { at: [0, h, 0], color: B.deepLight });
   for (let i = 0; i < 4; i++) for (const s of [-1, 1]) b.box(0.9, 0.9 - (i === 2 ? 0.5 : 0), 0.5, { at: [-w * 0.3 + i * w * 0.2, h + 0.9, s * w * 0.4], color: B.deep });
   // The Lantern Men's flag on a pole off the parapet.
@@ -1113,6 +1171,102 @@ export function pollard(variant: number): BufferGeometry {
   for (let i = 0; i < 4; i++) {
     const a = (i / 4) * PI * 2 + rand();
     b.ball(0.7 + rand() * 0.3, { at: [Math.cos(a) * 0.7, 3.3 + rand() * 0.6, Math.sin(a) * 0.7], color: FEN_PLANTS.willow[i % 3], jitter: 0.1 });
+  }
+  return b.build();
+}
+
+/**
+ * A clump of the fen's flowers, by `variant`: purple loosestrife's spikes
+ * (0), yellow flag iris among its sword leaves (1), meadowsweet's cream
+ * froth (2), marsh marigold low by the water (3). A few triangles each, so a
+ * bank can be thick with them.
+ */
+export function fenFlower(variant: number): BufferGeometry {
+  const b = new ModelBuilder(500 + variant);
+  const rand = mulberry32(1300 + variant * 17);
+  const kind = variant % 4;
+  const leaf = FEN_PLANTS.sedge[variant % FEN_PLANTS.sedge.length];
+  const blade = (x: number, z: number, h: number, r: number, color: number) => {
+    const a = rand() * PI * 2;
+    b.shape(new ConeGeometry(r, h, 3, 1, true), { at: [x, h / 2 - 0.03, z], rot: [Math.sin(a) * 0.2, a, Math.cos(a) * 0.2], color, jitter: 0.12 });
+  };
+  const n = kind === 3 ? 5 : 4;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * PI * 2 + rand();
+    const r = 0.08 + rand() * 0.3;
+    const [x, z] = [Math.cos(a) * r, Math.sin(a) * r];
+    if (kind === 0) {
+      const h = 0.8 + rand() * 0.5;
+      blade(x, z, h, 0.03, leaf);
+      b.cone(0.07, 0.45, 4, { at: [x, h - 0.05, z], color: rand() < 0.5 ? 0x9a3f86 : 0xb4559e, jitter: 0.12 });
+    } else if (kind === 1) {
+      blade(x, z, 0.7 + rand() * 0.4, 0.05, leaf);
+      if (i % 2 === 0) b.cone(0.09, 0.14, 4, { at: [x * 0.8, 0.75 + rand() * 0.2, z * 0.8], rot: [PI, rand() * PI, 0], color: 0xe2c43a, jitter: 0.08 });
+    } else if (kind === 2) {
+      const h = 0.7 + rand() * 0.4;
+      blade(x, z, h, 0.03, leaf);
+      b.cone(0.16, 0.14, 4, { at: [x, h + 0.04, z], rot: [PI, rand() * PI, 0], color: rand() < 0.5 ? 0xe8e2c8 : 0xdcd4b0, jitter: 0.1 });
+    } else {
+      blade(x * 1.2, z * 1.2, 0.3, 0.08, leaf);
+      b.cone(0.08, 0.05, 5, { at: [x, 0.2 + rand() * 0.08, z], color: 0xe8c030, jitter: 0.06 });
+    }
+  }
+  return b.build();
+}
+
+/** A tussock of sedge and rough grass, its blades arching out, green or bleached straw by `variant`. */
+export function tussock(variant: number): BufferGeometry {
+  const b = new ModelBuilder(520 + variant);
+  const rand = mulberry32(1400 + variant * 23);
+  const greens = [FEN_PLANTS.sedge[0], FEN_PLANTS.sedge[1], FEN_PLANTS.sedge[2], 0x8a8650];
+  const base = greens[variant % greens.length];
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * PI * 2 + rand() * 0.6;
+    const lean = 0.25 + rand() * 0.45;
+    const h = 0.45 + rand() * 0.35;
+    const r = 0.05 + rand() * 0.12;
+    b.shape(new ConeGeometry(0.045, h, 3, 1, true), {
+      at: [Math.cos(a) * (r + Math.sin(lean) * h * 0.5), Math.cos(lean) * h * 0.5 - 0.02, Math.sin(a) * (r + Math.sin(lean) * h * 0.5)],
+      rot: [Math.sin(a) * lean, 0, -Math.cos(a) * lean],
+      color: rand() < 0.25 ? FEN_PLANTS.reed[(variant + i) % FEN_PLANTS.reed.length] : base,
+      jitter: 0.14,
+    });
+  }
+  return b.build();
+}
+
+/**
+ * A fen willow: a short, leaning trunk forking low, its limbs arching up and
+ * out, each crowned with grey-green leaves that hang from it in long
+ * curtains nearly to the ground; a stand-in keeps the limbs and crowns.
+ */
+export function willow(variant: number, lite: boolean): BufferGeometry {
+  const b = new ModelBuilder(540 + variant);
+  const rand = mulberry32(1500 + variant * 29);
+  const leaf = FEN_PLANTS.willow[variant % FEN_PLANTS.willow.length];
+  const dark = FEN_PLANTS.willow[(variant + 2) % FEN_PLANTS.willow.length];
+  const trunkH = 2.0 + rand() * 0.7;
+  const lean = (rand() - 0.5) * 0.3;
+  b.cyl(0.3, 0.46, trunkH + 0.3, lite ? 5 : 7, { at: [0, trunkH / 2 - 0.15, 0], rot: [lean, 0, lean * 0.6], color: EARTH.bark, jitter: 0.14 });
+  if (!lite) b.cyl(0.5, 0.66, 0.45, 7, { at: [0, 0.1, 0], color: EARTH.barkDark, jitter: 0.14 });
+  const fork: Vec3 = [Math.sin(lean * 0.6) * -trunkH * 0.5, trunkH - 0.1, Math.sin(lean) * trunkH];
+  const limbs = lite ? 3 : 5;
+  for (let i = 0; i < limbs; i++) {
+    const a = (i / limbs) * PI * 2 + rand() * 0.9;
+    const reach = 1.5 + rand() * 1.3;
+    const tip: Vec3 = [fork[0] + Math.cos(a) * reach, trunkH + 1.6 + rand() * 1.4, fork[2] + Math.sin(a) * reach];
+    b.bar(fork, tip, 0.16, 0.16, { color: EARTH.bark });
+    const r = 1.1 + rand() * 0.45;
+    const crown = new IcosahedronGeometry(r, 0).scale(1.25, 0.75, 1.25);
+    b.shape(crown, { at: [tip[0], tip[1] + 0.2, tip[2]], rot: [0, rand() * PI, 0], color: i % 2 ? leaf : dark, jitter: 0.12 });
+    if (lite) continue;
+    // The curtains: long tapering fronds hanging from the crown's rim.
+    for (let k = 0; k < 6; k++) {
+      const c = (k / 6) * PI * 2 + rand() * 0.5;
+      const len = 1.6 + rand() * 1.2;
+      const [fx, fz] = [tip[0] + Math.cos(c) * r * 1.05, tip[2] + Math.sin(c) * r * 1.05];
+      b.shape(new ConeGeometry(0.34, len, 3, 1, true), { at: [fx, tip[1] - len / 2 + 0.1, fz], rot: [PI + Math.sin(c) * 0.08, c, -Math.cos(c) * 0.08], color: k % 2 ? leaf : dark, jitter: 0.12 });
+    }
   }
   return b.build();
 }

@@ -6,7 +6,7 @@ import { EARTH } from '../forest/palette';
 import { fbm, hash01, smoothstep, valueNoise } from '../forest/noise';
 import { addRoads, addSkirt, faceUp, MeshBuffer, type Region } from '../forest/terrain';
 import { recolourEach } from '../recolour';
-import { buildDeck, buildFenStructure, deadTree, pollard, reedClump, roadLog } from './models';
+import { buildDeck, buildFenStructure, deadTree, fenFlower, pollard, reedClump, roadLog, tussock, willow } from './models';
 import { type FenKind, PLACES, planSallows, SALLOWS, type SallowsPlan, UNDERGROWTH } from './plan';
 import { FEN_GROUND, FEN_PLANTS } from './palette';
 
@@ -57,7 +57,7 @@ function fenPrototypes(oak: Prototypes, lite: boolean): FenPrototypes {
   return {
     reed: variants(4, (v) => reedClump(v, lite)),
     sedge: recolourEach(oak.grass, FEN_PLANTS.sedge),
-    willow: recolourEach(oak.oak, FEN_PLANTS.willow),
+    willow: variants(4, (v) => willow(v, lite)),
     alder: recolourEach(oak.oak, FEN_PLANTS.alder),
     pollard: variants(3, pollard),
     lily: recolourEach(oak.lily, [FEN_PLANTS.lily]),
@@ -68,6 +68,11 @@ function fenPrototypes(oak: Prototypes, lite: boolean): FenPrototypes {
     rock: recolourEach(oak.rock, [FEN_PLANTS.lichen]),
     chalkRock: recolourEach(oak.rock, [0xdad6c4], true),
     rubble: recolourEach(oak.rock, [0x3e4a43, 0x56645a], true),
+    tussock: variants(4, tussock),
+    loosestrife: [fenFlower(0), fenFlower(4)],
+    iris: [fenFlower(1), fenFlower(5)],
+    meadowsweet: [fenFlower(2), fenFlower(6)],
+    marigold: [fenFlower(3), fenFlower(7)],
   };
 }
 
@@ -99,8 +104,8 @@ export function buildSallowsChunk(plan: SallowsPlan, key: ChunkKey, detail: Deta
     if (!full && pl.kind === 'reed' && reeds++ % 3 !== 0) continue;
     const variants = (full ? near : far)[pl.kind];
     const wide = !full && pl.kind === 'reed' ? 1.7 : 1;
-    // Juniper squat and dark, willows broad and low.
-    const sy = pl.kind === 'juniper' ? 1.3 : pl.kind === 'willow' ? 0.85 : 1;
+    // Juniper squat and dark.
+    const sy = pl.kind === 'juniper' ? 1.3 : 1;
     s.set(pl.scale * wide, pl.scale * sy, pl.scale * wide);
     m.compose(p.set(pl.x, pl.y, pl.z), q.setFromAxisAngle(UP, pl.yaw), s);
     raw.stamp(variants[pl.seed % variants.length], m.clone(), 0.92 + ((pl.seed >> 4) % 17) / 100);
