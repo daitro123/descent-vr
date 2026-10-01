@@ -23,8 +23,10 @@ import type { DressContext, Pose } from './rig';
 //
 // Both have a calm, unarmed look for villagers who are smugglers in all but
 // name (Hask's man Gil Tarr in Reedholm, Cass by the Drowned Lamp). No red at
-// the face or waist (a bandit's); archers who wear hoods wear the green; woad
-// blue never sits with gold.
+// the face or waist (a bandit's). The Lantern Men's crossbowmen wear the green
+// hood of every archer; the Undergate's wear no colours at all, so their
+// crossbow marks them, as it does Corvane's bailiffs'. Woad blue never sits
+// with gold.
 
 const PI = Math.PI;
 const DOWN: Vec3 = [PI, 0, 0]; // taper parts grow along +Y; this flips them down a limb
@@ -39,7 +41,7 @@ const CANVAS_DARK = 0x4e4a3c;
 const KNIT = 0x6a6050;
 const SEDGE = 0x56603e;
 /** Reedholm's woad (maps/sallows/palette.ts), on the Lantern Men's leaders. */
-const WOAD = 0x3c6a85;
+export const WOAD = 0x3c6a85;
 /** The Undergate's blacks, and the cloth they're patched with. */
 const BLACK = 0x221f22;
 const BLACK_WORN = 0x343034;
@@ -190,7 +192,7 @@ function boatHook(ctx: DressContext): WeaponSpec {
     .taper(0.03, 0.03, 0.006, 0.006, 0.12, { at: [0, -0.97, 0], rot: DOWN, color: PAL.iron, mask: 1 })
     .bar([0, -0.94, -0.01], [0, -1.0, -0.08], 0.022, 0.022, { color: PAL.iron, mask: 1 })
     .bar([0, -1.0, -0.08], [0, -0.93, -0.12], 0.02, 0.02, { color: PAL.iron, mask: 1 });
-  return { bone: 'handR', base: [0, -0.6, 0], tip: [0, -1.02, -0.06], radius: 0.05 };
+  return { bone: 'handR', base: [0, -0.3, 0], tip: [0, -1.02, -0.06], radius: 0.05 };
 }
 
 /** The dredger's hook: a long pole, held two-handed at its end, with a heavy iron hook to drag the channels' bottoms. */
@@ -203,7 +205,7 @@ function dredgingHook(ctx: DressContext): WeaponSpec {
     .bar([0, -1.36, -0.01], [0, -1.46, -0.11], 0.04, 0.035, { color: PAL.ironDark, mask: 1 })
     .bar([0, -1.46, -0.11], [0, -1.37, -0.21], 0.035, 0.03, { color: PAL.ironDark, mask: 1 })
     .taper(0.03, 0.03, 0.006, 0.006, 0.1, { at: [0, -1.37, -0.21], rot: [0.5, 0, 0], color: PAL.iron, mask: 1 });
-  return { bone: 'handR', base: [0, -0.5, 0], tip: [0, -1.44, -0.14], radius: 0.08 };
+  return { bone: 'handR', base: [0, -0.3, 0], tip: [0, -1.44, -0.14], radius: 0.08 };
 }
 
 /** A beetle: a heavy wooden mallet for driving piles, its head bound in iron at each end. */
@@ -492,13 +494,29 @@ function patches(ctx: DressContext, l: Look, variant: number): void {
   ctx.on(variant % 2 ? 'thighR' : 'thighL').box(0.15 * k, 0.09, 0.03, { at: [0, -ctx.p.thigh * 0.75, 0.07 * k], color: c, jitter: 0 });
 }
 
-/** A cellar thief: the black hood up, patched blacks, a long knife. */
+/** A cloth tied over the nose and mouth, leaving the eyes: its chin part on the jaw. */
+function mask(ctx: DressContext, color: number): void {
+  ctx.on('head').box(0.196, 0.075, 0.13, { at: [0, 0.088, 0.075], color, jitter: 0.08 });
+  ctx.on('jaw').box(0.12, 0.05, 0.07, { at: [0, -0.002, 0.02], color, jitter: 0.08 });
+}
+
+/**
+ * A cellar thief, patched blacks and a long knife: the black hood up (0), the
+ * hood thrown back under a knit cap with a cloth over the face (1), or the
+ * hood up over the cloth, nothing showing but the eyes (2).
+ */
 function dressUndergate(ctx: DressContext, variant: number): WeaponSpec {
   const v = ((variant % 3) + 3) % 3;
   const l = UNDERGATE_FACES[v];
   body(ctx, l);
   head(ctx, l);
-  hood(ctx, l, BLACK);
+  if (v === 1) {
+    cowl(ctx, l, BLACK);
+    knitCap(ctx, BLACK_WORN);
+  } else {
+    hood(ctx, l, BLACK);
+  }
+  if (v > 0) mask(ctx, v === 1 ? PATCH_GREY : BLACK_WORN);
   patches(ctx, l, v);
   return longKnife(ctx);
 }

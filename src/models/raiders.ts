@@ -104,7 +104,7 @@ function eelSpear(ctx: DressContext, tines: 3 | 4): WeaponSpec {
     const z = (i - (tines - 1) / 2) * spread;
     b.taper(0.012, 0.014, 0.006, 0.006, 0.17, { at: [0, -1.01, z], rot: DOWN, color: PAL.iron, mask: 1 });
   }
-  return { bone: 'handR', base: [0, -0.6, 0], tip: [0, -1.17, 0], radius: 0.07 };
+  return { bone: 'handR', base: [0, -0.3, 0], tip: [0, -1.17, 0], radius: 0.07 };
 }
 
 /** A peat cutter's spade (a slane): a long ash shaft and a narrow iron blade with a wing along its striking edge. */
@@ -116,7 +116,7 @@ function peatSpade(ctx: DressContext): WeaponSpec {
     .box(0.05, 0.08, 0.05, { at: [0, -0.98, 0], color: PAL.ironDark, mask: 1 })
     .box(0.014, 0.34, 0.13, { at: [0, -1.18, 0], color: PAL.iron, mask: 1 })
     .box(0.075, 0.3, 0.014, { at: [0.035, -1.19, -0.062], color: PAL.iron, mask: 1 });
-  return { bone: 'handR', base: [0, -0.5, 0], tip: [0, -1.34, 0], radius: 0.08 };
+  return { bone: 'handR', base: [0, -0.3, 0], tip: [0, -1.34, 0], radius: 0.08 };
 }
 
 /** A reed slasher: a long-handled billhook, its hooked blade's edge on the striking side. */
@@ -128,7 +128,7 @@ function slasher(ctx: DressContext): WeaponSpec {
     .box(0.04, 0.07, 0.04, { at: [0, -1.02, 0], color: PAL.ironDark, mask: 1 })
     .box(0.012, 0.3, 0.075, { at: [0, -1.19, -0.022], color: PAL.iron, mask: 1 })
     .bar([0, -1.33, -0.02], [0, -1.39, -0.13], 0.012, 0.05, { color: PAL.iron, mask: 1 });
-  return { bone: 'handR', base: [0, -0.5, 0], tip: [0, -1.35, -0.1], radius: 0.07 };
+  return { bone: 'handR', base: [0, -0.3, 0], tip: [0, -1.35, -0.1], radius: 0.07 };
 }
 
 // ---------------------------------------------------------------- the raiders
