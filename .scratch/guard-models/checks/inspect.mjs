@@ -119,7 +119,7 @@ for (const label of WANT) {
   const moments = { sentry: 0.33, attention: 0.3, drill: 0.19, blades: 0.25, lean: 0.03, peer: 0.35, walk: 0.25, idle: 0, chop: 0.45, slashR: 0.45, slam: 0.5, draw: 0.5 };
   for (const c of clips) {
     if (!(c in moments) || c === 'idle') continue;
-    if (c === 'walk' && !label.startsWith('Watchman')) continue;
+    if (c === 'walk' && !['Watchman', 'Royal guard', 'Toll sergeant', 'Watch commander'].includes(label)) continue;
     await pose(label, c, moments[c], 0.6);
     await shot(`${name}-${slug(c)}`);
   }

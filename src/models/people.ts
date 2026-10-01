@@ -24,6 +24,8 @@ export interface Person {
   seed: number;
   /** The work loops (people/work.ts) this look is made for, beyond standing about: shown in the model inspector. */
   works?: readonly WorkName[];
+  /** How they hold what they carry as they walk, instead of letting those bones swing: a guard's polearm, upright and off the ground. */
+  carry?: Pose;
 }
 
 const STAND: Pose = {

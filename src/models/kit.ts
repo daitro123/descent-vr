@@ -17,10 +17,15 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 // primitives with per-face vertex colours, merged into ONE geometry so it costs
 // one draw call (two in XR). Characters are rigid-skinned: each part follows a
 // single bone at weight 1, so a whole animated skeleton is still one draw.
+// Cloth that hangs between bones (a skirt) is the one exception: it's
+// `drape`d, each vertex weighted across a few bones, in the same draw.
 //
 // Nothing here touches the DOM, so rigs can be built and animated in unit tests.
 
 export type Vec3 = readonly [number, number, number];
+
+/** The bones a draped vertex follows, by index, and how much of each: the weights are normalised. */
+export type Weights = readonly (readonly [bone: number, weight: number])[];
 
 export interface PartOpts {
   /** Position in the current bone's space (or model space for static models). */
@@ -143,7 +148,18 @@ export class ModelBuilder {
     return this;
   }
 
-  private add(src: BufferGeometry, o: PartOpts, boneOf?: (localY: number) => number): this {
+  /**
+   * Cloth hanging between bones: each vertex follows up to four bones by the
+   * weights `weigh` gives for where it is in model space at bind (a skirt
+   * follows the hips at the waist and the thighs toward the hem), so it bends
+   * as they move apart instead of being cut through. Placed like the
+   * primitives, in the current bone's space.
+   */
+  drape(geometry: BufferGeometry, weigh: (at: Vector3) => Weights, o: PartOpts): this {
+    return this.add(geometry, o, undefined, weigh);
+  }
+
+  private add(src: BufferGeometry, o: PartOpts, boneOf?: (localY: number) => number, weigh?: (at: Vector3) => Weights): this {
     const g = src.index ? src.toNonIndexed() : src;
     if (g !== src) src.dispose();
     g.clearGroups();
@@ -176,9 +192,22 @@ export class ModelBuilder {
         colors[j * 3 + 2] = _c.b * k;
       }
     }
+    const pos = g.getAttribute('position');
     for (let v = 0; v < n; v++) {
       fx[v * 2] = o.glow ?? 0;
       fx[v * 2 + 1] = o.mask ?? 0;
+      if (weigh) {
+        const w = weigh(_p.fromBufferAttribute(pos, v))
+          .filter(([, k]) => k > 0)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 4);
+        const sum = w.reduce((s, [, k]) => s + k, 0);
+        w.forEach(([bone, k], i) => {
+          skinIndex[v * 4 + i] = bone;
+          skinWeight[v * 4 + i] = k / sum;
+        });
+        continue;
+      }
       skinIndex[v * 4] = boneAt ? boneAt[v] : this.bone;
       skinWeight[v * 4] = 1;
     }

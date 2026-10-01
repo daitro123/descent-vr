@@ -136,7 +136,7 @@ describe('every human character', () => {
   });
 
   it.each(HUMANS)('%s stands with their soles on the floor', (_name, build) => {
-    expect(Math.abs(extent(build(), ['shinL', 'shinR']).low)).toBeLessThan(0.01);
+    expect(Math.abs(extent(build(), ['footL', 'footR']).low)).toBeLessThan(0.01);
   });
 });
 

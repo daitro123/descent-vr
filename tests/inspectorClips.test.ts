@@ -3,7 +3,7 @@ import { CONFIG, type EnemyConfig } from '../src/config';
 import { IDLE } from '../src/enemies/poses';
 import { castClips, clipsFor, type MutablePose, personClips } from '../src/inspector/clips';
 import { type EnemyKind, FAMILIES, type Family } from '../src/models/characters';
-import { PEOPLE, type Person, type PersonId } from '../src/models/people';
+import { PEOPLE, type PersonId } from '../src/models/people';
 import { BONES } from '../src/models/rig';
 import { CAST, type CastId } from '../src/people/cast';
 
@@ -59,10 +59,10 @@ describe('inspector clips', () => {
     }
   });
 
-  it('show friendly characters standing at ease, Hale waving and the villagers at work', () => {
+  it('show friendly characters standing at ease, Hale waving, the villagers at work, and each walking', () => {
     for (const id of Object.keys(PEOPLE) as PersonId[]) {
       const names = personClips(id).map((c) => c.name);
-      expect(names).toEqual(id === 'hale' ? ['stand', 'wave'] : ['stand', 'work']);
+      expect(names).toEqual(id === 'hale' ? ['stand', 'wave', 'walk'] : ['stand', 'work', 'walk']);
     }
   });
 
@@ -79,7 +79,7 @@ describe('inspector clips', () => {
   it("show the cast zones place standing at ease, standing about, walking and at their own works, each looping round without a jump", () => {
     for (const id of Object.keys(CAST) as CastId[]) {
       const clips = castClips(id);
-      expect(clips.map((c) => c.name)).toEqual(['stand', 'stand about', 'walk', ...((CAST[id] as Person).works ?? [])]);
+      expect(clips.map((c) => c.name)).toEqual(['stand', 'stand about', 'walk', ...(CAST[id].works ?? [])]);
       const out: MutablePose = {};
       const flat = (pose: Partial<Record<string, readonly number[]>>) => BONES.flatMap((b) => pose[b] ?? [0, 0, 0]);
       for (const clip of clips.slice(1)) {

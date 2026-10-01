@@ -250,6 +250,17 @@ export const POLE_STAND: Pose = {
   thighR: [0.02, 0, -0.04],
 };
 
+/**
+ * Walking with a polearm: the right fist 16 cm higher than in POLE_STAND,
+ * the elbow at the side and the shaft still upright, so it's carried clear of
+ * the ground as the hips bob and doesn't swing (people/walk.ts `walkOver`).
+ */
+const POLE_CARRY: Pose = {
+  upperArmR: [-0.23, -0.15, -0.1],
+  forearmR: [-1.93, -0.02, 0],
+  handR: [0.59, -0.12, -0.66],
+};
+
 /** At attention: heels together, back straight, chin up, the halberd upright and the left arm straight down. */
 const ATTENTION_STAND: Pose = {
   spine: [-0.02, 0, 0],
@@ -560,16 +571,16 @@ function dressTownWatchman(ctx: DressContext, l: Look): void {
  * pair as `sentry`, a patrol as a stroll, the recruits at `drill`.
  */
 export const GUARDS = {
-  watchman: { label: 'Watchman', look: WATCHMAN_LOOK, stand: POLE_STAND, dress: dressWatchman, seed: 81, works: ['sentry', 'peer'] },
-  watchHalberdier: { label: 'Watch halberdier', look: HALBERDIER_LOOK, stand: POLE_STAND, dress: dressHalberdier, seed: 82, works: ['sentry'] },
+  watchman: { label: 'Watchman', look: WATCHMAN_LOOK, stand: POLE_STAND, dress: dressWatchman, seed: 81, works: ['sentry', 'peer'], carry: POLE_CARRY },
+  watchHalberdier: { label: 'Watch halberdier', look: HALBERDIER_LOOK, stand: POLE_STAND, dress: dressHalberdier, seed: 82, works: ['sentry'], carry: POLE_CARRY },
   watchSergeant: { label: 'Watch sergeant', look: SERGEANT_LOOK, stand: FOLDED, dress: dressSergeant, seed: 83 },
   watchCommander: { label: 'Watch commander', look: COMMANDER_LOOK, stand: HALE_STAND, dress: dressCommander, seed: 84 },
   quartermaster: { label: 'Quartermaster', look: QUARTERMASTER_LOOK, stand: SWORD_LOW, dress: dressQuartermaster, seed: 85, works: ['blades'] },
-  royalGuard: { label: 'Royal guard', look: ROYAL_LOOK, stand: ATTENTION_STAND, dress: dressRoyalGuard, seed: 86, works: ['attention'] },
+  royalGuard: { label: 'Royal guard', look: ROYAL_LOOK, stand: ATTENTION_STAND, dress: dressRoyalGuard, seed: 86, works: ['attention'], carry: POLE_CARRY },
   recruit: { label: 'Recruit', look: RECRUIT_LOOK, stand: WASTER_DOWN, dress: dressRecruit, seed: 87, works: ['drill'] },
-  corvaneMan: { label: 'Corvane man-at-arms', look: MAN_AT_ARMS_LOOK, stand: POLE_STAND, dress: dressManAtArms, seed: 88, works: ['sentry'] },
+  corvaneMan: { label: 'Corvane man-at-arms', look: MAN_AT_ARMS_LOOK, stand: POLE_STAND, dress: dressManAtArms, seed: 88, works: ['sentry'], carry: POLE_CARRY },
   harrowgateRetainer: { label: 'Harrowgate retainer', look: RETAINER_LOOK, stand: HALE_STAND, dress: dressRetainer, seed: 89 },
-  tollMan: { label: 'Toll man', look: TOLL_LOOK, stand: POLE_STAND, dress: dressTollMan, seed: 90, works: ['sentry', 'lean'] },
-  tollSergeant: { label: 'Toll sergeant', look: TOLL_SERGEANT_LOOK, stand: POLE_STAND, dress: dressTollSergeant, seed: 91, works: ['lean'] },
-  townWatchman: { label: 'Town watchman', look: TOWN_WATCH_LOOK, stand: POLE_STAND, dress: dressTownWatchman, seed: 92, works: ['sentry'] },
+  tollMan: { label: 'Toll man', look: TOLL_LOOK, stand: POLE_STAND, dress: dressTollMan, seed: 90, works: ['sentry', 'lean'], carry: POLE_CARRY },
+  tollSergeant: { label: 'Toll sergeant', look: TOLL_SERGEANT_LOOK, stand: POLE_STAND, dress: dressTollSergeant, seed: 91, works: ['lean'], carry: POLE_CARRY },
+  townWatchman: { label: 'Town watchman', look: TOWN_WATCH_LOOK, stand: POLE_STAND, dress: dressTownWatchman, seed: 92, works: ['sentry'], carry: POLE_CARRY },
 } satisfies Record<string, Person>;
