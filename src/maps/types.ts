@@ -147,6 +147,8 @@ export interface PostPlan {
   readonly level?: number;
   /** Who it is: bandits wear the human body, the undead are skeletons. */
   readonly family: Family;
+  /** One of its family's named (FamilyDef.named: a rare, a boss) rather than an ordinary member; it fights as `behaviour`. */
+  readonly named?: string;
   readonly x: number;
   readonly z: number;
   /** As a model turns about +Y: its front faces (sin yaw, cos yaw), so 0 faces +Z. */
@@ -323,6 +325,8 @@ export interface Zone extends MapBase {
   readonly villagers: readonly VillagerSpot[];
   /** Its other villagers, placed by data and built as you come near them. */
   readonly people: readonly PersonPlan[];
+  /** The water's surface at (x, z) where water stands over the ground, or null where it's dry (Ground.waterAt). Without it, the zone is dry. */
+  waterAt?(x: number, z: number): number | null;
   /** How near you villagers are built while you're in it, and how many at once. */
   readonly crowd: Crowd;
   /**

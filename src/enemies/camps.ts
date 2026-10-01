@@ -1,6 +1,7 @@
 import { Group, Vector3 } from 'three';
 import { CONFIG } from '../config';
 import type { CampPlan, PostPlan } from '../maps/types';
+import { FAMILIES } from '../models/characters';
 import type { Interior } from '../save/record';
 import { NO_STORY, type Story, there } from '../story';
 import type { Ground } from '../world/ground';
@@ -56,7 +57,7 @@ export interface You {
 }
 
 /** The fight's side of `EnemyContext`: where enemies' blows, slams and arrows land (Combat, in the game). No summons: a camp never holds a boss. */
-export type CampHooks = Pick<EnemyContext, 'sweep' | 'slam' | 'shoot' | 'nock' | 'telegraph'>;
+export type CampHooks = Pick<EnemyContext, 'sweep' | 'slam' | 'shoot' | 'nock' | 'telegraph' | 'emerge'>;
 
 export interface CampEvents {
   /** One of a camp's members fell. */
@@ -460,9 +461,15 @@ export class Camps {
     enemy.rig.mesh.geometry.dispose();
   }
 
-  /** A member's body at its post, in its family's looks, at its level (its camp's, unless its own) and with a camp's strength, running to keep up once it fights. */
+  /**
+   * A member's body at its post, in its family's looks (or as its named one),
+   * at its level (its camp's, unless its own) and with a camp's strength,
+   * running to keep up once it fights. A family that lurks lies hidden there
+   * till you come near.
+   */
   private raise(level: number, plan: PostPlan, post: EnemyPost, floor: Floor): Enemy {
-    const enemy = createEnemy(plan.behaviour, post.x, post.z, { level: plan.level ?? level, inCamp: true, family: plan.family, variant: Math.floor(Math.random() * 6) });
+    const lurks = FAMILIES[plan.family].lurks ?? false;
+    const enemy = createEnemy(plan.behaviour, post.x, post.z, { level: plan.level ?? level, inCamp: true, family: plan.family, variant: Math.floor(Math.random() * 6), named: plan.named, lurks });
     enemy.post = post;
     enemy.chaseSpeed = CONFIG.camps.chaseSpeed;
     enemy.position.y = floor.ctx.ground.heightAt(post.x, post.z);

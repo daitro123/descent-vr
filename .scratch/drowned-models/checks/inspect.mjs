@@ -40,8 +40,9 @@ const entries = await page.evaluate(async () => (await import('/src/inspector/in
 const WANT = entries.filter((e) => e.family === 'drowned' || e.family === 'bog').map((e) => e.label).filter((l) => !only || l.toLowerCase().includes(only.toLowerCase()));
 check(WANT.length > 0, `the inspector lists the drowned and the bog beasts (${WANT.join(', ')})`);
 
-/** Each body's cap: as a skeleton's, the bosses and the Mire King a little more. */
-const cap = (label) => (/Reeve|Mire King/.test(label) ? 2400 : 1500);
+/** Each body's cap: a drowned as a skeleton's, the big ones and the Reeve more, the lurkers less (they are lumps). */
+const cap = (label) =>
+  /Reeve/.test(label) ? 2000 : /lock-warden/.test(label) ? 1700 : /Mire King/.test(label) ? 1300 : /lurker|sewer/.test(label) ? 900 : 1400;
 
 for (const label of WANT) {
   const r = await page.evaluate(async (label) => {
@@ -109,6 +110,10 @@ for (const label of WANT) {
     if (!(c in moments)) continue;
     await pose(label, c, moments[c], c === 'mound' || c === 'surface' ? 0.9 : 0.6);
     await shot(`${name}-${slug(c)}`);
+    if (c === 'mound' || c === 'surface') {
+      await pose(label, c, moments[c], Math.PI / 2);
+      await shot(`${name}-${slug(c)}-side`);
+    }
   }
 }
 

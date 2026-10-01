@@ -192,12 +192,16 @@ export interface EnemyOptions {
   level?: number;
   /** In a camp, it's stronger again (`CONFIG.camps.strength`). */
   inCamp?: boolean;
-  /** Who it is: the undead (skeletons, the default) or the bandits (the human body). */
+  /** Who it is: one of FAMILIES (the undead, skeletons, by default). */
   family?: Family;
   /** Which of its family's looks for its behaviour. */
   variant?: number;
   /** Its behaviour's level-1 numbers, if not the usual ones (the `?duel` duelist). */
   def?: EnemyConfig;
+  /** One of its family's named (a rare, a boss), which must fight as `kind`. */
+  named?: string;
+  /** Lie hidden where it stands until you come near or it's called to fight (EnemyTraits.lurks). */
+  lurks?: boolean;
 }
 
 /**
@@ -206,8 +210,8 @@ export interface EnemyOptions {
  * camp, so they play with the numbers in CONFIG as they are.
  */
 export function createEnemy(kind: EnemyKind, x: number, z: number, options: EnemyOptions = {}): Enemy {
-  const { level = 1, inCamp = false, family = 'undead', variant = 0 } = options;
-  const traits = { family, variant, level, def: enemyNumbers(options.def ?? CONFIG.enemies[kind], level, inCamp) };
+  const { level = 1, inCamp = false, family = 'undead', variant = 0, named, lurks } = options;
+  const traits = { family, variant, level, named, lurks, def: enemyNumbers(options.def ?? CONFIG.enemies[kind], level, inCamp) };
   switch (kind) {
     case 'grunt':
       return new Grunt(kind, x, z, traits);

@@ -67,6 +67,8 @@ export interface FamilyDef {
   readonly fights: Partial<Record<EnemyKind, Fighter>>;
   /** Its named ones, by name, placed one at a time (PostPlan.named): the rares and the bosses no camp fills with. */
   readonly named?: Readonly<Record<string, NamedFighter>>;
+  /** A camp's lie hidden where they're raised (under the ground, the water, the mud) until you come near: the drowned, the bog's beasts. */
+  readonly lurks?: boolean;
   /** Varies its per-face shading, with its look. */
   readonly seed: number;
 }

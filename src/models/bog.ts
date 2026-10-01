@@ -279,6 +279,7 @@ function dressSewerBeast(ctx: DressContext): WeaponSpec {
 export const BOG: FamilyDef = {
   body: 'mud',
   seed: 41,
+  lurks: true,
   fights: {
     brute: { label: 'Bog lurker', looks: 2, proportions: LURKER, dress: dressLurker },
   },

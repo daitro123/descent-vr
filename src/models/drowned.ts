@@ -494,6 +494,7 @@ function dressLanternMan(ctx: DressContext): WeaponSpec {
 export const DROWNED: FamilyDef = {
   body: 'skeleton',
   seed: 31,
+  lurks: true,
   fights: {
     grunt: { label: 'Drowned', looks: 6, proportions: DROWNED_PROPORTIONS.grunt, dress: dressGrunt },
     archer: { label: 'Drowned archer', looks: 1, proportions: DROWNED_PROPORTIONS.archer, dress: dressArcher },

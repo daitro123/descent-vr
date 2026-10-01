@@ -59,6 +59,10 @@ export function buildBrackenmoor(given?: MoorPlan): Zone {
     bounds: plan.walkable.bounds,
     landmarks: plan.landmarks,
     heightAt: plan.heightAt,
+    waterAt: (x, z) => {
+      const level = plan.waterLevel(x, z);
+      return level > plan.heightAt(x, z) ? level : null;
+    },
     resolve: (p, radius) => plan.colliders.resolve(p, radius),
     collide: (p, radius) => plan.colliders.pushOut(p, radius),
     update(dt: number, camera: Camera) {
