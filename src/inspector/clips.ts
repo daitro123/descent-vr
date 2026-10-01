@@ -139,10 +139,10 @@ function holdClip(kind: EnemyKind, name: string, pose: Pose, hold: number, drop 
   };
 }
 
-/** Every animation the game plays for this behaviour, in this family's body, in a stable order. */
-export function clipsFor(kind: EnemyKind, family: Family = 'undead'): Clip[] {
-  const def: EnemyConfig = numbersOf(kind, family);
-  const p = proportionsOf(kind, family);
+/** Every animation the game plays for this behaviour, in this family's body (or its named fighter's), with its own numbers, in a stable order. */
+export function clipsFor(kind: EnemyKind, family: Family = 'undead', named?: string): Clip[] {
+  const def: EnemyConfig = numbersOf(kind, family, named);
+  const p = proportionsOf(kind, family, named);
   const clips: Clip[] = [idleClip(kind), walkClip(kind, p, def.speed)];
   // One clip per distinct attack pose; the first config entry supplies the timings.
   const seen = new Set<string>();

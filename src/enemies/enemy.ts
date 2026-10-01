@@ -64,6 +64,8 @@ export interface EnemyTraits {
   family?: Family;
   /** Which of its family's looks for its behaviour. */
   variant?: number;
+  /** One of its family's named fighters, dressed for one place: a leader, a boss (FamilyDef.named). */
+  named?: string;
   /** Its numbers, already made at its level. */
   def?: EnemyConfig;
   /** Its level, which `def`'s numbers were made at: what its kill pays for. */
@@ -130,7 +132,7 @@ function rand(lo: number, hi: number): number {
   return lo + Math.random() * (hi - lo);
 }
 
-/** Where a slash crosses the enemy's front, measured once per body (family and behaviour) at its bind proportions. */
+/** Where a slash crosses the enemy's front, measured once per body (family, behaviour and look: each carries its own weapon) at its bind proportions. */
 interface AimCalibration {
   angle: number; // elevation of that crossing seen from the right shoulder
   shoulderY: number;
@@ -161,8 +163,8 @@ interface Shard {
  * behaviour's (CONFIG.enemies), with whatever its own body changes laid over
  * them (Fighter.numbers: a giant's reach, a skeleton brute's death).
  */
-export function numbersOf(kind: EnemyKind, family: Family = 'undead'): EnemyConfig {
-  const own = fighterOf(kind, family).numbers;
+export function numbersOf(kind: EnemyKind, family: Family = 'undead', named?: string): EnemyConfig {
+  const own = fighterOf(kind, family, named).numbers;
   return own ? { ...CONFIG.enemies[kind], ...own } : CONFIG.enemies[kind];
 }
 
@@ -183,6 +185,8 @@ export abstract class Enemy {
   readonly made: 'flesh' | 'bone' | 'stone';
   /** A boss's name and colour, for the long health bar; the rest have none. */
   readonly boss: Fighter['boss'];
+  /** Which of its family's bodies and weapons it fights with, for the aim measured once per body. */
+  private readonly fighter: string;
   readonly def: EnemyConfig;
   /** Its level, which `def`'s numbers were made at (createEnemy): what its kill pays for. */
   readonly level: number;
@@ -286,17 +290,18 @@ export abstract class Enemy {
     z: number,
     traits: EnemyTraits = {},
   ) {
-    const { family = 'undead', variant = 0, def = numbersOf(kind, family), level = 1 } = traits;
+    const { family = 'undead', variant = 0, named, def = numbersOf(kind, family, named), level = 1 } = traits;
     this.family = family;
     this.body = FAMILIES[family].body;
-    const fighter = fighterOf(kind, family);
+    this.fighter = `${family}:${kind}:${named ?? variant}`;
+    const fighter = fighterOf(kind, family, named);
     this.made = fighter.made ?? (this.body === 'human' ? 'flesh' : 'bone');
     this.boss = fighter.boss;
     this.def = def;
     this.level = level;
     this.hp = this.maxHp = this.def.hp;
     this.material = createModelMaterial();
-    const model = buildCharacter(kind, { material: this.material, family, variant });
+    const model = buildCharacter(kind, { material: this.material, family, variant, named });
     this.rig = model.rig;
     this.weapon = model.weapon;
     this.position = this.root.position;
@@ -689,7 +694,7 @@ export abstract class Enemy {
   }
 
   private calibrate(attack: AttackConfig): AimCalibration {
-    const key = `${this.family}:${this.kind}:${attack.pose}`;
+    const key = `${this.fighter}:${attack.pose}`;
     const hit = aimCache.get(key);
     if (hit) return hit;
     // Sample the arc at bind proportions, facing +Z from the origin, and find
@@ -748,7 +753,7 @@ export abstract class Enemy {
 
   private calibrateDraw(): DrawCalibration {
     const pose = this.attack!.pose;
-    const key = `${this.family}:${this.kind}:${pose}`;
+    const key = `${this.fighter}:${pose}`;
     const hit = drawCache.get(key);
     if (hit) return hit;
     const cal = this.atOrigin(() => {
