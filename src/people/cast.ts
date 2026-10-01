@@ -1,18 +1,24 @@
 import type { BufferGeometry, Material } from 'three';
 import { BOG_BODIES } from '../models/bogDead';
+import { CLERGY } from '../models/clergy';
 import { COMMONERS } from '../models/commoners';
 import { FALLEN_DIGGERS } from '../models/diggers';
+import { GENTRY } from '../models/gentry';
 import { GUARDS } from '../models/guards';
 import { BUILDS } from '../models/human';
 import { PEOPLE, type Person } from '../models/people';
 import { Rig } from '../models/rig';
 import { SMUGGLERS } from '../models/smugglers';
+import { TRAINERS } from '../models/trainers';
 
 const MEMBERS = {
   innkeeper: PEOPLE.innkeeper,
   smith: PEOPLE.smith,
   farmer: PEOPLE.farmer,
   herbalist: PEOPLE.herbalist,
+  ...CLERGY,
+  ...GENTRY,
+  ...TRAINERS,
   ...COMMONERS,
   ...GUARDS,
   ...SMUGGLERS,

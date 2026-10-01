@@ -8,6 +8,7 @@ import type { CastId } from '../people/cast';
 import type { WorkName } from '../people/work';
 import type { PlaceSound, TreeCover, ZoneAmbience } from '../world/ambience';
 import type { Atmosphere } from '../world/atmosphere';
+import type { AnimalId } from '../models/animals';
 import type { Interior as InteriorId } from '../save/record';
 import type { SpotKind } from '../professions/professions';
 import type { ChunkSource } from '../world/chunks';
@@ -113,6 +114,62 @@ export interface PersonPlan {
 export interface Crowd {
   readonly near: number;
   readonly most: number;
+}
+
+/**
+ * Animals a zone places by data (animals/herds.ts), built as you come near
+ * them as its villagers are, within its crowd's `near`, and sharing a body
+ * per look: a flock grazing about its home, a dog, or a horse tethered at its
+ * spot. Out of doors only. Each spot must be clear to stand on for its body
+ * (CONFIG.animals.radius); a flock's sheep stand round its home.
+ */
+export type HerdPlan = FlockPlan | DogPlan | TetherPlan;
+
+interface HerdBase {
+  /** Unique across the world, beginning with its zone's id: 'brackenmoor-hobs-fold'. */
+  readonly id: string;
+  /** Where it lives, in world metres (x east, z south): a flock's home, a dog's bed, a horse's tether. */
+  readonly x: number;
+  readonly z: number;
+}
+
+/** Sheep grazing about their home, a few metres to each new patch; a lamb keeps to the first ewe. */
+export interface FlockPlan extends HerdBase {
+  readonly kind: 'flock';
+  /** Its sheep's looks (models/animals.ts ANIMALS), the ewe a lamb follows first. */
+  readonly sheep: readonly AnimalId[];
+  /** m from home they graze: CONFIG.animals.flock.roam without it. Keep it inside a fold's walls. */
+  readonly roam?: number;
+  /**
+   * Does it run from you (the moor's ewes), and drift back home once you've
+   * gone? One that isn't (the landlord's white sheep, used to men) only steps
+   * out of your way.
+   */
+  readonly shy: boolean;
+}
+
+/** A dog lying at its spot that lifts its head to you; one that minds a flock gets up now and then and goes round it. */
+export interface DogPlan extends HerdBase {
+  readonly kind: 'dog';
+  /** Which way it lies, as a model turns: its front faces (sin yaw, cos yaw), so 0 faces +Z. */
+  readonly yaw: number;
+  /** Its look: 'sheepdog', 'townDog'. */
+  readonly dog: AnimalId;
+  /**
+   * The flock it minds (a flock's id in the same zone): it goes round it every
+   * so often, and follows it when it scatters.
+   */
+  readonly minds?: string;
+  /** m from the flock's home it goes round at: the flock's roam plus CONFIG.animals.follow.round without it (clear of a fold's walls). */
+  readonly ring?: number;
+}
+
+/** A horse tethered at its spot: it shifts its weight, crops the grass, stamps and turns its head to you. Solid. */
+export interface TetherPlan extends HerdBase {
+  readonly kind: 'tethered';
+  /** Which way it stands, as a model turns. Its spot is under the middle of its back. */
+  readonly yaw: number;
+  readonly horse: AnimalId;
 }
 
 /**
@@ -355,6 +412,8 @@ export interface Zone extends MapBase {
   waterAt?(x: number, z: number): number | null;
   /** How near you villagers are built while you're in it, and how many at once. */
   readonly crowd: Crowd;
+  /** Its sheep, dogs and horses, placed by data and built as you come near them. */
+  readonly animals: readonly HerdPlan[];
   /** Its critters, placed by data, living and drawn only while you're near (world/critters.ts). */
   readonly critters?: readonly CritterPlan[];
   /** The water's surface at (x, z) where water stands over the ground, or null where it's dry (Ground.waterAt). Without it, the zone is dry. */

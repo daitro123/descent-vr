@@ -981,6 +981,49 @@ export const CONFIG = {
     walk: { speed: 1.1, pause: 4 }, // m/s strolling a route (each build has its own pace: human.ts `Gait`), s standing at each end
   },
 
+  // The animals a zone places (animals/herds.ts): built as you come near, as
+  // its villagers are, and sharing a body per look. Sheep graze about their
+  // home and scatter from you; dogs lie, trot about or follow; horses stand
+  // tethered. (Wolves are enemies: CONFIG.wolf.)
+  animals: {
+    most: 40, // animals built at once, the nearest: a sheep or a dog is about 450 triangles, a horse about 500
+    perFrame: 2, // herds (a flock, a dog, a horse) built a frame as you walk: each look's first body is a build, the rest share it
+    pad: 0.5, // m round an animal's body at bind that culls it out of view: room for its legs and neck to swing
+    speed: {
+      sheep: { walk: 0.45, run: 2.3 },
+      dog: { walk: 1.2, run: 3.2 },
+      horse: { walk: 1.0, run: 2.6 },
+    },
+    turn: 4, // rad/s an animal turns at its walk (twice that running)
+    radius: { sheep: 0.32, dog: 0.25, horse: 0.55 }, // m: the solid round each, that you and the others walk round (a horse's at each end is 0.85 of it)
+    // A flock grazes about its home: each sheep walks a few metres to a new
+    // patch, grazes `graze` s, and now and then lifts its head (`look`) and looks round.
+    flock: {
+      roam: 6, // m from home a sheep grazes, unless the plan says
+      graze: [5, 14] as const, // s at one patch
+      look: 0.25, // chance it looks up between patches…
+      lie: 0.1, // …or lies down a while, chewing the cud (`rest` s)
+      rest: [15, 30] as const,
+      // A shy one runs from you once you're within `fear`, straight away, until
+      // it's `safe` off; it drifts back home only while you're well clear of it.
+      fear: 6,
+      safe: 11,
+      clear: 9, // m: how far you must be from home before they drift back to it
+      wary: [3, 6] as const, // s a sheep that's run stands watching you before it grazes where it is
+      aside: 1.4, // m: a flock that isn't shy still steps out of your way this close
+    },
+    // A dog that minds a flock gets up every `every` s and goes round it, `round`
+    // m beyond its roam, sniffing at a couple of places; when the flock scatters
+    // it follows, keeping `round` m off its edge, and goes back to its bed once
+    // the flock is home.
+    follow: { round: 2.5, every: [20, 40] as const },
+    notice: 7, // m: a lying dog lifts its head to you, a tethered horse turns its head
+    sniff: [2, 4] as const, // s a dog going round sniffs at each of a couple of places
+    // s a tethered horse stands, crops the grass, or rests a hind leg, before it changes;
+    // and the chance it stamps as it does.
+    tether: { stand: [5, 12] as const, graze: [4, 10] as const, rest: [10, 20] as const, stamp: 0.25 },
+  },
+
   // Critters (world/critters.ts): hares and rabbits, frogs, rats, each a
   // few still frames drawn instanced. They live round their spot and always
   // run away from you, never towards you.
@@ -1020,6 +1063,31 @@ export const CONFIG = {
       rearm: 10, // m: …and not again until you've been this far away
       most: 2, // barks showing at once, at most
       over: 0.6, // m over the middle of their head, to the panel's middle (clear of the farmer's hat and pitchfork)
+    },
+    // The robed and named figures' loops (models/clergy.ts, gentry.ts, trainers.ts), each in s unless it says otherwise.
+    figures: {
+      // A book: reading, a page turned now and then, and a look up over it at the street.
+      read: { read: 5, page: 1.0, lift: 0.8, look: 2.6 },
+      // A ledger: lines written in bursts, the pen down the page, a look up to smile at whoever passes.
+      ledger: { write: 3.2, strokes: 2.5, line: 0.6, lift: 0.7, look: 2.2 }, // strokes: per s
+      // A coin box: coins lifted out one at a time and dropped back, counted, then a look up.
+      coins: { lift: 0.45, drop: 0.35, count: 6, rest: 1.2, look: 2 },
+      // A hedge priest: salt taken from the bag and scattered in a fan, three throws, then a prayer.
+      salt: { dip: 0.8, throw: 0.6, throws: 3, pray: 4, rest: 2 },
+      // Hands folded: the head bowed in prayer, raised, and a glance down at the floor.
+      pray: { bow: 1.2, prayer: 5, lift: 1, rest: 2.5, glance: 2.2 },
+      // The almoner: a loaf laid on the trestle, the next taken from the basket at her left.
+      alms: { reach: 1.1, lay: 0.8, turn: 1.0, take: 0.8, rest: 1.5 },
+      // Talking: an open hand lifted, a nod, the hand back.
+      converse: { rest: 2.5, raise: 0.7, speak: 2.4, lower: 0.8, nod: 0.6 },
+      // Pointing out at the ships, then a look down at the ledger beside them.
+      point: { raise: 0.9, point: 2.6, lower: 0.9, turn: 0.8, check: 3, rest: 2 },
+      // A drill master's slow form: a chop and a slash with the grunt's own poses, slowed, then the sword down.
+      form: { ready: 1.0, windup: 1.1, strike: 0.6, hold: 0.7, recover: 0.9, rest: 4 },
+      // A ranger's draw, aim and loose with the archer's own poses, then a long watch.
+      loose: { draw: 1.4, aim: 1.2, release: 0.12, follow: 0.5, back: 1.0, rest: 4 },
+      // Fletching an arrow: the feathers smoothed, then the shaft sighted along and turned.
+      fletch: { stroke: 0.7, strokes: 3, raise: 0.8, sight: 2.4, lower: 0.8, rest: 1.5 },
     },
     // The smith's loop: bursts of blows, turning the piece between them, and the bellows now and then.
     smith: {

@@ -52,6 +52,18 @@ _Avoid_: patrol (a patrol is a camp's), wander, path
 Someone placed lying dead where they fell, face down and still: they say nothing, never turn to you and aren't solid (the diggers by an open barrow). Not an enemy that's just been killed, which falls and sinks away.
 _Avoid_: corpse (the bog dead's body, which fights), body
 
+**Animal**:
+A sheep, dog or horse a zone places as its livestock and pets: it lives about its home and never fights. A wolf has the same body but is an enemy, in a camp.
+_Avoid_: critter (the small things underfoot), creature, mob
+
+**Herd**:
+The animals a zone places together at one home, with what they do there: a flock, a dog on its bed, a horse at its tether.
+_Avoid_: spawn, group, pack
+
+**Flock**:
+Sheep grazing about one home. A shy flock runs from you and drifts home once you've gone; one used to people only steps out of your way.
+_Avoid_: herd (any herd), mob
+
 **Bark**:
 A short line a friendly character says unasked as you walk near, shown as text over their head. It isn't a conversation, and what it says can change as the quest chain moves on.
 _Avoid_: greeting, gossip, chatter, speech bubble
@@ -111,6 +123,10 @@ _Avoid_: uniform, faction colours, team
 **Build**:
 A human body's size and shape, and the walk that goes with it (its gait): average, stout, broad or big for grown men; woman; elder and elder woman, stooped; child.
 _Avoid_: body type, size
+
+**Four-legged body**:
+The one body every animal stands on, sheep, dogs, horses and wolves alike, each at its own size and shape and dressed per look. In the code, the quadruped skeleton.
+_Avoid_: animal rig, quadruped model
 
 **Gait**:
 How a build walks: the length of its step, its pace, how its arms swing and how far its feet roll heel to toe. A child takes quick short steps; an elder shuffles, slow and flat-footed.
@@ -275,6 +291,10 @@ _Avoid_: crafting bench, workbench
 **Trainer**:
 A friendly character who teaches a profession, gives its intro quest and sells its recipes. Oakvale has two: the smith (Mining and Smithing) and the herbalist (Herbalism and Alchemy).
 _Avoid_: teacher, master, NPC
+
+**Class trainer**:
+A friendly character who teaches a class its abilities and gives its class quests. Most look the part (a drill master with a drawn sword, a lodge-master with a longbow and a feathered cap, a magister in the Collegium's grey); one who looks like their trade instead, as Brannoc at his anvil, is dressed as that trade.
+_Avoid_: trainer alone (a trainer teaches a profession), class master, guildmaster
 
 **Proficiency**:
 How practised a character is at one profession: a number that climbs by gathering and making.

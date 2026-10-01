@@ -367,17 +367,33 @@ function beard(ctx: DressContext, l: Look): void {
   }
 }
 
-/** Torso, hips, arms, legs and boots, in the look's shirt, trousers and boots. Garments go on top. */
-export function body(ctx: DressContext, l: Look): void {
+/**
+ * Parts of the body a garment over it hides whole, so they needn't be built:
+ * under any robe or coat (`robe`) the torso, hips and upper arms; under one
+ * that reaches the knee, the thighs too.
+ */
+export interface Covered {
+  readonly torso?: boolean;
+  readonly upperArms?: boolean;
+  readonly thighs?: boolean;
+}
+
+/** What a robe or coat with its hem `hem` m off the floor hides (`robe`): to mid-shin, the thighs too. */
+export const robed = (hem = 0.07): Covered => ({ torso: true, upperArms: true, thighs: hem <= 0.3 });
+
+/** Torso, hips, arms, legs and boots, in the look's shirt, trousers and boots, but for what's `covered`. Garments go on top. */
+export function body(ctx: DressContext, l: Look, covered: Covered = {}): void {
   const k = thick(l);
   const belly = bellyOf(l);
   const { chest, waist, hips, bust } = figureOf(l);
   const { spine: L, upperArm: UA, forearm: FA, thigh: TH, shin: SH, shoulderW: SW } = ctx.p;
-  ctx
-    .on('spine')
-    .taper((waist + belly) * k, (0.2 + belly) * k, chest * k, 0.24 * k, L * 0.7, { at: [0, -0.02, 0.005 + belly * 0.3], color: l.shirt })
-    .taper(chest * k, 0.24 * k, (SW * 2 + 0.02) * k, 0.2 * k, L * 0.32, { at: [0, L * 0.68 - 0.02, 0], color: l.shirt });
-  if (bust > 0) {
+  if (!covered.torso) {
+    ctx
+      .on('spine')
+      .taper((waist + belly) * k, (0.2 + belly) * k, chest * k, 0.24 * k, L * 0.7, { at: [0, -0.02, 0.005 + belly * 0.3], color: l.shirt })
+      .taper(chest * k, 0.24 * k, (SW * 2 + 0.02) * k, 0.2 * k, L * 0.32, { at: [0, L * 0.68 - 0.02, 0], color: l.shirt });
+  }
+  if (bust > 0 && !covered.torso) {
     // The bust: swelling out below the collarbones, and in again underneath.
     const z = 0.12 * k + bust / 2;
     ctx
@@ -385,7 +401,7 @@ export function body(ctx: DressContext, l: Look): void {
       .taper(chest * 0.8 * k, 0.01, chest * 0.85 * k, bust + 0.01, 0.08, { at: [0, L * 0.47, z - bust / 2 + 0.005], color: l.shirt })
       .taper(chest * 0.85 * k, bust + 0.01, chest * 0.8 * k, 0.01, 0.07, { at: [0, L * 0.47 + 0.08, z - bust / 2 + 0.005], color: l.shirt });
   }
-  ctx.on('hips').taper(hips * k, 0.22 * k, (waist + belly) * k, (0.2 + belly) * k, 0.2, { at: [0, -0.14, 0.005], color: l.trousers });
+  if (!covered.torso) ctx.on('hips').taper(hips * k, 0.22 * k, (waist + belly) * k, (0.2 + belly) * k, 0.2, { at: [0, -0.14, 0.005], color: l.trousers });
   if (l.belt !== undefined) {
     ctx
       .on('hips')
@@ -398,16 +414,18 @@ export function body(ctx: DressContext, l: Look): void {
   const forearm = l.forearm === 'skin' ? l.skin : (l.forearm ?? sleeve);
   const hand = l.hands === undefined || l.hands === 'skin' ? l.skin : l.hands;
   for (const side of ['L', 'R'] as const) {
-    ctx
-      .on(`upperArm${side}`)
-      .ball(0.068 * k, { color: sleeve })
-      .taper(0.085 * k, 0.085 * k, 0.105 * k, 0.105 * k, UA, { at: [0, -UA, 0], color: sleeve });
+    if (!covered.upperArms) {
+      ctx
+        .on(`upperArm${side}`)
+        .ball(0.068 * k, { color: sleeve })
+        .taper(0.085 * k, 0.085 * k, 0.105 * k, 0.105 * k, UA, { at: [0, -UA, 0], color: sleeve });
+    }
     ctx.on(`forearm${side}`).taper(0.066 * k, 0.066 * k, 0.085 * k, 0.085 * k, FA, { at: [0, -FA, 0], color: forearm });
     ctx
       .on(`hand${side}`)
       .box(0.07 * k, 0.09, 0.05 * k, { at: [0, -0.045, 0.005], color: hand })
       .box(0.025 * k, 0.05, 0.03 * k, { at: [side === 'L' ? -0.03 * k : 0.03 * k, -0.03, 0.03 * k], color: hand });
-    ctx.on(`thigh${side}`).taper(0.115 * k, 0.125 * k, 0.145 * k, 0.16 * k, TH, { at: [0, -TH, 0], color: l.trousers });
+    if (!covered.thighs) ctx.on(`thigh${side}`).taper(0.115 * k, 0.125 * k, 0.145 * k, 0.16 * k, TH, { at: [0, -TH, 0], color: l.trousers });
     ctx
       .on(`shin${side}`)
       .taper(0.09 * k, 0.1 * k, 0.115 * k, 0.125 * k, SH, { at: [0, -SH, 0], color: l.trousers })
@@ -587,6 +605,8 @@ export interface SkirtOpts {
   apron?: number;
   /** A band of another colour round the hem (a dyed border, a muddy hem). */
   border?: number;
+  /** Another colour for the skirt below the knee (a hem muddy to the knee). */
+  lower?: number;
 }
 
 /**
@@ -630,9 +650,13 @@ export function skirt(ctx: DressContext, l: Look, color: number, opts: SkirtOpts
     ];
   };
   const b = ctx.on('hips');
-  b.drape(tube(rings, 0, rings.length - 1), weigh, { color, jitter: 0.06 });
+  if (opts.lower === undefined) b.drape(tube(rings, 0, rings.length - 1), weigh, { color, jitter: 0.06 });
+  else {
+    b.drape(tube(rings, 0, rings.length - 2), weigh, { color, jitter: 0.06 });
+    b.drape(tube(rings, rings.length - 2, rings.length - 1), weigh, { color: opts.lower, jitter: 0.1 });
+  }
   // The lining of the last band, seen looking up under the hem.
-  b.drape(tube(rings, rings.length - 2, rings.length - 1, true), weigh, { color: shade(color, 0.6), jitter: 0 });
+  b.drape(tube(rings, rings.length - 2, rings.length - 1, true), weigh, { color: shade(opts.lower ?? color, 0.6), jitter: 0 });
   if (opts.border !== undefined) {
     const [y, w, d, z] = rings[rings.length - 1];
     const band: [number, number, number, number][] = [
@@ -698,6 +722,9 @@ export interface RobeOpts {
   cord?: number;
   /** A broad band down the front from the neck to the hem, in this colour (a stole, a scholar's facing). */
   stole?: number;
+  /** An apron over the skirt's front, and a colour below the knee: as the skirt's own (`SkirtOpts`). */
+  apron?: number;
+  lower?: number;
 }
 
 /**
@@ -718,7 +745,7 @@ export function robe(ctx: DressContext, l: Look, color: number, opts: RobeOpts =
       color,
     })
     .taper(chest * k + 0.025, 0.24 * k + 0.025 + bust * 1.4, (SW * 2 + 0.02) * k + 0.02, 0.2 * k + 0.02, L * 0.33, { at: [0, L * 0.67 - 0.03, 0], color });
-  skirt(ctx, l, color, { hem: opts.hem ?? 0.07, flare: 0.1 });
+  skirt(ctx, l, color, { hem: opts.hem ?? 0.07, flare: 0.1, apron: opts.apron, lower: opts.lower });
   const wide = (opts.sleeves ?? 'wide') === 'wide';
   for (const side of ['L', 'R'] as const) {
     ctx

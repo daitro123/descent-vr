@@ -188,6 +188,9 @@ export class SkeletonRig<B extends string, P> {
   }
 }
 
+/** A rig on any skeleton, as code that only poses and draws it sees one. */
+export type AnyRig = SkeletonRig<string, { readonly hipY: number }>;
+
 // ---------------------------------------------------------------- the humanoid
 
 export const BONES = [
