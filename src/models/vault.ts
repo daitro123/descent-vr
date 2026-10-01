@@ -21,10 +21,11 @@ const DOWN: Vec3 = [PI, 0, 0]; // taper parts grow along +Y; this flips them dow
 
 /** The Deepkings' black basalt (Aldhaven's palette), a lighter face of it, and the worn edge. */
 export const BASALT = { base: 0x2e2c33, light: 0x45424d, edge: 0x5c5866 } as const;
-/** The light in the Deepkings' glyphs, and in the vault dead's eyes. */
-export const GLYPH = 0x6ac4f4;
-/** How brightly a glyph cut in stone glows: faint, beside the eyes' full light. */
-const FAINT = 0.7;
+/** The light in the vault dead's eyes: the blue of the Deepkings' glyphs, a deeper one than the undead's. */
+export const GLYPH = 0x5ab0ec;
+/** A glyph cut in their stone, and how faintly it glows (Aldhaven's own glyphs, on its well, glow fainter still). */
+export const CUT = 0x4380bc;
+export const FAINT = 0.45;
 /** Bone that's lain in the dark, sealed: grey, not stained. */
 const BONE = 0xb0aa9c;
 const BONE_SHADE = 0x7c776c;
@@ -33,7 +34,24 @@ const SLATE = 0x2a313e;
 /** An archer's hood, green as every archer's is, but the dark of the vault. */
 const HOOD = 0x2f4434;
 
-const look = (s: number): SkeletonLook => ({ s, eye: GLYPH, bone: BONE, shade: BONE_SHADE });
+// Dark sockets: glyphEyes puts the light in them.
+const look = (s: number): SkeletonLook => ({ s, eye: PAL.socket, bone: BONE, shade: BONE_SHADE });
+
+/** Their eyes are glyphs: a slit of light upright in each socket, not the undead's round glow. */
+function glyphEyes(ctx: DressContext, s: number): void {
+  for (const x of [-1, 1]) {
+    ctx
+      .on('head')
+      .box(0.012 * s, 0.036 * s, 0.02 * s, { at: [0.046 * x * s, 0.13 * s, 0.101 * s], color: GLYPH, glow: 0.9, jitter: 0 })
+      .box(0.03 * s, 0.008 * s, 0.02 * s, { at: [0.046 * x * s, 0.118 * s, 0.1 * s], color: GLYPH, glow: 0.6, jitter: 0 });
+  }
+}
+
+/** A vault skeleton: the shared bones, glyph eyes. */
+function vaultSkeleton(ctx: DressContext, s: number): void {
+  skeleton(ctx, look(s));
+  glyphEyes(ctx, s);
+}
 
 // ---------------------------------------------------------------- helms and plate
 
@@ -46,7 +64,7 @@ function finHelm(ctx: DressContext, s: number): void {
     .box(0.026 * s, 0.15 * s, 0.13 * s, { at: [-0.112 * s, 0.13 * s, 0.01 * s], color: BASALT.light })
     .box(0.026 * s, 0.15 * s, 0.13 * s, { at: [0.112 * s, 0.13 * s, 0.01 * s], color: BASALT.light })
     .box(0.236 * s, 0.03 * s, 0.25 * s, { at: [0, 0.2 * s, -0.005 * s], color: BASALT.edge })
-    .box(0.13 * s, 0.014 * s, 0.012 * s, { at: [0, 0.212 * s, 0.128 * s], color: GLYPH, glow: FAINT, jitter: 0 });
+    .box(0.13 * s, 0.014 * s, 0.012 * s, { at: [0, 0.212 * s, 0.128 * s], color: CUT, glow: FAINT, jitter: 0 });
 }
 
 /** A round-topped helm with a long neck guard and a glyph down the nose guard. */
@@ -57,7 +75,7 @@ function domeHelm(ctx: DressContext, s: number): void {
     .box(0.24 * s, 0.03 * s, 0.255 * s, { at: [0, 0.2 * s, 0], color: BASALT.edge })
     .box(0.22 * s, 0.12 * s, 0.03 * s, { at: [0, 0.14 * s, -0.12 * s], rot: [-0.2, 0, 0], color: BASALT.light })
     .box(0.03 * s, 0.09 * s, 0.022 * s, { at: [0, 0.16 * s, 0.124 * s], color: BASALT.light })
-    .box(0.01 * s, 0.07 * s, 0.01 * s, { at: [0, 0.16 * s, 0.137 * s], color: GLYPH, glow: FAINT, jitter: 0 });
+    .box(0.01 * s, 0.07 * s, 0.01 * s, { at: [0, 0.16 * s, 0.137 * s], color: CUT, glow: FAINT, jitter: 0 });
 }
 
 /**
@@ -74,8 +92,8 @@ function stonePlate(ctx: DressContext, s: number): void {
     .on('spine')
     .taper(w * 0.92, d, w * 1.06, d * 1.04, h, { at: [0, y0, 0.005 * s], color: BASALT.base })
     .box(w * 1.1, 0.03 * s, d * 1.1, { at: [0, L - 0.02 * s, 0.005 * s], color: BASALT.edge })
-    .box(0.014 * s, h * 0.8, 0.01 * s, { at: [0, y0 + h * 0.48, d * 0.53 + 0.005 * s], color: GLYPH, glow: FAINT, jitter: 0 })
-    .box(w * 0.7, 0.014 * s, 0.01 * s, { at: [0, L - 0.06 * s, d * 0.53 + 0.005 * s], color: GLYPH, glow: FAINT, jitter: 0 });
+    .box(0.014 * s, h * 0.8, 0.01 * s, { at: [0, y0 + h * 0.48, d * 0.53 + 0.005 * s], color: CUT, glow: FAINT, jitter: 0 })
+    .box(w * 0.7, 0.014 * s, 0.01 * s, { at: [0, L - 0.06 * s, d * 0.53 + 0.005 * s], color: CUT, glow: FAINT, jitter: 0 });
   for (const side of ['L', 'R'] as const) {
     const x = side === 'L' ? 1 : -1;
     ctx
@@ -86,7 +104,7 @@ function stonePlate(ctx: DressContext, s: number): void {
     ctx
       .on(`shin${side}`)
       .taper(0.07 * s, 0.075 * s, 0.075 * s, 0.085 * s, ctx.p.shin * 0.6, { at: [0, -ctx.p.shin * 0.85, 0.012 * s], color: BASALT.base })
-      .box(0.01 * s, ctx.p.shin * 0.4, 0.01 * s, { at: [0, -ctx.p.shin * 0.55, 0.058 * s], color: GLYPH, glow: FAINT, jitter: 0 });
+      .box(0.01 * s, ctx.p.shin * 0.4, 0.01 * s, { at: [0, -ctx.p.shin * 0.55, 0.058 * s], color: CUT, glow: FAINT, jitter: 0 });
   }
 }
 
@@ -97,7 +115,7 @@ function plateBelt(ctx: DressContext, s: number, len: number): void {
     .on('hips')
     .box(0.31 * s, 0.055 * s, 0.19 * s, { at: [0, -0.015 * s, 0], color: BRONZE.base })
     .box(0.08 * s, 0.07 * s, 0.02 * s, { at: [0, -0.015 * s, 0.1 * s], color: BASALT.light })
-    .box(0.012 * s, 0.04 * s, 0.01 * s, { at: [0, -0.015 * s, 0.112 * s], color: GLYPH, glow: FAINT, jitter: 0 });
+    .box(0.012 * s, 0.04 * s, 0.01 * s, { at: [0, -0.015 * s, 0.112 * s], color: CUT, glow: FAINT, jitter: 0 });
 }
 
 /**
@@ -115,8 +133,8 @@ function slabShield(ctx: DressContext, s: number): void {
     .on('forearmL')
     .box(0.34 * s, 0.03 * s, 0.44 * s, { at: at(0), rot, color: BASALT.base })
     .box(0.36 * s, 0.02 * s, 0.03 * s, { at: at(0.005 * s), rot, color: BASALT.edge })
-    .box(0.04 * s, 0.012 * s, 0.26 * s, { at: at(0.02 * s), rot, color: GLYPH, glow: FAINT, jitter: 0 })
-    .box(0.16 * s, 0.012 * s, 0.04 * s, { at: at(0.02 * s), rot, color: GLYPH, glow: FAINT, jitter: 0 });
+    .box(0.04 * s, 0.012 * s, 0.26 * s, { at: at(0.02 * s), rot, color: CUT, glow: FAINT, jitter: 0 })
+    .box(0.16 * s, 0.012 * s, 0.04 * s, { at: at(0.02 * s), rot, color: CUT, glow: FAINT, jitter: 0 });
 }
 
 // ---------------------------------------------------------------- weapons (hand space, along -Y)
@@ -129,7 +147,8 @@ function glyphSword(ctx: DressContext): WeaponSpec {
     .box(0.03, 0.11, 0.032, { at: [0, -0.04, 0], color: BASALT.base })
     .box(0.036, 0.032, 0.15, { at: [0, -0.11, 0], color: BRONZE.base, mask: 1 })
     .taper(0.016, 0.06, 0.008, 0.016, 0.7, { at: [0, -0.125, 0], rot: DOWN, color: PAL.ironDark, mask: 1 })
-    .box(0.02, 0.5, 0.01, { at: [0, -0.42, 0], color: GLYPH, glow: FAINT, mask: 1, jitter: 0 });
+    .box(0.016, 0.2, 0.01, { at: [0, -0.26, 0], color: CUT, glow: FAINT, mask: 1, jitter: 0 })
+    .box(0.03, 0.012, 0.01, { at: [0, -0.2, 0], color: CUT, glow: FAINT, mask: 1, jitter: 0 });
   return { bone: 'handR', base: [0, -0.13, 0], tip: [0, -0.82, 0], radius: 0.035 };
 }
 
@@ -140,9 +159,11 @@ function crescentAxe(ctx: DressContext): WeaponSpec {
     .box(0.036, 0.74, 0.036, { at: [0, -0.31, 0], color: BASALT.base })
     .box(0.042, 0.06, 0.042, { at: [0, -0.02, 0], color: BRONZE.base })
     .box(0.034, 0.12, 0.08, { at: [0, -0.58, -0.04], color: BASALT.light, mask: 1 })
-    .taper(0.028, 0.12, 0.01, 0.3, 0.13, { at: [0, -0.58, -0.07], rot: [-PI / 2, 0, 0], color: BASALT.base, mask: 1 })
-    .box(0.03, 0.3, 0.02, { at: [0, -0.58, -0.205], color: BRONZE.base, mask: 1 })
-    .box(0.01, 0.1, 0.01, { at: [0.018, -0.58, -0.12], color: GLYPH, glow: FAINT, mask: 1, jitter: 0 });
+    .taper(0.028, 0.12, 0.01, 0.28, 0.13, { at: [0, -0.58, -0.07], rot: [-PI / 2, 0, 0], color: BASALT.light, mask: 1 })
+    .box(0.03, 0.29, 0.022, { at: [0, -0.58, -0.205], color: BRONZE.bright, mask: 1 })
+    .box(0.026, 0.05, 0.05, { at: [0, -0.445, -0.18], rot: [0.6, 0, 0], color: BRONZE.bright, mask: 1 })
+    .box(0.026, 0.05, 0.05, { at: [0, -0.715, -0.18], rot: [-0.6, 0, 0], color: BRONZE.bright, mask: 1 })
+    .box(0.01, 0.1, 0.01, { at: [0.018, -0.58, -0.12], color: CUT, glow: FAINT, mask: 1, jitter: 0 });
   return { bone: 'handR', base: [0, -0.3, 0], tip: [0, -0.7, -0.2], radius: 0.06 };
 }
 
@@ -156,7 +177,7 @@ function vaultMaul(ctx: DressContext): WeaponSpec {
     .box(0.26, 0.26, 0.46, { at: [0, -1.02, 0], color: BASALT.base, mask: 1 })
     .box(0.28, 0.05, 0.48, { at: [0, -0.92, 0], color: BRONZE.base, mask: 1 })
     .box(0.28, 0.05, 0.48, { at: [0, -1.12, 0], color: BRONZE.base, mask: 1 })
-    .box(0.27, 0.014, 0.47, { at: [0, -1.02, 0], color: GLYPH, glow: FAINT, mask: 1, jitter: 0 });
+    .box(0.27, 0.014, 0.47, { at: [0, -1.02, 0], color: CUT, glow: FAINT, mask: 1, jitter: 0 });
   return { bone: 'handR', base: [0, -0.2, 0], tip: [0, -1.1, 0], radius: 0.16 };
 }
 
@@ -169,7 +190,7 @@ function vaultMaul(ctx: DressContext): WeaponSpec {
  */
 export function dressVaultGrunt(ctx: DressContext, variant: number): WeaponSpec {
   const v = ((variant % 3) + 3) % 3;
-  skeleton(ctx, look(1));
+  vaultSkeleton(ctx, 1);
   plateBelt(ctx, 1, 0.32);
   stonePlate(ctx, 1);
   if (v === 1) domeHelm(ctx, 1);
@@ -182,32 +203,32 @@ export function dressVaultGrunt(ctx: DressContext, variant: number): WeaponSpec 
 export function dressVaultArcher(ctx: DressContext): WeaponSpec {
   const s = 0.95;
   const L = ctx.p.spine;
-  skeleton(ctx, look(s));
+  vaultSkeleton(ctx, s);
   plateBelt(ctx, s, 0.3);
   ctx
     .on('head')
     .taper(0.24, 0.25, 0.14, 0.16, 0.2, { at: [0, 0.08, -0.03], color: HOOD })
     .box(0.24, 0.12, 0.05, { at: [0, 0.13, -0.12], color: HOOD })
     .cone(0.06, 0.12, 4, { at: [0, 0.3, -0.07], rot: [-0.5, 0, 0], color: HOOD })
-    .box(0.1, 0.012, 0.012, { at: [0, 0.205, 0.125], color: GLYPH, glow: FAINT, jitter: 0 });
+    .box(0.1, 0.012, 0.012, { at: [0, 0.205, 0.125], color: CUT, glow: FAINT, jitter: 0 });
   ctx
     .on('spine')
     .taper(0.34, 0.24, 0.3, 0.2, 0.12, { at: [0, L - 0.08, 0], color: HOOD })
     .taper(0.27, 0.19, 0.3, 0.2, 0.16, { at: [0, L - 0.25, 0.005], color: BASALT.base })
-    .box(0.012, 0.13, 0.01, { at: [0, L - 0.17, 0.105], color: GLYPH, glow: FAINT, jitter: 0 })
+    .box(0.012, 0.13, 0.01, { at: [0, L - 0.17, 0.105], color: CUT, glow: FAINT, jitter: 0 })
     .cyl(0.05, 0.045, 0.42, 6, { at: [-0.06, L - 0.2, -0.14], rot: [0, 0, -0.35], color: PAL.leatherDark })
     .box(0.03, 0.1, 0.03, { at: [-0.14, L + 0.04, -0.14], rot: [0, 0, -0.35], color: SLATE })
     .box(0.03, 0.1, 0.03, { at: [-0.1, L + 0.05, -0.15], rot: [0, 0, -0.3], color: BONE_SHADE });
   ctx.on('forearmL').taper(0.06, 0.06, 0.07, 0.07, 0.14, { at: [0, -0.21, 0], color: BASALT.base });
   const spec = bow(ctx, { tips: BRONZE.base, string: BONE_SHADE });
-  ctx.on('handL').box(0.036, 0.02, 0.06, { at: [0, -0.06, 0], color: GLYPH, glow: FAINT, jitter: 0 });
+  ctx.on('handL').box(0.036, 0.02, 0.06, { at: [0, -0.06, 0], color: CUT, glow: FAINT, jitter: 0 });
   return spec;
 }
 
 /** The vault's brute: a big-boned skeleton in heavy stone plate and a fin helm, with a glyph-banded maul. */
 export function dressVaultBrute(ctx: DressContext): WeaponSpec {
   const s = 1.6;
-  skeleton(ctx, look(s));
+  vaultSkeleton(ctx, s);
   plateBelt(ctx, s * 0.9, 0.44);
   finHelm(ctx, s);
   stonePlate(ctx, s * 0.95);
@@ -215,8 +236,9 @@ export function dressVaultBrute(ctx: DressContext): WeaponSpec {
     const x = side === 'L' ? 1 : -1;
     ctx
       .on(`upperArm${side}`)
-      .box(0.28, 0.08, 0.3, { at: [0.06 * x, 0.02, 0], rot: [0, 0, -0.3 * x], color: BASALT.light })
-      .box(0.012, 0.012, 0.31, { at: [0.06 * x, 0.065, 0], rot: [0, 0, -0.3 * x], color: GLYPH, glow: FAINT, jitter: 0 });
+      .taper(0.27, 0.3, 0.2, 0.25, 0.24, { at: [0.03 * x, -0.16, 0], color: BASALT.light })
+      .box(0.3, 0.05, 0.33, { at: [0.035 * x, -0.15, 0], color: BASALT.edge })
+      .box(0.014, 0.16, 0.012, { at: [0.035 * x, -0.03, 0.14], color: CUT, glow: FAINT, jitter: 0 });
   }
   return vaultMaul(ctx);
 }
