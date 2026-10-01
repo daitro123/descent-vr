@@ -50,7 +50,7 @@ _Avoid_: patrol (a patrol is a camp's), wander, path
 
 **Fallen**:
 Someone placed lying dead where they fell, face down and still: they say nothing, never turn to you and aren't solid (the diggers by an open barrow). Not an enemy that's just been killed, which falls and sinks away.
-_Avoid_: corpse (a model family's look), body
+_Avoid_: corpse (the bog dead's body, which fights), body
 
 **Bark**:
 A short line a friendly character says unasked as you walk near, shown as text over their head. It isn't a conversation, and what it says can change as the quest chain moves on.
@@ -81,7 +81,7 @@ How an enemy fights, and so what it tests in the player: the grunt (reading a sw
 _Avoid_: kind, type, class, AI
 
 **Family**:
-Who an enemy is, whatever its behaviour: the bandits, House Corvane's bailiffs, the Lantern Men or the undead. A bandit archer and an undead archer share a behaviour but not a family. A family wears one body, the human body or the skeleton, and fields a look for each behaviour it fights with.
+Who an enemy is, whatever its behaviour: the bandits, House Corvane's bailiffs, the Lantern Men or the undead. A bandit archer and an undead archer share a behaviour but not a family. A family wears one body, the human body, the skeleton or a corpse, and fields a look for each behaviour it fights with.
 _Avoid_: faction, race, type
 
 **Named fighter**:
@@ -95,6 +95,10 @@ _Avoid_: stun (a stagger is the game's stun), snare, debuff, crowd control
 **Human body**:
 The one body every person wears, bandits, bailiffs and friendly characters alike, dressed per character. The undead are skeletons instead.
 _Avoid_: human model, NPC mesh
+
+**Corpse**:
+The bog dead's body: dead flesh made on the human body's bones. It claws up out of the ground as the skeletons do, but falls whole when killed, as a person does, and bleeds dark rather than throwing bone chips.
+_Avoid_: zombie, ghoul, fleshed skeleton
 
 **Livery**:
 The colours that say whose service someone is in: the crown's blue and gold (the City Watch, the royal guard, and faded on the toll men), House Corvane's deep crimson with a black key (its men-at-arms and bailiffs), House Harrowgate's grey with a white tower, a town watch's cream armband.

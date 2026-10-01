@@ -8,7 +8,7 @@ import { BAILIFF_BUILDS } from '../src/models/bailiffs';
 import { RAIDER_BUILDS } from '../src/models/raiders';
 import { LANTERN_BUILDS, UNDERGATE_BUILDS } from '../src/models/smugglers';
 import { type EnemyKind, FAMILIES, type Family } from '../src/models/characters';
-import { DIGGER_BUILDS, LAMP_CREW_BUILDS } from '../src/models/diggers';
+import { LAMP_CREW_BUILDS } from '../src/models/diggers';
 import { BUILDS } from '../src/models/human';
 import { MOOR_BANDIT_BUILDS } from '../src/models/moorBandits';
 import { Arena } from '../src/world/arena';
@@ -50,7 +50,6 @@ const BUILT: Partial<Record<Family, Partial<Record<EnemyKind, keyof typeof BUILD
   undergate: UNDERGATE_BUILDS,
   raider: RAIDER_BUILDS,
   moorBandit: MOOR_BANDIT_BUILDS,
-  digger: DIGGER_BUILDS,
   lampCrew: LAMP_CREW_BUILDS,
 };
 

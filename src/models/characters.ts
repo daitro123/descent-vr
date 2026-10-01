@@ -2,7 +2,7 @@ import type { Material } from 'three';
 import { BANDITS } from './bandits';
 import { BAILIFFS } from './bailiffs';
 import { BOG_DEAD } from './bogDead';
-import { DIGGERS, LAMP_CREWS } from './diggers';
+import { LAMP_CREWS } from './diggers';
 import { MOOR_BANDITS } from './moorBandits';
 import { RAIDERS } from './raiders';
 import { LANTERN_MEN, UNDERGATE } from './smugglers';
@@ -443,7 +443,6 @@ export const FAMILIES = {
   undergate: UNDERGATE,
   raider: RAIDERS,
   moorBandit: MOOR_BANDITS,
-  digger: DIGGERS,
   lampCrew: LAMP_CREWS,
   bogDead: BOG_DEAD,
 } satisfies Record<string, FamilyDef>;

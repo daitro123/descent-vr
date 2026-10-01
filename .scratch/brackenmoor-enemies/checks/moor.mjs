@@ -12,8 +12,8 @@
 // 2. a view of each place a few metres off: every camp here leaves you be
 //    until you hurt one of it (the zone's own camps will fight from 8 m), so
 //    you can walk up to them;
-// 3. in a fight (each hurt with a scratch first): Red Annis, a digger, a bog dead brute and a lamp crewman
-//    each come at you and swing.
+// 3. in a fight (each hurt with a scratch first): Red Annis, a digger and a
+//    bog dead brute each come at you and swing.
 import { mkdirSync } from 'node:fs';
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 
@@ -121,13 +121,13 @@ const CAMPS = [
       post('grunt', 'moorBandit', -164, 218, 0.4),
       post('grunt', 'moorBandit', -148.5, 216.5, -0.6),
       post('archer', 'moorBandit', -149.6, 223.6, -0.3),
-      post('brute', 'digger', -170.4, 210.4, -2.2),
+      post('brute', 'moorBandit', -170.4, 210.4, -2.2),
       post('grunt', 'moorBandit', -154, 205, 0.2),
     ],
   },
   // Red Annis on the lip, looking down into the pit.
   { id: 'check-scar-top',
-    neutralUntil: NEVER, place: { x: -151.4, z: 197.2, r: 4 }, level: 10, posts: [post('brute', 'moorBandit', -151.4, 197.2, 0, { role: 'leader' })] },
+    neutralUntil: NEVER, place: { x: -151.4, z: 197.2, r: 4 }, level: 10, posts: [post('brute', 'moorBandit', -151.4, 197.2, 0, { named: 'annis', role: 'leader' })] },
   // Turfmoss's cuttings: two bog dead at the opened banks.
   { id: 'check-turfmoss',
     neutralUntil: NEVER, place: { x: -112, z: 377, r: 6 }, level: 8, posts: [post('grunt', 'bogDead', -108.5, 381, 0.8), post('grunt', 'bogDead', -116, 373, 1.2)] },
@@ -149,7 +149,7 @@ const CAMPS = [
       post('grunt', 'moorBandit', -150.4, 427, 1.2),
       post('grunt', 'moorBandit', -155.6, 433, 0.9),
       post('archer', 'moorBandit', -157, 425, 1.0),
-      post('brute', 'digger', -151, 437.6, 1.5),
+      post('brute', 'moorBandit', -151, 437.6, 1.5),
     ],
   },
   // Corvane's lamp crew at the east dig in the barrow field (the spec's dig, the House's men in it).
@@ -174,7 +174,7 @@ const CAMPS = [
     posts: [
       ...[0, 1, 2, 3, 4, 5].map((v, i) => post('grunt', 'moorBandit', -97 + i * 1.3, 346, 0)),
       post('archer', 'moorBandit', -97 + 6 * 1.3, 346, 0),
-      post('brute', 'moorBandit', -97 + 7 * 1.4, 346, 0),
+      post('brute', 'moorBandit', -97 + 7 * 1.4, 346, 0, { named: 'annis' }),
     ],
   },
   {
@@ -183,7 +183,7 @@ const CAMPS = [
     level: 8,
     neutralUntil: NEVER,
     posts: [
-      post('brute', 'digger', -97, 353, 0),
+      post('brute', 'moorBandit', -97, 353, 0),
       ...[0, 1, 2].map((v, i) => post('grunt', 'lampCrew', -95.4 + i * 1.3, 353, 0)),
       post('archer', 'lampCrew', -95.4 + 3 * 1.3, 353, 0),
       post('brute', 'lampCrew', -95.4 + 4 * 1.3 + 0.2, 353, 0),
@@ -368,9 +368,8 @@ await shot('16-fallen-close');
 
 // 5. In a fight: walk up to each and catch it mid-swing.
 await swing('moorBandit', 'brute', '17 Red Annis swings', -151.4, 197.2);
-await swing('digger', 'brute', '18 Kerchief digger swings', -151, 437.6);
+await swing('moorBandit', 'brute', '18 Kerchief digger swings', -151, 437.6);
 await swing('bogDead', 'brute', '19 Bog dead brute swings', -128, 412);
-await swing('lampCrew', 'grunt', '20 Lamp crew pick swings', 215, 238.5);
 
 check(errors.length === 0, `no page errors${errors.length ? `: ${errors.slice(0, 3).join(' | ')}` : ''}`);
 await browser.close();

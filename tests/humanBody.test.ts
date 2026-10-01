@@ -13,7 +13,7 @@ import { Wardrobe } from '../src/people/cast';
 // the living who fight you (the bandits, models/bandits.ts, House Corvane's
 // bailiffs, models/bailiffs.ts, the Sallows' smugglers and fen raiders,
 // models/smugglers.ts and models/raiders.ts, and on Brackenmoor the moor's
-// bandits, models/moorBandits.ts, and the diggers, models/diggers.ts), the bog
+// bandits, models/moorBandits.ts, and the lamp crews, models/diggers.ts), the bog
 // dead (models/bogDead.ts), the friendly characters (models/people.ts) and the
 // guards (models/guards.ts).
 // These check what a player would notice of a body: it stands on its soles at
@@ -125,7 +125,7 @@ describe('the human body', () => {
 
 describe('every fighter of the living, and the bodies of the dead', () => {
   it('counts the bandits and House Corvane’s bailiffs among the living, and the bog dead among the bodies', () => {
-    expect(LIVING).toEqual(expect.arrayContaining(['bandit', 'corvane', 'moorBandit', 'digger', 'lampCrew']));
+    expect(LIVING).toEqual(expect.arrayContaining(['bandit', 'corvane', 'moorBandit', 'lampCrew']));
     expect(CORPSES).toEqual(['bogDead']);
   });
 

@@ -1,44 +1,29 @@
 import { crossbow } from './bailiffs';
 import type { FamilyDef, WeaponSpec } from './characters';
 import { LIVERY } from './guards';
-import { BUILDS, body, HUE, head, kerchief, type Look, sash, shade } from './human';
-import { MOOR } from './moorBandits';
+import { BUILDS, body, HUE, head, type Look, shade } from './human';
+import { DIGGER_LOOK, dressKerchiefDigger } from './moorBandits';
 import { PAL } from './palette';
 import type { Person } from './people';
 import type { DressContext, Pose } from './rig';
 
 // Diggers: the men House Corvane pays to dig into the Deepkings' graves. Two
 // crews, one trade. The Red Kerchiefs' diggers (Brackenmoor's barrows, the
-// old mine) are bandits stripped to dig, bare-armed and black with peat, with
-// the gang's red at the face and waist, and fight as brutes with their picks.
-// Corvane's own lamp crews (Aldhaven's Undercroft) are hired delvers: a
-// miner's helmet with its lamp lit, grey with stone dust, the house's crimson
-// armband and black key on the arm, never at the face or the waist. They
-// fight as grunts with a pick, archers with a crossbow, and brutes with a
-// sledge. The fallen ones are here too, for the dead by the open barrow.
+// old mine) are the moor gang's brutes (moorBandits.ts). Corvane's own lamp
+// crews (Aldhaven's Undercroft) are hired delvers: a miner's helmet with its
+// lamp lit, grey with stone dust, the house's crimson armband and black key
+// on the arm, never at the face or the waist. They fight as grunts with a
+// pick, archers with a crossbow, and brutes with a sledge. The fallen of both
+// crews are here, for the dead by the open barrow.
 
 const PI = Math.PI;
 
-/** Peat and the mud of a dig, black-brown, and the grey dust of cut stone. */
-const MUD = 0x2e241c;
-const MUD_WET = 0x3c2e22;
+/** The grey dust of cut stone. */
 const DUST = 0x8c867a;
 
 const thick = (l: Look) => BUILDS[l.build].thickness;
 
-// ---------------------------------------------------------------- what they dig with (in the hand, along -Y, its point to -Z)
-
-/** The Kerchiefs' two-handed pick: a long ash haft, a heavy iron head with a point forward and a flat adze behind. */
-function pick(ctx: DressContext): WeaponSpec {
-  ctx
-    .on('handR')
-    .box(0.042, 1.0, 0.042, { at: [0, -0.4, 0], color: MOOR.ash })
-    .box(0.05, 0.12, 0.05, { at: [0, -0.02, 0], color: PAL.leatherDark })
-    .box(0.07, 0.09, 0.12, { at: [0, -0.88, 0], color: PAL.ironDark, mask: 1 })
-    .taper(0.06, 0.07, 0.012, 0.014, 0.36, { at: [0, -0.9, -0.05], rot: [-PI / 2 - 0.25, 0, 0], color: PAL.iron, mask: 1 })
-    .taper(0.06, 0.06, 0.09, 0.02, 0.2, { at: [0, -0.88, 0.05], rot: [PI / 2 + 0.2, 0, 0], color: PAL.iron, mask: 1 });
-  return { bone: 'handR', base: [0, -0.3, 0], tip: [0, -0.98, -0.38], radius: 0.08 };
-}
+// ---------------------------------------------------------------- what the lamp crews dig with (in the hand, along -Y, its point to -Z)
 
 /** A lamp man's one-handed pick: a short haft and a double-pointed head. */
 function minersPick(ctx: DressContext): WeaponSpec {
@@ -61,51 +46,6 @@ function sledge(ctx: DressContext): WeaponSpec {
     .box(0.16, 0.16, 0.3, { at: [0, -0.98, 0], color: PAL.ironDark, mask: 1 })
     .box(0.17, 0.04, 0.31, { at: [0, -0.91, 0], color: PAL.iron, mask: 1 });
   return { bone: 'handR', base: [0, -0.25, 0], tip: [0, -1.06, 0], radius: 0.14 };
-}
-
-// ---------------------------------------------------------------- the Kerchiefs' digger
-
-const DIGGER_LOOK: Look = {
-  build: 'big',
-  skin: HUE.skinFair,
-  hair: HUE.hairBrown,
-  hairStyle: 'cropped',
-  beard: 'full',
-  shirt: MOOR.woolDark,
-  sleeve: HUE.skinFair,
-  forearm: 'skin',
-  trousers: MOOR.wool,
-  boots: MUD,
-};
-
-/** Peat to the knee and caked on the forearms, smeared on the shirt. */
-function mud(ctx: DressContext, l: Look): void {
-  const k = thick(l);
-  const { forearm: FA, shin: SH, spine: L } = ctx.p;
-  for (const side of ['L', 'R'] as const) {
-    ctx.on(`forearm${side}`).taper(0.07 * k, 0.07 * k, 0.088 * k, 0.088 * k, FA * 0.5, { at: [0, -FA * 0.98, 0], color: MUD_WET, jitter: 0.25 });
-    ctx.on(`shin${side}`).taper(0.1 * k, 0.11 * k, 0.122 * k, 0.132 * k, SH * 0.55, { at: [0, -SH + 0.2, 0], color: MUD, jitter: 0.25 });
-  }
-  ctx.on('spine').box(0.16 * k, 0.12, 0.02, { at: [-0.04 * k, L * 0.25, 0.125 * k], rot: [0, 0, 0.4], color: MUD_WET, jitter: 0.25 });
-}
-
-/**
- * A Kerchief digger: a big man in a sleeveless wool shirt, bare arms black
- * with peat to the elbow and his legs to the knee, a leather apron, the red
- * kerchief and sash, and a two-handed pick.
- */
-function dressKerchiefDigger(ctx: DressContext, l: Look = DIGGER_LOOK, armed = true): WeaponSpec | null {
-  const k = thick(l);
-  body(ctx, l);
-  head(ctx, l);
-  mud(ctx, l);
-  // A digger's leather apron, from the chest to the knee, scuffed dark.
-  const L = ctx.p.spine;
-  ctx.on('spine').box(0.28 * k, L * 0.6, 0.02, { at: [0, L * 0.32, 0.13 * k], color: PAL.leather, jitter: 0.12 });
-  ctx.on('hips').box(0.32 * k, 0.48, 0.02, { at: [0, -0.2, 0.135 * k], rot: [0.06, 0, 0], color: PAL.leather, jitter: 0.12 });
-  kerchief(ctx, HUE.banditRed);
-  sash(ctx, l, HUE.banditRed);
-  return armed ? pick(ctx) : null;
 }
 
 // ---------------------------------------------------------------- Corvane's lamp crews
@@ -184,20 +124,10 @@ function dressLampSledge(ctx: DressContext): WeaponSpec {
   return sledge(ctx);
 }
 
-// ---------------------------------------------------------------- the families
+// ---------------------------------------------------------------- the family
 
-/** The build each digger's body is made in. */
-export const DIGGER_BUILDS = { brute: DIGGER_LOOK.build } as const;
+/** The build each lamp crewman's body is made in. */
 export const LAMP_CREW_BUILDS = { grunt: LAMP_FACES[0].build, archer: LAMP_CROSSBOW_LOOK.build, brute: LAMP_SLEDGE_LOOK.build } as const;
-
-/** The Red Kerchiefs' diggers: big men with picks, fighting as brutes beside the gang's thugs and archers (moorBandits.ts, bandits.ts). */
-export const DIGGERS: FamilyDef = {
-  body: 'human',
-  seed: 51,
-  fights: {
-    brute: { label: 'Kerchief digger', looks: 1, proportions: BUILDS[DIGGER_BUILDS.brute].proportions, dress: (ctx) => dressKerchiefDigger(ctx)! },
-  },
-};
 
 /** House Corvane's lamp crews: picks fight as grunts, crossbows as archers, the sledge as a brute. */
 export const LAMP_CREWS: FamilyDef = {

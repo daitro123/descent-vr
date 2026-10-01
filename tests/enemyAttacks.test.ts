@@ -167,8 +167,8 @@ describe.each([
   ['Abel Thatch', () => new TestBrute('brute', 0, 0, { family: 'raider', named: 'headman' })],
   ['moor thug with a billhook', () => new TestGrunt('grunt', 0, 0, { family: 'moorBandit' })],
   ['moor thug with a long knife', () => new TestGrunt('grunt', 0, 0, { family: 'moorBandit', variant: 1 })],
-  ['Red Annis', () => new TestBrute('brute', 0, 0, { family: 'moorBandit' })],
-  ['Kerchief digger', () => new TestBrute('brute', 0, 0, { family: 'digger' })],
+  ['Kerchief digger', () => new TestBrute('brute', 0, 0, { family: 'moorBandit' })],
+  ['Red Annis', () => new TestBrute('brute', 0, 0, { family: 'moorBandit', named: 'annis' })],
   ['lamp crew pick', () => new TestGrunt('grunt', 0, 0, { family: 'lampCrew' })],
   ['lamp crew sledge', () => new TestBrute('brute', 0, 0, { family: 'lampCrew' })],
   ['bog dead with a stake', () => new TestGrunt('grunt', 0, 0, { family: 'bogDead' })],
@@ -270,10 +270,11 @@ describe('slams and shots', () => {
 // same behaviour on the human body's big build, swinging a felling axe and a
 // long mace, and so do the Sallows' brutes and leaders: the dredgers' hook and
 // beetle, the Lantern Men leader's boarding axe, Captain Crake's long cutlass,
-// the peat cutter's spade and Abel Thatch's slasher. On Brackenmoor, Red Annis
-// fights with it on a woman's build, her crook-blade's long staff making up
-// the difference; the diggers swing a pick and a sledge on the big build; the
-// bog dead's brute is the undead brute's body in peat.
+// the peat cutter's spade and Abel Thatch's slasher. On Brackenmoor, the
+// Kerchiefs' digger and Corvane's lamp crews swing a pick and a sledge on the
+// big build; Red Annis fights with it on a woman's build, her crook-blade's
+// long staff making up the difference; the bog dead's brute is the undead
+// brute's body in peat.
 describe.each([
   ['bandit leader', 'bandit'],
   ['bailiff shieldman', 'corvane'],
@@ -283,8 +284,8 @@ describe.each([
   ['Captain Crake', 'smuggler', 0, 'crake'],
   ['fen raider peat cutter', 'raider'],
   ['Abel Thatch', 'raider', 0, 'headman'],
-  ['Red Annis', 'moorBandit'],
-  ['Kerchief digger', 'digger'],
+  ['Kerchief digger', 'moorBandit'],
+  ['Red Annis', 'moorBandit', 0, 'annis'],
   ['lamp crew sledge', 'lampCrew'],
   ['bog dead brute', 'bogDead'],
 ] as const)("the %s's reach", (_name, family, variant = 0, named?: string) => {

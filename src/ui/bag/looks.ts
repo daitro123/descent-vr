@@ -90,9 +90,8 @@ const MODELS: Readonly<Record<string, ItemLook>> = {
   // The fen raiders' junk: a rusty eel hook, and a charm of plaited reed.
   'eel-hook': { look: 'trinket', tint: 0x8a4e2a },
   'reed-charm': { look: 'charm', tint: 0xa89d62 },
-  // The moor's Kerchiefs: a hank of fleece off a sheep they took.
+  // The moor's Kerchiefs: a hank of fleece off a sheep they took; from their diggers, a bead out of a barrow and the tip of a pick broken on its stones.
   fleece: { look: 'cloth', tint: 0xcbbf9f },
-  // The Kerchiefs' diggers: a bead out of a barrow, and the tip of a pick broken on its stones.
   'grave-bead': { look: 'trinket', tint: 0x6a8a5a },
   'pick-tip': { look: 'charm', tint: 0x5a5c62 },
   // Corvane's lamp crews: a chip of the Deepkings' black stone with part of a glyph on it.

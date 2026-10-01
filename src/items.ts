@@ -148,8 +148,6 @@ export const JUNK = {
   moorBandit: [
     ['matted-fleece', 'Matted Fleece', 'fleece'],
     ['tarnished-earring', 'Tarnished Earring', 'trinket'],
-  ],
-  digger: [
     ['grave-bead', 'Grave Bead', 'grave-bead'],
     ['broken-pick-tip', 'Broken Pick Tip', 'pick-tip'],
   ],

@@ -11,8 +11,9 @@ import type { DressContext } from './rig';
 // sheepskin and undyed wool, a plaid, a flat bonnet, leg wraps, and a
 // billhook or a long knife. The gang's red is the same: a kerchief over the
 // face and a sash at the waist, and the archer the green hood of every
-// archer. Their leader is Red Annis, a shepherd's wife, with a crook-bladed
-// polearm. The diggers they hire out are diggers.ts.
+// archer. Their brutes are the diggers they set to the barrows, bare-armed
+// with picks. Their leader is Red Annis, a shepherd's wife, with a
+// crook-bladed polearm. Corvane's own diggers, the lamp crews, are diggers.ts.
 
 const PI = Math.PI;
 const DOWN: Vec3 = [PI, 0, 0]; // taper parts grow along +Y; this flips them down a limb
@@ -261,6 +262,68 @@ function dressArcher(ctx: DressContext): WeaponSpec {
   return bow(ctx, { tips: PAL.iron, string: HUE.bowString });
 }
 
+// ---------------------------------------------------------------- the diggers
+
+/** Peat and the mud of a dig, black-brown. */
+const MUD = 0x2e241c;
+const MUD_WET = 0x3c2e22;
+
+/** The Kerchiefs' two-handed pick: a long ash haft, a heavy iron head with a point forward and a flat adze behind. */
+function pick(ctx: DressContext): WeaponSpec {
+  ctx
+    .on('handR')
+    .box(0.042, 1.0, 0.042, { at: [0, -0.4, 0], color: MOOR.ash })
+    .box(0.05, 0.12, 0.05, { at: [0, -0.02, 0], color: PAL.leatherDark })
+    .box(0.07, 0.09, 0.12, { at: [0, -0.88, 0], color: PAL.ironDark, mask: 1 })
+    .taper(0.06, 0.07, 0.012, 0.014, 0.36, { at: [0, -0.9, -0.05], rot: [-PI / 2 - 0.25, 0, 0], color: PAL.iron, mask: 1 })
+    .taper(0.06, 0.06, 0.09, 0.02, 0.2, { at: [0, -0.88, 0.05], rot: [PI / 2 + 0.2, 0, 0], color: PAL.iron, mask: 1 });
+  return { bone: 'handR', base: [0, -0.3, 0], tip: [0, -0.98, -0.38], radius: 0.08 };
+}
+
+/** A Kerchief digger's body: a big man, bare-armed, bearded. */
+export const DIGGER_LOOK: Look = {
+  build: 'big',
+  skin: HUE.skinFair,
+  hair: HUE.hairBrown,
+  hairStyle: 'cropped',
+  beard: 'full',
+  shirt: MOOR.woolDark,
+  sleeve: HUE.skinFair,
+  forearm: 'skin',
+  trousers: MOOR.wool,
+  boots: MUD,
+};
+
+/** Peat to the knee and caked on the forearms, smeared on the shirt. */
+function mud(ctx: DressContext, l: Look): void {
+  const k = thick(l);
+  const { forearm: FA, shin: SH, spine: L } = ctx.p;
+  for (const side of ['L', 'R'] as const) {
+    ctx.on(`forearm${side}`).taper(0.07 * k, 0.07 * k, 0.088 * k, 0.088 * k, FA * 0.5, { at: [0, -FA * 0.98, 0], color: MUD_WET, jitter: 0.25 });
+    ctx.on(`shin${side}`).taper(0.1 * k, 0.11 * k, 0.122 * k, 0.132 * k, SH * 0.55, { at: [0, -SH + 0.2, 0], color: MUD, jitter: 0.25 });
+  }
+  ctx.on('spine').box(0.16 * k, 0.12, 0.02, { at: [-0.04 * k, L * 0.25, 0.125 * k], rot: [0, 0, 0.4], color: MUD_WET, jitter: 0.25 });
+}
+
+/**
+ * A Kerchief digger: a big man in a sleeveless wool shirt, bare arms black
+ * with peat to the elbow and his legs to the knee, a leather apron, the red
+ * kerchief and sash, and a two-handed pick.
+ */
+export function dressKerchiefDigger(ctx: DressContext, l: Look = DIGGER_LOOK, armed = true): WeaponSpec | null {
+  const k = thick(l);
+  body(ctx, l);
+  head(ctx, l);
+  mud(ctx, l);
+  // A digger's leather apron, from the chest to the knee, scuffed dark.
+  const L = ctx.p.spine;
+  ctx.on('spine').box(0.28 * k, L * 0.6, 0.02, { at: [0, L * 0.32, 0.13 * k], color: PAL.leather, jitter: 0.12 });
+  ctx.on('hips').box(0.32 * k, 0.48, 0.02, { at: [0, -0.2, 0.135 * k], rot: [0.06, 0, 0], color: PAL.leather, jitter: 0.12 });
+  kerchief(ctx, HUE.banditRed);
+  sash(ctx, l, HUE.banditRed);
+  return armed ? pick(ctx) : null;
+}
+
 // ---------------------------------------------------------------- Red Annis
 
 const ANNIS_LOOK: Look = {
@@ -332,12 +395,12 @@ function dressAnnis(ctx: DressContext): WeaponSpec {
 // ---------------------------------------------------------------- the family
 
 /** The build each moor bandit's body is made in. */
-export const MOOR_BANDIT_BUILDS = { grunt: THUG_LOOKS[0].build, archer: ARCHER_LOOK.build, brute: ANNIS_LOOK.build } as const;
+export const MOOR_BANDIT_BUILDS = { grunt: THUG_LOOKS[0].build, archer: ARCHER_LOOK.build, brute: DIGGER_LOOK.build } as const;
 
 /**
  * The Red Kerchiefs on the moor: thugs fight as grunts, the archer as an
- * archer, and Red Annis, their leader, as a brute. Like Oakvale's leader she
- * is one of a kind: a camp's ordinary brutes are its diggers (diggers.ts).
+ * archer, and the gang's diggers as its brutes. Red Annis, their leader, is
+ * its named fighter (`annis`), fighting as a brute at the top of Raven Scar.
  */
 export const MOOR_BANDITS: FamilyDef = {
   body: 'human',
@@ -345,6 +408,9 @@ export const MOOR_BANDITS: FamilyDef = {
   fights: {
     grunt: { label: 'Moor thug', looks: 6, proportions: BUILDS[MOOR_BANDIT_BUILDS.grunt].proportions, dress: dressThug },
     archer: { label: 'Moor archer', looks: 1, proportions: BUILDS[MOOR_BANDIT_BUILDS.archer].proportions, dress: dressArcher },
-    brute: { label: 'Red Annis', looks: 1, proportions: BUILDS[MOOR_BANDIT_BUILDS.brute].proportions, dress: dressAnnis },
+    brute: { label: 'Kerchief digger', looks: 1, proportions: BUILDS[MOOR_BANDIT_BUILDS.brute].proportions, dress: (ctx) => dressKerchiefDigger(ctx)! },
+  },
+  named: {
+    annis: { kind: 'brute', label: 'Red Annis', looks: 1, proportions: BUILDS[ANNIS_LOOK.build].proportions, dress: dressAnnis },
   },
 };
