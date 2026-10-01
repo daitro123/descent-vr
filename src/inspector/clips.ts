@@ -166,7 +166,7 @@ export function clipsFor(kind: EnemyKind, family: Family = 'undead'): Clip[] {
  * hold): two steps a cycle at the build's pace, as a villager walks their
  * route (people/villagers.ts). In place: the plinth stays put.
  */
-export function strollClip(stand: Pose, build: BuildName): Clip {
+export function strollClip(stand: Pose, build: BuildName, carry?: Pose): Clip {
   const b = BUILDS[build];
   const cycle = (2 * b.gait.step) / b.gait.speed;
   const frame = { pose: {}, hip: [0, 0, 0] as [number, number, number] };
@@ -177,7 +177,7 @@ export function strollClip(stand: Pose, build: BuildName): Clip {
     duration: 2 * cycle,
     sample: (t, out) => {
       copyInto(friendlyPose(stand, t), out);
-      walkOver(out, walkFrame(t / cycle, b, frame), 1, hip);
+      walkOver(out, walkFrame(t / cycle, b, frame), 1, hip, carry);
       return { pose: out as Pose, hipY: hip[1], hip: [hip[0], hip[1], hip[2]], phase: 'walk', telegraph: 0 };
     },
   };
@@ -242,7 +242,7 @@ export function castClips(id: CastId): Clip[] {
   return [
     { name: 'stand', duration: BREATH_PERIOD, sample: (t, out) => ({ pose: copyInto(friendlyPose(stand, t), out), hipY: 0, phase: 'stand', telegraph: 0 }) },
     workClip('stand about', about),
-    strollClip(stand, look.build),
+    strollClip(stand, look.build, person.carry),
     ...(person.works ?? []).map((name) => workClip(name, WORKS[name](stand, 0))),
   ];
 }
