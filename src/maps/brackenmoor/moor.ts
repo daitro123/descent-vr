@@ -3,6 +3,7 @@ import { TreeCover } from '../../world/ambience';
 import { type PlumeSource, Smoke } from '../../world/smoke';
 import type { Zone } from '../types';
 import { buildWaterSheet } from '../waterSheet';
+import { smokeFrom } from './buildings';
 import { buildMoorChunk, moorChunks, planMoor } from './chunks';
 import { MOOR_BUILD } from './palette';
 import { MOOR, MOOR_ATMOSPHERE, type MoorPlan, type MoorStructure } from './plan';
@@ -65,23 +66,16 @@ export function buildBrackenmoor(given?: MoorPlan): Zone {
 
 /**
  * Where peat smoke rises: the chimneys of Cairnford's lived-in houses, the
- * inn's two, the smithy's forge, and the crofts still lived in (an
- * abandoned croft's hearth is cold). Each chimney's top, in its building's
- * frame, as buildings.ts stands it.
+ * inn's two, the smithy's forge, the tollhouse's, and the crofts still lived
+ * in (an abandoned croft's hearth is cold). Each chimney's top, in its
+ * building's frame, as buildings.ts stands it.
  */
 export function plumes(structures: readonly MoorStructure[]): PlumeSource[] {
-  const out: PlumeSource[] = [];
-  const at = (s: MoorStructure, x: number, y: number, z: number) => {
-    const p = new Vector3(x, y, z).applyAxisAngle(new Vector3(0, 1, 0), s.yaw);
-    out.push({ x: s.x + p.x, y: s.y + p.y, z: s.z + p.z, fire: false });
-  };
-  for (const s of structures) {
-    if (s.kind === 'inn') {
-      at(s, s.w / 2 - 0.5, 9.2, 0);
-      at(s, -s.w / 2 + 0.5, 9.2, 0);
-    } else if (s.kind === 'house' && s.variant % 3 !== 2) at(s, (s.variant % 2 ? -1 : 1) * (s.w / 2 - 0.5), s.h * 2.7 + 3.6, 0);
-    else if (s.kind === 'smithy') at(s, -s.w / 4, 3 + 3.2, -s.d / 2 + 0.6);
-    else if (s.kind === 'croft' && s.variant === 0) at(s, s.w / 2 - 0.6, 2.1 + 2.6, 0);
-  }
-  return out;
+  const up = new Vector3(0, 1, 0);
+  return structures.flatMap((s) =>
+    smokeFrom(s).map(([x, y, z]) => {
+      const p = new Vector3(x, y, z).applyAxisAngle(up, s.yaw);
+      return { x: s.x + p.x, y: s.y + p.y, z: s.z + p.z, fire: false };
+    }),
+  );
 }

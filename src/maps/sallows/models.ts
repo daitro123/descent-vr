@@ -4,7 +4,7 @@ import { PAL } from '../../models/palette';
 import { standingStone } from '../forest/buildings';
 import { mulberry32 } from '../forest/noise';
 import { EARTH } from '../forest/palette';
-import { crate, barrel, door, gableRoof, pile, punt, type RoofLook, signpost, windowOn } from '../props';
+import { barrel, chimney, crate, door, gableRoof, pile, punt, type RoofLook, signpost, windowOn } from '../props';
 import { type FenDeck, type FenStructure, LANE, SALLOWS } from './plan';
 import { FEN_BUILD as B, FEN_PLANTS } from './palette';
 
@@ -78,6 +78,14 @@ export function buildFenStructure(s: FenStructure): BufferGeometry {
     case 'cog': cog(b, s.w, s.d, s.h); break;
     case 'tent': tent(b, s.w, s.d, s.h); break;
     case 'lookout': lookout(b, s.h); break;
+    case 'factorHouse': factorHouse(b, s.w, s.d, s.h, F); break;
+    case 'trestle': trestle(b, s.w, rand); break;
+    case 'lanternPole': lanternPole(b, s.h, rand); break;
+    case 'palisade': palisade(b, s.w, rand); break;
+    case 'sheerlegs': sheerlegs(b, s.h, SALLOWS.water - s.y); break;
+    case 'dredger': dredger(b, s.w, s.d, rand); break;
+    case 'deepStatue': deepStatue(b, s.h, s.variant, SALLOWS.water - s.y); break;
+    case 'deepStairs': deepStairs(b, s.w, s.h, SALLOWS.water - s.y); break;
     case 'sluice': sluice(b, s.w, s.d, rand); break;
     case 'sluiceTower': sluiceTower(b, s.w, s.h); break;
     case 'sluiceGate': sluiceGate(b, s.w); break;
@@ -142,11 +150,13 @@ function stiltHouse(b: ModelBuilder, w: number, d: number, h: number, variant: n
     // Its ridge runs back from the lane, its gable end over the porch.
     b.on(0, new Matrix4().makeRotationY(PI / 2));
     gableRoof(b, d, w, floor + wall, h * 0.95, 0.6, roof);
+    roofTrim(b, d, w, floor + wall, h * 0.95, 0.6);
     b.on(0, new Matrix4());
     // A wattle hood over the smoke hole in the ridge.
     b.box(0.6, 0.5, 0.6, { at: [0, floor + wall + h * 0.95 + 0.2, -d / 4], color: B.thatchDark });
   } else {
     gableRoof(b, w, d, floor + wall, h * 0.95, 0.6, roof);
+    roofTrim(b, w, d, floor + wall, h * 0.95, 0.6);
     // A wattle hood over the smoke hole at one end of the ridge.
     b.box(0.6, 0.5, 0.6, { at: [-w / 4, floor + wall + h * 0.95 + 0.25, 0], color: B.thatchDark });
   }
@@ -204,20 +214,51 @@ function inn(b: ModelBuilder, w: number, d: number, h: number): void {
   stilts(b, w, d + 1.4, F, 2);
   b.box(w + 0.4, 0.18, d + 1.4, { at: [0, F - 0.09, 0.7], color: B.plank, jitter: 0.14 });
   wattleWalls(b, w, d, F, h, B.daub);
-  // The upper storey jettied out over the porch, under a deep thatch.
+  const t = d / 2;
+  // Its frame showing on the front: posts either side of the windows and the door, a sill rail, braces from the corners.
+  for (const x of [-3.9, -2.1, -1.0, 1.0, 2.1, 3.9]) b.box(0.18, h, 0.08, { at: [x, F + h / 2, t + 0.04], color: B.timberDark, jitter: 0.08 });
+  for (const sx of [-1, 1]) {
+    b.box(w / 2 - 1, 0.14, 0.08, { at: [sx * (w / 4 + 0.5), F + 0.82, t + 0.05], color: B.timberDark, jitter: 0.08 });
+    b.bar([sx * (w / 2 - 0.1), F + 0.9, t + 0.05], [sx * 4.0, F + h - 0.15, t + 0.05], 0.14, 0.06, { color: B.timberDark });
+    windowOn(b, [sx * (w / 2), F + 1.3, -1.2], [sx, 0], 0.6, B.warmWindow, B.timberDark);
+  }
+  // The upper storey jettied out over the porch on its joists and brackets, under a deep thatch.
   b.box(w + 0.2, 0.2, d + 0.6, { at: [0, F + h + 0.1, 0.3], color: B.timberDark });
+  for (let x = -w / 2 + 0.1; x <= w / 2; x += 0.62) b.box(0.14, 0.14, 0.7, { at: [x, F + h - 0.07, t + 0.3], color: B.timber, jitter: 0.08 });
+  for (const x of [-w / 2 + 0.1, -2.1, 2.1, w / 2 - 0.1]) b.bar([x, F + h - 0.75, t + 0.06], [x, F + h - 0.1, t + 0.55], 0.12, 0.12, { color: B.timberDark });
+  b.on(0, new Matrix4().makeTranslation(0, 0, 0.3));
   wattleWalls(b, w + 0.2, d + 0.6, F + h + 0.2, 2.2, B.wattle);
+  roofTrim(b, w + 0.2, d + 0.6, F + h + 2.4, 3.2, 0.7);
+  b.on(0, new Matrix4());
   gableRoof(b, w + 0.2, d + 0.6, F + h + 2.4, 3.2, 0.7, THATCH, [0, 0, 0.3]);
+  // Close studding on the upper front between its windows.
+  for (let x = -w / 2 + 0.3; x < w / 2; x += 0.5) {
+    if ([-3, 0, 3].some((wx) => Math.abs(x - wx) < 0.5)) continue;
+    b.box(0.1, 2.2, 0.06, { at: [x, F + h + 1.3, t + 0.63], color: B.timberDark, jitter: 0.08 });
+  }
   b.box(0.9, h + 6.2, 0.8, { at: [w / 2 - 1, F + (h + 6.2) / 2, 0], color: PAL.stoneDark, jitter: 0.12 });
-  doorAt(b, 0, F, d / 2, 1.3, 2.1);
-  for (const x of [-3, 3]) windowOn(b, [x, F + 1.3, d / 2], [0, 1], 0.7, B.warmWindow, B.timberDark);
-  for (const x of [-3, 0, 3]) windowOn(b, [x, F + h + 1.3, d / 2 + 0.6], [0, 1], 0.6, B.window, B.timberDark);
+  doorAt(b, 0, F, t, 1.3, 2.1);
+  for (const x of [-3, 3]) windowOn(b, [x, F + 1.3, t], [0, 1], 0.7, B.warmWindow, B.timberDark);
+  for (const x of [-3, 0, 3]) windowOn(b, [x, F + h + 1.3, t + 0.6], [0, 1], 0.6, x === 3 ? B.window : B.warmWindow, B.timberDark);
+  for (const sx of [-1, 1]) windowOn(b, [sx * (w / 2 + 0.1), F + h + 1.3, 0.3], [sx, 0], 0.55, B.window, B.timberDark);
+  // A lantern either side of the door.
+  for (const sx of [-1, 1]) {
+    b.box(0.06, 0.06, 0.3, { at: [sx * 1.0, F + 2.35, t + 0.15], color: PAL.ironDark });
+    b.box(0.22, 0.3, 0.22, { at: [sx * 1.0, F + 2.1, t + 0.3], color: PAL.ironDark });
+    b.box(0.24, 0.18, 0.14, { at: [sx * 1.0, F + 2.1, t + 0.3], color: B.warmWindow, jitter: 0 });
+  }
   // The sign: an eel round a lantern, on a bracket.
-  b.box(0.1, 0.1, 1.3, { at: [-w / 4, F + h - 0.3, d / 2 + 0.65], color: PAL.ironDark });
-  b.box(0.06, 0.8, 0.9, { at: [-w / 4, F + h - 0.85, d / 2 + 1.1], color: B.timber });
-  b.box(0.08, 0.3, 0.3, { at: [-w / 4, F + h - 0.85, d / 2 + 1.1], color: B.warmWindow, glow: 0.8, jitter: 0 });
-  // Benches on the porch.
-  for (const x of [-w / 2 + 1.4, w / 2 - 1.4]) b.box(1.8, 0.1, 0.4, { at: [x, F + 0.45, d / 2 + 0.4], color: B.plank });
+  b.box(0.1, 0.1, 1.3, { at: [-w / 4, F + h - 0.3, t + 0.65], color: PAL.ironDark });
+  b.box(0.06, 0.8, 0.9, { at: [-w / 4, F + h - 0.85, t + 1.1], color: B.timber });
+  b.box(0.08, 0.3, 0.3, { at: [-w / 4, F + h - 0.85, t + 1.1], color: B.warmWindow, glow: 0.8, jitter: 0 });
+  // Benches on the porch, ale barrels by the door, and a rail at its ends.
+  for (const x of [-w / 2 + 1.4, w / 2 - 1.4]) b.box(1.8, 0.1, 0.4, { at: [x, F + 0.45, t + 0.4], color: B.plank });
+  for (const x of [-1.65, 1.65]) barrel(b, [x, F, t + 0.45], 0.85);
+  barrel(b, [-1.65, F + 0.85, t + 0.45], 0.6);
+  for (const sx of [-1, 1]) {
+    for (const x of [w / 2 + 0.1, 3.7]) b.box(0.12, 1.0, 0.12, { at: [sx * x, F + 0.5, t + 1.3], color: B.timberDark });
+    b.box(w / 2 - 3.5, 0.08, 0.1, { at: [sx * (w / 4 + 1.9), F + 0.92, t + 1.3], color: B.timber });
+  }
 }
 
 /** The moot hall: a long timber hall on its island, thatched, woad pennants at its gables and the heron weathervane on its ridge. */
@@ -226,6 +267,7 @@ function mootHall(b: ModelBuilder, w: number, d: number, h: number): void {
   wattleWalls(b, w, d, 0.25, h, B.daub);
   for (let x = -w / 2 + 1.5; x < w / 2; x += 1.5) for (const z of [-d / 2 - 0.04, d / 2 + 0.04]) b.box(0.16, h, 0.08, { at: [x, 0.25 + h / 2, z], color: B.timberDark });
   gableRoof(b, w, d, h + 0.25, 3.6, 0.7, THATCH);
+  thatchCourses(b, w, d, h + 0.25, 3.6, 0.7);
   door(b, 0, d / 2, 1.8, 2.6, B.timber, B.timberDark);
   for (const x of [-w / 3, w / 3]) windowOn(b, [x, 2, d / 2], [0, 1], 0.7, B.window, B.timberDark);
   // A porch roof over the doors.
@@ -822,6 +864,205 @@ function lookout(b: ModelBuilder, h: number): void {
   for (let y = 0.3; y < h; y += 0.45) b.box(0.05, 0.05, 0.56, { at: [lx(y), y, 0], color: B.timber });
 }
 
+/**
+ * Trim on a thatched roof whose ridge runs along X, `len` long over a `span`
+ * deep footprint, its walls stopping at `top` and its ridge `rise` above
+ * them, `over` its overhang: a thicker, darker fringe along both eaves, the
+ * thatch's courses stepping up both slopes, and crossed gable boards (the
+ * fen's "horns") over both ends of the ridge.
+ */
+function roofTrim(b: ModelBuilder, len: number, span: number, top: number, rise: number, over: number): void {
+  const theta = Math.atan2(rise, span / 2);
+  const drop = over * Math.tan(theta);
+  for (const side of [-1, 1]) b.box(len + 2 * over + 0.06, 0.42, 0.5, { at: [0, top - drop + 0.2, side * (span / 2 + over - 0.22)], rot: [side * theta, 0, 0], color: B.thatchDark, jitter: 0.12 });
+  thatchCourses(b, len, span, top, rise, over);
+  for (const end of [-1, 1]) {
+    for (const s of [-1, 1]) b.box(0.07, 1.3, 0.14, { at: [end * (len / 2 + over - 0.05), top + rise + 0.45, s * 0.22], rot: [s * 0.55, 0, 0], color: B.timberDark, jitter: 0.08 });
+  }
+}
+
+/** The courses of a thatch, laid in steps: a proud band across each slope a third and two thirds of the way up from the eave. */
+function thatchCourses(b: ModelBuilder, len: number, span: number, top: number, rise: number, over: number): void {
+  const theta = Math.atan2(rise, span / 2);
+  const half = span / 2 + over;
+  for (const side of [-1, 1]) {
+    for (const f of [0.36, 0.68]) {
+      const r = half * f;
+      b.box(len + 2 * over + 0.03, 0.18, 0.3, { at: [0, top + rise - r * Math.tan(theta) + 0.4, side * r], rot: [side * theta, 0, 0], color: B.thatchDark, jitter: 0.12 });
+    }
+  }
+}
+
+/**
+ * Jory Hask's office, the salvage factor's: a town house on piles at the
+ * square's edge, as smart as Reedholm gets. Two storeys, the upper one
+ * limewashed and jettied out under a shingle roof, a stone chimney, glazed
+ * windows lit, a crimson door, and a sign of a black key on crimson.
+ */
+function factorHouse(b: ModelBuilder, w: number, d: number, h: number, floor: number): void {
+  const porch = LANE.porch;
+  stilts(b, w, d + porch, floor);
+  b.box(w + 0.3, 0.16, d + porch, { at: [0, floor - 0.08, porch / 2], color: B.plank, jitter: 0.14 });
+  b.box(w + 0.3, 0.12, 0.14, { at: [0, floor - 0.1, d / 2 + porch - 0.07], color: B.timberDark });
+  const [lower, upper] = [2.4, 2.1];
+  wattleWalls(b, w, d, floor, lower, B.daub);
+  const up = floor + lower + 0.2;
+  b.box(w + 0.3, 0.2, d + 0.6, { at: [0, up - 0.1, 0.3], color: B.timberDark });
+  wattleWalls(b, w + 0.2, d + 0.5, up, upper, 0xd2c8a8);
+  // Close studding on the upper front, the factor's money showing.
+  for (let x = -w / 2 + 0.2; x < w / 2 + 0.1; x += 0.45) b.box(0.1, upper, 0.06, { at: [x, up + upper / 2, d / 2 + 0.29], color: B.timberDark, jitter: 0.08 });
+  gableRoof(b, w + 0.2, d + 0.5, up + upper, h * 0.8, 0.45, SHINGLE, [0, 0, 0.25]);
+  chimney(b, -w / 2 + 0.6, -0.4, up, up + upper + h * 0.8 + 0.8, PAL.stoneDark);
+  // The crimson door, a brass knocker, glazed windows either side and above.
+  const t = d / 2;
+  b.box(1.16, 2.06, 0.1, { at: [0.6, floor + 1.0, t + 0.03], color: B.timberDark });
+  b.box(0.96, 1.92, 0.08, { at: [0.6, floor + 0.96, t + 0.08], color: 0x7a1e1e, jitter: 0.05 });
+  b.box(0.12, 0.12, 0.06, { at: [0.6, floor + 1.25, t + 0.14], color: 0xc8a040, jitter: 0 });
+  windowOn(b, [-1.0, floor + 1.25, t], [0, 1], 0.7, B.warmWindow, B.timberDark);
+  for (const x of [-w / 4, w / 4]) windowOn(b, [x, up + 1.1, t + 0.25], [0, 1], 0.6, B.warmWindow, B.timberDark);
+  for (const sx of [-1, 1]) windowOn(b, [sx * (w / 2 + 0.1), up + 1.1, 0], [sx, 0], 0.5, B.window, B.timberDark);
+  // The sign on its bracket: a black key on crimson.
+  b.box(0.08, 0.08, 1.1, { at: [w / 2 - 0.3, up + 0.3, t + 0.8], color: PAL.ironDark });
+  b.box(0.06, 0.8, 0.7, { at: [w / 2 - 0.3, up - 0.2, t + 1.15], color: 0x7a1e1e, jitter: 0.04 });
+  for (const s of [-1, 1]) {
+    b.box(0.04, 0.16, 0.16, { at: [w / 2 - 0.3 + s * 0.035, up - 0.02, t + 1.0], color: 0x141414, jitter: 0 });
+    b.box(0.04, 0.4, 0.06, { at: [w / 2 - 0.3 + s * 0.035, up - 0.3, t + 1.0], color: 0x141414, jitter: 0 });
+    b.box(0.04, 0.06, 0.12, { at: [w / 2 - 0.3 + s * 0.035, up - 0.44, t + 1.08], color: 0x141414, jitter: 0 });
+  }
+  // A bench and a locked strongbox on the porch.
+  b.box(1.2, 0.08, 0.32, { at: [-1.2, floor + 0.42, t + 0.3], color: B.plank });
+  for (const e of [-0.5, 0.5]) b.box(0.08, 0.4, 0.26, { at: [-1.2 + e, floor + 0.2, t + 0.3], color: B.timberDark });
+  b.box(0.7, 0.45, 0.45, { at: [w / 2 - 0.7, floor + 0.23, t + 0.4], color: B.timber, jitter: 0.06 });
+  b.box(0.74, 0.08, 0.49, { at: [w / 2 - 0.7, floor + 0.4, t + 0.4], color: PAL.ironDark });
+}
+
+/** A trestle table on the square with a bench either side, mugs and a jug on it. */
+function trestle(b: ModelBuilder, w: number, rand: () => number): void {
+  b.box(w, 0.08, 0.8, { at: [0, 0.76, 0], color: B.plank, jitter: 0.12 });
+  for (const x of [-w / 2 + 0.3, w / 2 - 0.3]) for (const s of [-1, 1]) b.bar([x, 0, s * 0.32], [x, 0.72, 0], 0.07, 0.07, { color: B.timberDark });
+  for (const s of [-1, 1]) {
+    b.box(w - 0.1, 0.07, 0.28, { at: [0, 0.45, s * 0.72], color: B.plank, jitter: 0.12 });
+    for (const x of [-w / 2 + 0.35, w / 2 - 0.35]) b.box(0.08, 0.42, 0.22, { at: [x, 0.21, s * 0.72], color: B.timberDark });
+  }
+  for (let i = 0; i < 4; i++) b.cyl(0.05, 0.045, 0.14, 5, { at: [-w / 2 + 0.4 + rand() * (w - 0.8), 0.87, (rand() - 0.5) * 0.5], color: rand() < 0.5 ? B.timber : 0x8a7a5a });
+  b.cyl(0.09, 0.07, 0.26, 6, { at: [(rand() - 0.5) * w * 0.4, 0.93, 0], color: 0x7a5a3a });
+}
+
+/** A Lantern Men's signal pole: a crooked post with an arm out over +Z, a shuttered lantern hung from it, lit. */
+function lanternPole(b: ModelBuilder, h: number, rand: () => number): void {
+  b.box(0.16, h + 0.6, 0.16, { at: [0, (h - 0.6) / 2, 0], rot: [(rand() - 0.5) * 0.06, 0, (rand() - 0.5) * 0.08], color: B.timberDark, jitter: 0.1 });
+  b.bar([0, h - 0.3, 0], [0, h + 0.05, 0.9], 0.08, 0.08, { color: B.timberDark });
+  b.box(0.03, 0.35, 0.03, { at: [0, h - 0.12, 0.85], color: PAL.ironDark });
+  b.box(0.3, 0.36, 0.3, { at: [0, h - 0.5, 0.85], color: PAL.ironDark });
+  b.box(0.32, 0.22, 0.2, { at: [0, h - 0.5, 0.85], color: B.warmWindow, jitter: 0 });
+  b.taper(0.34, 0.34, 0.06, 0.06, 0.16, { at: [0, h - 0.32, 0.85], color: PAL.ironDark });
+}
+
+/** A run of sharpened stakes along its own X, `len` long, two rails lashed behind them, a few gone. */
+function palisade(b: ModelBuilder, len: number, rand: () => number): void {
+  for (let x = -len / 2 + 0.2; x <= len / 2; x += 0.42) {
+    if (rand() < 0.07) continue;
+    const h = 1.7 + rand() * 0.5;
+    b.box(0.2, h + 0.7, 0.2, { at: [x, (h - 0.7) / 2, 0], rot: [(rand() - 0.5) * 0.08, 0, (rand() - 0.5) * 0.08], color: rand() < 0.5 ? B.timber : B.timberDark, jitter: 0.12 });
+    b.cone(0.13, 0.4, 4, { at: [x, h + 0.19, 0], color: B.timber, jitter: 0.1 });
+  }
+  for (const y of [0.55, 1.35]) b.box(len, 0.1, 0.1, { at: [0, y, -0.16], color: B.timberDark, jitter: 0.1 });
+}
+
+/**
+ * Sheerlegs at the water's edge: two poles lashed at the top leaning out
+ * over +Z, a stay behind, a chain down to a carved Deepking block hauled half
+ * out of the water, and the winch on the bank that hauls it. `wl` is the
+ * water's height in its frame.
+ */
+function sheerlegs(b: ModelBuilder, h: number, wl: number): void {
+  const top: Vec3 = [0, h, 1.6];
+  for (const s of [-1, 1]) b.bar([s * 1.3, -0.3, -0.6], top, 0.16, 0.16, { color: B.timber });
+  b.bar([0, -0.3, -2.8], top, 0.12, 0.12, { color: B.timberDark });
+  b.box(0.3, 0.42, 0.3, { at: [0, h - 0.35, 1.6], color: B.timberDark });
+  const lift = wl + 1.25;
+  b.box(0.05, h - 0.5 - lift, 0.05, { at: [0, (h - 0.5 + lift) / 2, 1.6], color: PAL.ironDark });
+  b.box(1.2, 1.0, 1.0, { at: [0, wl + 0.7, 1.6], rot: [0.18, 0.3, 0.1], color: B.deep, jitter: 0.1 });
+  b.box(0.8, 0.12, 0.1, { at: [0, wl + 0.85, 2.1], rot: [0.18, 0.3, 0.1], color: B.deepDark });
+  b.box(0.5, 0.3, 0.1, { at: [0, wl + 0.55, 2.1], rot: [0.18, 0.3, 0.1], color: 0x141814 });
+  for (const s of [-1, 1]) b.box(0.12, 1.0, 0.12, { at: [s * 0.65, 0.4, -1.9], color: B.timberDark });
+  b.cyl(0.22, 0.22, 1.2, 8, { at: [0, 0.85, -1.9], rot: [0, 0, PI / 2], color: B.timber });
+  for (const s of [-1, 1]) b.box(0.06, 0.06, 0.5, { at: [s * 0.7, 0.85, -1.7], color: PAL.ironDark });
+  b.bar([0, 1.0, -1.75], [0, h - 0.5, 1.5], 0.03, 0.03, { color: B.rope });
+}
+
+/** A Lantern Men's dredging raft over the drowned town: logs, sheerlegs over its end with a chain into the water, a relic hauled up on deck, a crate, a lantern on a pole. */
+function dredger(b: ModelBuilder, w: number, d: number, rand: () => number): void {
+  for (let x = -w / 2 + 0.2; x < w / 2; x += 0.42) b.cyl(0.2, 0.2, d, 6, { at: [x, 0.05, 0], rot: [PI / 2, 0, 0], color: EARTH.bark, jitter: 0.12 });
+  for (const z of [-d / 2 + 0.5, d / 2 - 0.5]) b.box(w, 0.1, 0.25, { at: [0, 0.27, z], color: B.timberDark });
+  const top: Vec3 = [0, 4.2, d / 2 + 0.7];
+  for (const s of [-1, 1]) b.bar([s * (w / 2 - 0.3), 0.25, d / 2 - 0.6], top, 0.14, 0.14, { color: B.timber });
+  b.bar([0, 0.25, -d / 2 + 1.0], top, 0.1, 0.1, { color: B.timberDark });
+  b.box(0.05, 4.2, 0.05, { at: [0, 1.7, d / 2 + 0.7], color: PAL.ironDark });
+  for (const s of [-1, 1]) b.box(0.12, 0.8, 0.12, { at: [s * 0.6, 0.6, -d / 2 + 1.6], color: B.timberDark });
+  b.cyl(0.2, 0.2, 1.1, 8, { at: [0, 0.9, -d / 2 + 1.6], rot: [0, 0, PI / 2], color: B.timber });
+  b.bar([0, 1.05, -d / 2 + 1.7], [0, 4.0, d / 2 + 0.6], 0.03, 0.03, { color: B.rope });
+  // What they've brought up: a carved block with a face's brow on it, an urn.
+  b.box(1.0, 0.8, 0.8, { at: [-0.7, 0.68, 0.2], rot: [0, 0.4 + rand() * 0.2, 0], color: B.deep, jitter: 0.1 });
+  b.box(0.7, 0.12, 0.12, { at: [-0.55, 0.85, 0.58], rot: [0, 0.45, 0], color: B.deepLight });
+  b.cyl(0.25, 0.18, 0.6, 7, { at: [0.7, 0.58, 0.4], color: 0x5a6a52, jitter: 0.1 });
+  crate(b, [0.8, 0.28, -0.6], 0.6, 0.2);
+  b.box(0.08, 2.2, 0.08, { at: [w / 2 - 0.3, 1.35, -d / 2 + 0.4], color: B.timberDark });
+  b.box(0.26, 0.32, 0.26, { at: [w / 2 - 0.3, 2.3, -d / 2 + 0.4], color: PAL.ironDark });
+  b.box(0.28, 0.2, 0.18, { at: [w / 2 - 0.3, 2.3, -d / 2 + 0.4], color: B.warmWindow, jitter: 0 });
+}
+
+/**
+ * A Deepking king standing in the water to his knees: a plinth under the
+ * water, a robed body, his hands on the pommel of a great sword stood point
+ * down before him, a bearded head under a crown of points, worn smooth;
+ * headless with the head fallen at his feet when `variant` is 1, his right
+ * arm broken off when it is 2. `wl` is the water's height in its frame.
+ */
+function deepStatue(b: ModelBuilder, h: number, variant: number, wl: number): void {
+  const s = h / 5;
+  const y0 = wl - 0.4;
+  const stone: PartOpts = { color: B.deep, jitter: 0.08 };
+  b.box(2.0 * s, 1.6, 2.0 * s, { ...stone, at: [0, y0 - 0.6, 0] });
+  // A robed king: the robe to the waist, a belt, the chest and shoulders.
+  b.taper(1.5 * s, 1.1 * s, 1.1 * s, 0.85 * s, 2.6 * s, { ...stone, at: [0, y0, 0] });
+  b.taper(1.1 * s, 0.85 * s, 1.5 * s, 0.9 * s, 1.4 * s, { ...stone, at: [0, y0 + 2.6 * s, 0] });
+  b.box(1.16 * s, 0.2 * s, 0.9 * s, { at: [0, y0 + 2.6 * s, 0], color: B.deepDark });
+  // Arms down at his sides, bent in at the elbow, his hands on the pommel of a great sword stood point down before him.
+  for (const sx of variant === 2 ? [-1] : [-1, 1]) {
+    b.bar([sx * 0.86 * s, y0 + 3.85 * s, 0], [sx * 0.82 * s, y0 + 3.0 * s, 0.18 * s], 0.32 * s, 0.34 * s, stone);
+    b.bar([sx * 0.8 * s, y0 + 3.0 * s, 0.18 * s], [sx * 0.16 * s, y0 + 2.8 * s, 0.62 * s], 0.28 * s, 0.28 * s, stone);
+  }
+  if (variant === 2) b.bar([0.86 * s, y0 + 3.85 * s, 0], [0.84 * s, y0 + 3.45 * s, 0.06 * s], 0.32 * s, 0.34 * s, stone);
+  b.box(0.42 * s, 0.3 * s, 0.32 * s, { at: [0, y0 + 2.82 * s, 0.66 * s], color: B.deepLight, jitter: 0.06 });
+  b.box(0.2 * s, 2.45 * s, 0.1 * s, { at: [0, y0 + 0.3 + 1.2 * s, 0.7 * s], color: B.deepDark, jitter: 0.04 });
+  b.box(0.95 * s, 0.12 * s, 0.16 * s, { at: [0, y0 + 2.58 * s, 0.7 * s], color: B.deepLight });
+  b.box(1.6 * s + 0.1, 0.3, 1.2 * s + 0.1, { at: [0, wl, 0], color: B.weed, jitter: 0.25 });
+  if (variant === 1) {
+    // Headless, the neck broken off and the head fallen at his feet.
+    b.box(0.5 * s, 0.25 * s, 0.4 * s, { at: [0.1 * s, y0 + 4.1 * s, 0], rot: [0.3, 0.2, 0.4], color: B.deepLight });
+    b.box(0.66 * s, 0.7 * s, 0.7 * s, { at: [1.15 * s, wl - 0.05, 0.9 * s], rot: [0.5, 0.7, 1.1], color: B.deepLight, jitter: 0.1 });
+    return;
+  }
+  // His head: a carved face, a square beard on his chest and a crown of points.
+  const hy = y0 + 4.0 * s;
+  b.box(0.62 * s, 0.78 * s, 0.66 * s, { at: [0, hy + 0.39 * s, 0], color: B.deepLight, jitter: 0.08 });
+  b.taper(0.24 * s, 0.16 * s, 0.6 * s, 0.3 * s, 0.75 * s, { at: [0, hy - 0.45 * s, 0.3 * s], color: B.deepLight, jitter: 0.08 });
+  for (let y = hy - 0.3 * s; y < hy + 0.2 * s; y += 0.16 * s) b.box(0.5 * s, 0.04 * s, 0.05, { at: [0, y, 0.47 * s], color: B.deepDark, jitter: 0 });
+  b.box(0.8 * s, 0.22 * s, 0.82 * s, { at: [0, hy + 0.86 * s, 0], color: B.deep });
+  for (const [x, z] of [[-0.3, -0.3], [0.3, -0.3], [-0.3, 0.3], [0.3, 0.3], [0, 0.34], [0, -0.34], [-0.34, 0], [0.34, 0]] as const) {
+    b.taper(0.16 * s, 0.12 * s, 0.03, 0.03, 0.34 * s, { at: [x * s, hy + 0.97 * s, z * s], color: B.deep });
+  }
+  b.box(0.56 * s, 0.08 * s, 0.1, { at: [0, hy + 0.55 * s, 0.34 * s], color: B.deepDark });
+  for (const x of [-0.15 * s, 0.15 * s]) b.box(0.12 * s, 0.08 * s, 0.1, { at: [x, hy + 0.46 * s, 0.34 * s], color: 0x141814, jitter: 0 });
+}
+
+/** A flight of the Deepkings' steps down into the water off a quay, `w` wide, from `top` down past `wl`. */
+function deepStairs(b: ModelBuilder, w: number, top: number, wl: number): void {
+  for (let i = 0, y = top; y > wl - 0.8; i++, y -= 0.28) b.box(w, 0.3, 0.55, { at: [0, y - 0.15, 0.27 + i * 0.5], color: i % 2 ? B.deep : B.deepLight, jitter: 0.08 });
+  for (const s of [-1, 1]) b.box(0.6, top - wl + 1.2, (top - wl + 0.8) / 0.28 * 0.5 + 0.4, { at: [s * (w / 2 + 0.3), (top + wl) / 2 - 0.4, ((top - wl + 0.8) / 0.28) * 0.25], color: B.deep, jitter: 0.08 });
+}
+
 // ------------------------------------------------------------------ the Deepkings'
 
 /** Carved channels cut into a face: the Deepkings' sign on everything they built. */
@@ -831,10 +1072,13 @@ function channels(b: ModelBuilder, w: number, y0: number, h: number, z: number):
 
 /**
  * The Sluice House's lock, across the Great Channel (its own X; +Z is
- * downstream): three great piers of green-black stone with their noses
- * rising either side of the walkway (a deck, laid over the gate beam), wing
- * walls along both banks, the gate leaves swung open downstream with the
- * water pouring white through them, and the great wheel beside the walkway.
+ * downstream): three great piers of green-black stone, their noses rising
+ * into towers either side of the walkway (a deck, laid over the gate beam)
+ * and joined over it by a lintel, so the walkway passes through a gateway on
+ * each, a Lantern Men's lamp hung in it; the gate head upstream with its
+ * winches and paddles hauled up, wing walls along both banks, the gate
+ * leaves swung open downstream with the water pouring white through them,
+ * and the great wheel beside the walkway.
  */
 function sluice(b: ModelBuilder, w: number, d: number, rand: () => number): void {
   const half = w / 2;
@@ -845,15 +1089,44 @@ function sluice(b: ModelBuilder, w: number, d: number, rand: () => number): void
     b.box(2.6, top + 3.4, d, { ...stone, at: [x, (top - 3.4) / 2, 0] });
     b.box(2.8, 0.4, d + 0.3, { at: [x, top - 0.2, 0], color: B.deepLight });
     b.box(2.7, 0.3, d + 0.1, { at: [x, 0.02, 0], color: B.weed, jitter: 0.2 });
-    // Its noses, up and down stream, rising past the walkway's rails, a carved face on each, a pyramid cap.
+    // Its noses, up and down stream, rising into towers either side of the walkway, a carved face on each, a pyramid cap,
+    // and a lintel across from one to the other high over the walkway: a gateway on every pier.
+    const tall = 6.2;
     for (const s of [-1, 1]) {
       const z = s * (d / 2 - 0.75);
-      b.box(2.4, 2.6, 1.5, { ...stone, at: [x, top + 1.3, z] });
-      b.box(2.6, 0.25, 1.7, { at: [x, top + 2.65, z], color: B.deepLight });
-      b.taper(2.4, 1.5, 0.3, 0.3, 0.9, { at: [x, top + 2.75, z], color: B.deep });
+      b.taper(2.4, 1.5, 2.1, 1.3, tall, { ...stone, at: [x, top, z] });
+      for (const y of [2.2, 4.4]) b.taper(2.5, 1.6, 2.5, 1.6, 0.22, { at: [x, top + y, z], color: B.deepDark });
+      b.box(2.3, 0.25, 1.5, { at: [x, top + tall + 0.12, z], color: B.deepLight });
+      b.taper(2.1, 1.3, 0.3, 0.3, 1.0, { at: [x, top + tall + 0.25, z], color: B.deep });
       b.box(1.0, 1.0, 0.1, { at: [x, top + 1.3, z + s * 0.76], color: B.deepDark });
       b.box(0.7, 0.16, 0.12, { at: [x, top + 1.4, z + s * 0.78], color: B.deepLight, jitter: 0 });
       b.box(0.5, 0.12, 0.12, { at: [x, top + 1.05, z + s * 0.78], color: 0x141814, jitter: 0 });
+      for (const y of [3.3, 5.3]) b.box(0.24, 0.8, 0.1, { at: [x, top + y, z + s * 0.68], color: 0x141814, jitter: 0 });
+    }
+    b.box(2.0, 1.2, d - 1.4, { ...stone, at: [x, top + tall - 0.9, 0] });
+    b.box(2.2, 0.25, d - 1.2, { at: [x, top + tall - 0.2, 0], color: B.deepLight });
+    for (const e of [-1, 1]) b.box(0.06, 0.12, d - 1.6, { at: [x + e * 1.02, top + tall - 0.9, 0], color: B.deepDark, jitter: 0 });
+    // A Lantern Men's lantern hung under every gateway.
+    b.box(0.04, 0.6, 0.04, { at: [x, top + tall - 1.8, 0], color: PAL.ironDark });
+    b.box(0.3, 0.36, 0.3, { at: [x, top + tall - 2.2, 0], color: PAL.ironDark });
+    b.box(0.32, 0.22, 0.2, { at: [x, top + tall - 2.2, 0], color: B.warmWindow, jitter: 0 });
+  }
+  // The gate head upstream: a beam from pier to pier, a winch drum over each bay, the paddles hauled up out of the water on chains.
+  {
+    const z = -(d / 2 - 0.75);
+    b.box(w - 2, 0.9, 0.9, { ...stone, at: [0, top + 4.6, z - 0.2] });
+    for (const cx of [-half / 2 + 0.7, half / 2 - 0.7]) {
+      b.cyl(0.45, 0.45, half - 3.4, 10, { at: [cx, top + 5.45, z - 0.2], rot: [0, 0, PI / 2], color: B.timberDark, jitter: 0.08 });
+      for (const e of [-1, 1]) b.cyl(0.55, 0.55, 0.12, 10, { at: [cx + e * ((half - 3.4) / 2), top + 5.45, z - 0.2], rot: [0, 0, PI / 2], color: PAL.ironDark });
+      // Three paddles to a bay, hung high enough to see the water under them from the walkway.
+      const bay = half - 3.8;
+      const pw = (bay - 2 * 0.7) / 3;
+      for (let i = 0; i < 3; i++) {
+        const px = cx - bay / 2 + pw / 2 + i * (pw + 0.7);
+        b.box(pw, 1.5, 0.3, { at: [px, top + 2.65, z - 0.9], color: 0x3a3a30, jitter: 0.1 });
+        for (const y of [2.15, 3.15]) b.box(pw + 0.06, 0.12, 0.36, { at: [px, top + y, z - 0.9], color: PAL.ironDark });
+        b.box(0.06, 1.0, 0.06, { at: [px, top + 3.9, z - 0.85], color: PAL.ironDark });
+      }
     }
   }
   // The gate beam under the walkway, spanning pier to pier.
@@ -885,16 +1158,19 @@ function sluice(b: ModelBuilder, w: number, d: number, rand: () => number): void
   }
   // The great wheel that turns the gates, upright beside the walkway's west end, upstream.
   const wx = -half + 3.4;
-  b.cyl(1.4, 1.4, 0.16, 12, { at: [wx, top + 1.7, -2.1], rot: [PI / 2, 0, 0], color: PAL.ironDark });
-  b.cyl(1.1, 1.1, 0.18, 12, { at: [wx, top + 1.7, -2.1], rot: [PI / 2, 0, 0], color: B.deepDark });
-  for (let i = 0; i < 4; i++) b.box(0.12, 2.6, 0.12, { at: [wx, top + 1.7, -2.05], rot: [0, 0, (i * PI) / 4], color: PAL.iron });
+  const wy = top + 2.0;
+  b.cyl(1.8, 1.8, 0.18, 16, { at: [wx, wy, -2.1], rot: [PI / 2, 0, 0], color: PAL.ironDark });
+  b.cyl(1.45, 1.45, 0.2, 16, { at: [wx, wy, -2.1], rot: [PI / 2, 0, 0], color: B.deepDark });
+  b.cyl(0.35, 0.35, 0.5, 8, { at: [wx, wy, -2.15], rot: [PI / 2, 0, 0], color: PAL.iron });
+  for (let i = 0; i < 4; i++) b.box(0.14, 3.4, 0.14, { at: [wx, wy, -2.02], rot: [0, 0, (i * PI) / 4], color: PAL.iron });
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * PI * 2;
-    b.box(0.1, 0.1, 0.4, { at: [wx + Math.cos(a) * 1.45, top + 1.7 + Math.sin(a) * 1.45, -2.0], color: PAL.iron });
+    b.box(0.12, 0.12, 0.5, { at: [wx + Math.cos(a) * 1.9, wy + Math.sin(a) * 1.9, -1.95], color: PAL.iron });
   }
-  b.box(0.5, 1.6, 0.5, { at: [wx, top + 0.7, -2.4], color: B.deep });
+  b.box(0.7, 2.0, 0.7, { at: [wx, top + 0.9, -2.5], color: B.deep });
+  b.box(0.9, 0.3, 0.9, { at: [wx, top + 1.95, -2.5], color: B.deepLight });
   // Chains from the wheel down to the gates.
-  b.bar([wx + 0.3, top + 1.6, -2.0], [wx + 4.8, top - 0.2, -0.9], 0.06, 0.06, { color: PAL.ironDark });
+  b.bar([wx + 0.3, wy - 0.1, -2.0], [wx + 4.8, top - 0.2, -0.9], 0.06, 0.06, { color: PAL.ironDark });
 }
 
 /**
@@ -960,9 +1236,27 @@ function sluiceGate(b: ModelBuilder, w: number): void {
 /** A length of the drowned town's wall, its footing in the mud, weed at the water line; a flood wall has the fen folk's chalk marks. */
 function deepWall(b: ModelBuilder, w: number, d: number, h: number, marks: boolean, rand: () => number): void {
   b.box(w, h + 2, d, { at: [0, h / 2 - 1, 0], color: B.deep, jitter: 0.1 });
+  // Dressed quoins at its ends, standing a little proud.
+  for (const sx of [-1, 1]) b.box(0.7, h + 2.1, d + 0.12, { at: [sx * (w / 2 - 0.3), h / 2 - 0.95, 0], color: B.deepLight, jitter: 0.08 });
   // Broken top: a few blocks missing, a few left proud.
   for (let x = -w / 2 + 0.6; x < w / 2; x += 1.2) if (rand() < 0.5) b.box(1.1, 0.5, d + 0.1, { at: [x, h + 0.25, 0], color: rand() < 0.5 ? B.deep : B.deepLight });
-  channels(b, w, 0.4, h - 0.5, d / 2 + 0.02);
+  for (const z of [d / 2 + 0.02, -d / 2 - 0.02]) channels(b, w, 0.4, h - 0.5, z);
+  // Its windows, black and empty, a lintel over each, where it still stands high enough.
+  if (h > 2.4 && !marks) {
+    const n = Math.max(1, Math.floor((w - 1.4) / 2.4));
+    for (let i = 0; i < n; i++) {
+      const x = -((n - 1) * 2.4) / 2 + i * 2.4;
+      for (const s of [-1, 1]) {
+        b.box(0.7, 1.0, 0.06, { at: [x, 1.4, s * (d / 2 + 0.04)], color: 0x101410, jitter: 0 });
+        b.box(1.0, 0.24, 0.14, { at: [x, 2.02, s * (d / 2 + 0.05)], color: B.deepLight });
+      }
+    }
+  }
+  // Blocks fallen from its top, tumbled at its foot.
+  for (let i = 0; i < 3; i++) {
+    const s = rand() < 0.5 ? -1 : 1;
+    b.box(0.8 + rand() * 0.4, 0.6, 0.6 + rand() * 0.3, { at: [(rand() - 0.5) * (w - 1), 0.1 + rand() * 0.15, s * (d / 2 + 0.55)], rot: [(rand() - 0.5) * 0.6, rand() * 3, (rand() - 0.5) * 0.6], color: rand() < 0.5 ? B.deep : B.deepLight, jitter: 0.1 });
+  }
   b.box(w + 0.06, 0.28, d + 0.06, { at: [0, 0.08, 0], color: B.weed, jitter: 0.25 });
   if (marks) {
     // Flood marks: old ones cut low down, fresh chalk scrawls higher.
@@ -996,6 +1290,17 @@ function deepRoof(b: ModelBuilder, w: number, d: number, h: number, variant: num
   b.box(w, eaves + 2, d, { at: [0, eaves / 2 - 1, 0], color: B.deep, jitter: 0.1 });
   b.box(w + 0.06, 0.28, d + 0.06, { at: [0, wl, 0], color: B.weed, jitter: 0.25 });
   channels(b, w, wl + 0.2, eaves - wl - 0.2, d / 2 + 0.02);
+  // Its windows, deep slits just above the water, and a door's lintel showing where the water's not over it.
+  if (eaves - wl > 0.9) {
+    const y = Math.min(eaves - 0.5, wl + 0.75);
+    for (const [nx, nz, half] of [[0, 1, w / 2], [0, -1, w / 2], [1, 0, d / 2], [-1, 0, d / 2]] as const) {
+      for (const a of [-half * 0.5, half * 0.5]) {
+        const [x, z] = [nx * (nx ? w / 2 : 0) + (nz ? a : 0), nz * (nz ? d / 2 : 0) + (nx ? a : 0)];
+        b.box(nz ? 0.35 : 0.12, 0.8, nz ? 0.12 : 0.35, { at: [x + nx * 0.02, y, z + nz * 0.02], color: 0x141814, jitter: 0 });
+        b.box(nz ? 0.7 : 0.14, 0.18, nz ? 0.14 : 0.7, { at: [x + nx * 0.04, y + 0.5, z + nz * 0.04], color: B.deepLight });
+      }
+    }
+  }
   if (variant === 1) {
     b.box(w + 0.3, 0.3, d + 0.3, { at: [0, eaves + 0.15, 0], color: B.deepLight, jitter: 0.08 });
     for (let x = -w / 2 + 0.5; x < w / 2; x += 1) for (const z of [-d / 2, d / 2]) if (rand() < 0.7) b.box(0.9, 0.5 + rand() * 0.3, 0.4, { at: [x, eaves + 0.5, z], color: B.deep });

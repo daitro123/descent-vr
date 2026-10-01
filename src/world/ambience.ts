@@ -8,10 +8,11 @@ import type { Interior } from '../save/record';
 
 /**
  * A zone's own ambience, placed nowhere in particular: Oakvale's light wind
- * with birds calling from its trees, or Brackenmoor's stronger, lower wind
- * and a lone call now and then.
+ * with birds calling from its trees, Brackenmoor's stronger, lower wind
+ * and a lone call now and then, or Aldhaven's sea wind over the surf with
+ * gulls crying overhead.
  */
-export type ZoneAmbience = 'woods' | 'moor';
+export type ZoneAmbience = 'woods' | 'moor' | 'harbour';
 
 /** A place that sounds where it is. */
 export type PlaceId = 'stream' | 'dock' | 'windmill' | 'forge' | 'anvil' | 'hearth' | 'campfire' | 'mineMouth';
@@ -125,8 +126,8 @@ export class TreeCover {
 export const BIRD_CALLS = ['trill', 'whistle', 'chirps', 'coo'] as const;
 export type BirdCall = (typeof BIRD_CALLS)[number];
 
-/** Every call a bird makes, each a sound by that name: the woods' birds', and the moor's lone curlew. */
-export type Call = BirdCall | 'curlew';
+/** Every call a bird makes, each a sound by that name: the woods' birds', the moor's lone curlew, and the harbour's gulls. */
+export type Call = BirdCall | 'curlew' | 'gull';
 
 /** A bird calling: from where, and which call. */
 export interface Birdcall {
@@ -193,7 +194,8 @@ type LoneRules = {
 /**
  * The moor's lone bird: every so often a curlew calls from a spot at random
  * `near` to `far` m off, on the wing `height` m over you. With no trees to call
- * from, nothing else on the moor calls at all.
+ * from, nothing else on the moor calls at all. Over the harbour, the same
+ * rule with its own rules and call: the gulls.
  */
 export class LoneCall {
   private wait: number;
@@ -201,6 +203,7 @@ export class LoneCall {
   constructor(
     private readonly rand: () => number = Math.random,
     private readonly rules: LoneRules = CONFIG.sound.moor.call,
+    private readonly call: Call = 'curlew',
   ) {
     this.wait = this.between(rules.every);
   }
@@ -213,7 +216,7 @@ export class LoneCall {
     this.wait += this.between(this.rules.every);
     const a = this.rand() * Math.PI * 2;
     const r = near + (far - near) * this.rand();
-    return { x: x + Math.sin(a) * r, y: y + this.between(height), z: z + Math.cos(a) * r, call: 'curlew' };
+    return { x: x + Math.sin(a) * r, y: y + this.between(height), z: z + Math.cos(a) * r, call: this.call };
   }
 
   private between([lo, hi]: readonly [number, number]): number {

@@ -151,7 +151,7 @@ describe('the World as Ground across the seam', () => {
   it('walks every road and track clear end to end, through the tollgate standing open on the Kingsroad, but for the rockfall that ends the Sunreach road', () => {
     const p = new Vector3();
     const [gate] = of('tollgate');
-    expect(moor.roads.map((road) => road.id)).toEqual(['pass', 'kingsroad', 'fen', 'sunreach', 'hob', 'oldFold', 'scar', 'turfmoss', 'fells']);
+    expect(moor.roads.map((road) => road.id)).toEqual(['pass', 'kingsroad', 'fen', 'sunreach', 'hob', 'oldFold', 'scar', 'turfmoss', 'fells', 'hall', 'chapel', 'mill', 'beckFoot']);
     for (const road of moor.roads) {
       for (const [x, z] of road.line) {
         // Where you walk, a body's width in from its edge.
@@ -385,10 +385,11 @@ describe("Brackenmoor's land", () => {
     for (const c of cypresses) expect(c.z).toBeGreaterThan(Math.max(...fall.map((p) => p.z)) - 2);
   });
 
-  it('grows bracken, heather, bushes and gorse, cotton grass and reeds, few trees, and none of it on a road', () => {
+  it('grows bracken, heather, moor grass, bushes and gorse, cotton grass and reeds, few trees, and none of it on a road', () => {
     const count = (kind: string) => moor.plants.filter((p) => p.kind === kind).length;
     expect(count('bracken')).toBeGreaterThan(3000);
     expect(count('heather')).toBeGreaterThan(800);
+    expect(count('tussock')).toBeGreaterThan(1000);
     expect(count('bush') + count('gorse')).toBeGreaterThan(300);
     expect(count('gorse')).toBeGreaterThan(50);
     expect(count('rock')).toBeGreaterThan(300);
@@ -403,7 +404,7 @@ describe("Brackenmoor's land", () => {
       if (!moor.walkable.contains(p.x, p.z)) continue;
       for (const road of moor.roads) expect(nearestOnPolyline(road.line, p.x, p.z).d, `${p.kind} by the ${road.id} road (${p.x.toFixed(1)}, ${p.z.toFixed(1)})`).toBeGreaterThan(road.width / 2);
     }
-  });
+  }, 30000);
 
   it('builds Cairnford round its square at the bridge: the inn, the moot hall, the smithy, the chapel, the mill and a score of buildings', () => {
     const sq = MOOR.square;
