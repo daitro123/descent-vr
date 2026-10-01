@@ -71,6 +71,8 @@ const _b = new Vector3();
 
 interface Built {
   rig: Rig;
+  /** A carrier's body bare, and with their load on: worn as the clip has it in their hands. */
+  laden?: { readonly bare: BufferGeometry; readonly load: BufferGeometry };
   /** What it strikes with; friendly characters strike with nothing. */
   weapon: WeaponSpec | null;
   material: ModelMaterial;
@@ -150,7 +152,12 @@ export class Inspector {
       const e = ENTRIES[index];
       const material = createModelMaterial();
       if ('person' in e) b = { rig: buildPerson(e.person, material), weapon: null, material, clips: personClips(e.person) };
-      else if ('cast' in e) b = { rig: new Wardrobe().dress(e.cast, material), weapon: null, material, clips: castClips(e.cast) };
+      else if ('cast' in e) {
+        const wardrobe = new Wardrobe();
+        const rig = wardrobe.dress(e.cast, material);
+        const load = wardrobe.burden(e.cast);
+        b = { rig, weapon: null, material, clips: castClips(e.cast), laden: load ? { bare: rig.mesh.geometry, load } : undefined };
+      }
       else {
         const { rig, weapon } = buildCharacter(e.kind, { material, family: e.family, variant: e.variant });
         b = { rig, weapon, material, clips: clipsFor(e.kind, e.family) };
@@ -283,6 +290,8 @@ export class Inspector {
     b.rig.apply(frame.pose);
     const hip = frame.hip ?? [0, frame.hipY, 0];
     b.rig.setHipOffset(hip[0], hip[1], hip[2]);
+    b.rig.mesh.rotation.y = frame.turn ?? 0;
+    if (b.laden) b.rig.mesh.geometry = frame.laden ? b.laden.load : b.laden.bare;
     const tele = b.material.telegraph;
     if (frame.telegraph > 0 && clip.attack) {
       tele.copy(clip.attack.blockable ? _telegraphBlock : _telegraphUnblock).multiplyScalar(frame.telegraph);

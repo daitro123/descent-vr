@@ -1,4 +1,4 @@
-import { type Camera, Group, type Object3D, type Scene, Vector3, type WebGLRenderer } from 'three';
+import { type BufferGeometry, type Camera, Group, type Object3D, type Scene, Vector3, type WebGLRenderer } from 'three';
 import type { AdventureState } from '../adventureState';
 import { CONFIG } from '../config';
 import { type FileSpot, PatrolWalk } from '../enemies/patrol';
@@ -12,7 +12,9 @@ import { Card, FONT, parchment, wrap } from '../ui/card';
 import { QuestMarker } from '../ui/questMarker';
 import type { Ground } from '../world/ground';
 import { BarkRule } from './barks';
+import { ease, eventsBetween } from './loop';
 import { friendlyPose } from './poses';
+import { crouched, type Folded } from './sit';
 import { cyclesOver, type MutablePose, type WalkFrame, walkFrame, walkOver } from './walk';
 import { strikesBetween, type WorkLoop, workLoop } from './work';
 
@@ -54,8 +56,20 @@ const BARK = { w: 1.1, h: 0.33, ppm: 850 };
 
 const isGiver = (id: string): id is VillagerId & GiverId => (GIVERS as readonly string[]).includes(id);
 
-/** Where a villager works, and the building they're in, if any: one of Oakvale's own (`VillagerSpot`), or one a zone places by data. */
-export type VillagerPlace<Id extends string> = Omit<VillagerSpot, 'id'> & { readonly id: Id };
+/**
+ * Where a villager works, and the building they're in, if any: one of
+ * Oakvale's own (`VillagerSpot`), or one a zone places by data, maybe on a
+ * prop's floor (`y`, world metres: a ship's deck) rather than the ground.
+ */
+export type VillagerPlace<Id extends string> = Omit<VillagerSpot, 'id'> & { readonly id: Id; readonly y?: number };
+
+/** A carrier's load: their body with it on (people/cast.ts `Wardrobe.burden`), and the pose they hold it in. */
+export interface Burden {
+  readonly geometry: BufferGeometry;
+  readonly carry: Pose;
+}
+
+const ARMS = ['upperArmL', 'forearmL', 'handL', 'upperArmR', 'forearmR', 'handR'] as const;
 
 /** Who a villager is: their body, their name over a bark, the pose they stand easy in, and their work. */
 export interface Who {
@@ -69,6 +83,10 @@ export interface Who {
   readonly start: number;
   /** Do they give quests, with a "!" or "?" over their head (the smith, the herbalist)? */
   readonly gives: boolean;
+  /** Seated: their legs folded under them, whatever they're at (people/sit.ts). */
+  readonly sit?: Folded;
+  /** What they carry, if they do: on their walk out along their route and set down at its end, or as their work takes it up and sets it down. */
+  readonly burden?: Burden;
 }
 
 /** One of Oakvale's own villagers: their body built afresh, their trade's work, and a marker if they give quests. */
@@ -118,7 +136,17 @@ export class Villager<Id extends string = VillagerId> {
   /** 0 standing to 1 walking, eased, and how many cycles of the walk (two steps each) their legs have been round. */
   private walking = 0;
   private stride = 0;
-
+  /** How many times their work called for a cry this frame (a stallholder's), while they weren't attending to you. */
+  cried = 0;
+  /** Their body without their load, and whether the load's in their hands. */
+  private readonly bare: BufferGeometry;
+  private laden = false;
+  /** 0 standing to 1 bent to set their load down or pick it up, at a carrier's route's ends. */
+  private bend = 0;
+  /** The arm bones their carry sets (the sack's hand up on it): those don't swing as they walk. */
+  private readonly held: readonly (typeof ARMS)[number][];
+  /** Bent to set a load down: their legs, and the hips with them. */
+  private readonly crouch: Folded;
   constructor(
     readonly spot: VillagerPlace<Id>,
     readonly who: Who,
@@ -128,11 +156,15 @@ export class Villager<Id extends string = VillagerId> {
   ) {
     const { id } = spot;
     this.rig = who.rig;
+    this.bare = this.rig.mesh.geometry;
+    const carry = who.burden?.carry;
+    this.held = carry ? ARMS.filter((b) => [0, 1, 2].some((i) => Math.abs((carry[b]?.[i] ?? 0) - (who.stand[b]?.[i] ?? 0)) > 0.05)) : [];
+    this.crouch = crouched(who.build, 0.65, 1.0);
     const p = this.rig.proportions;
     this.headY = p.hipY + 0.06 + p.neck + 0.12;
     this.work = who.work;
     this.root.name = id;
-    this.root.position.set(spot.x, ground.heightAt(spot.x, spot.z), spot.z);
+    this.root.position.set(spot.x, this.floorAt(spot.x, spot.z), spot.z);
     this.root.rotation.y = spot.yaw;
     this.root.add(this.rig.mesh, this.bark.mesh);
     this.bark.mesh.name = `${id}-bark`;
@@ -153,6 +185,11 @@ export class Villager<Id extends string = VillagerId> {
 
   get id(): Id {
     return this.spot.id;
+  }
+
+  /** The floor under (x, z): the prop's they stand on, or the ground. */
+  private floorAt(x: number, z: number): number {
+    return this.spot.y ?? this.ground.heightAt(x, z);
   }
 
   /** The quest giver they are, if they give quests: the smith and the herbalist. */
@@ -209,7 +246,7 @@ export class Villager<Id extends string = VillagerId> {
     this.at.x = this.solid.x = _file.x;
     this.at.z = this.solid.z = _file.z;
     this.at.yaw = dt > 0 ? this.at.yaw + towards(this.at.yaw, _file.yaw) * Math.min(1, dt * 6) : _file.yaw;
-    this.root.position.set(this.at.x, this.ground.heightAt(this.at.x, this.at.z), this.at.z);
+    this.root.position.set(this.at.x, this.floorAt(this.at.x, this.at.z), this.at.z);
   }
 
   /** Walk towards where they should stand, facing the way they go and then the way it faces. */
@@ -238,7 +275,31 @@ export class Villager<Id extends string = VillagerId> {
     this.at.yaw = d <= step && Math.abs(turn) < 1e-3 ? to.yaw : this.at.yaw + turn * Math.min(1, dt * 6);
     this.solid.x = this.at.x;
     this.solid.z = this.at.z;
-    this.root.position.set(this.at.x, this.ground.heightAt(this.at.x, this.at.z), this.at.z);
+    this.root.position.set(this.at.x, this.floorAt(this.at.x, this.at.z), this.at.z);
+  }
+
+  /**
+   * Whether their load is in their hands, and how far they're bent: a carrier
+   * on their route has it on the way out, bends to set it down at the far
+   * end and to take up another at the start; one whose work takes it up and
+   * sets it down has it as their work says.
+   */
+  private carrying(): void {
+    const { burden } = this.who;
+    if (!burden) return;
+    const walk = this.stroll;
+    let laden: boolean;
+    if (walk) {
+      const { bend } = CONFIG.villagers.carry;
+      const into = walk.pausing ? CONFIG.population.walk.pause - walk.restLeft : -1;
+      // Down, the load changing hands at the bottom, and back up, a moment after they stop.
+      const u = (into - 0.3) / bend;
+      this.bend = u <= 0 || u >= 2 ? 0 : u < 1 ? ease(u) : ease(2 - u);
+      laden = walk.outbound === (!walk.pausing || u < 1);
+    } else laden = this.work.laden?.(this.clock) ?? false;
+    if (laden === this.laden) return;
+    this.laden = laden;
+    this.rig.mesh.geometry = laden ? burden.geometry : this.bare;
   }
 
   /** How far your head is from them, on the floor plane. */
@@ -259,8 +320,10 @@ export class Villager<Id extends string = VillagerId> {
     this.attend = clamp(this.attend + (near ? 1 : -1) * V.attend * dt, 0, 1);
     const was = this.clock;
     this.clock += dt * (1 - this.attend);
-    // A blow half-stopped by your coming doesn't ring.
+    // A blow half-stopped by your coming doesn't ring, nor a cry called.
     const blows = this.attend < 0.3 ? strikesBetween(this.work, was, this.clock) : 0;
+    this.cried = this.attend < 0.3 && this.work.cries ? eventsBetween(this.work.cries, this.work.duration, was, this.clock) : 0;
+    this.carrying();
     this.breath += dt;
 
     // Where you are, round from where they face at their work.
@@ -273,17 +336,28 @@ export class Villager<Id extends string = VillagerId> {
     return blows;
   }
 
-  /** Their pose: their work, blended to standing easy as they attend to you, with the head (and chest) turned your way. */
+  /**
+   * Their pose: their work, blended to standing easy as they attend to you,
+   * with the head (and chest) turned your way; on folded legs if they sit,
+   * and holding their load as they hold it while it's in their hands.
+   */
   private pose(far: number, up = 0): void {
     const V = CONFIG.villagers;
+    const { burden, sit } = this.who;
+    // A carrier walking with their load: their work loop is their walk, the load held as they hold it.
+    const loaded = this.laden && burden && this.stroll;
     const working = this.work.at(this.clock);
+    const stand = this.laden && burden ? burden.carry : this.who.stand;
     // Walking, they stand easy (holding what they hold) on the walk's legs, with its swing.
     const w = this.walking;
-    const a = Math.max(this.attend, w);
+    const a = loaded ? 1 : Math.max(this.attend, w);
     // Breathing, at work or standing easy.
-    const pose = friendlyPose(blendPoses(working.pose, this.who.stand, a, {}), this.breath) as MutablePose;
+    const pose = friendlyPose(blendPoses(working.pose, stand, a, {}), this.breath) as MutablePose;
     _hip.fill(0);
     if (w > 0.01) walkOver(pose, walkFrame(this.stride, this.who.build, _walk), w, _hip);
+    // The load held steady, not swung.
+    if (this.laden && burden) for (const b of this.held) pose[b] = [...(burden.carry[b] ?? [0, 0, 0])] as [number, number, number];
+    if (this.bend > 0) this.bent(pose, this.bend);
     const head = V.look.head;
     const turned = clamp(this.look, -head, head);
     const chest = this.look - turned;
@@ -293,9 +367,28 @@ export class Villager<Id extends string = VillagerId> {
     h[1] += turned;
     // And a little up or down to your eyes, while they look at you.
     if (Number.isFinite(far) && far > 0.1) h[0] = h[0] * (1 - a) + a * clamp(-Math.atan2(up, far), -0.3, 0.3);
+    if (sit) Object.assign(pose, sit.legs);
     this.rig.apply(pose as Pose);
-    this.rig.setHipOffset(working.hip[0] * (1 - a) + _hip[0], working.hip[1] * (1 - a) + _hip[1], working.hip[2] * (1 - a) + _hip[2]);
+    if (sit) this.rig.setHipOffset(sit.hip[0], sit.hip[1], sit.hip[2]);
+    else this.rig.setHipOffset(working.hip[0] * (1 - a) + _hip[0], working.hip[1] * (1 - a) + _hip[1], working.hip[2] * (1 - a) + _hip[2]);
     this.root.rotation.y = this.at.yaw + working.turn * (1 - a);
+  }
+
+  /** `pose` bent `k` of the way down to set a load on the ground, or take one up: the knees bent, the back bent over, the arms down to it. */
+  private bent(pose: MutablePose, k: number): void {
+    const c = this.crouch;
+    for (const [bone, r] of Object.entries(c.legs)) pose[bone] = r.map((v, i) => (pose[bone]?.[i] ?? 0) * (1 - k) + v * k) as [number, number, number];
+    const lean = (pose.spine ??= [0, 0, 0]);
+    lean[0] += 0.7 * k;
+    for (const b of ['upperArmL', 'upperArmR'] as const) {
+      const r = (pose[b] ??= [0, 0, 0]);
+      r[0] = r[0] * (1 - k) - 0.7 * k;
+    }
+    for (const b of ['forearmL', 'forearmR'] as const) {
+      const r = (pose[b] ??= [0, 0, 0]);
+      r[0] = r[0] * (1 - k) - 0.3 * k;
+    }
+    for (let i = 0; i < 3; i++) _hip[i] += c.hip[i] * k;
   }
 
   /** The bark's panel over their head, turned to you. */

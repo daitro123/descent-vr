@@ -6,6 +6,7 @@ import { MeshBuffer } from '../forest/terrain';
 import type { Zone } from '../types';
 import { aldhavenChunks, buildAldhavenChunk } from './chunks';
 import { CITY_GROUND, CITY_WATER } from './palette';
+import { ALDHAVEN_PEOPLE } from './people';
 import { ALDHAVEN, ALDHAVEN_ATMOSPHERE, type AldhavenPlan, planAldhaven } from './plan';
 
 /**
@@ -17,9 +18,10 @@ import { ALDHAVEN, ALDHAVEN_ATMOSPHERE, type AldhavenPlan, planAldhaven } from '
  * sunburst; and the Greyspine's feet past its north edge, the gorge going on
  * up into them. Its own air is the harbour's: the wind off the sea, the
  * surf, the gulls; the river, the quays, the forge and the windmill sound
- * where they are. Nothing lives here yet and nothing can hurt you: no camps,
- * no people, nowhere to wake, no interiors. It meets Brackenmoor on its west
- * edge, over the Kingsroad, and the Sallows on its south, over the causeway.
+ * where they are. Its people work the market and the harbour (people.ts);
+ * nothing can hurt you: no camps, nowhere to wake, no interiors. It meets
+ * Brackenmoor on its west edge, over the Kingsroad, and the Sallows on its
+ * south, over the causeway.
  */
 export function buildAldhaven(given?: AldhavenPlan): Zone {
   const plan = given ?? planAldhaven();
@@ -63,7 +65,7 @@ export function buildAldhaven(given?: AldhavenPlan): Zone {
     interiors: [],
     mine: null,
     villagers: [],
-    people: [],
+    people: ALDHAVEN_PEOPLE,
     // Within 100 m the cathedral front and the Aldbridge break the frame budget; within 50 m every
     // spot fits, and the busiest circle has 45 people (aldhaven-inhabitants.md).
     crowd: { near: 50, most: 45 },

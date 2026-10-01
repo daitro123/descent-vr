@@ -1,4 +1,5 @@
 import type { Material } from 'three';
+import type { WorkName } from '../people/work';
 import { apron, BUILDS, body, cuffs, HUE, head, type Look, mail, pauldrons, rolledSleeves, sheathedSword, tabard } from './human';
 import { PAL } from './palette';
 import { type DressContext, type Pose, Rig } from './rig';
@@ -21,6 +22,14 @@ export interface Person {
   dress(ctx: DressContext, look: Look): void;
   /** Varies the per-face shading. */
   seed: number;
+  /** The work loops (people/work.ts) this look is made for, beyond standing about: shown in the model inspector. */
+  works?: readonly WorkName[];
+  /** What a stallholder cries to anyone near at their work, one line after the next, unless where they're placed says otherwise. */
+  cries?: readonly string[];
+  /** What they carry when they carry (a sack on the shoulder, a crate in their arms), dressed onto them only while they hold it. */
+  load?(ctx: DressContext, look: Look): void;
+  /** The pose they stand in, and walk in, while they hold their load. */
+  carry?: Pose;
 }
 
 const STAND: Pose = {
@@ -100,7 +109,7 @@ function dressHale(ctx: DressContext, l: Look, given = false): void {
   sheathedSword(ctx, l, PAL.gold, !given);
 }
 
-function tankard(ctx: DressContext): void {
+export function tankard(ctx: DressContext): void {
   ctx
     .on('handR')
     .cyl(0.05, 0.05, 0.13, 8, { at: [0, -0.06, 0.07], rot: [PI / 2, 0, 0], color: PAL.wood })
@@ -108,7 +117,7 @@ function tankard(ctx: DressContext): void {
     .cyl(0.045, 0.045, 0.01, 8, { at: [0, -0.125, 0.07], rot: [PI / 2, 0, 0], color: 0xe8dcc0 });
 }
 
-function hammer(ctx: DressContext): void {
+export function hammer(ctx: DressContext): void {
   ctx
     .on('handR')
     .box(0.03, 0.42, 0.03, { at: [0, -0.14, 0], color: PAL.woodDark })
@@ -116,14 +125,14 @@ function hammer(ctx: DressContext): void {
 }
 
 /** Along the hand's Z, so it stands upright with the forearm held level. */
-function pitchfork(ctx: DressContext): void {
+export function pitchfork(ctx: DressContext): void {
   const b = ctx.on('handR');
   b.cyl(0.02, 0.02, 1.55, 5, { at: [0, -0.02, -0.05], rot: [PI / 2, 0, 0], color: PAL.wood }).box(0.18, 0.02, 0.03, { at: [0, -0.02, 0.73], color: PAL.ironDark });
   for (const x of [-0.08, 0, 0.08]) b.box(0.015, 0.015, 0.22, { at: [x, -0.02, 0.85], color: PAL.iron });
 }
 
 /** Tongs in the left hand, gripping a bar hot from the forge across their jaws. */
-function tongs(ctx: DressContext): void {
+export function tongs(ctx: DressContext): void {
   ctx
     .on('handL')
     .box(0.016, 0.44, 0.016, { at: [-0.013, -0.2, 0.01], color: PAL.ironDark })
@@ -132,7 +141,7 @@ function tongs(ctx: DressContext): void {
 }
 
 /** A rag in the left hand, for the bar and the tankards. */
-function rag(ctx: DressContext): void {
+export function rag(ctx: DressContext): void {
   ctx.on('handL').box(0.11, 0.025, 0.13, { at: [0, -0.075, 0.02], color: HUE.linenDark });
 }
 
@@ -230,7 +239,7 @@ const HERBALIST_LOOK: Look = {
 };
 
 /** A bundle of Hearthleaf in the left hand, tied at the stems. */
-function herbs(ctx: DressContext): void {
+export function herbs(ctx: DressContext): void {
   ctx
     .on('handL')
     .box(0.02, 0.1, 0.02, { at: [0, -0.06, 0.02], color: HUE.strawDark })

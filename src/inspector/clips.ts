@@ -3,12 +3,14 @@ import { SUMMON_ATTACK } from '../enemies/kinds';
 import { ATTACK_POSES, GUARD, type GuardSide, IDLE, KNEEL, KNEEL_DROP, RISE, STAGGER, walkOffsets } from '../enemies/poses';
 import { type EnemyKind, type Family, proportionsOf } from '../models/characters';
 import { BUILDS, type BuildName } from '../models/human';
-import { PEOPLE, type PersonId } from '../models/people';
+import { PEOPLE, type Person, type PersonId } from '../models/people';
 import { BONES, blendPoses, type Pose, type Proportions } from '../models/rig';
 import { CAST, type CastId } from '../people/cast';
 import { BREATH_PERIOD, friendlyPose } from '../people/poses';
+import { type Folded, sitting } from '../people/sit';
+import { SAT_AT } from '../people/trades';
 import { walkFrame, walkOver } from '../people/walk';
-import { WORKS, workLoop } from '../people/work';
+import { WORKS, type WorkName, workLoop } from '../people/work';
 
 // The inspector's animations: every pose the game plays for a kind, as a
 // looping clip with the game's own timings and easing (see Enemy.updateAttack),
@@ -27,6 +29,10 @@ export interface ClipFrame {
   phase: string;
   /** Weapon telegraph as the game shows it: 0 = off, else its strength. */
   telegraph: number;
+  /** How far round they've turned from facing the viewer (a villager's work with a second place), rad, + to their left. */
+  turn?: number;
+  /** Whether a carrier's load is in their hands (people/cast.ts `Wardrobe.burden`). */
+  laden?: boolean;
 }
 
 export interface Clip {
@@ -216,24 +222,64 @@ export function personClips(id: PersonId): Clip[] {
   return clips;
 }
 
+/** A bench's seat, m over the floor: where the inspector sits anyone. */
+const BENCH = 0.5;
+
+/** One of the cast at `name`'s work, as a villager at it in a zone: turning on the spot to its second place, on folded legs if `sit`. */
+function castWorkClip(person: Person, name: WorkName, label: string, sit: Folded | null): Clip {
+  const build = BUILDS[person.look.build];
+  const work = WORKS[name](person.stand, 0, { build, carry: person.carry });
+  return {
+    name: label,
+    duration: work.duration,
+    sample: (t, out) => {
+      const at = work.at(t);
+      const pose = { ...friendlyPose(at.pose, t), ...sit?.legs };
+      const hip = sit?.hip ?? at.hip;
+      return { pose: copyInto(pose, out), hipY: hip[1], hip: [hip[0], hip[1], hip[2]], phase: label, telegraph: 0, turn: at.turn, laden: work.laden?.(t) };
+    },
+  };
+}
+
 /**
  * One of the cast a zone places (people/cast.ts): standing at ease, standing
- * about (the work of anyone without one), and strolling, as a villager walks
- * their route at their build's pace (people/villagers.ts).
+ * about (the work of anyone without one), at each of the works they're made
+ * for (sitting at those done sitting), standing about seated on a bench,
+ * walking with their load if they carry one, and strolling, as a villager
+ * walks their route at their build's pace (people/villagers.ts).
  */
 export function castClips(id: CastId): Clip[] {
-  const { stand, look } = CAST[id];
-  const about = WORKS.stand(stand);
-  return [
+  const person: Person = CAST[id];
+  const { stand, look } = person;
+  const build = BUILDS[look.build];
+  const works = (person.works ?? []).map((name) => {
+    const seat = SAT_AT[name as keyof typeof SAT_AT];
+    return castWorkClip(person, name, seat ? `${name} (sitting)` : name, seat ? sitting(build, seat) : null);
+  });
+  const clips: Clip[] = [
     { name: 'stand', duration: BREATH_PERIOD, sample: (t, out) => ({ pose: copyInto(friendlyPose(stand, t), out), hipY: 0, phase: 'stand', telegraph: 0 }) },
-    {
-      name: 'stand about',
-      duration: about.duration,
-      sample: (t, out) => {
-        const at = about.at(t);
-        return { pose: copyInto(friendlyPose(at.pose, t), out), hipY: at.hip[1], phase: 'work', telegraph: 0 };
-      },
-    },
-    strollClip(stand, look.build),
+    castWorkClip(person, 'stand', 'stand about', null),
+    ...works,
+    castWorkClip(person, 'stand', 'sit', sitting(build, { height: BENCH })),
   ];
+  if (person.load && person.carry) clips.push(carryClip(stand, person.carry, look.build));
+  clips.push(strollClip(stand, look.build));
+  return clips;
+}
+
+/** Walking with their load held as they hold it, not swung: a docker with a sack on their shoulder, a porter with a crate. */
+function carryClip(stand: Pose, carry: Pose, build: BuildName): Clip {
+  const walk = strollClip(carry, build);
+  const held = (['upperArmL', 'forearmL', 'handL', 'upperArmR', 'forearmR', 'handR'] as const).filter((b) =>
+    [0, 1, 2].some((i) => Math.abs((carry[b]?.[i] ?? 0) - (stand[b]?.[i] ?? 0)) > 0.05),
+  );
+  return {
+    name: 'carry',
+    duration: walk.duration,
+    sample: (t, out) => {
+      const frame = walk.sample(t, out);
+      for (const b of held) out[b] = [...(carry[b] ?? [0, 0, 0])] as [number, number, number];
+      return { ...frame, phase: 'carry', laden: true };
+    },
+  };
 }

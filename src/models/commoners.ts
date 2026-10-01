@@ -22,7 +22,7 @@ const HABIT = 0x5e4632;
 const WELD = 0x9a9a5a;
 
 /** Standing easy, hands at the sides. */
-const EASY: Pose = {
+export const EASY: Pose = {
   spine: [0.02, 0, 0],
   upperArmL: [0.04, 0, 0.1],
   forearmL: [-0.2, 0, 0],
@@ -33,10 +33,10 @@ const EASY: Pose = {
 };
 
 /** Standing easy in a skirt, the hands clear of it. */
-const EASY_SKIRT: Pose = { ...EASY, upperArmL: [0.04, 0, 0.17], upperArmR: [0.04, 0, -0.17] };
+export const EASY_SKIRT: Pose = { ...EASY, upperArmL: [0.04, 0, 0.17], upperArmR: [0.04, 0, -0.17] };
 
 /** Hands folded before the waist: into their sleeves, or holding their shawl. */
-const FOLDED: Pose = {
+export const FOLDED: Pose = {
   ...EASY,
   upperArmL: [-0.18, 0, 0.12],
   forearmL: [-1.25, -0.55, 0],
@@ -47,7 +47,7 @@ const FOLDED: Pose = {
 };
 
 /** An old man's stand: leaning on a stick planted ahead at the right, the left hand easy. */
-const STICK_STAND: Pose = {
+export const STICK_STAND: Pose = {
   ...EASY,
   upperArmL: [0.02, 0, 0.12],
   forearmL: [-0.35, 0, 0],
@@ -57,7 +57,7 @@ const STICK_STAND: Pose = {
 };
 
 /** A child's stand: weight on one leg, head cocked, looking about. */
-const CHILD_STAND: Pose = {
+export const CHILD_STAND: Pose = {
   ...EASY,
   spine: [0, 0.08, 0.04],
   head: [0.05, -0.15, 0.08],
@@ -70,7 +70,7 @@ const CHILD_STAND: Pose = {
 };
 
 /** A shepherd's crook planted upright at their right side, the right forearm level. */
-const CROOK_STAND: Pose = {
+export const CROOK_STAND: Pose = {
   spine: [0.02, 0, 0],
   upperArmL: [0.04, 0, 0.1],
   forearmL: [-0.2, 0, 0],
@@ -81,7 +81,7 @@ const CROOK_STAND: Pose = {
 };
 
 /** A basket on the left forearm, held across the body; the right hand easy. */
-const BASKET_STAND: Pose = {
+export const BASKET_STAND: Pose = {
   spine: [0.02, 0, 0],
   upperArmL: [-0.15, 0.25, 0.12],
   forearmL: [-1.45, 0, 0],
@@ -187,7 +187,7 @@ const GREYBEARD_LOOK: Look = {
 };
 
 /** A walking stick in the right hand, held along the hand's -Y: it reaches the ground ahead of the right foot. */
-function stick(ctx: DressContext, len: number): void {
+export function stick(ctx: DressContext, len: number): void {
   ctx
     .on('handR')
     .cyl(0.018, 0.016, len, 5, { at: [0, -len / 2 + 0.03, 0.01], color: PAL.woodDark })

@@ -41,6 +41,19 @@ export class BarkRule {
   }
 
   /**
+   * Show villager `i`'s line now for `time` s (a stallholder's cry, as their
+   * work calls it), if fewer than `most` show: whether it shows. It leaves
+   * their bark armed for when you come close.
+   */
+  call(i: number, time: number): boolean {
+    let shown = 0;
+    for (const left of this.left) if (left > 0) shown++;
+    if (this.left[i] > 0 || shown >= this.times.most) return false;
+    this.left[i] = time;
+    return true;
+  }
+
+  /**
    * One step: `far[i]` is how far you are from villager `i` (Infinity while
    * they aren't drawn). Returns the villagers whose bark starts this step,
    * nearest first.

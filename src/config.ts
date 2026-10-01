@@ -995,6 +995,16 @@ export const CONFIG = {
     farmer: { lean: 4, shift: 1.2, look: 3, lift: 0.8 }, // s each: a lean before each shift of weight, the look after every second one, the hand going up and down
     // Standing about, for anyone with no work of their own: weight on one foot, then the other, and a look round each side now and then.
     stand: { rest: 5, shift: 1.4, turn: 0.7, glance: 2.2, look: 0.75, hip: 0.025 }, // s on a foot, shifting, turning the head and looking; rad the head turns; m the hips shift
+    // A stallholder crying their wares (people/trades.ts `cry`): their cry shows over their head, by the barks' rule's
+    // `most`, as their loop calls it while you're within `within` m, for `time` s.
+    cry: { within: 9, time: 3.5 },
+    // Two talking (people/trades.ts `talk`): each speaks for `speak` s while the other listens, then listens as long.
+    talk: { speak: 6 },
+    // A carrier walking their route (people/villagers.ts): they bend to set the load down at its far end and pick
+    // another up at its start, while they stand there, the bend taking `bend` s down and as long back up.
+    carry: { bend: 0.9 },
+    // Sitting (people/sit.ts): the hips' joint this far over the seat, m at thickness 1.
+    sit: { over: 0.09 },
   },
 
   // Talking to Hale on a board that unfolds beside them: the talk prototype's

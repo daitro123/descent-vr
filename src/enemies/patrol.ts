@@ -55,6 +55,16 @@ export class PatrolWalk {
     return this.resting > 0;
   }
 
+  /** Is it bound from the road's first point to its last (or standing at the last, not yet turned back)? */
+  get outbound(): boolean {
+    return this.heading > 0;
+  }
+
+  /** Seconds it has left standing at the end it reached; 0 while walking. */
+  get restLeft(): number {
+    return this.resting;
+  }
+
   /** Back to the road's first end, the file's head just leaving it; or `along` m along it, walking on. */
   reset(along = this.half): void {
     this.middle = Math.max(this.half, Math.min(this.length - this.half, along));

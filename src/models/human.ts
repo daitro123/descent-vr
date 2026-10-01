@@ -242,7 +242,7 @@ const bellyOf = (l: Look) => BUILDS[l.build].belly;
 const figureOf = (l: Look) => BUILDS[l.build].figure;
 
 /** How far forward of the spine a panel over the chest hangs (a tabard, an apron's bib), clear of the belly and the bust. */
-function chestFront(l: Look, front: number): number {
+export function chestFront(l: Look, front: number): number {
   const k = thick(l);
   const { bust } = figureOf(l);
   const z = (front + bellyOf(l) * 0.6) * k;

@@ -3,9 +3,10 @@ import { CONFIG, type EnemyConfig } from '../src/config';
 import { IDLE } from '../src/enemies/poses';
 import { castClips, clipsFor, type MutablePose, personClips } from '../src/inspector/clips';
 import type { EnemyKind } from '../src/models/characters';
-import { PEOPLE, type PersonId } from '../src/models/people';
+import { PEOPLE, type Person, type PersonId } from '../src/models/people';
 import { BONES } from '../src/models/rig';
 import { CAST, type CastId } from '../src/people/cast';
+import { SAT_AT } from '../src/people/trades';
 
 const KINDS: EnemyKind[] = ['grunt', 'archer', 'brute', 'warden'];
 
@@ -72,10 +73,12 @@ describe('inspector clips', () => {
     expect(armUp(wave.duration - 0.01)).toBeLessThan(0.2);
   });
 
-  it("show the cast zones place standing at ease, standing about and walking, each looping round without a jump", () => {
+  it("show the cast zones place standing at ease, standing about, at their works, sitting and walking, each looping round without a jump", () => {
     for (const id of Object.keys(CAST) as CastId[]) {
       const clips = castClips(id);
-      expect(clips.map((c) => c.name)).toEqual(['stand', 'stand about', 'walk']);
+      const person: Person = CAST[id];
+      const works = (person.works ?? []).map((w) => (w in SAT_AT ? `${w} (sitting)` : w));
+      expect(clips.map((c) => c.name)).toEqual(['stand', 'stand about', ...works, 'sit', ...(person.load ? ['carry'] : []), 'walk']);
       const out: MutablePose = {};
       const flat = (pose: Partial<Record<string, readonly number[]>>) => BONES.flatMap((b) => pose[b] ?? [0, 0, 0]);
       for (const clip of clips.slice(1)) {

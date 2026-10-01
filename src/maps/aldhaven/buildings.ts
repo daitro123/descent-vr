@@ -1322,6 +1322,20 @@ function anchor(b: ModelBuilder, w: number): void {
   b.cyl(0.22, 0.22, 0.06, 8, { at: [-w / 2 - 0.2, 0.06, 0], color: C.iron });
 }
 
+/** Something to sit on, its top at `h`: a crate on its end, iron-banded, or (variant 1) a three-legged stool. */
+function stool(b: ModelBuilder, w: number, d: number, h: number, variant: number): void {
+  if (variant === 1) {
+    b.cyl(w / 2, w / 2, 0.06, 8, { at: [0, h - 0.03, 0], color: C.plank });
+    for (let k = 0; k < 3; k++) {
+      const a = (k / 3) * PI * 2;
+      b.bar([Math.sin(a) * w * 0.3, h - 0.06, Math.cos(a) * w * 0.3], [Math.sin(a) * w * 0.45, 0, Math.cos(a) * w * 0.45], 0.05, 0.05, { color: C.timber });
+    }
+    return;
+  }
+  slab(b, w, h, d, 0, 0, 0, C.plank, { jitter: 0.03 });
+  for (const y of [0.08, h - 0.12]) slab(b, w + 0.02, 0.04, d + 0.02, 0, y, 0, C.iron, { jitter: 0 });
+}
+
 /** A stone planter by a door: herbs and flowers. */
 function planter(b: ModelBuilder, w: number, d: number, h: number, variant: number, rand: Rand): void {
   slab(b, w, h, d, 0, 0, 0, variant === 1 ? C.basaltLight : C.limestoneShade);
@@ -1425,6 +1439,7 @@ export function buildPiece(p: Piece, far = false): BufferGeometry {
     case 'sacks': sacks(b, rand); break;
     case 'anchor': anchor(b, p.w); break;
     case 'planter': planter(b, p.w, p.d, p.h, p.variant, rand); break;
+    case 'stool': stool(b, p.w, p.d, p.h, p.variant); break;
   }
   if (p.drop) steps(b, doorX(p), p.d, p.drop, STEPS_WIDE.has(p.kind) ? Math.min(8, p.w * 0.4) : 1.8);
   return b.build();

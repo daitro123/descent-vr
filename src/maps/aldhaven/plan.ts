@@ -112,13 +112,13 @@ export type PieceKind =
   | 'marketCross' | 'stall' | 'lamp' | 'well' | 'statue' | 'grave' | 'butt' | 'dummy' | 'bench'
   | 'crates' | 'barrels' | 'cart' | 'ship' | 'boat' | 'signpost' | 'mapboard' | 'banner' | 'sinkhole' | 'haystack' | 'bollard' | 'pondRim'
   | 'fountain' | 'kerb' | 'tent' | 'bundle' | 'nets' | 'vats' | 'rack' | 'woodpile' | 'shed' | 'sacks' | 'anchor' | 'planter'
-  | 'washing';
+  | 'washing' | 'stool';
 
 /** Too small to see from a stand-in's distance. */
 export const SMALL: ReadonlySet<PieceKind> = new Set<PieceKind>([
   'stall', 'lamp', 'well', 'statue', 'grave', 'butt', 'dummy', 'bench', 'crates', 'barrels', 'cart', 'boat',
   'signpost', 'mapboard', 'banner', 'sinkhole', 'haystack', 'bollard', 'pondRim',
-  'fountain', 'kerb', 'tent', 'bundle', 'nets', 'vats', 'rack', 'woodpile', 'shed', 'sacks', 'anchor', 'planter', 'washing',
+  'fountain', 'kerb', 'tent', 'bundle', 'nets', 'vats', 'rack', 'woodpile', 'shed', 'sacks', 'anchor', 'planter', 'washing', 'stool',
 ]);
 
 /**
@@ -1095,6 +1095,11 @@ export function planAldhaven(): AldhavenPlan {
     else if (rand() < 0.4 && h > 0.5) plant('grass', x, z, 0.8 + rand() * 0.6);
     else if (rand() < 0.04 && h > 0.5 && z < wall.south) plant('bush', x, z, 0.7 + rand() * 0.4);
   });
+
+  // Seats for the people who sit at their work by the water (maps/aldhaven/people.ts): a stool each for the net menders
+  // by the drying nets, and the light keeper's crate at the light's foot. Last, so nothing placed before them moves.
+  for (const x of [60, 66]) put('stool', x, 25.4, 0, { w: 0.4, d: 0.36, h: 0.45, variant: 1 }, 'none');
+  put('stool', 145, 41, -0.8, { w: 0.55, d: 0.45, h: 0.45 }, 'none');
 
   // ---- Into the world: move everything from the city's frame to its place.
   const heightAt = (x: number, z: number) => ground0(x - ox, z - oz);

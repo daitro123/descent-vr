@@ -3,6 +3,8 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
 import { MAPS } from '../src/maps/registry';
 import type { PersonPlan, Zone } from '../src/maps/types';
+import { BUILDS } from '../src/models/human';
+import type { Person } from '../src/models/people';
 import { CAST, type CastId, Wardrobe } from '../src/people/cast';
 import { Fallen } from '../src/people/fallen';
 import { type Builder, type Placed, Population, type Streets, villagersOn } from '../src/people/population';
@@ -308,7 +310,8 @@ describe('the wardrobe', () => {
   it('gives every work loop to anyone of the cast', () => {
     for (const id of Object.keys(CAST) as CastId[]) {
       for (const [name, make] of Object.entries(WORKS)) {
-        const loop = make(CAST[id].stand, -1);
+        const p: Person = CAST[id];
+        const loop = make(p.stand, -1, { build: BUILDS[p.look.build], carry: p.carry });
         expect(loop.duration, `${id} ${name}`).toBeGreaterThan(0);
       }
     }

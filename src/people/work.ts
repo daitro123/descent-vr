@@ -1,6 +1,8 @@
 import { CONFIG } from '../config';
-import { blendPoses, type Pose } from '../models/rig';
 import type { PersonId } from '../models/people';
+import type { Pose } from '../models/rig';
+import { clamp01, ease, eventsBetween, hold, loop, mix, move, plus, type Segment, still, type WorkLoop, type Worker } from './loop';
+import { TRADES } from './trades';
 
 // What the villagers do all day, on the human body: pure loops of poses, shared
 // by the game and the model inspector so what loops on the plinth is what
@@ -11,76 +13,7 @@ import type { PersonId } from '../models/people';
 // the pitchfork, shifts their weight and shades their eyes to look off
 // towards the farm.
 
-/** A moment of work: the pose, how far they've turned from their spot's facing (rad, + to their left), and the hips' shift. */
-export interface Working {
-  readonly pose: Pose;
-  readonly turn: number;
-  readonly hip: readonly [number, number, number];
-}
-
-/** A villager's work, round and round. */
-export interface WorkLoop {
-  /** Seconds round the loop. */
-  readonly duration: number;
-  /** Where the loop is `t` s in (any t: it wraps). */
-  at(t: number): Working;
-  /** The seconds into the loop at which the smith's hammer lands on the anvil: none for the others. */
-  readonly strikes: readonly number[];
-}
-
-/** One stretch of a loop: `u` goes 0 to 1 across its `time` seconds. */
-interface Segment {
-  readonly time: number;
-  at(u: number): Working;
-}
-
-const ease = (u: number) => u * u * (3 - 2 * u);
-const clamp01 = (u: number) => Math.max(0, Math.min(1, u));
-const STILL: readonly [number, number, number] = [0, 0, 0];
-
-/** `a` to `b`, `t` of the way (both poses, the turn and the hips). */
-function mix(a: Working, b: Working, t: number): Working {
-  return {
-    pose: blendPoses(a.pose, b.pose, t, {}),
-    turn: a.turn + (b.turn - a.turn) * t,
-    hip: [a.hip[0] + (b.hip[0] - a.hip[0]) * t, a.hip[1] + (b.hip[1] - a.hip[1]) * t, a.hip[2] + (b.hip[2] - a.hip[2]) * t],
-  };
-}
-
-const still = (pose: Pose, turn = 0, hip = STILL): Working => ({ pose, turn, hip });
-/** Easing from `a` to `b` over `time` s. */
-const move = (time: number, a: Working, b: Working): Segment => ({ time, at: (u) => mix(a, b, ease(u)) });
-/** Holding `w`, `time` s. */
-const hold = (time: number, w: Working): Segment => ({ time, at: () => w });
-
-/** A pose with `add` added onto `base`, bone by bone. */
-function plus(base: Pose, add: Pose): Pose {
-  const out: Record<string, [number, number, number]> = {};
-  for (const [bone, r] of Object.entries(base)) out[bone] = [r[0], r[1], r[2]];
-  for (const [bone, r] of Object.entries(add)) {
-    const o = (out[bone] ??= [0, 0, 0]);
-    for (let i = 0; i < 3; i++) o[i] += r[i];
-  }
-  return out;
-}
-
-/** The segments strung into a loop, with the strikes found at `strikes` (s into a segment, by segment). */
-function loop(segments: readonly Segment[], strikes: readonly number[] = []): WorkLoop {
-  const duration = segments.reduce((s, g) => s + g.time, 0);
-  return {
-    duration,
-    strikes,
-    at(t: number): Working {
-      let at = ((t % duration) + duration) % duration;
-      for (const g of segments) {
-        if (at < g.time) return g.at(at / g.time);
-        at -= g.time;
-      }
-      const last = segments[segments.length - 1];
-      return last.at(1);
-    },
-  };
-}
+export type { Working, WorkLoop, Worker } from './loop';
 
 // ------------------------------------------------------------------ the smith
 
@@ -342,10 +275,11 @@ function standLoop(stand: Pose): WorkLoop {
 
 /**
  * Every work loop a zone can give a villager (maps/types.ts `PersonPlan`), by
- * name: standing about, or one of Oakvale's trades. Each is made from the
- * villager's standing pose and, for a work with a second place (the smith's
- * bellows), how far round to their left it stands. A model family adds its
- * own loops here.
+ * name: standing about, one of Oakvale's trades, or one of the city's
+ * (people/trades.ts). Each is made from the villager's standing pose, for a
+ * work with a second place (the smith's bellows) how far round to their left
+ * it stands, and who's at it (their build). A model family adds its own loops
+ * here.
  */
 export const WORKS = {
   stand: (stand: Pose) => standLoop(stand),
@@ -353,7 +287,8 @@ export const WORKS = {
   innkeeper: () => innkeeperLoop(),
   farmer: () => farmerLoop(),
   herbalist: () => herbalistLoop(),
-} satisfies Record<string, (stand: Pose, turn: number) => WorkLoop>;
+  ...TRADES,
+} satisfies Record<string, (stand: Pose, turn: number, who: Worker) => WorkLoop>;
 
 /** A work loop's name. */
 export type WorkName = keyof typeof WORKS;
@@ -374,12 +309,5 @@ export function workLoop(id: Exclude<PersonId, 'hale'>, bellowsTurn = 0): WorkLo
 
 /** How many of `loop`'s blows land after `from` s and up to `to` s (any times: it wraps). */
 export function strikesBetween(work: WorkLoop, from: number, to: number): number {
-  const { duration, strikes } = work;
-  if (!strikes.length || to <= from) return 0;
-  const count = (t: number) => {
-    const rounds = Math.floor(t / duration);
-    const into = t - rounds * duration;
-    return rounds * strikes.length + strikes.filter((s) => s <= into).length;
-  };
-  return count(to) - count(from);
+  return eventsBetween(work.strikes, work.duration, from, to);
 }

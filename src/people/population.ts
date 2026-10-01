@@ -4,11 +4,13 @@ import type { FileSpot, PatrolWalk } from '../enemies/patrol';
 import type { Crowd, PersonPlan } from '../maps/types';
 import { BUILDS } from '../models/human';
 import { sharedModelMaterial } from '../models/materials';
+import type { Person } from '../models/people';
 import { NO_STORY, type Story, there } from '../story';
 import type { Ground } from '../world/ground';
 import { BarkRule } from './barks';
 import { CAST, Wardrobe } from './cast';
 import { Fallen } from './fallen';
+import { sitting } from './sit';
 import { strollFrom, Villager } from './villagers';
 import { WORKS } from './work';
 
@@ -21,9 +23,11 @@ import { WORKS } from './work';
 // walk goes on while they're dropped, so you don't find everyone where you
 // left them. Each says the next of their lines as you pass, by the barks'
 // rule. Someone placed from or until a moment in a quest is there only
-// between them (story.ts), and the fallen lie still where they fell. Oakvale's own cast (people/villagers.ts `Villagers`) isn't here: the
-// quests, the wares and the trainers know them by name, and they stand from
-// the start.
+// between them (story.ts), and the fallen lie still where they fell. A
+// stallholder cries their wares as their work calls it, to anyone near
+// enough to hear. Oakvale's own cast (people/villagers.ts `Villagers`) isn't
+// here: the quests, the wares and the trainers know them by name, and they
+// stand from the start.
 
 const _spot: FileSpot = { x: 0, z: 0, yaw: 0 };
 
@@ -40,6 +44,8 @@ export interface Placed {
   far(you: Vector3): number;
   /** Show `line` over their head, or hide it (null). */
   say(line: string | null): void;
+  /** How many times their work called for a cry this frame (a stallholder's): none, for most. */
+  readonly cried?: number;
 }
 
 /** How the population builds a villager, and takes one away. */
@@ -57,8 +63,9 @@ interface Slot<P> {
   readonly stroll: PatrolWalk | null;
   /** Their body, while you're near; null while they're dropped. */
   person: P | null;
-  /** Which of their lines they say next. */
+  /** Which of their lines they say next, and of their cries. */
   next: number;
+  cry: number;
   /** How far you are from them (from where they'd stand, while dropped). */
   far: number;
   /** How near they are for building: built ones count `hysteresis` nearer, so they're kept until you've gone well past. */
@@ -88,7 +95,9 @@ export class Population<P extends Placed = Inhabitant> {
     for (const plan of people) {
       // Each strolls at their build's pace: an elder slower than a grown man or a child.
       const stroll = plan.route?.length ? strollFrom(plan.x, plan.z, plan.route, BUILDS[CAST[plan.cast].look.build].gait.speed) : null;
-      this.slots.push({ plan, stroll, person: null, next: 0, far: Infinity, rank: Infinity });
+      // Two on one route start apart, so they don't walk it in step.
+      if (stroll && plan.start) stroll.reset(plan.start * stroll.length);
+      this.slots.push({ plan, stroll, person: null, next: 0, cry: 0, far: Infinity, rank: Infinity });
     }
     this.rule.grow(people.length);
   }
@@ -138,6 +147,15 @@ export class Population<P extends Placed = Inhabitant> {
       const s = slots[i];
       const lines = s.plan.barks!;
       s.person?.say(lines[s.next++ % lines.length]);
+    }
+    // A cry, as their work calls it, to anyone near enough to hear, if no more than the barks' most are showing.
+    const C = CONFIG.villagers.cry;
+    for (let i = 0; i < slots.length; i++) {
+      const s = slots[i];
+      if (!s.person?.cried || !s.person.shown || s.far > C.within || this.rule.showing(i)) continue;
+      const cast: Person = CAST[s.plan.cast];
+      const cries = s.plan.cries ?? cast.cries;
+      if (cries?.length && this.rule.call(i, C.time)) s.person.say(cries[s.cry++ % cries.length]);
     }
     for (let i = 0; i < slots.length; i++) if (!this.rule.showing(i)) slots[i].person?.say(null);
   }
@@ -197,8 +215,9 @@ export interface Streets extends Ground {
 /**
  * The game's villagers for a `Population`: each hung from `root` (hidden with
  * the outdoors), standing on `streets` and solid in it (the fallen lie on it,
- * not solid), in a body from the cast's `wardrobe` (shared by everyone
- * dressed alike), culled out of view.
+ * not solid; one on a deck stands on it, not solid), in a body from the
+ * cast's `wardrobe` (shared by everyone dressed alike, and their load with
+ * it while they carry one), culled out of view. Those placed sitting sit.
  */
 export function villagersOn(
   streets: Streets,
@@ -208,7 +227,7 @@ export function villagersOn(
 ): Builder<Inhabitant> {
   return {
     make(plan, stroll) {
-      const person = CAST[plan.cast];
+      const person: Person = CAST[plan.cast];
       const rig = wardrobe.dress(plan.cast, material);
       rig.cullOutside(CONFIG.population.pad);
       if (plan.fallen) {
@@ -217,27 +236,36 @@ export function villagersOn(
         return fallen;
       }
       const turn = plan.turn ?? 0;
+      const build = BUILDS[person.look.build];
+      const work = WORKS[plan.work ?? 'stand'](person.stand, turn, { build, carry: person.carry });
+      // A load carried on their walk, or taken up and set down at their work.
+      const carries = person.load && (stroll || work.laden);
       const villager = new Villager(
-        { id: plan.id, x: plan.x, z: plan.z, yaw: plan.yaw, interior: null, turn },
+        { id: plan.id, x: plan.x, z: plan.z, yaw: plan.yaw, interior: null, turn, y: plan.deck },
         {
           rig,
-          build: BUILDS[person.look.build],
+          build,
           label: plan.label ?? person.label,
           stand: person.stand,
-          work: WORKS[plan.work ?? 'stand'](person.stand, turn),
-          start: startOf(plan.id),
+          work,
+          start: plan.start ?? startOf(plan.id),
           gives: false,
+          sit: plan.seat !== undefined || plan.hang ? sitting(build, { height: plan.seat ?? 0, hang: plan.hang }) : undefined,
+          burden: carries ? { geometry: wardrobe.burden(plan.cast)!, carry: person.carry ?? person.stand } : undefined,
         },
         streets,
         stroll,
       );
       root.add(villager.root);
-      streets.addBody(villager.body);
+      if (plan.deck === undefined) streets.addBody(villager.body);
       return villager;
     },
     drop(person, plan) {
       person.dispose();
-      if (person instanceof Villager) streets.removeBody(person.body);
+      if (person instanceof Villager) {
+        if (plan.deck === undefined) streets.removeBody(person.body);
+        if (person.who.burden) wardrobe.unburden(plan.cast);
+      }
       wardrobe.undress(plan.cast);
     },
   };

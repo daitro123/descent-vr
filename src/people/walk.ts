@@ -20,7 +20,7 @@ import type { Build } from '../models/human';
 export const STANCE = 0.6;
 
 /** The boots' sole below the ankle, and how far the heel and the toe reach behind and ahead of it, at thickness 1 (human.ts `body`). */
-const SOLE = 0.03;
+export const SOLE = 0.03;
 const HEEL = 0.085;
 const TOE = 0.165;
 
@@ -48,7 +48,7 @@ const smooth = (t: number) => t * t * (3 - 2 * t);
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
 /** The thigh's and the shin's turns (x) that put the ankle at (`z` ahead, `y` up) from the hip joint, knee forward. */
-function reach(z: number, y: number, thigh: number, shin: number, out: [number, number]): [number, number] {
+export function reach(z: number, y: number, thigh: number, shin: number, out: [number, number] = [0, 0]): [number, number] {
   const d = clamp(Math.hypot(z, y), Math.abs(thigh - shin) + 1e-3, (thigh + shin) * 0.9999);
   const line = Math.atan2(-z, -y);
   const knee = Math.acos(clamp((thigh * thigh + shin * shin - d * d) / (2 * thigh * shin), -1, 1));

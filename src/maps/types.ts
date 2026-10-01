@@ -77,8 +77,30 @@ export interface PersonPlan {
   readonly yaw: number;
   /** What they do there, round and round (people/work.ts WORKS): standing about without one. */
   readonly work?: WorkName;
-  /** For a work with a second place (the smith's bellows): how far round to their left it stands, in radians. */
+  /** For a work with a second place (the smith's bellows, where a porter sets a sack down): how far round to their left it stands, in radians. */
   readonly turn?: number;
+  /**
+   * Sitting at their work, on a seat this high over the floor at their feet
+   * (a bench's 0.5, a crate's, 0 on the ground): the seat under their hips at
+   * (x, z) and their feet ahead of it (people/sit.ts). Never on a route.
+   */
+  readonly seat?: number;
+  /** Sitting on an edge (a quay's, the mole's), their legs hanging down over it before them. */
+  readonly hang?: boolean;
+  /**
+   * On a prop rather than the ground, its floor this high in world metres: a
+   * ship's deck, a moored boat, the crane's treadwheel. Not solid, and never
+   * on a route.
+   */
+  readonly deck?: number;
+  /**
+   * How far round their work they start, 0 to 1: two talking, half a loop
+   * apart, speak in turn. Else their own, from their id. A stroller starts
+   * this far along their way out: two carrying on one route don't walk in step.
+   */
+  readonly start?: number;
+  /** What they cry as their work calls it (a stallholder's wares, the crane hand's "Lower away!"), if not their cast's. */
+  readonly cries?: readonly string[];
   /** Their name over their barks, if not their cast's: "Old Maud". */
   readonly label?: string;
   /** What they say as you pass, one line after the next each time you come close: none, and they say nothing. */
