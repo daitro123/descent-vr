@@ -8,17 +8,21 @@
 // No zone places them yet (Brackenmoor's placement thread does that), so this
 // adds the camps and the fallen for the check, then for each place:
 // 1. everyone is raised there, standing with their soles on the ground (the
-//    bog dead once they've risen out of the peat);
+//    bog dead lurk under the peat and the pools until you come within 11 m,
+//    then rise);
 // 2. a view of each place a few metres off: every camp here leaves you be
 //    until you hurt one of it (the zone's own camps will fight from 8 m), so
 //    you can walk up to them;
 // 3. in a fight (each hurt with a scratch first): Red Annis, a digger and a
 //    bog dead brute each come at you and swing.
+// ONLY=3 (or 1,3,5) runs just those numbered parts below.
 import { mkdirSync } from 'node:fs';
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:5173';
 const shots = process.argv[3];
+const only = process.env.ONLY?.split(',');
+const part = (n) => !only || only.includes(String(n));
 if (shots) mkdirSync(shots, { recursive: true });
 const browser = await chromium.launch({
   executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
@@ -91,7 +95,7 @@ const ours = () =>
             sole = Math.min(sole, v.y);
           }
         });
-        return { kind: e.kind, family: e.family, x: p.x, z: p.z, ground: d.world.heightAt(p.x, p.z), sole, state: e.state, hittable: e.hittable, alive: e.alive };
+        return { kind: e.kind, family: e.family, x: p.x, z: p.z, ground: d.world.heightAt(p.x, p.z), sole, state: e.state, hittable: e.hittable, alive: e.alive, lurking: e.lurking };
       });
   });
 
@@ -213,6 +217,12 @@ async function standing(where, x, z, r) {
   for (const e of near) check(Math.abs(e.sole - e.ground) < 0.04, `${where}: the ${e.family} ${e.kind} at (${e.x.toFixed(1)}, ${e.z.toFixed(1)}) stands on the ground (${(e.sole - e.ground).toFixed(3)} m)`);
 }
 
+/** Our enemies within `r` m of (x, z) all lie hidden (raised, not risen, not to be hit). */
+async function lurking(where, x, z, r) {
+  const near = (await ours()).filter((e) => Math.hypot(e.x - x, e.z - z) < r);
+  check(near.length > 0 && near.every((e) => e.lurking && !e.hittable && e.sole < e.ground), `${where}: ${near.length} lie hidden till you come near`);
+}
+
 /**
  * Stand where you see the enemies within `r` m of (x, z) best from about
  * `dist` m off: on ground near their height, with a clear sight of as many of
@@ -273,8 +283,8 @@ async function swing(family, kind, name, x, z) {
     [family, kind, x, z, PICK],
   );
   let swung = false;
-  for (let i = 0; i < 72 * 8 && !swung; i++) {
-    await step(1 / 72);
+  for (let i = 0; i < 24 * 10 && !swung; i++) {
+    await step(1 / 24);
     swung = await page.evaluate(
       ([family, kind, x, z, pick]) => {
         const d = window.__descent;
@@ -312,6 +322,7 @@ async function away() {
   await step(1);
 }
 
+if (part(1)) {
 // 1. The line-ups on Turfmoss green, close enough to see faces: they leave you be.
 await standLooking(-92, 352, -92, 346, 4);
 await standing('Turfmoss green, the Kerchiefs', -92, 346, 6);
@@ -329,7 +340,9 @@ await standLooking(-87.5, 356.5, -87.5, 353, 0.3, -0.12);
 await shot('06-lineup-sledge-bogdead-close');
 await standLooking(-91, 349.5, -91, 353, 0.3, -0.05);
 await shot('07-lineup-diggers-behind');
+}
 
+if (part(2)) {
 // 2. Raven Scar: the pit's camp, out of their notice, and Red Annis on the lip.
 await away();
 await frame(-157, 214, 16, 9, true);
@@ -340,23 +353,41 @@ await shot('08-scar-pit');
 await frame(-151.4, 197.2, 3, 4.5, true);
 await standing('Raven Scar lip', -151.4, 197.2, 3);
 await shot('09-scar-annis');
+}
 
-// 3. Turfmoss's cuttings and the Blackmire: the bog dead rising out of the peat as you come, then standing.
+if (part(3)) {
+// 3. Turfmoss's cuttings and the Blackmire: the bog dead lie hidden till you
+// come within 11 m, then rise out of the peat and the pools.
 await away();
-await page.evaluate(() => window.__descent.teleport(-104, 372, Math.atan2(-(-112 + 104), -(377 - 372))));
+await standLooking(-100, 362, -112, 377, 1.5, -0.08);
+await lurking('Turfmoss cuttings, 18 m off', -112, 377, 8);
+await shot('10a-turfmoss-hidden');
+await page.evaluate(() => window.__descent.teleport(-111, 371, Math.atan2(-(-112 + 111), -(377 - 371))));
 await step(0.9);
 await shot('10-turfmoss-rising');
 await step(3);
 await standing('Turfmoss cuttings', -112, 377, 8);
 await frame(-112, 377, 8, 6, true);
 await shot('11-turfmoss-bogdead');
-await frame(-131, 409, 8, 6, true);
+// From the east bank: the pools 13 m off and more, then a step in among them
+// (within 11 m of all three) to rouse them and back to the bank to watch.
+await standLooking(-117, 404, -131.3, 408.7, 1.5, -0.1);
+await lurking('the Blackmire, 13 m off', -131, 409, 8);
+await shot('12a-blackmire-hidden');
+await page.evaluate(() => window.__descent.teleport(-126, 408, 0));
+await step(0.1);
+await standLooking(-121.5, 408, -131.3, 408.7, 0.9, -0.1);
+await shot('12b-blackmire-rising');
+await step(3);
 await standing('the Blackmire', -131, 409, 8);
+await standLooking(-121.5, 408, -131.3, 408.7, 0.2, -0.1);
 await shot('12-blackmire-bogdead');
 await frame(-153, 431, 9, 7, true);
 await standing('the hide', -153, 431, 9);
 await shot('13-hide');
+}
 
+if (part(4)) {
 // 4. The barrow field: the lamp crew at the dig, and the fallen by the open barrow.
 await frame(216, 235, 9, 7, true);
 await standing('the east dig', 216, 235, 9);
@@ -365,11 +396,14 @@ await standLooking(159, 187, 163.5, 181, 1, -0.35);
 await shot('15-fallen-at-the-barrow');
 await standLooking(164, 185, 163.5, 181, 0.2, -0.6);
 await shot('16-fallen-close');
+}
 
+if (part(5)) {
 // 5. In a fight: walk up to each and catch it mid-swing.
 await swing('moorBandit', 'brute', '17 Red Annis swings', -151.4, 197.2);
 await swing('moorBandit', 'brute', '18 Kerchief digger swings', -151, 437.6);
 await swing('bogDead', 'brute', '19 Bog dead brute swings', -128, 412);
+}
 
 check(errors.length === 0, `no page errors${errors.length ? `: ${errors.slice(0, 3).join(' | ')}` : ''}`);
 await browser.close();
