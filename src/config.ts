@@ -961,7 +961,7 @@ export const CONFIG = {
     most: 30, // villagers built at once, the nearest: a town's crowd is about 1.5k triangles and 2 draw calls each in view (zones/character-notes.md)
     perFrame: 1, // villagers built a frame as you walk, and as many of a camp's members: each is a few ms on the headset
     pad: 0.6, // m round a villager's body at bind that culls them out of view: room for their arms to swing and what they hold to move
-    walk: { speed: 1.1, pause: 4, stride: 6.5 }, // m/s strolling a route, s standing at each end, walk cycle's rad per metre walked
+    walk: { speed: 1.1, pause: 4 }, // m/s strolling a route (each build has its own pace: human.ts `Gait`), s standing at each end
   },
 
   // The village's people at work (people/villagers.ts, people/work.ts): the
