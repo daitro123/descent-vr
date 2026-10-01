@@ -140,7 +140,7 @@ describe("Oakvale's chunk builder", () => {
     // The Old North Pass (its slide, cairn, waymark and cart road, and the trees cleared off them) brings it to 215,629.
     // Oakvale's polish, with the budget doubled: footpaths to every door, worn yards, stream banks, ferns, crags on
     // the ridge and the pass, the camps' and farms' props, wheat in sheaves, and long grass and wild flowers over
-    // the meadows bring it to 317,789 (the worst heading at the mine's front draws 551k over both eyes, of 600k).
+    // the meadows bring it to 317,789 (the worst heading at the mine's front draws 544k over both eyes, of 600k).
     expect(triangles).toBe(317789);
   }, 20000);
 
