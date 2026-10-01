@@ -288,6 +288,10 @@ _Avoid_: crafting bench, workbench
 A friendly character who teaches a profession, gives its intro quest and sells its recipes. Oakvale has two: the smith (Mining and Smithing) and the herbalist (Herbalism and Alchemy).
 _Avoid_: teacher, master, NPC
 
+**Class trainer**:
+A friendly character who teaches a class its abilities and gives its class quests. Most look the part (a drill master with a drawn sword, a lodge-master with a longbow and a feathered cap, a magister in the Collegium's grey); one who looks like their trade instead, as Brannoc at his anvil, is dressed as that trade.
+_Avoid_: trainer alone (a trainer teaches a profession), class master, guildmaster
+
 **Proficiency**:
 How practised a character is at one profession: a number that climbs by gathering and making.
 _Avoid_: skill, level, experience

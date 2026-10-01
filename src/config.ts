@@ -1064,6 +1064,31 @@ export const CONFIG = {
       most: 2, // barks showing at once, at most
       over: 0.6, // m over the middle of their head, to the panel's middle (clear of the farmer's hat and pitchfork)
     },
+    // The robed and named figures' loops (models/clergy.ts, gentry.ts, trainers.ts), each in s unless it says otherwise.
+    figures: {
+      // A book: reading, a page turned now and then, and a look up over it at the street.
+      read: { read: 5, page: 1.0, lift: 0.8, look: 2.6 },
+      // A ledger: lines written in bursts, the pen down the page, a look up to smile at whoever passes.
+      ledger: { write: 3.2, strokes: 2.5, line: 0.6, lift: 0.7, look: 2.2 }, // strokes: per s
+      // A coin box: coins lifted out one at a time and dropped back, counted, then a look up.
+      coins: { lift: 0.45, drop: 0.35, count: 6, rest: 1.2, look: 2 },
+      // A hedge priest: salt taken from the bag and scattered in a fan, three throws, then a prayer.
+      salt: { dip: 0.8, throw: 0.6, throws: 3, pray: 4, rest: 2 },
+      // Hands folded: the head bowed in prayer, raised, and a glance down at the floor.
+      pray: { bow: 1.2, prayer: 5, lift: 1, rest: 2.5, glance: 2.2 },
+      // The almoner: a loaf laid on the trestle, the next taken from the basket at her left.
+      alms: { reach: 1.1, lay: 0.8, turn: 1.0, take: 0.8, rest: 1.5 },
+      // Talking: an open hand lifted, a nod, the hand back.
+      converse: { rest: 2.5, raise: 0.7, speak: 2.4, lower: 0.8, nod: 0.6 },
+      // Pointing out at the ships, then a look down at the ledger beside them.
+      point: { raise: 0.9, point: 2.6, lower: 0.9, turn: 0.8, check: 3, rest: 2 },
+      // A drill master's slow form: a chop and a slash with the grunt's own poses, slowed, then the sword down.
+      form: { ready: 1.0, windup: 1.1, strike: 0.6, hold: 0.7, recover: 0.9, rest: 4 },
+      // A ranger's draw, aim and loose with the archer's own poses, then a long watch.
+      loose: { draw: 1.4, aim: 1.2, release: 0.12, follow: 0.5, back: 1.0, rest: 4 },
+      // Fletching an arrow: the feathers smoothed, then the shaft sighted along and turned.
+      fletch: { stroke: 0.7, strokes: 3, raise: 0.8, sight: 2.4, lower: 0.8, rest: 1.5 },
+    },
     // The smith's loop: bursts of blows, turning the piece between them, and the bellows now and then.
     smith: {
       bursts: [4, 3, 5], // blows in each burst, the loop round
