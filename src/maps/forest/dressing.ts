@@ -301,7 +301,9 @@ export function dressPlants(ground: HeightGrid, grown: readonly Plant[], g: Grow
       const roll = rand();
       const size = 0.7 + rand() * 0.6;
       if (roll > 0.5 * smoothstep(P.maxZ, P.maxZ - 30, z) + 0.12 || !g.clear(x, z, 0.3)) continue;
-      add(roll < 0.08 ? 'bush' : 'grass', x, z, size);
+      // A bush sunk the deeper the steeper it stands, so its downhill side doesn't hang off the slope.
+      if (roll < 0.08) add('bush', x, z, size, size * 0.5 * Math.min(1, grade(x, z)));
+      else add('grass', x, z, size);
     }
   }
 
