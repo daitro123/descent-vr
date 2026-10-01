@@ -35,8 +35,11 @@ const WOOL = 0x5a4a36;
 const WOOL_DARK = 0x3a3026;
 /** A rotted moss-green hood: an archer reads by its green hood in any family. */
 const MOSS = 0x48593a;
-/** The cold light in a barrow-wight's sockets, and in the Thane's crown and blade. */
-export const BARROW_LIGHT = 0xa8ecbc;
+/**
+ * The cold light in a barrow-wight's sockets, and in the Thane's crown and
+ * blade: a corpse-candle's green, deep enough to read as light, not white, by day.
+ */
+export const BARROW_LIGHT = 0x5ee08a;
 /** The Thane's cloak, the heather's purple gone nearly black. */
 const HEATHER = 0x4a3048;
 

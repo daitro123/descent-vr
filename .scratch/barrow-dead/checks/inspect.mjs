@@ -5,9 +5,9 @@
 //   node .scratch/barrow-dead/checks/inspect.mjs [http://localhost:5173] [shots/] [label filter]
 //
 // For every look: each animation plays with every bone in place, and the body
-// is one mesh under its cap. Then a close-up of each standing, from behind,
-// and at its attacks at a telling moment, and a line-up beside the undead for
-// scale.
+// is one mesh, and its triangles. Then a shot of each standing, from behind,
+// and at its attacks at a telling moment (CLOSE=1 adds its head, ALL=1 every
+// attack). The line-ups for scale are in zone.mjs.
 //
 // Playwright is the global install; Chromium is the pre-installed one.
 
@@ -36,7 +36,7 @@ await page.goto(`${base}/?inspect&noemulate`);
 await page.waitForFunction(() => window.__descent?.inspector, null, { timeout: 120000 });
 
 const entries = await page.evaluate(async () => (await import('/src/inspector/inspector.ts')).ENTRIES.map((e) => ({ label: e.label, family: e.family })));
-const FAMILIES = ['barrow', 'vault', 'keyward'];
+const FAMILIES = ['barrow', 'vault']; // the Keyward is the vault dead's named fighter
 const OURS = entries.filter((e) => FAMILIES.includes(e.family)).map((e) => e.label);
 const WANT = (only === 'undead' ? entries.filter((e) => e.family === 'undead').map((e) => e.label) : OURS).filter(
   (l) => !only || only === 'undead' || l.toLowerCase().includes(only.toLowerCase()),
@@ -87,7 +87,7 @@ const pose = (label, clip, at, turn = 0.45, wide = 1, lift = 0) =>
       if (!geometry.boundingBox) geometry.computeBoundingBox();
       const top = Math.max(b.rig.proportions.hipY + b.rig.proportions.neck + 0.3, geometry.boundingBox.max.y + 0.08) * s * wide;
       camera.position.set(0, top * (0.55 + lift), -1.8 + top * 1.05);
-      camera.lookAt(0, top * 0.5, -1.8);
+      camera.lookAt(0, top * (0.5 + lift * 0.9), -1.8);
       return b.clips.map((c) => c.name);
     },
     [label, clip, at, turn, wide, lift],

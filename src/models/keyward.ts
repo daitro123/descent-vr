@@ -10,14 +10,13 @@ import { BASALT, CUT, FAINT, GLYPH } from './vault';
 // on the giant build (giant.ts), about 5 m to its crown, bound in bronze
 // plates and cut with glyphs that glow the vault's faint blue; a keyhole of
 // full light in its chest, a slit of it for eyes, and for a weapon the key
-// itself, a bronze key as long as a man is tall with a bit like a maul's
-// head. It fights as the brute does, its slams scaled up. The vault dead's
+// itself, a bronze key as long as a man is tall, gripped by its bow, with a
+// bit like a maul's head. It fights as the brute does, its slams scaled up. The vault dead's
 // named fighter (FAMILIES.vault in characters.ts): the Sealed Vault's camp
 // asks for it by name.
 
 const PI = Math.PI;
 const SIDE = [PI / 2, 0, 0] as Vec3; // a cylinder's axis turned from Y to Z: a disc facing forward
-const ACROSS = [0, 0, PI / 2] as Vec3; // a cylinder's axis turned from Y to X: a disc facing sideways
 
 /** The Keyward's numbers, over the brute's: a giant's reach and weight, and a boss's health. */
 export const KEYWARD_NUMBERS: Partial<EnemyConfig> = {
@@ -155,19 +154,23 @@ function head(ctx: DressContext): void {
 // ---------------------------------------------------------------- the key (hand space, along -Y)
 
 /**
- * The Deepkings' key: a bronze bow above the fist with the vault's light in
- * its eye, a shank of basalt bound in bronze, and the bit at its end, a block
- * of bronze stepped with stone wards, struck with like a maul's head.
+ * The Deepkings' key, gripped by its bow: a ring of bronze round the fist
+ * with a glyph at its crown, a shank of basalt bound in bronze, and the bit
+ * at its end, a block of bronze stepped with stone wards, struck with like a
+ * maul's head.
  */
 function greatKey(ctx: DressContext): WeaponSpec {
-  ctx
-    .on('handR')
-    .cyl(0.26, 0.26, 0.09, 8, { at: [0, 0.42, 0], rot: ACROSS, color: BRONZE.base })
-    .cyl(0.12, 0.12, 0.1, 8, { at: [0, 0.42, 0], rot: ACROSS, color: GLYPH, glow: FAINT, jitter: 0 })
-    .box(0.17, 0.14, 0.17, { at: [0, 0.12, 0], color: BRONZE.bright })
-    .cyl(0.075, 0.075, 2.1, 6, { at: [0, -0.95, 0], color: BASALT.base })
-    .box(0.18, 0.1, 0.18, { at: [0, -0.62, 0], color: BRONZE.base })
-    .box(0.18, 0.1, 0.18, { at: [0, -1.3, 0], color: BRONZE.base })
+  const b = ctx.on('handR');
+  // The bow: eight bars round the fist, in the plane of the bit.
+  const r = 0.34;
+  const c: Vec3 = [0, -0.16, 0];
+  const at = (k: number): Vec3 => [0, c[1] + Math.cos((k / 8) * PI * 2) * r, c[2] + Math.sin((k / 8) * PI * 2) * r];
+  for (let k = 0; k < 8; k++) b.bar(at(k), at(k + 1), 0.12, 0.1, { color: BRONZE.base });
+  b.box(0.13, 0.08, 0.05, { at: [0, c[1] + r, 0], color: GLYPH, glow: FAINT, jitter: 0 })
+    .box(0.17, 0.14, 0.17, { at: [0, c[1] - r - 0.02, 0], color: BRONZE.bright })
+    .cyl(0.075, 0.075, 1.5, 6, { at: [0, -1.3, 0], color: BASALT.base })
+    .box(0.18, 0.1, 0.18, { at: [0, -1.0, 0], color: BRONZE.base })
+    .box(0.18, 0.1, 0.18, { at: [0, -1.5, 0], color: BRONZE.base })
     .box(0.36, 0.52, 0.52, { at: [0, -1.98, -0.14], color: BRONZE.base, mask: 1 })
     .box(0.3, 0.14, 0.26, { at: [0, -1.84, -0.5], color: BASALT.light, mask: 1 })
     .box(0.3, 0.12, 0.2, { at: [0, -2.08, -0.47], color: BASALT.light, mask: 1 })
