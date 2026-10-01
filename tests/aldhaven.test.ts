@@ -38,9 +38,9 @@ function same(a: ChunkData, b: ChunkData): void {
 const free = (x: number, z: number) => city.walkable.contains(x, z) && !city.collide(new Vector3(x, 0, z), r);
 
 describe('Aldhaven, as the registry lists it', () => {
-  it('is a zone called Aldhaven, joined to no neighbour yet', () => {
-    expect(findMap('aldhaven')).toMatchObject({ kind: 'zone', label: 'Aldhaven', neighbours: [] });
-    expect(city).toMatchObject({ kind: 'zone', id: 'aldhaven', label: 'Aldhaven', seams: [] });
+  it('is a zone called Aldhaven, joined to Brackenmoor over the Kingsroad and the Sallows over the causeway', () => {
+    expect(findMap('aldhaven')).toMatchObject({ kind: 'zone', label: 'Aldhaven', neighbours: ['brackenmoor', 'sallows'] });
+    expect(city).toMatchObject({ kind: 'zone', id: 'aldhaven', label: 'Aldhaven', seams: [plan.southSeam], sideSeams: [plan.westSeam] });
   });
 
   it('is scenery only: no camps, people, pickups, chests, wake spots, sounds, interiors or mine', () => {

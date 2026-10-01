@@ -70,26 +70,28 @@ export type Crossing<Z = Zone> = NorthSouth<Z> | WestEast<Z>;
 
 /**
  * Every place two of `zones` meet: each seam a zone lists, with the zone
- * whose land lies on its other side, once each.
+ * whose land lies on its other side along it (one edge can meet several
+ * zones, as Brackenmoor's east meets Aldhaven and the Sallows), once each,
+ * over the stretch where both lie.
  */
 export function crossings<Z extends Pick<Zone, 'land' | 'seams' | 'sideSeams'>>(zones: readonly Z[]): Crossing<Z>[] {
   const out: Crossing<Z>[] = [];
   for (const a of zones) {
     for (const s of a.seams) {
       const aNorth = a.land.maxZ === s.z;
-      const b = zones.find((o) => o !== a && (aNorth ? o.land.minZ === s.z : o.land.maxZ === s.z));
+      const b = zones.find((o) => o !== a && (aNorth ? o.land.minZ === s.z : o.land.maxZ === s.z) && o.land.minX < s.maxX && o.land.maxX > s.minX);
       if (!b) continue;
       const [north, south] = aNorth ? [a, b] : [b, a];
       if (out.some((c) => 'z' in c && c.z === s.z && c.north === north && c.south === south)) continue;
-      out.push({ z: s.z, minX: s.minX, maxX: s.maxX, north, south });
+      out.push({ z: s.z, minX: Math.max(s.minX, b.land.minX), maxX: Math.min(s.maxX, b.land.maxX), north, south });
     }
     for (const s of a.sideSeams ?? []) {
       const aWest = a.land.maxX === s.x;
-      const b = zones.find((o) => o !== a && (aWest ? o.land.minX === s.x : o.land.maxX === s.x));
+      const b = zones.find((o) => o !== a && (aWest ? o.land.minX === s.x : o.land.maxX === s.x) && o.land.minZ < s.maxZ && o.land.maxZ > s.minZ);
       if (!b) continue;
       const [west, east] = aWest ? [a, b] : [b, a];
       if (out.some((c) => 'x' in c && c.x === s.x && c.west === west && c.east === east)) continue;
-      out.push({ x: s.x, minZ: s.minZ, maxZ: s.maxZ, west, east });
+      out.push({ x: s.x, minZ: Math.max(s.minZ, b.land.minZ), maxZ: Math.min(s.maxZ, b.land.maxZ), west, east });
     }
   }
   return out;
