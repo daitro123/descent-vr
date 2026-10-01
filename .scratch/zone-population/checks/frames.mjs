@@ -23,6 +23,8 @@ const SPOTS = [
   ['brackenmoor', 'Cairnford square', 35, 365],
   ['brackenmoor', 'east gate', 110, 362],
   ['brackenmoor', "Fellgate's forecourt", 168, 331.6],
+  ['brackenmoor', "Hob's Fold", -24, 228],
+  ['brackenmoor', "the enclosure's north field", 168, 284],
   ['aldhaven', 'market cross', 350, 345],
   ['aldhaven', 'cathedral front', 428, 345],
   ['aldhaven', 'Aldbridge', 390, 420],
@@ -65,11 +67,11 @@ await page.evaluate(() => {
   Object.assign(d.device.controllers.right.position, { x: 0.3, y: -1, z: 0.2 });
 });
 
-/** Everything that draws a character: the population, the camps, Oakvale's own villagers and Hale. */
+/** Everything that draws a character: the population, the animals, the camps, Oakvale's own villagers and Hale. */
 const characters = (shown) =>
   page.evaluate((shown) => {
     const a = window.__descent.adventure;
-    for (const root of [a.peopleRoot, a.camps.root, a.villagers.root, a.hale.root]) root.visible = shown;
+    for (const root of [a.peopleRoot, a.herdsRoot, a.camps.root, a.villagers.root, a.hale.root]) root.visible = shown;
   }, shown);
 const frame = async () => {
   await xrFrames(2);
@@ -79,7 +81,7 @@ const frame = async () => {
   });
 };
 
-console.log('spot: worst frame both eyes (calls) | characters in it (calls) | built near you');
+console.log('spot: worst frame both eyes (calls) | characters and animals in it (calls) | built near you');
 for (const [zone, name, x, z] of SPOTS) {
   const skip = only.length && !only.includes(zone);
   await page.evaluate(([x, z]) => window.__descent.teleport(x, z, 0), [x, z]);
@@ -107,13 +109,13 @@ for (const [zone, name, x, z] of SPOTS) {
   }
   const built = await page.evaluate(() => {
     const d = window.__descent;
-    return { people: d.people.built.length, enemies: d.camps.enemies.length };
+    return { people: d.people.built.length, animals: d.herds.built.reduce((n, h) => n + h.animals.length, 0), enemies: d.camps.enemies.length };
   });
   const k = (n) => `${(n / 1000).toFixed(1)}k`;
   const { all, bare } = worst;
   const flag = all.triangles > 600000 || all.calls > 300 ? '  OVER' : '';
   console.log(
-    `${here === zone ? '' : `(in ${here}) `}${zone}, ${name}: ${k(all.triangles)} (${all.calls}) | ${k(all.triangles - bare.triangles)} (${all.calls - bare.calls}) | ${built.people} people, ${built.enemies} enemies${flag}`,
+    `${here === zone ? '' : `(in ${here}) `}${zone}, ${name}: ${k(all.triangles)} (${all.calls}) | ${k(all.triangles - bare.triangles)} (${all.calls - bare.calls}) | ${built.people} people, ${built.animals} animals, ${built.enemies} enemies${flag}`,
   );
 }
 if (errors.length) console.log(`page errors:\n${errors.join('\n')}`);
