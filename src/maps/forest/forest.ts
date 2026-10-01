@@ -92,6 +92,8 @@ export function buildForest(given?: ForestLayout): StartingZone {
     hale: plan.hale,
     places: plan.places,
     villagers: plan.villagers,
+    people: [],
+    respawnPoints: [plan.respawns.village],
     pickups: plan.pickups,
     chests: plan.chests,
     spots: plan.spots,

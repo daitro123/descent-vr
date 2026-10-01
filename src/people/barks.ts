@@ -27,6 +27,14 @@ export class BarkRule {
     this.armed = new Array<boolean>(count).fill(true);
   }
 
+  /** Take in `count` more villagers, after those it has: they'll bark the next time you come close. */
+  grow(count: number): void {
+    for (let k = 0; k < count; k++) {
+      this.left.push(0);
+      this.armed.push(true);
+    }
+  }
+
   /** Is villager `i`'s bark showing? */
   showing(i: number): boolean {
     return this.left[i] > 0;

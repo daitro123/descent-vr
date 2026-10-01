@@ -1,6 +1,8 @@
-import { type Camera, Group, type Material, type Object3D, type Scene, Vector3, type WebGLRenderer } from 'three';
+import { type Camera, Group, type Object3D, type Scene, Vector3, type WebGLRenderer } from 'three';
 import type { AdventureState } from '../adventureState';
 import { CONFIG } from '../config';
+import { type FileSpot, PatrolWalk } from '../enemies/patrol';
+import { walkOffsets } from '../enemies/poses';
 import type { VillagerSpot } from '../maps/types';
 import { createModelMaterial } from '../models/materials';
 import { buildPerson, PEOPLE } from '../models/people';
@@ -25,6 +27,8 @@ import { strikesBetween, type WorkLoop, workLoop } from './work';
 
 const _hand = new Vector3();
 const _at = new Vector3();
+const _file: FileSpot = { x: 0, z: 0, yaw: 0 };
+const _walk: Record<string, [number, number, number]> = {};
 
 /** Is `o` drawn: it and everything it hangs from visible? */
 function drawn(o: Object3D): boolean {
@@ -46,10 +50,41 @@ export interface Standing {
 /** Card size, metres, and how finely it's drawn. */
 const BARK = { w: 1.1, h: 0.33, ppm: 850 };
 
-const isGiver = (id: VillagerId): id is VillagerId & GiverId => (GIVERS as readonly string[]).includes(id);
+const isGiver = (id: string): id is VillagerId & GiverId => (GIVERS as readonly string[]).includes(id);
 
-/** One villager at their spot. */
-export class Villager {
+/** Where a villager works, and the building they're in, if any: one of Oakvale's own (`VillagerSpot`), or one a zone places by data. */
+export type VillagerPlace<Id extends string> = Omit<VillagerSpot, 'id'> & { readonly id: Id };
+
+/** Who a villager is: their body, their name over a bark, the pose they stand easy in, and their work. */
+export interface Who {
+  readonly rig: Rig;
+  readonly label: string;
+  readonly stand: Pose;
+  readonly work: WorkLoop;
+  /** How far round their work they start, 0 to 1: villagers each start at their own point, so a village doesn't move in step. */
+  readonly start: number;
+  /** Do they give quests, with a "!" or "?" over their head (the smith, the herbalist)? */
+  readonly gives: boolean;
+}
+
+/** One of Oakvale's own villagers: their body built afresh, their trade's work, and a marker if they give quests. */
+function oakvaler(spot: VillagerSpot): Who {
+  const p = PEOPLE[spot.id];
+  return {
+    rig: buildPerson(spot.id, createModelMaterial()),
+    label: p.label,
+    stand: p.stand,
+    work: workLoop(spot.id, spot.turn),
+    start: (p.seed % 7) / 7,
+    gives: isGiver(spot.id),
+  };
+}
+
+/**
+ * One villager at their spot, or strolling their route: a walk there and
+ * back, standing a while at each end at their work.
+ */
+export class Villager<Id extends string = VillagerId> {
   readonly root = new Group();
   /** The circle nothing walks through: stand it in the World. It goes where they go. */
   readonly body: { readonly x: number; readonly z: number; readonly r: number };
@@ -75,24 +110,29 @@ export class Villager {
   /** How far round they look (rad, + to their left), eased. */
   look = 0;
   private breath = 0;
+  /** 0 standing to 1 walking at a stroll, eased, and how far round the walk cycle their legs are (rad). */
+  private walking = 0;
+  private stride = 0;
 
   constructor(
-    readonly spot: VillagerSpot,
+    readonly spot: VillagerPlace<Id>,
+    readonly who: Who,
     private readonly ground: Ground,
-    material: Material,
+    /** Their stroll along a route, if they walk one: it goes on while they're dropped, so it's shared. */
+    readonly stroll: PatrolWalk | null = null,
   ) {
     const { id } = spot;
-    this.rig = buildPerson(id, material);
+    this.rig = who.rig;
     const p = this.rig.proportions;
     this.headY = p.hipY + 0.06 + p.neck + 0.12;
-    this.work = workLoop(id, spot.turn);
+    this.work = who.work;
     this.root.name = id;
     this.root.position.set(spot.x, ground.heightAt(spot.x, spot.z), spot.z);
     this.root.rotation.y = spot.yaw;
     this.root.add(this.rig.mesh, this.bark.mesh);
     this.bark.mesh.name = `${id}-bark`;
     this.bark.mesh.visible = false;
-    this.marker = isGiver(id) ? new QuestMarker() : null;
+    this.marker = who.gives ? new QuestMarker() : null;
     if (this.marker) {
       this.marker.sprite.name = `${id}-marker`;
       this.root.add(this.marker.sprite);
@@ -100,19 +140,20 @@ export class Villager {
     }
     this.body = this.solid = { x: spot.x, z: spot.z, r: CONFIG.villagers.radius };
     this.at = { x: spot.x, z: spot.z, yaw: spot.yaw };
+    if (stroll) this.strollOn(0);
     // Villagers each start at their own point in their loop, so the village doesn't move in step.
-    this.clock = (this.work.duration * (PEOPLE[id].seed % 7)) / 7;
+    this.clock = this.work.duration * who.start;
     this.pose(0);
   }
 
-  get id(): VillagerId {
+  get id(): Id {
     return this.spot.id;
   }
 
   /** The quest giver they are, if they give quests: the smith and the herbalist. */
   get giver(): GiverId | null {
     const { id } = this;
-    return isGiver(id) ? id : null;
+    return this.who.gives && isGiver(id) ? id : null;
   }
 
   /**
@@ -129,9 +170,9 @@ export class Villager {
     return drawn(this.root);
   }
 
-  /** Away from their spot: stepped aside, or on the way. */
+  /** Away from their spot: stepped aside, or on the way. (A stroller's spot is wherever their walk has got to.) */
   get away(): boolean {
-    return this.aside !== null || this.at.x !== this.spot.x || this.at.z !== this.spot.z;
+    return !this.stroll && (this.aside !== null || this.at.x !== this.spot.x || this.at.z !== this.spot.z);
   }
 
   /**
@@ -146,8 +187,30 @@ export class Villager {
     } else if (this.aside && this.backIn <= 0) this.backIn = CONFIG.villagers.smith.aside.back;
   }
 
+  /**
+   * On along their route, slowing to a stop as they attend to you and walking
+   * on as you go, facing the way they walk (and on past an end while they
+   * stand there).
+   */
+  private strollOn(dt: number): void {
+    const walk = this.stroll!;
+    walk.step(dt * (1 - this.attend));
+    walk.spot(0, _file);
+    const moved = Math.hypot(_file.x - this.at.x, _file.z - this.at.z);
+    const W = CONFIG.population.walk;
+    // Easing into the walk as they set off, and out of it as they stop.
+    const going = !walk.pausing && this.attend < 0.5 && dt > 0 ? 1 : 0;
+    this.walking += (going - this.walking) * Math.min(1, dt * 5);
+    this.stride += moved * W.stride;
+    this.at.x = this.solid.x = _file.x;
+    this.at.z = this.solid.z = _file.z;
+    this.at.yaw = dt > 0 ? this.at.yaw + towards(this.at.yaw, _file.yaw) * Math.min(1, dt * 6) : _file.yaw;
+    this.root.position.set(this.at.x, this.ground.heightAt(this.at.x, this.at.z), this.at.z);
+  }
+
   /** Walk towards where they should stand, facing the way they go and then the way it faces. */
   private walk(dt: number): void {
+    if (this.stroll) return this.strollOn(dt);
     if (this.backIn > 0 && (this.backIn -= dt) <= 0) this.aside = null;
     const to = this.aside ?? this.spot;
     const dx = to.x - this.at.x;
@@ -207,9 +270,18 @@ export class Villager {
   private pose(far: number, up = 0): void {
     const V = CONFIG.villagers;
     const working = this.work.at(this.clock);
-    const a = this.attend;
+    // Walking, they stand easy over the walk's swing of arms and legs.
+    const w = this.walking;
+    const a = Math.max(this.attend, w);
     // Breathing, at work or standing easy.
-    const pose = friendlyPose(blendPoses(working.pose, PEOPLE[this.id].stand, a, {}), this.breath) as Record<string, [number, number, number]>;
+    const pose = friendlyPose(blendPoses(working.pose, this.who.stand, a, {}), this.breath) as Record<string, [number, number, number]>;
+    if (w > 0.01) {
+      walkOffsets(this.stride, w * 0.8, _walk);
+      for (const [bone, r] of Object.entries(_walk)) {
+        const o = (pose[bone] ??= [0, 0, 0]);
+        for (let i = 0; i < 3; i++) o[i] += r[i];
+      }
+    }
     const head = V.look.head;
     const turned = clamp(this.look, -head, head);
     const chest = this.look - turned;
@@ -220,7 +292,8 @@ export class Villager {
     // And a little up or down to your eyes, while they look at you.
     if (Number.isFinite(far) && far > 0.1) h[0] = h[0] * (1 - a) + a * clamp(-Math.atan2(up, far), -0.3, 0.3);
     this.rig.apply(pose as Pose);
-    this.rig.setHipOffset(working.hip[0] * (1 - a), working.hip[1] * (1 - a), working.hip[2] * (1 - a));
+    const bob = -Math.abs(Math.sin(this.stride)) * 0.03 * w;
+    this.rig.setHipOffset(working.hip[0] * (1 - a), working.hip[1] * (1 - a) + bob, working.hip[2] * (1 - a));
     this.root.rotation.y = this.at.yaw + working.turn * (1 - a);
   }
 
@@ -237,7 +310,7 @@ export class Villager {
   say(line: string | null): void {
     this.bark.mesh.visible = line !== null;
     if (line === null) return;
-    const label = PEOPLE[this.id].label;
+    const { label } = this.who;
     this.bark.paint(line, (c, w, h) => {
       parchment(c, w, h, 8);
       c.fillStyle = '#6a4a22';
@@ -251,6 +324,20 @@ export class Villager {
         .forEach((l, i) => c.fillText(l, 28, 66 + i * 52));
     });
   }
+
+  /** Take them out of the world, with their bark's panel and marker (their body is whoever built it's to dispose). */
+  dispose(): void {
+    this.root.removeFromParent();
+    this.bark.dispose();
+    this.marker?.sprite.material.map?.dispose();
+    this.marker?.sprite.material.dispose();
+  }
+}
+
+/** A villager's stroll along `route` from where they start, at a walk. */
+export function strollFrom(x: number, z: number, route: readonly { readonly x: number; readonly z: number }[]): PatrolWalk {
+  const { speed, pause } = CONFIG.population.walk;
+  return new PatrolWalk([{ x, z }, ...route], 1, { speed, pause, gap: 0 });
 }
 
 /**
@@ -270,7 +357,7 @@ export class Villagers {
   /** At `spots` on `ground`; `room(id)` is the room an indoor villager hangs from. */
   constructor(spots: readonly VillagerSpot[], ground: Ground, room: (id: NonNullable<VillagerSpot['interior']>) => Object3D) {
     this.root.name = 'villagers';
-    this.all = spots.map((spot) => new Villager(spot, ground, createModelMaterial()));
+    this.all = spots.map((spot) => new Villager(spot, oakvaler(spot), ground));
     for (const v of this.all) (v.spot.interior ? room(v.spot.interior) : this.root).add(v.root);
     this.rule = new BarkRule(this.all.length);
     this.far = this.all.map(() => Infinity);

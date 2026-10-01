@@ -308,6 +308,56 @@ function herbalistLoop(): WorkLoop {
   ]);
 }
 
+// ------------------------------------------------------------------ standing about
+
+/**
+ * Standing about, for anyone with no work of their own: weight on one foot,
+ * then the other, now and then a look round to one side, then the other.
+ * Built over `stand`, so whatever they hold stays in their hands.
+ */
+function standLoop(stand: Pose): WorkLoop {
+  const S = CONFIG.villagers.stand;
+  const onRight = plus(stand, { spine: [0, 0, -0.03], thighL: [-0.07, 0, 0.06], shinL: [0.14, 0, 0], thighR: [0.02, 0, -0.02] });
+  const onLeft = plus(stand, { spine: [0, 0, 0.03], thighR: [-0.07, 0, -0.06], shinR: [0.14, 0, 0], thighL: [0.02, 0, 0.02] });
+  const right = still(onRight, 0, [-S.hip, 0, 0]);
+  const left = still(onLeft, 0, [S.hip, 0, 0]);
+  // A look round to their left, and later to their right: the head most of the way, the chest a little.
+  const lookLeft = still(plus(onLeft, { head: [0, S.look, 0], spine: [0, S.look * 0.25, 0] }), 0, [S.hip, 0, 0]);
+  const lookRight = still(plus(onRight, { head: [0, -S.look, 0], spine: [0, -S.look * 0.25, 0] }), 0, [-S.hip, 0, 0]);
+  return loop([
+    hold(S.rest, right),
+    move(S.shift, right, left),
+    hold(S.rest * 0.6, left),
+    move(S.turn, left, lookLeft),
+    hold(S.glance, lookLeft),
+    move(S.turn, lookLeft, left),
+    hold(S.rest * 0.8, left),
+    move(S.shift, left, right),
+    hold(S.rest * 0.6, right),
+    move(S.turn, right, lookRight),
+    hold(S.glance, lookRight),
+    move(S.turn, lookRight, right),
+  ]);
+}
+
+/**
+ * Every work loop a zone can give a villager (maps/types.ts `PersonPlan`), by
+ * name: standing about, or one of Oakvale's trades. Each is made from the
+ * villager's standing pose and, for a work with a second place (the smith's
+ * bellows), how far round to their left it stands. A model family adds its
+ * own loops here.
+ */
+export const WORKS = {
+  stand: (stand: Pose) => standLoop(stand),
+  smith: (_stand: Pose, turn: number) => smithLoop(turn),
+  innkeeper: () => innkeeperLoop(),
+  farmer: () => farmerLoop(),
+  herbalist: () => herbalistLoop(),
+} satisfies Record<string, (stand: Pose, turn: number) => WorkLoop>;
+
+/** A work loop's name. */
+export type WorkName = keyof typeof WORKS;
+
 /** A friendly character's work. The smith's bellows stand `bellowsTurn` rad round to their left from where they face the anvil. */
 export function workLoop(id: Exclude<PersonId, 'hale'>, bellowsTurn = 0): WorkLoop {
   switch (id) {

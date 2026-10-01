@@ -63,6 +63,8 @@ export function buildAldhaven(given?: AldhavenPlan): Zone {
     interiors: [],
     mine: null,
     villagers: [],
+    people: [],
+    respawnPoints: [],
     pickups: [],
     chests: [],
     spots: [],

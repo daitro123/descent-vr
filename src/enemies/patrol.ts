@@ -20,6 +20,13 @@ export interface FileSpot {
   yaw: number;
 }
 
+/** How a file walks: m/s along its road, s standing at each end, and m apart. */
+export interface Pace {
+  readonly speed: number;
+  readonly pause: number;
+  readonly gap: number;
+}
+
 export class PatrolWalk {
   /** The road's length, end to end. */
   readonly length: number;
@@ -34,6 +41,8 @@ export class PatrolWalk {
     readonly road: readonly RoadPoint[],
     /** How many walk in the file. */
     readonly count: number,
+    /** How it walks: a patrol's pace, unless it's a villager's stroll (people/villagers.ts). */
+    private readonly pace: Pace = CONFIG.camps.patrol,
   ) {
     let length = 0;
     for (let i = 1; i < road.length; i++) length += Math.hypot(road[i].x - road[i - 1].x, road[i].z - road[i - 1].z);
@@ -46,9 +55,9 @@ export class PatrolWalk {
     return this.resting > 0;
   }
 
-  /** Back to the road's first end, the file's head just leaving it. */
-  reset(): void {
-    this.middle = this.half;
+  /** Back to the road's first end, the file's head just leaving it; or `along` m along it, walking on. */
+  reset(along = this.half): void {
+    this.middle = Math.max(this.half, Math.min(this.length - this.half, along));
     this.heading = 1;
     this.resting = 0;
   }
@@ -59,7 +68,7 @@ export class PatrolWalk {
    * the first of them standing reaches the road's start, or the last its end.
    */
   step(dt: number, standing?: readonly boolean[]): void {
-    const { speed, pause, gap } = CONFIG.camps.patrol;
+    const { speed, pause, gap } = this.pace;
     if (this.resting > 0) {
       this.resting = Math.max(0, this.resting - dt);
       if (this.resting === 0) this.heading = -this.heading;
@@ -80,7 +89,7 @@ export class PatrolWalk {
    * walks, and while it stands at an end it keeps looking on past it.
    */
   spot(i: number, out: FileSpot = { x: 0, z: 0, yaw: 0 }): FileSpot {
-    const at = this.middle + (i - (this.count - 1) / 2) * CONFIG.camps.patrol.gap;
+    const at = this.middle + (i - (this.count - 1) / 2) * this.pace.gap;
     alongRoad(this.road, at, out);
     if (this.heading < 0) out.yaw += Math.PI;
     return out;
@@ -88,7 +97,7 @@ export class PatrolWalk {
 
   /** Half the file's length: how far its head and tail are from its middle. */
   private get half(): number {
-    return ((this.count - 1) * CONFIG.camps.patrol.gap) / 2;
+    return ((this.count - 1) * this.pace.gap) / 2;
   }
 }
 

@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG, type EnemyConfig } from '../src/config';
 import { IDLE } from '../src/enemies/poses';
-import { clipsFor, type MutablePose, personClips } from '../src/inspector/clips';
+import { castClips, clipsFor, type MutablePose, personClips } from '../src/inspector/clips';
 import type { EnemyKind } from '../src/models/characters';
 import { PEOPLE, type PersonId } from '../src/models/people';
+import { BONES } from '../src/models/rig';
+import { CAST, type CastId } from '../src/people/cast';
 
 const KINDS: EnemyKind[] = ['grunt', 'archer', 'brute', 'warden'];
 
@@ -68,5 +70,20 @@ describe('inspector clips', () => {
     expect(armUp(wave.duration / 3)).toBeGreaterThan(2);
     expect(wave.sample(wave.duration - 0.01, out).pose.upperArmL).toEqual(PEOPLE.hale.stand.upperArmL);
     expect(armUp(wave.duration - 0.01)).toBeLessThan(0.2);
+  });
+
+  it("show the cast zones place standing at ease, standing about and walking, each looping round without a jump", () => {
+    for (const id of Object.keys(CAST) as CastId[]) {
+      const clips = castClips(id);
+      expect(clips.map((c) => c.name)).toEqual(['stand', 'stand about', 'walk']);
+      const out: MutablePose = {};
+      const flat = (pose: Partial<Record<string, readonly number[]>>) => BONES.flatMap((b) => pose[b] ?? [0, 0, 0]);
+      for (const clip of clips.slice(1)) {
+        const start = flat({ ...clip.sample(0, out).pose });
+        const end = flat({ ...clip.sample(clip.duration - 1e-6, out).pose });
+        // Breathing aside (it keeps its own time), round to where it began.
+        start.forEach((v, i) => expect(Math.abs(v - end[i]), `${id} ${clip.name}`).toBeLessThan(0.05));
+      }
+    }
   });
 });

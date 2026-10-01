@@ -4,8 +4,9 @@ import { ATTACK_POSES, GUARD, type GuardSide, IDLE, KNEEL, KNEEL_DROP, RISE, STA
 import { type EnemyKind, type Family, proportionsOf } from '../models/characters';
 import { PEOPLE, type PersonId } from '../models/people';
 import { BONES, blendPoses, type Pose, type Proportions } from '../models/rig';
+import { CAST, type CastId } from '../people/cast';
 import { BREATH_PERIOD, friendlyPose } from '../people/poses';
-import { workLoop } from '../people/work';
+import { WORKS, workLoop } from '../people/work';
 
 // The inspector's animations: every pose the game plays for a kind, as a
 // looping clip with the game's own timings and easing (see Enemy.updateAttack),
@@ -186,4 +187,42 @@ export function personClips(id: PersonId): Clip[] {
     });
   }
   return clips;
+}
+
+/**
+ * One of the cast a zone places (people/cast.ts): standing at ease, standing
+ * about (the work of anyone without one), and strolling, as a villager walks
+ * their route at CONFIG.population.walk's pace (people/villagers.ts).
+ */
+export function castClips(id: CastId): Clip[] {
+  const { stand } = CAST[id];
+  const about = WORKS.stand(stand);
+  const W = CONFIG.population.walk;
+  const rate = W.speed * W.stride;
+  const swing: MutablePose = {};
+  return [
+    { name: 'stand', duration: BREATH_PERIOD, sample: (t, out) => ({ pose: copyInto(friendlyPose(stand, t), out), hipY: 0, phase: 'stand', telegraph: 0 }) },
+    {
+      name: 'stand about',
+      duration: about.duration,
+      sample: (t, out) => {
+        const at = about.at(t);
+        return { pose: copyInto(friendlyPose(at.pose, t), out), hipY: at.hip[1], phase: 'work', telegraph: 0 };
+      },
+    },
+    {
+      name: 'walk',
+      duration: (4 * Math.PI) / rate,
+      sample: (t, out) => {
+        const phase = t * rate;
+        walkOffsets(phase, 0.8, swing);
+        copyInto(friendlyPose(stand, t), out);
+        for (const [bone, r] of Object.entries(swing)) {
+          const o = (out[bone] ??= [0, 0, 0]);
+          for (let i = 0; i < 3; i++) o[i] += r[i];
+        }
+        return { pose: out as Pose, hipY: -Math.abs(Math.sin(phase)) * 0.03, phase: 'walk', telegraph: 0 };
+      },
+    },
+  ];
 }
