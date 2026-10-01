@@ -107,7 +107,7 @@ describe("Oakvale's zone", () => {
   it('plans its atmosphere and its heights along the crest of the southern pass', () => {
     expect(plan.atmosphere).toBe(OAKVALE_ATMOSPHERE);
     const [crest] = plan.seams;
-    expect(crest).toMatchObject({ z: 140, minX: -100, maxX: 100 });
+    expect(crest).toMatchObject({ z: 140, minX: -140, maxX: 140 });
     expect(crest.heights).toHaveLength((crest.maxX - crest.minX) / crest.step + 1);
     crest.heights.forEach((h, k) => expect(h).toBe(plan.ground.at(crest.minX + k * crest.step, crest.z)));
   });

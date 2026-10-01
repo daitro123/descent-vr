@@ -52,8 +52,12 @@ export const OAKVALE_ATMOSPHERE: Atmosphere = {
   flames: [],
 };
 
-/** The southern pass's crest, where Brackenmoor takes over: the terrain's south edge, across the pass's valley. */
-export const CREST = { z: 140, minX: -100, maxX: 100 } as const;
+/**
+ * The southern pass's crest, where Brackenmoor takes over: the terrain's
+ * whole south edge, the pass's valley and the Greyspine either side of it,
+ * which Brackenmoor's land meets all along.
+ */
+export const CREST = { z: 140, minX: -140, maxX: 140 } as const;
 
 /**
  * The southern pass, walkable from the play square's edge up to the crest: a
