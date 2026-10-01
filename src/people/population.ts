@@ -1,34 +1,41 @@
 import { Group, type Material, type Vector3 } from 'three';
 import { CONFIG } from '../config';
 import type { FileSpot, PatrolWalk } from '../enemies/patrol';
-import type { PersonPlan } from '../maps/types';
+import type { Crowd, PersonPlan } from '../maps/types';
+import { BUILDS } from '../models/human';
 import { sharedModelMaterial } from '../models/materials';
+import { NO_STORY, type Story, there } from '../story';
 import type { Ground } from '../world/ground';
 import { BarkRule } from './barks';
 import { CAST, Wardrobe } from './cast';
+import { Fallen } from './fallen';
 import { strollFrom, Villager } from './villagers';
 import { WORKS } from './work';
 
 // The villagers every zone places by data (maps/types.ts `PersonPlan`), built
 // as you come near them and dropped as you walk on, the way the chunks round
-// you are: within CONFIG.population.near of you (or the fog's far edge, if
-// that's nearer), the nearest CONFIG.population.most at most, a few a frame,
-// and gone again once you're CONFIG.population.hysteresis farther off. So a town can hold as many as its
-// streets want while only the crowd round you costs anything. A stroller's
+// you are: within the `Crowd`'s near of you (the zone's own, or the fog's far
+// edge if that's nearer), its nearest `most` at most, a few a frame, and gone
+// again once you're CONFIG.population.hysteresis farther off. So a town can
+// hold as many as its streets want while only the crowd round you costs anything. A stroller's
 // walk goes on while they're dropped, so you don't find everyone where you
 // left them. Each says the next of their lines as you pass, by the barks'
-// rule. Oakvale's own cast (people/villagers.ts `Villagers`) isn't here: the
+// rule. Someone placed from or until a moment in a quest is there only
+// between them (story.ts), and the fallen lie still where they fell. Oakvale's own cast (people/villagers.ts `Villagers`) isn't here: the
 // quests, the wares and the trainers know them by name, and they stand from
 // the start.
 
 const _spot: FileSpot = { x: 0, z: 0, yaw: 0 };
 
+/** Who a zone places: a villager at their work, or one lying where they fell. */
+export type Inhabitant = Villager<string> | Fallen;
+
 /** What the population asks of a villager it has built. */
 export interface Placed {
   /** Are they drawn (not hidden with the outdoors)? */
   readonly shown: boolean;
-  /** One frame with your head at `you`. */
-  update(dt: number, you: Vector3): unknown;
+  /** One frame with your head at `you`, `time` s since the population began (for a work everyone keeps time at). */
+  update(dt: number, you: Vector3, time: number): unknown;
   /** How far your head is from them, on the floor plane. */
   far(you: Vector3): number;
   /** Show `line` over their head, or hide it (null). */
@@ -63,19 +70,26 @@ function whereIs<P>(slot: Slot<P>): { readonly x: number; readonly z: number } {
   return slot.stroll ? slot.stroll.spot(0, _spot) : slot.plan;
 }
 
-export class Population<P extends Placed = Villager<string>> {
+export class Population<P extends Placed = Inhabitant> {
   private readonly slots: Slot<P>[] = [];
   private readonly rule = new BarkRule(0);
   /** The slots by how near they are, sorted afresh each frame (kept to spare the garbage collector). */
   private readonly order: Slot<P>[] = [];
   private readonly fars: number[] = [];
+  /** Seconds it's been running: the clock a drill keeps, so everyone at it strikes together. */
+  private time = 0;
 
-  constructor(private readonly builder: Builder<P>) {}
+  constructor(
+    private readonly builder: Builder<P>,
+    /** Where the quests stand: who's there. */
+    private readonly story: Story = NO_STORY,
+  ) {}
 
   /** Take in a zone's villagers (as it's loaded): none is built until you come near. */
   add(people: readonly PersonPlan[]): void {
     for (const plan of people) {
-      const stroll = plan.route?.length ? strollFrom(plan.x, plan.z, plan.route) : null;
+      // Each strolls at their build's pace: an elder slower than a grown man or a child.
+      const stroll = plan.route?.length ? strollFrom(plan.x, plan.z, plan.route, BUILDS[CAST[plan.cast].look.build].gait.speed) : null;
       this.slots.push({ plan, stroll, person: null, next: 0, far: Infinity, rank: Infinity });
     }
     this.rule.grow(people.length);
@@ -98,26 +112,27 @@ export class Population<P extends Placed = Villager<string>> {
 
   /**
    * Build everyone wanted round `you` at once (loading in, waking after a
-   * death), however many that is: those within `near` m, as `update`.
+   * death), however many that is: the `crowd`, as `update`.
    */
-  fill(you: Vector3, near: number = CONFIG.population.near): void {
+  fill(you: Vector3, crowd: Crowd = CONFIG.population): void {
     this.reckon(0, you);
-    this.rebuild(Infinity, near);
+    this.rebuild(Infinity, crowd);
   }
 
   /**
-   * One frame with your head at `you`: build those within `near` m (no
-   * farther than you can see through the fog, in a fen) and drop those you've
-   * gone past, step who's built, and bark.
+   * One frame with your head at `you`: build the nearest `crowd.most` within
+   * `crowd.near` m (no farther than you can see through the fog, in a fen)
+   * and drop those you've gone past, step who's built, and bark.
    */
-  update(dt: number, you: Vector3, near: number = CONFIG.population.near): void {
+  update(dt: number, you: Vector3, crowd: Crowd = CONFIG.population): void {
     this.reckon(dt, you);
-    this.rebuild(CONFIG.population.perFrame, near);
+    this.rebuild(CONFIG.population.perFrame, crowd);
+    this.time += dt;
     const { slots, fars } = this;
     for (let i = 0; i < slots.length; i++) {
       const s = slots[i];
       if (s.person) {
-        s.person.update(dt, you);
+        s.person.update(dt, you, this.time);
         s.far = s.person.far(you);
       }
       fars[i] = s.person?.shown && s.plan.barks?.length ? s.far : Infinity;
@@ -130,7 +145,7 @@ export class Population<P extends Placed = Villager<string>> {
     for (let i = 0; i < slots.length; i++) if (!this.rule.showing(i)) slots[i].person?.say(null);
   }
 
-  /** How far you are from each, walking on those dropped who stroll. */
+  /** How far you are from each, walking on those dropped who stroll. Those not there, as the quests stand, are wanted nowhere. */
   private reckon(dt: number, you: Vector3): void {
     const { hysteresis } = CONFIG.population;
     for (const s of this.slots) {
@@ -141,13 +156,12 @@ export class Population<P extends Placed = Villager<string>> {
         const at = whereIs(s);
         s.far = Math.hypot(at.x - you.x, at.z - you.z);
       }
-      s.rank = s.person ? s.far - hysteresis : s.far;
+      s.rank = !there(s.plan, this.story) ? Infinity : s.person ? s.far - hysteresis : s.far;
     }
   }
 
-  /** Drop those you've gone past, and build up to `budget` of those within `near`, nearest first. */
-  private rebuild(budget: number, near: number): void {
-    const { most } = CONFIG.population;
+  /** Drop those you've gone past, and build up to `budget` of the `crowd`, nearest first. */
+  private rebuild(budget: number, { near, most }: Crowd): void {
     const { order } = this;
     order.length = 0;
     for (const s of this.slots) if (s.rank < near) order.push(s);
@@ -185,24 +199,39 @@ export interface Streets extends Ground {
 
 /**
  * The game's villagers for a `Population`: each hung from `root` (hidden with
- * the outdoors), standing on `streets` and solid in it, in a body from the
- * cast's `wardrobe` (shared by everyone dressed alike), culled out of view.
+ * the outdoors), standing on `streets` and solid in it (the fallen lie on it,
+ * not solid), in a body from the cast's `wardrobe` (shared by everyone
+ * dressed alike), culled out of view.
  */
 export function villagersOn(
   streets: Streets,
   root: Group,
   wardrobe = new Wardrobe(),
   material: Material = sharedModelMaterial(),
-): Builder<Villager<string>> {
+): Builder<Inhabitant> {
   return {
     make(plan, stroll) {
       const person = CAST[plan.cast];
       const rig = wardrobe.dress(plan.cast, material);
       rig.cullOutside(CONFIG.population.pad);
+      if (plan.fallen) {
+        const fallen = new Fallen(plan.id, rig, plan, streets);
+        root.add(fallen.root);
+        return fallen;
+      }
       const turn = plan.turn ?? 0;
       const villager = new Villager(
         { id: plan.id, x: plan.x, z: plan.z, yaw: plan.yaw, interior: null, turn },
-        { rig, label: plan.label ?? person.label, stand: person.stand, work: WORKS[plan.work ?? 'stand'](person.stand, turn), start: startOf(plan.id), gives: false },
+        {
+          rig,
+          build: BUILDS[person.look.build],
+          label: plan.label ?? person.label,
+          stand: person.stand,
+          carry: person.carry,
+          work: WORKS[plan.work ?? 'stand'](person.stand, turn),
+          start: startOf(plan.id),
+          gives: false,
+        },
         streets,
         stroll,
       );
@@ -210,17 +239,17 @@ export function villagersOn(
       streets.addBody(villager.body);
       return villager;
     },
-    drop(villager, plan) {
-      villager.dispose();
-      streets.removeBody(villager.body);
+    drop(person, plan) {
+      person.dispose();
+      if (person instanceof Villager) streets.removeBody(person.body);
       wardrobe.undress(plan.cast);
     },
   };
 }
 
-/** The villagers in the world: a population, and the group they hang from (hide it with the outdoors). */
-export function worldPopulation(streets: Streets): { readonly population: Population; readonly root: Group } {
+/** The villagers in the world, there as `story` has it: a population, and the group they hang from (hide it with the outdoors). */
+export function worldPopulation(streets: Streets, story: Story = NO_STORY): { readonly population: Population; readonly root: Group } {
   const root = new Group();
   root.name = 'people';
-  return { population: new Population(villagersOn(streets, root)), root };
+  return { population: new Population(villagersOn(streets, root), story), root };
 }

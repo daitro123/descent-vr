@@ -1,4 +1,5 @@
 import { CONFIG } from '../config';
+import { CHOP, IDLE, SLASH_R } from '../enemies/poses';
 import { blendPoses, type Pose } from '../models/rig';
 import type { PersonId } from '../models/people';
 
@@ -9,7 +10,9 @@ import type { PersonId } from '../models/people';
 // and now and then turns to pump the bellows; the innkeeper wipes the bar,
 // polishes a tankard, sets it down and picks up another; the farmer leans on
 // the pitchfork, shifts their weight and shades their eyes to look off
-// towards the farm.
+// towards the farm. The guards (models/guards.ts) stand sentry, stand to
+// attention, drill, look over blades, lean on their halberds and peer into
+// holes.
 
 /** A moment of work: the pose, how far they've turned from their spot's facing (rad, + to their left), and the hips' shift. */
 export interface Working {
@@ -26,6 +29,12 @@ export interface WorkLoop {
   at(t: number): Working;
   /** The seconds into the loop at which the smith's hammer lands on the anvil: none for the others. */
   readonly strikes: readonly number[];
+  /**
+   * Does everyone at it keep time together (the recruits' drill)? Then it runs
+   * on the clock of everyone placed, not each from their own start, and
+   * doesn't stop while they look at you.
+   */
+  readonly together?: boolean;
 }
 
 /** One stretch of a loop: `u` goes 0 to 1 across its `time` seconds. */
@@ -65,11 +74,12 @@ function plus(base: Pose, add: Pose): Pose {
 }
 
 /** The segments strung into a loop, with the strikes found at `strikes` (s into a segment, by segment). */
-function loop(segments: readonly Segment[], strikes: readonly number[] = []): WorkLoop {
+function loop(segments: readonly Segment[], strikes: readonly number[] = [], together = false): WorkLoop {
   const duration = segments.reduce((s, g) => s + g.time, 0);
   return {
     duration,
     strikes,
+    together,
     at(t: number): Working {
       let at = ((t % duration) + duration) % duration;
       for (const g of segments) {
@@ -340,12 +350,179 @@ function standLoop(stand: Pose): WorkLoop {
   ]);
 }
 
+// ------------------------------------------------------------------ the guards
+
+/**
+ * Standing sentry at a gate or a door, a polearm upright in the right hand:
+ * weight on one foot, then the other, a long look up the road to one side,
+ * and now and then the polearm lifted a hand's breadth and grounded.
+ */
+function sentryLoop(stand: Pose): WorkLoop {
+  const G = CONFIG.villagers.guard.sentry;
+  const hip = CONFIG.villagers.stand.hip;
+  const onRight = plus(stand, { spine: [0, 0, -0.03], thighL: [-0.07, 0, 0.06], shinL: [0.14, 0, 0], thighR: [0.02, 0, -0.02] });
+  const onLeft = plus(stand, { spine: [0, 0, 0.03], thighR: [-0.07, 0, -0.06], shinR: [0.14, 0, 0], thighL: [0.02, 0, 0.02] });
+  const right = still(onRight, 0, [-hip, 0, 0]);
+  const left = still(onLeft, 0, [hip, 0, 0]);
+  // Up the road: the head most of the way round, the chest a little, and back the other way later.
+  const upRoad = still(plus(onLeft, { head: [-0.05, G.look, 0], spine: [0, G.look * 0.3, 0] }), 0, [hip, 0, 0]);
+  const downRoad = still(plus(onRight, { head: [0, -G.look * 0.8, 0], spine: [0, -G.look * 0.2, 0] }), 0, [-hip, 0, 0]);
+  // The shoulder brings the fist (and the polearm in it) up and forward, and lets it drop.
+  const lifted = still(plus(onRight, { upperArmR: [-0.14, 0, 0], forearmR: [0.06, 0, 0] }), 0, [-hip, 0, 0]);
+  return loop([
+    hold(G.rest, right),
+    move(G.shift, right, left),
+    hold(G.rest * 0.5, left),
+    move(G.turn, left, upRoad),
+    hold(G.watch, upRoad),
+    move(G.turn, upRoad, left),
+    hold(G.rest * 0.6, left),
+    move(G.shift, left, right),
+    move(G.lift, right, lifted),
+    { time: G.ground, at: (u) => mix(lifted, right, u * u) },
+    hold(G.rest * 0.6, right),
+    move(G.turn, right, downRoad),
+    hold(G.watch * 0.6, downRoad),
+    move(G.turn, downRoad, right),
+  ]);
+}
+
+/** The royal guard at attention: still as a post, the eyes going to one side and back now and then. */
+function attentionLoop(stand: Pose): WorkLoop {
+  const A = CONFIG.villagers.guard.attention;
+  const s = still(stand);
+  const left = still(plus(stand, { head: [0, A.look, 0] }));
+  const right = still(plus(stand, { head: [0.03, -A.look, 0] }));
+  return loop([hold(A.still, s), move(A.eyes, s, left), hold(A.glance, left), move(A.eyes, left, s), hold(A.still * 0.7, s), move(A.eyes, s, right), hold(A.glance, right), move(A.eyes, right, s)]);
+}
+
+/**
+ * The recruits' drill at the dummies: into the grunt's ready stance, a chop
+ * and a forehand slash with the grunt's own wind-ups and strikes, again, then
+ * the sword down and a breather. Everyone at it keeps time together.
+ */
+function drillLoop(stand: Pose): WorkLoop {
+  const D = CONFIG.villagers.guard.drill;
+  const rest = still(stand);
+  const ready = still(IDLE.grunt);
+  const strike = (from: Pose, to: Pose): Segment => ({ time: D.strike, at: (u) => mix(still(from), still(to), u * u) });
+  const blow = (a: { windup: Pose; strike: Pose }): Segment[] => [move(D.windup, ready, still(a.windup)), strike(a.windup, a.strike), move(D.recover, still(a.strike), ready)];
+  const rounds = Array.from({ length: D.rounds }, () => [...blow(CHOP), ...blow(SLASH_R)]).flat();
+  return loop([move(D.ready, rest, ready), ...rounds, move(D.ready, ready, rest), hold(D.rest, rest)], [], true);
+}
+
+/** A blade raised before the face, point up and away, looked along: the quartermaster checking an edge. */
+const SIGHT: Pose = {
+  spine: [0.02, 0.1, 0],
+  head: [0.12, -0.15, 0],
+  upperArmR: [-1.0, 0.35, -0.05],
+  forearmR: [-1.35, 0, 0],
+  handR: [0, 0, 0],
+  upperArmL: [0.04, 0, 0.1],
+  forearmL: [-0.2, 0, 0],
+};
+/** Reaching up to hang a blade on the rack's pegs, point down. */
+const HANG: Pose = {
+  spine: [0.08, 0, 0],
+  head: [-0.1, 0, 0],
+  upperArmR: [-1.5, 0.15, -0.1],
+  forearmR: [-0.15, 0, 0],
+  handR: [1.5, 0, 0],
+  upperArmL: [0.04, 0, 0.1],
+  forearmL: [-0.2, 0, 0],
+};
+
+/**
+ * Looking blades over at the rack: one raised to sight along its edge and
+ * turned in the light, lowered, then hung on the rack `rackTurn` round to
+ * their left and the next one taken down.
+ */
+function bladesLoop(stand: Pose, rackTurn: number): WorkLoop {
+  const B = CONFIG.villagers.guard.blades;
+  const low = still(stand);
+  const up = still(SIGHT);
+  const sight: Segment = { time: B.sight, at: (u) => still(plus(SIGHT, { handR: [0, 0.9 * Math.sin(u * Math.PI * 2), 0], head: [0.04 * Math.sin(u * Math.PI * 4), 0, 0] })) };
+  const atRack = still(stand, rackTurn);
+  const hang = still(HANG, rackTurn);
+  return loop([
+    hold(B.rest, low),
+    move(B.raise, low, up),
+    sight,
+    move(B.lower, up, low),
+    move(B.turn, low, atRack),
+    move(B.hang, atRack, hang),
+    hold(B.hold, hang),
+    move(B.hang, hang, atRack),
+    move(B.turn, atRack, low),
+  ]);
+}
+
+/**
+ * Leaning on the polearm, added to the stand that holds it upright at the
+ * right side: the chest turned to it, the left hand over on its shaft a
+ * hand's breadth above the right, the butt still where it stood, the weight
+ * on it and the right foot.
+ */
+const LEANING: Pose = {
+  spine: [0.08, -0.25, 0.06],
+  head: [0.1, 0.2, -0.04],
+  upperArmL: [-1.12, -0.71, -0.15],
+  forearmL: [-0.63, 0, 0],
+  handL: [0.29, 0.02, 0.02],
+  upperArmR: [-0.23, 0.19, -0.04],
+  forearmR: [0.12, 0.17, 0],
+  handR: [0.01, -0.03, -0.04],
+  thighR: [0.02, 0, -0.02],
+  thighL: [-0.12, 0, 0.12],
+  shinL: [0.2, 0, 0],
+};
+
+/**
+ * Leaning on a polearm planted at the right side: a long rest, a sigh (the
+ * shoulders up, then down further), and a look off to their left over the
+ * reeds and back.
+ */
+function leanLoop(stand: Pose): WorkLoop {
+  const L = CONFIG.villagers.guard.lean;
+  const base = plus(stand, LEANING);
+  const lean = still(base, 0, [-0.03, -0.01, 0]);
+  const breathe = still(plus(base, { spine: [-0.06, 0, 0], head: [-0.15, 0, 0] }), 0, [-0.03, 0, 0]);
+  const slump = still(plus(base, { spine: [0.06, 0, 0], head: [0.18, 0, 0] }), 0, [-0.03, -0.02, 0]);
+  const away = still(plus(base, { head: [-0.05, L.away, 0], spine: [0, L.away * 0.2, 0] }), 0, [-0.03, -0.01, 0]);
+  return loop([
+    hold(L.rest, lean),
+    move(L.sigh * 0.4, lean, breathe),
+    move(L.sigh * 0.6, breathe, slump),
+    hold(L.rest * 0.4, slump),
+    move(L.turn, slump, lean),
+    hold(L.rest * 0.5, lean),
+    move(L.turn, lean, away),
+    hold(L.look, away),
+    move(L.turn, away, lean),
+  ]);
+}
+
+/**
+ * At a fence round a hole: leaning in over it with the left hand on the rail
+ * to peer down, looking along it, then straightening for a look round. The
+ * polearm in the right hand stays upright.
+ */
+function peerLoop(stand: Pose): WorkLoop {
+  const P = CONFIG.villagers.guard.peer;
+  const s = still(stand);
+  const over = plus(stand, { spine: [0.42, 0, 0], head: [0.5, 0, 0], upperArmR: [0.42, 0, 0], upperArmL: [-0.75, 0, 0.05], forearmL: [-0.45, 0, 0], thighL: [-0.12, 0, 0], thighR: [-0.12, 0, 0] });
+  const down = still(over, 0, [0, -0.01, -0.05]);
+  const scan: Segment = { time: P.scan, at: (u) => still(plus(over, { head: [0, 0.35 * Math.sin(u * Math.PI * 2), 0] }), 0, [0, -0.01, -0.05]) };
+  const round = still(plus(stand, { head: [-0.05, -0.8, 0], spine: [0, -0.2, 0] }));
+  return loop([hold(P.stand, s), move(P.down, s, down), scan, move(P.up, down, s), move(P.turn, s, round), hold(P.look, round), move(P.turn, round, s)]);
+}
+
 /**
  * Every work loop a zone can give a villager (maps/types.ts `PersonPlan`), by
- * name: standing about, or one of Oakvale's trades. Each is made from the
- * villager's standing pose and, for a work with a second place (the smith's
- * bellows), how far round to their left it stands. A model family adds its
- * own loops here.
+ * name: standing about, one of Oakvale's trades, or a guard's. Each is made
+ * from the villager's standing pose and, for a work with a second place (the
+ * smith's bellows, the quartermaster's rack), how far round to their left it
+ * stands. A model family adds its own loops here.
  */
 export const WORKS = {
   stand: (stand: Pose) => standLoop(stand),
@@ -353,6 +530,12 @@ export const WORKS = {
   innkeeper: () => innkeeperLoop(),
   farmer: () => farmerLoop(),
   herbalist: () => herbalistLoop(),
+  sentry: (stand: Pose) => sentryLoop(stand),
+  attention: (stand: Pose) => attentionLoop(stand),
+  drill: (stand: Pose) => drillLoop(stand),
+  blades: (stand: Pose, turn: number) => bladesLoop(stand, turn),
+  lean: (stand: Pose) => leanLoop(stand),
+  peer: (stand: Pose) => peerLoop(stand),
 } satisfies Record<string, (stand: Pose, turn: number) => WorkLoop>;
 
 /** A work loop's name. */

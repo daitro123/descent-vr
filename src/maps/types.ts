@@ -1,8 +1,8 @@
 import type { Camera, Object3D, Vector3 } from 'three';
 import type { Role } from '../adventureState';
 import type { RoadPoint } from '../enemies/patrol';
-import type { Item, Place, VillagerId } from '../quests';
-import type { EnemyKind, Family } from '../models/characters';
+import type { Item, Place, QuestMoment, VillagerId } from '../quests';
+import type { EnemyFamily, EnemyKind } from '../models/characters';
 import type { CritterLook } from '../models/critters';
 import type { CastId } from '../people/cast';
 import type { WorkName } from '../people/work';
@@ -91,6 +91,28 @@ export interface PersonPlan {
    * to walk: a street, a road, a quay.
    */
   readonly route?: readonly RoadPoint[];
+  /** There only from this moment of a quest on: the Fairweathers' son, home on the raft after North Wind. */
+  readonly from?: QuestMoment;
+  /** Gone from this moment of a quest on, for good: Jory Hask, once his office is empty. */
+  readonly until?: QuestMoment;
+  /**
+   * Lying dead where they fell, face down: still, silent, not solid, never
+   * turning to you or doing anything (the diggers by the open barrow). No
+   * work, route or barks.
+   */
+  readonly fallen?: boolean;
+}
+
+/**
+ * How many villagers are built round you, and how near (people/population.ts):
+ * the nearest `most` within `near` m (or the fog's far edge, if nearer). A
+ * city's house rows hide its streets past about 50 m, so it can show a nearer,
+ * thicker crowd than the open moor: the zones' inhabitants specs measure each
+ * against the frame budget (/zones/<zone>-inhabitants.md in the project's files).
+ */
+export interface Crowd {
+  readonly near: number;
+  readonly most: number;
 }
 
 /**
@@ -139,8 +161,8 @@ export interface PostPlan {
   readonly role?: Extract<Role, 'leader' | 'deepBrute'>;
   /** Its level, if not its camp's (the mine's deep brutes). */
   readonly level?: number;
-  /** Who it is: bandits wear the human body, the undead are skeletons, leeches and adders are crawlers. */
-  readonly family: Family;
+  /** Who it is: the undead are skeletons, the bandits and House Corvane's men wear the human body, leeches and adders are crawlers. */
+  readonly family: EnemyFamily;
   /**
    * Which of its family's looks, if a set one. A leech's are 0 the black mire
    * leech, 1 the pale fen leech and 2 the Old Mother Leech. Unset, a person or
@@ -173,6 +195,20 @@ export interface CampPlan {
    * and bringing others, and it refills only once you've left.
    */
   readonly interior?: InteriorId;
+  /**
+   * Leaves you be until this moment of a quest: it notices you only once you
+   * hurt one of it (and brings its campmates then, as any camp does).
+   * Fellgate's bailiffs, until Letters from the House.
+   */
+  readonly neutralUntil?: QuestMoment;
+  /** There only from this moment of a quest on: the smuggler punt's crew, once you've shown the lantern signal. */
+  readonly from?: QuestMoment;
+  /**
+   * Gone from this moment of a quest on, for good, once it's calm and its
+   * fallen have fallen. A camp that comes or goes is raised only while you're
+   * near, as another zone's camps are, even in the starting zone.
+   */
+  readonly until?: QuestMoment;
 }
 
 /** Something lying in a zone to pick up by hand (the leader's orders): where, and which way it lies. */
@@ -309,6 +345,8 @@ export interface Zone extends MapBase {
   readonly villagers: readonly VillagerSpot[];
   /** Its other villagers, placed by data and built as you come near them. */
   readonly people: readonly PersonPlan[];
+  /** How near you villagers are built while you're in it, and how many at once. */
+  readonly crowd: Crowd;
   /** Its critters, placed by data, living and drawn only while you're near (world/critters.ts). */
   readonly critters?: readonly CritterPlan[];
   /** The water's surface at (x, z) where water stands over the ground, or null where it's dry (Ground.waterAt). Without it, the zone is dry. */

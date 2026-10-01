@@ -376,9 +376,9 @@ export const CONFIG = {
   // same step, so a fight against your own level plays like the arena at any
   // level. The arena is level 1 with every base ability of its class.
   levels: {
-    xp: 100, // level L needs this × (L − 1) more XP than level L − 1: 100, 300, 600 and 1,000 in all to 2, 3, 4 and 5; 19,000 to 20
-    cap: 5, // the top level the content has quests and camps for; XP past it is dropped
-    most: 20, // the highest a test may raise the cap to (`&cap=`): the curve is sketched to 20
+    xp: 100, // level L needs this × (L − 1) more XP than level L − 1: 100, 300, 600 and 1,000 in all to 2, 3, 4 and 5; 19,000 to 20, 78,000 to 40
+    cap: 5, // the top level the content has quests and camps for; XP past it is dropped. Raised as each zone's quests come (Brackenmoor's are 5 to 12)
+    most: 40, // the highest a test may raise the cap to (`&cap=`): the world's (zones/world-map.md in the project's files; the Hollow North is 32 to 40)
     grey: 5, // an enemy this many levels or more below you pays no XP
     step: 0.2, // an enemy's health and damage, times 1 + this per level above 1 (your attributes make the same step)
     killXp: 10, // a kill pays this per enemy level…
@@ -771,7 +771,7 @@ export const CONFIG = {
     // What a chest holds (.scratch/inventory/issues/13-oakvales-chests.md): `coins` × its level,
     // and one piece of gear of your class at its level, of a rarity by `gear`'s chances.
     chest: { coins: 5, gear: { green: 0.8, blue: 0.2 } satisfies Partial<Record<Rarity, number>> },
-    levels: 5, // loot's items come at item levels 1 to this; an enemy above it drops this level's
+    levels: 40, // loot's items come at item levels 1 to this; an enemy above it drops this level's
     lifetime: 300, // s a drop lies, through your death too
     most: 12, // drops lying at once: past this the oldest goes
     ring: 0.4, // m from the pouch its items lie, round it
@@ -974,7 +974,7 @@ export const CONFIG = {
     most: 30, // villagers built at once, the nearest: a town's crowd is about 1.5k triangles and 2 draw calls each in view (zones/character-notes.md)
     perFrame: 1, // villagers built a frame as you walk, and as many of a camp's members: each is a few ms on the headset
     pad: 0.6, // m round a villager's body at bind that culls them out of view: room for their arms to swing and what they hold to move
-    walk: { speed: 1.1, pause: 4, stride: 6.5 }, // m/s strolling a route, s standing at each end, walk cycle's rad per metre walked
+    walk: { speed: 1.1, pause: 4 }, // m/s strolling a route (each build has its own pace: human.ts `Gait`), s standing at each end
   },
 
   // Critters (world/critters.ts): hares and rabbits, frogs, rats, each a
@@ -1033,6 +1033,21 @@ export const CONFIG = {
     farmer: { lean: 4, shift: 1.2, look: 3, lift: 0.8 }, // s each: a lean before each shift of weight, the look after every second one, the hand going up and down
     // Standing about, for anyone with no work of their own: weight on one foot, then the other, and a look round each side now and then.
     stand: { rest: 5, shift: 1.4, turn: 0.7, glance: 2.2, look: 0.75, hip: 0.025 }, // s on a foot, shifting, turning the head and looking; rad the head turns; m the hips shift
+    // The guards' loops (models/guards.ts), each in s unless it says otherwise.
+    guard: {
+      // At a gate or a door: weight from foot to foot, a long look up the road, and the polearm lifted and grounded now and then.
+      sentry: { rest: 6, shift: 1.6, turn: 1.1, watch: 3.5, look: 1.0, lift: 0.5, ground: 0.25 }, // look: rad the head and chest turn up the road
+      // The royal guard at attention: nearly still, the eyes going to one side now and then and back.
+      attention: { still: 9, eyes: 0.6, glance: 1.8, look: 0.3 }, // look: rad
+      // The recruits at the dummies: a chop and a slash with the grunt's own strikes, `rounds` times, then a rest; everyone at it keeps time together.
+      drill: { ready: 0.8, windup: 0.6, strike: 0.22, recover: 0.6, rounds: 2, rest: 3.5 },
+      // The quartermaster: a blade raised to sight along its edge and turned, lowered, and hung on the rack (round to their left).
+      blades: { raise: 1.0, sight: 2.6, lower: 0.9, turn: 1.0, hang: 1.1, hold: 0.6, rest: 1.5 },
+      // Leaning on a polearm: a sigh now and then, and a look off to one side.
+      lean: { rest: 5, sigh: 2.2, turn: 1.2, look: 3, away: 0.9 }, // away: rad
+      // At a fence round a hole: leaning in to peer down, looking along it, straightening to look round.
+      peer: { stand: 4, down: 1.4, scan: 4, up: 1.2, turn: 0.8, look: 2 },
+    },
   },
 
   // Talking to Hale on a board that unfolds beside them: the talk prototype's

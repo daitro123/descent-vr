@@ -17,7 +17,7 @@ import {
   Vector3,
   type WebGLRenderer,
 } from 'three';
-import { buildCharacter, type HumanoidFamily, type HumanoidKind, type WeaponSpec } from '../models/characters';
+import { buildCharacter, FAMILIES, type Family, type Fighter, type HumanoidKind, type WeaponSpec } from '../models/characters';
 import { CRAWLER_LOOKS, type CrawlerLook } from '../models/crawler';
 import { CRITTER_LOOKS, type CritterLook } from '../models/critters';
 import { createModelMaterial, type ModelMaterial } from '../models/materials';
@@ -36,7 +36,7 @@ import { crawlerShowpiece, critterShowpiece, type Moment, type Showpiece } from 
 
 export type InspectorEntry =
   /** An enemy: its behaviour, its family's body, and which of its looks. */
-  | { kind: HumanoidKind; family: HumanoidFamily; variant: number; label: string }
+  | { kind: HumanoidKind; family: Family; variant: number; label: string }
   /** A friendly character: Hale or one of Oakvale's villagers. */
   | { person: PersonId; label: string }
   /** One of the cast a zone places as a villager, beyond Oakvale's (people/cast.ts). */
@@ -46,21 +46,21 @@ export type InspectorEntry =
   /** A crawler: a leech or the adder (models/crawler.ts), crawling and fighting as a biter. */
   | { crawler: CrawlerLook; label: string };
 
-const VARIANTS = [0, 1, 2, 3, 4, 5];
+/** Each look of every enemy family's fighters: "Grunt v0" to "v5", "Archer". */
+const enemies = (Object.keys(FAMILIES) as Family[]).flatMap((family) =>
+  (Object.entries(FAMILIES[family].fights) as [HumanoidKind, Fighter][]).flatMap(([kind, f]) =>
+    Array.from({ length: f.looks }, (_, variant) => ({ kind, family, variant, label: f.looks > 1 ? `${f.label} v${variant}` : f.label })),
+  ),
+);
 
 /**
- * Every model the game builds: the undead (grunts come in six helmet, cloth
- * and weapon combos), the bandits (thugs in six looks and weapons), then
- * Marshal Hale and the villagers, then the rest of the cast zones place.
+ * Every model the game builds: each enemy family's (the undead's grunts in
+ * six helmet, cloth and weapon combos, the bandits' thugs in six looks and
+ * weapons, and so on), then Marshal Hale and the villagers, then the rest of
+ * the cast zones place.
  */
 export const ENTRIES: InspectorEntry[] = [
-  ...VARIANTS.map((v) => ({ kind: 'grunt' as const, family: 'undead' as const, variant: v, label: `Grunt v${v}` })),
-  { kind: 'archer', family: 'undead', variant: 0, label: 'Archer' },
-  { kind: 'brute', family: 'undead', variant: 0, label: 'Brute' },
-  { kind: 'warden', family: 'undead', variant: 0, label: 'Bone Warden' },
-  ...VARIANTS.map((v) => ({ kind: 'grunt' as const, family: 'bandit' as const, variant: v, label: `Bandit thug v${v}` })),
-  { kind: 'archer', family: 'bandit', variant: 0, label: 'Bandit archer' },
-  { kind: 'brute', family: 'bandit', variant: 0, label: 'Bandit leader' },
+  ...enemies,
   ...(Object.keys(PEOPLE) as PersonId[]).map((id) => ({ person: id, label: PEOPLE[id].label })),
   ...(Object.keys(CAST) as CastId[]).filter((id) => !(id in PEOPLE)).map((id) => ({ cast: id, label: CAST[id].label })),
   ...CRITTER_LOOKS.map((look) => ({ critter: look, label: look.charAt(0).toUpperCase() + look.slice(1) })),
@@ -193,7 +193,8 @@ export class Inspector {
       play(i, t) {
         const frame = clips[i].sample(t, pose);
         rig.apply(frame.pose);
-        rig.setHipOffset(0, frame.hipY, 0);
+        const hip = frame.hip ?? [0, frame.hipY, 0];
+        rig.setHipOffset(hip[0], hip[1], hip[2]);
         return frame;
       },
       triangles: rig.triangles,

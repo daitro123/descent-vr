@@ -1,5 +1,5 @@
 import { CONFIG } from './config';
-import type { Family } from './models/characters';
+import type { EnemyFamily } from './models/characters';
 
 // The item catalogue, as data, and the one rule that gives an item its
 // numbers from its item level and rarity. Nothing here is hand-tuned per item:
@@ -119,7 +119,7 @@ export const LOOT_LEVELS: readonly number[] = Array.from({ length: CONFIG.loot.l
 /** An item that comes at every loot level has one id per level: its base id and the level. */
 export const levelled = (base: string, level: number): ItemId => `${base}-${level}`;
 
-/** Junk, by the family that drops it: the base id, its name and its model. */
+/** Junk, by the enemy family that drops it: the base id, its name and its model. */
 export const JUNK = {
   bandit: [
     ['worn-trinket', 'Worn Trinket', 'trinket'],
@@ -129,6 +129,10 @@ export const JUNK = {
     ['bone-charm', 'Bone Charm', 'charm'],
     ['grave-dust', 'Grave Dust', 'dust'],
   ],
+  corvane: [
+    ['tithe-tally', 'Tithe Tally', 'tally'],
+    ['key-badge', 'Black Key Badge', 'key-badge'],
+  ],
   leech: [
     ['leech-slime', 'Leech Slime', 'slime'],
     ['leech-teeth', 'Leech Teeth', 'teeth'],
@@ -137,7 +141,7 @@ export const JUNK = {
     ['shed-adder-skin', 'Shed Adder Skin', 'snakeskin'],
     ['adder-fang', 'Adder Fang', 'fang'],
   ],
-} as const satisfies Record<Family, readonly (readonly [string, string, string])[]>;
+} as const satisfies Record<EnemyFamily, readonly (readonly [string, string, string])[]>;
 
 /** Junk at every loot level: sold only, and worth its item level × `CONFIG.items.sell.grey`. */
 const junk = (): JunkItem[] =>

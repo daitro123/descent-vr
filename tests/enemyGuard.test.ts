@@ -266,6 +266,8 @@ describe.each([
   ['grunt', () => new TestGrunt('grunt', 0, 0)],
   ['bandit thug with a sword', () => new TestGrunt('grunt', 0, 0, { family: 'bandit' })],
   ['bandit thug with a hatchet', () => new TestGrunt('grunt', 0, 0, { family: 'bandit', variant: 1 })],
+  ['bailiff with a cudgel', () => new TestGrunt('grunt', 0, 0, { family: 'corvane' })],
+  ['bailiff with an iron-bound club', () => new TestGrunt('grunt', 0, 0, { family: 'corvane', variant: 1 })],
   ['warden', () => new TestWarden('warden', 0, 0)],
 ] as const)('%s guarding', (_name, make) => {
   /** Guard `side`, give the pose time to come up, and hold still. */
@@ -350,6 +352,8 @@ describe('the duelist (?duel)', () => {
     let raised = 0;
     for (let i = 0; i < 100; i++) {
       const e = spawn(make());
+      // Each read rolls from the i-th of them, however many building the body took (three.js rolls an id per bone).
+      n = i;
       e.update(DT, context(WINDUP.left));
       if (e.guarding) raised++;
     }

@@ -2,7 +2,7 @@ import { Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
 import { attackClip, type MutablePose } from '../src/inspector/clips';
-import { buildCharacter, type HumanoidKind as EnemyKind, type HumanoidFamily as Family } from '../src/models/characters';
+import { buildCharacter, type HumanoidKind as EnemyKind, type Family } from '../src/models/characters';
 import { buildLongsword } from '../src/models/gear';
 
 // Blades should land edge first. These play each melee swing with the game's
@@ -18,6 +18,10 @@ const WIELDERS: [string, EnemyKind, number, Family][] = [
   ['bandit thug (sword)', 'grunt', 0, 'bandit'],
   ['bandit thug (hatchet)', 'grunt', 1, 'bandit'],
   ['bandit leader (felling axe)', 'brute', 0, 'bandit'],
+  // A club has no edge, but swung the same way it lands its striking face first all the same.
+  ['bailiff (cudgel)', 'grunt', 0, 'corvane'],
+  ['bailiff (iron-bound club)', 'grunt', 1, 'corvane'],
+  ['bailiff shieldman (mace)', 'brute', 0, 'corvane'],
 ];
 
 /** Angles (degrees) between the cutting side and the blade's travel, across the swing. */

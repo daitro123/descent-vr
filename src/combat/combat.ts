@@ -77,8 +77,8 @@ const CREATURE_BLOOD: Partial<Record<Enemy['family'], number>> = { leech: 0x3a0e
 
 /** The blood that flies from `enemy`, or null for the dead, who are bones (bar the brute's dark ichor, the default). */
 function bloodOf(enemy: Enemy): number | undefined | null {
-  if (enemy.family === 'bandit') return HUMAN_BLOOD;
-  if (enemy.family !== 'undead') return CREATURE_BLOOD[enemy.family];
+  if (enemy.body === 'human') return HUMAN_BLOOD;
+  if (enemy.body === 'crawler') return CREATURE_BLOOD[enemy.family];
   return enemy.kind === 'brute' ? undefined : null;
 }
 const _to = new Vector3();
@@ -850,7 +850,7 @@ export class Combat implements ArrowResolver {
     this.fx.text.spawn('Evade', at.clone().setY(at.y + 0.2), { color: '#c0c0c0', scale: 0.16 });
   }
 
-  /** Red from bandits, leeches and adders, dark ichor from the undead brute, bone chips from skeletons; sparks on crits. */
+  /** Red from the living, leeches and adders, dark ichor from the undead brute, bone chips from skeletons; sparks on crits. */
   private impactFx(enemy: Enemy, at: Vector3, dir: Vector3, bright: boolean): void {
     _vel.copy(dir).normalize();
     const blood = bloodOf(enemy);
@@ -871,7 +871,7 @@ export class Combat implements ArrowResolver {
     enemy.capsule(_a, _b);
     _a.lerp(_b, 0.5);
     const blood = bloodOf(enemy);
-    sfx.death(_a, { big: enemy.kind === 'warden' || enemy.kind === 'brute', bones: enemy.family === 'undead' });
+    sfx.death(_a, { big: enemy.kind === 'warden' || enemy.kind === 'brute', bones: enemy.body === 'skeleton' });
     if (blood === null) this.fx.particles.burst('bone', _a, enemy.kind === 'warden' ? 40 : 14);
     else this.fx.particles.burst('blood', _a, enemy.kind === 'brute' ? 24 : enemy.kind === 'biter' ? 8 : 12, undefined, blood);
     if (enemy.kind === 'warden') {

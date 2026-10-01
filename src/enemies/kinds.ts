@@ -1,7 +1,7 @@
 import { Vector3 } from 'three';
 import { enemyNumbers } from '../adventureState';
 import { type AttackConfig, CONFIG, type EnemyConfig } from '../config';
-import type { EnemyKind, Family } from '../models/characters';
+import type { EnemyFamily, EnemyKind } from '../models/characters';
 import {
   buildCrawler,
   CRAWLER_BONES,
@@ -217,8 +217,8 @@ export interface EnemyOptions {
   level?: number;
   /** In a camp, it's stronger again (`CONFIG.camps.strength`). */
   inCamp?: boolean;
-  /** Who it is: the undead (skeletons, the default) or the bandits (the human body). */
-  family?: Family;
+  /** Who it is: the undead (skeletons, the default), a family in the human body, or a crawler's (leeches, adders: biters only). */
+  family?: EnemyFamily;
   /** Which of its family's looks for its behaviour. */
   variant?: number;
   /** Its behaviour's level-1 numbers, if not the usual ones (the `?duel` duelist). */

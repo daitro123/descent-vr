@@ -1,6 +1,6 @@
 import { bow } from './bow';
-import type { HumanoidKind, WeaponSpec } from './characters';
-import { type BuildName, body, HUE, head, hood, kerchief, type Look, quiver, sash, shade } from './human';
+import type { FamilyDef, HumanoidKind, WeaponSpec } from './characters';
+import { BUILDS, type BuildName, body, HUE, head, hood, kerchief, type Look, quiver, sash, shade } from './human';
 import type { Vec3 } from './kit';
 import { PAL } from './palette';
 import type { DressContext } from './rig';
@@ -198,14 +198,13 @@ function dressLeader(ctx: DressContext): WeaponSpec {
 /** The build each bandit's body is made in. */
 export const BANDIT_BUILDS: Record<BanditKind, BuildName> = { grunt: THUG_BUILD, archer: ARCHER_LOOK.build, brute: LEADER_LOOK.build };
 
-/** A bandit with the behaviour `kind` dresses for it; thugs vary with `variant`. */
-export function dressBandit(ctx: DressContext, kind: BanditKind, variant: number): WeaponSpec {
-  switch (kind) {
-    case 'grunt':
-      return dressThug(ctx, variant);
-    case 'archer':
-      return dressArcher(ctx);
-    case 'brute':
-      return dressLeader(ctx);
-  }
-}
+/** The bandits, in the human body: thugs fight as grunts, the archer as an archer, the leader as a brute. */
+export const BANDITS: FamilyDef = {
+  body: 'human',
+  seed: 21,
+  fights: {
+    grunt: { label: 'Bandit thug', looks: 6, proportions: BUILDS[BANDIT_BUILDS.grunt].proportions, dress: dressThug },
+    archer: { label: 'Bandit archer', looks: 1, proportions: BUILDS[BANDIT_BUILDS.archer].proportions, dress: dressArcher },
+    brute: { label: 'Bandit leader', looks: 1, proportions: BUILDS[BANDIT_BUILDS.brute].proportions, dress: dressLeader },
+  },
+};

@@ -48,6 +48,10 @@ _Avoid_: NPC type, archetype, template
 A villager's walk along a set route and back, at a walking pace, standing a while at each end. Like any villager, a stroller stops and turns to you as you come close.
 _Avoid_: patrol (a patrol is a camp's), wander, path
 
+**Fallen**:
+Someone placed lying dead where they fell, face down and still: they say nothing, never turn to you and aren't solid (the diggers by an open barrow). Not an enemy that's just been killed, which falls and sinks away.
+_Avoid_: corpse (a model family's look), body
+
 **Bark**:
 A short line a friendly character says unasked as you walk near, shown as text over their head. It isn't a conversation, and what it says can change as the quest chain moves on.
 _Avoid_: greeting, gossip, chatter, speech bubble
@@ -77,7 +81,7 @@ How an enemy fights, and so what it tests in the player: the grunt (reading a sw
 _Avoid_: kind, type, class, AI
 
 **Family**:
-Who an enemy is, whatever its behaviour: the bandits or the undead. A bandit archer and an undead archer share a behaviour but not a family.
+Who an enemy is, whatever its behaviour: the bandits, House Corvane's bailiffs or the undead. A bandit archer and an undead archer share a behaviour but not a family. A family wears one body, the human body or the skeleton, and fields a look for each behaviour it fights with.
 _Avoid_: faction, race, type
 
 **Rooted**, **frozen**, **slowed**:
@@ -85,15 +89,23 @@ What an ability can hold an enemy in for a while. Rooted, it can't walk but stri
 _Avoid_: stun (a stagger is the game's stun), snare, debuff, crowd control
 
 **Human body**:
-The one body every person wears, bandits and friendly characters alike, dressed per character. The undead are skeletons instead.
+The one body every person wears, bandits, bailiffs and friendly characters alike, dressed per character. The undead are skeletons instead.
 _Avoid_: human model, NPC mesh
 
+**Livery**:
+The colours that say whose service someone is in: the crown's blue and gold (the City Watch, the royal guard, and faded on the toll men), House Corvane's deep crimson with a black key (its men-at-arms and bailiffs), House Harrowgate's grey with a white tower, a town watch's cream armband.
+_Avoid_: uniform, faction colours, team
+
 **Build**:
-A human body's size and shape: average, stout, broad or big.
+A human body's size and shape, and the walk that goes with it (its gait): average, stout, broad or big for grown men; woman; elder and elder woman, stooped; child.
 _Avoid_: body type, size
 
+**Gait**:
+How a build walks: the length of its step, its pace, how its arms swing and how far its feet roll heel to toe. A child takes quick short steps; an elder shuffles, slow and flat-footed.
+_Avoid_: walk style, locomotion
+
 **Camp**:
-A group of enemies that lives at one place and refills some time after it is cleared: the bandits at the farm, at the lumber camp and at the watchtower, and the undead in the mine. A boss is never part of a camp. (The lumber camp is a place; the bandits there are its camp.)
+A group of enemies that lives at one place and refills some time after it is cleared: the bandits at the farm, at the lumber camp and at the watchtower, and the undead in the mine. A boss is never part of a camp. (The lumber camp is a place; the bandits there are its camp.) A camp can be neutral until a quest turns it, leaving you be unless you hurt one of it, and can come or go with a quest.
 _Avoid_: spawn, pack, mob
 
 **Patrol**:
