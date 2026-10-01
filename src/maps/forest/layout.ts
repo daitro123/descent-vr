@@ -70,6 +70,29 @@ const MAIN_ROAD: P2[] = [
   [-2, -12], [-5, -22], [-6, -31], [-5, -40], [-8, -52], [-12, -64], [-14, -73],
 ];
 
+/**
+ * The Old North Pass: a cut in the northern ridge just east of the old mine's
+ * front, choked by a rockslide. The old cart road leaves the main road below
+ * the mine and climbs to the slide's toe, where it's buried; a weathered
+ * cairn by it carries a faded waymark. Pines and a little snow show above
+ * the slide. Scenery only: nothing to climb, and where you can walk doesn't
+ * change (Greyfell opens it from the north, much later).
+ */
+export const NORTH_PASS = {
+  /** The cut's floor line, from its foot at the play area's edge up through the ridge to the land's edge. */
+  line: [[10, -82], [14, -94], [17, -108], [19, -124], [20, -141]] as P2[],
+  /** Its floor's half width, its sides' slope (rise over run), and its floor's height at its foot and at the land's edge. */
+  half: 5,
+  side: 1.3,
+  floor: [10, 34] as const,
+  /** The slide: big boulders heaped in the cut between these distances along it, scree spilling below them. */
+  slide: { from: 8, to: 36, boulders: 42, scree: 26 },
+  /** The old cart road, from the main road below the mine up to the slide's toe. */
+  road: [[-11, -64.5], [-4, -69], [3, -75], [9, -83], [13, -92]] as P2[],
+  /** The cairn by the road below the slide, its waymark stuck in its top. */
+  cairn: { x: 8.4, z: -77.6, h: 1.25 },
+} as const;
+
 const PATHS: { id: string; width: number; pts: P2[] }[] = [
   { id: 'main', width: 4, pts: MAIN_ROAD },
   { id: 'east', width: 3.4, pts: [[1, -1], [12, -2], [26, 3], [38, 12], [47, 20], [54, 26]] },
@@ -274,6 +297,8 @@ export interface SignpostPlan {
   readonly length: number;
   readonly height: number;
   readonly boards: readonly SignBoard[];
+  /** Weathered grey, its names all but worn away. */
+  readonly faded?: boolean;
 }
 
 /**
@@ -307,6 +332,14 @@ export const SIGNPOSTS: readonly SignpostPlan[] = [
       { name: 'Watchtower', a: 2.07, y: 1.61 },
       { name: 'Village', a: -0.11, y: 1.39 },
     ],
+  },
+  {
+    // The waymark in the cairn below the Old North Pass: one weathered board, pointing up the buried road.
+    post: 1.75,
+    length: 0.7,
+    height: 0.15,
+    faded: true,
+    boards: [{ name: 'North Road', a: Math.PI - 0.45, y: 1.6 }],
   },
 ];
 
@@ -359,7 +392,7 @@ const CLEARINGS: Clearing[] = [
 export type StructureKind =
   | 'inn' | 'house' | 'smithy' | 'well' | 'signpost' | 'lamp' | 'cart' | 'farmhouse' | 'barn'
   | 'windmill' | 'scarecrow' | 'haybale' | 'trough' | 'tower' | 'mine' | 'tent' | 'campfire'
-  | 'logpile' | 'stones' | 'dock' | 'boat' | 'bridge' | 'mapboard';
+  | 'logpile' | 'stones' | 'dock' | 'boat' | 'bridge' | 'mapboard' | 'cairn' | 'rockslide';
 
 export interface Structure {
   kind: StructureKind;
@@ -537,6 +570,8 @@ export class DistanceField {
 export interface ForestLayout {
   /** Where you can walk: the play square and the southern pass up to its crest. */
   walkable: Walkable;
+  /** The rockslide choking the Old North Pass, boulder by boulder. */
+  slide: readonly Boulder[];
   /** Its fog, sky colours and light, which the World applies. */
   atmosphere: Atmosphere;
   /** Its heights along each seam with a neighbour, which the neighbour's land meets. */
@@ -777,6 +812,18 @@ export function buildLayout(): ForestLayout {
     }
   }
 
+  // The Old North Pass comes last, so nothing planned before it moves: the woods are planted
+  // over the ground and roads as they were without it, then cleared off it and settled on it.
+  const natural = new HeightField(half, cell);
+  natural.data.set(ground.data);
+  const naturalRoads = new DistanceField(half);
+  for (const p of paths) naturalRoads.stamp(p.line, p.width / 2 + 6, p.width / 2);
+  const planted = structures.slice();
+  cutNorthPass(ground);
+  const cartRoad = northPassRoad(ground);
+  paths.push(cartRoad);
+  const slide = northPassSlide(ground);
+  structures.push(...northPassPieces(ground));
   const roadDistance = new DistanceField(half);
   for (const p of paths) roadDistance.stamp(p.line, p.width / 2 + 6, p.width / 2);
   // The veins out of doors: what grows there is thinned away after it's placed (so nothing else moves), and they're solid.
@@ -794,12 +841,24 @@ export function buildLayout(): ForestLayout {
     HERBS[kind].map((h, i) => ({ id: `${kind}-${h.id}`, kind, x: h.x, y: heightAt(h.x, h.z), z: h.z, yaw: i * 2.4, interior: null })),
   );
   const C = CONFIG.professions.clump;
-  const plants = placePlants(ground, roadDistance, streamField, structures, colliders).filter(
+  const plants = placePlants(natural, naturalRoads, streamField, planted, colliders).filter(
     (p) =>
       !veins.some((v) => Math.hypot(p.x - v.x, p.z - v.z) < (TREE_HEIGHT[p.kind] ? VEINS.clear.tree : VEINS.clear.plant)) &&
       !clumps.some((c) => Math.hypot(p.x - c.x, p.z - c.z) < (TREE_HEIGHT[p.kind] ? C.clear.tree : C.clear.plant)),
   );
+  // Nothing grows in the Old North Pass's cut, on its cart road or by its cairn; what grows by them stands on the ground as it's cut.
+  const cairn = structures.find((st) => st.kind === 'cairn')!;
+  plants.splice(
+    0,
+    plants.length,
+    ...plants
+      .filter((p) => !inNorthPass(p.x, p.z, 2.5) && nearestOnPolyline(cartRoad.line, p.x, p.z).d > cartRoad.width / 2 + (TREE_HEIGHT[p.kind] ? 1.6 : 0.4) && Math.hypot(p.x - cairn.x, p.z - cairn.z) > 1.4)
+      .map((p) => ({ ...p, y: p.y + ground.at(p.x, p.z) - natural.at(p.x, p.z) })),
+  );
   plants.push(...passEdges(ground, main.line));
+  colliders.addCircle({ x: cairn.x, z: cairn.z, r: cairn.hw });
+  // The slide's boulders where they come within reach of where you walk.
+  for (const r of slide) if (walkable.distance(r.x, r.z) < r.r + 1) colliders.addCircle({ x: r.x, z: r.z, r: r.r * 0.85 });
   for (const v of veins) colliders.addCircle({ x: v.x, z: v.z, r: CONFIG.professions.vein.body });
   for (const c of clumps) colliders.addCircle({ x: c.x, z: c.z, r: C.body });
   for (const p of plants) {
@@ -889,6 +948,7 @@ export function buildLayout(): ForestLayout {
 
   return {
     walkable,
+    slide,
     atmosphere: OAKVALE_ATMOSPHERE,
     seams: [crest],
     ground,
@@ -1108,6 +1168,139 @@ function passEdges(ground: HeightField, line: readonly P2[]): Plant[] {
     }
   }
   return plants;
+}
+
+/** How far (x, z) is from the Old North Pass's floor line, and how far along it. */
+function northPassAt(x: number, z: number): { d: number; s: number } {
+  const { line } = NORTH_PASS;
+  const near = nearestOnPolyline(line, x, z);
+  let s = 0;
+  for (let i = 0; i < near.i; i++) s += Math.hypot(line[i + 1][0] - line[i][0], line[i + 1][1] - line[i][1]);
+  const [a, b] = [line[near.i], line[near.i + 1]];
+  s += Math.hypot(b[0] - a[0], b[1] - a[1]) * near.t;
+  return { d: near.d, s };
+}
+
+/** The Old North Pass's floor line's length. */
+const NORTH_PASS_LENGTH = NORTH_PASS.line.reduce((sum, p, i, l) => (i ? sum + Math.hypot(p[0] - l[i - 1][0], p[1] - l[i - 1][1]) : 0), 0);
+
+/**
+ * How much of the Old North Pass's scar shows at (x, z), 0 to 1: the bare
+ * grey rubble the slide left in the cut and up its sides.
+ */
+export function northPassScar(x: number, z: number): number {
+  if (z > -FOREST.play + 4) return 0;
+  const { d, s } = northPassAt(x, z);
+  const { half, slide } = NORTH_PASS;
+  return smoothstep(half + 9, half + 2, d) * smoothstep(slide.from - 8, slide.from, s) * smoothstep(slide.to + 18, slide.to, s) * smoothstep(-FOREST.play + 4, -FOREST.play - 2, z);
+}
+
+/** Is (x, z) in the Old North Pass's cut (past the play area's edge), `margin` m over its floor's sides? */
+function inNorthPass(x: number, z: number, margin: number): boolean {
+  if (z > -FOREST.play) return false;
+  return northPassAt(x, z).d < NORTH_PASS.half + margin;
+}
+
+/** The old cart road up to the Old North Pass, laid over the ground as the other roads are, its heights smoothed. */
+function northPassRoad(ground: HeightField): Path {
+  const line = sampleCurve(NORTH_PASS.road as unknown as P2[], 1);
+  let heights = line.map(([x, z]) => ground.at(x, z));
+  for (let pass = 0; pass < 4; pass++) heights = smooth(heights, 5);
+  const path = { id: 'northPass', width: 2.2, line, heights };
+  flattenAlong(ground, path);
+  return path;
+}
+
+/**
+ * The Old North Pass's set pieces: the rockslide, from its toe up the cut;
+ * the cairn by the cart road below it, and the waymark stuck in the cairn.
+ */
+function northPassPieces(ground: HeightField): Structure[] {
+  const [toeX, toeZ] = NORTH_PASS.line[1];
+  const [footX, footZ] = NORTH_PASS.line[0];
+  const { x, z } = NORTH_PASS.cairn;
+  const y = ground.at(x, z);
+  return [
+    { kind: 'rockslide', x: toeX, z: toeZ, y: ground.at(toeX, toeZ), yaw: Math.atan2(toeX - footX, toeZ - footZ), hw: NORTH_PASS.half + 4, hd: 20, solid: false, variant: 0 },
+    { kind: 'cairn', x, z, y, yaw: 0.7, hw: 0.75, hd: 0.75, solid: false, variant: 0 },
+    { kind: 'signpost', x, z, y, yaw: 0, hw: 0.2, hd: 0.2, solid: false, variant: 2 },
+  ];
+}
+
+/**
+ * Cut the Old North Pass into the northern ridge: a floor rising from its
+ * foot to the land's edge, its sides sloping up to the ridge either side.
+ * Only past the play area's edge, and only ever lower.
+ */
+function cutNorthPass(ground: HeightField): void {
+  const { half, side, floor } = NORTH_PASS;
+  ground.each((x, z, k) => {
+    const weight = smoothstep(-FOREST.play + 2, -FOREST.play - 4, z);
+    if (weight <= 0) return;
+    const { d, s } = northPassAt(x, z);
+    if (d > half + 40) return;
+    const t = Math.min(1, s / NORTH_PASS_LENGTH);
+    const bed = lerp(floor[0], floor[1], t * t * 0.4 + t * 0.6) + (valueNoise(x * 0.3, z * 0.3, 61) - 0.5) * 0.8;
+    const cut = bed + Math.max(0, d - half) * side;
+    // Its shoulders stand up either side, so it reads as a notch in the ridge, not a valley.
+    const shoulders = ground.data[k] + 9 * smoothstep(half + 28, half + 7, d);
+    ground.data[k] = lerp(ground.data[k], Math.min(shoulders, cut), weight);
+  });
+}
+
+/** One boulder of the Old North Pass's rockslide: where it lies, its size, and how it's turned and squashed. */
+export interface Boulder {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly r: number;
+  readonly yaw: number;
+  readonly tilt: number;
+  readonly squash: number;
+  readonly shade: number;
+}
+
+/**
+ * The rockslide in the Old North Pass: big, angular boulders heaped across
+ * the cut, freshly broken grey, scree spilling down to its foot and over the
+ * end of the cart road. Their own random stream, so nothing else in Oakvale
+ * moves.
+ */
+function northPassSlide(ground: HeightField): Boulder[] {
+  const rand = mulberry32(5521);
+  const { line, half, slide } = NORTH_PASS;
+  const out: Boulder[] = [];
+  const at = (s: number): [number, number, number, number] => {
+    // The point `s` m along the floor line, and the way across it.
+    let left = s;
+    for (let i = 0; i < line.length - 1; i++) {
+      const [a, b] = [line[i], line[i + 1]];
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (left <= len || i === line.length - 2) {
+        const t = Math.min(1, left / len);
+        return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, -(b[1] - a[1]) / len, (b[0] - a[0]) / len];
+      }
+      left -= len;
+    }
+    return [line[0][0], line[0][1], 1, 0];
+  };
+  const rock = (s: number, across: number, r: number, heap: number) => {
+    const [cx, cz, ax, az] = at(s);
+    const x = cx + ax * across;
+    const z = cz + az * across;
+    // Heaped up in the middle of the slide, lower at its edges; each a little sunk.
+    const y = ground.at(x, z) + heap - r * 0.3;
+    out.push({ x, y, z, r, yaw: rand() * Math.PI * 2, tilt: (rand() - 0.5) * 0.8, squash: 0.6 + rand() * 0.35, shade: rand() });
+  };
+  for (let i = 0; i < slide.boulders; i++) {
+    const t = rand();
+    const across = (rand() - 0.5) * 2 * (half + 3);
+    // The heap is highest a third of the way up, and in the cut's middle.
+    const heap = 4 * Math.sin(Math.PI * Math.min(1, t * 1.4)) * (1 - Math.abs(across) / (half + 4));
+    rock(lerp(slide.from, slide.to, t), across, 1.3 + rand() * 1.7, Math.max(0, heap));
+  }
+  for (let i = 0; i < slide.scree; i++) rock(rand() * slide.from, (rand() - 0.5) * 2 * (half + 1), 0.3 + rand() * 0.55, 0);
+  return out;
 }
 
 /** `line` (running north) from where it first reaches `z`, starting exactly on that line. */

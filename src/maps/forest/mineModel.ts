@@ -1,5 +1,6 @@
 import { type BufferGeometry, type Camera, Group, IcosahedronGeometry, Matrix4, Mesh, PlaneGeometry, Vector3 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { CONFIG } from '../../config';
 import { ModelBuilder, type PartOpts } from '../../models/kit';
 import { type ModelMaterial, sharedModelMaterial } from '../../models/materials';
 import { PAL } from '../../models/palette';
@@ -642,5 +643,71 @@ function buildCrypt(hollow: Hollow, builders: PartBuilders[], glowIn: (part: num
     { floor: hallPart.floor, walls: hallPart.walls, props: hallPart.model, glow: (gx, gy, gz, size, color) => glowIn(hallPiece.part)(hall.x + gx, hall.floor + gy, hall.z + gz, size, color) },
     { south: 'through', east: 'choked', west: 'choked' },
   );
+  giantsCarving(hallPart.model);
   for (const b of [hallPart.model, hallPart.floor, hallPart.walls]) b.on(0, new Matrix4());
+}
+
+/**
+ * The carving on the Warden's hall's north wall, behind the throne, in the
+ * hall's own frame: a crowned king over the throne, and either side of it a
+ * giant twice a man's height bowed low before him, chained at the neck and
+ * wrists, the neck chains running up into the king's hands. Nobody in Oakvale
+ * knows what it means; the north will tell them.
+ */
+function giantsCarving(b: ModelBuilder): void {
+  const { halfSize, wallHeight } = CONFIG.arena;
+  const wall = -halfSize;
+  const field: PartOpts = { color: PAL.stoneDark, jitter: 0.08 };
+  const relief: PartOpts = { color: PAL.stoneLight, jitter: 0.12 };
+  const chain: PartOpts = { color: PAL.stone, jitter: 0.1 };
+  const [x0, x1] = [-4.3, 4.3];
+  const [y0, y1] = [PLINTH.height + 0.18, wallHeight - CORNICE.height - 0.1];
+  // The darker field it's cut in: one face on the wall, between the north pilasters and from the plinth to the cornice.
+  b.shape(new PlaneGeometry(x1 - x0, y1 - y0), { ...field, at: [0, (y0 + y1) / 2, wall + 0.01] });
+  const z = wall + 0.06;
+  const limb = (a: [number, number], c: [number, number], w: number) => b.bar([a[0], a[1], z], [c[0], c[1], z], w, 0.08, relief);
+  // Something flat cut proud of the figures, `w` by `h` at (u, v), turned `r` in the wall's plane: links, collars, cuffs.
+  const flat = (u: number, v: number, w: number, h: number, r = 0) => b.shape(new PlaneGeometry(w, h), { ...chain, at: [u, v, z + 0.05], rot: [0, 0, r] });
+  // A chain of links from a to c.
+  const links = (a: [number, number], c: [number, number]) => {
+    const len = Math.hypot(c[0] - a[0], c[1] - a[1]);
+    const n = Math.max(1, Math.round(len / 0.13));
+    const r = Math.atan2(c[1] - a[1], c[0] - a[0]);
+    for (let i = 0; i < n; i++) {
+      const t = (i + 0.5) / n;
+      flat(a[0] + (c[0] - a[0]) * t, a[1] + (c[1] - a[1]) * t, (len / n) * 0.8, i % 2 ? 0.035 : 0.07, r);
+    }
+  };
+
+  // The king, crowned, over the throne, a hand out to either side.
+  const king = { y: wallHeight - CORNICE.height - 0.75 };
+  limb([0, king.y - 0.3], [0, king.y + 0.15], 0.26);
+  b.box(0.2, 0.2, 0.08, { ...relief, at: [0, king.y + 0.3, z] });
+  b.box(0.24, 0.06, 0.08, { color: PAL.gold, at: [0, king.y + 0.43, z + 0.01] });
+  for (const u of [-0.09, 0, 0.09]) b.cone(0.035, 0.1, 4, { color: PAL.gold, at: [u, king.y + 0.51, z + 0.01] });
+  const hands: [number, number][] = [-1, 1].map((side) => [side * 0.5, king.y]);
+  for (const hand of hands) limb([0, king.y + 0.1], hand, 0.08);
+
+  // The giants, one either side, bowed toward him.
+  for (const side of [-1, 1]) {
+    const at = (u: number, v: number): [number, number] => [side * u, v];
+    const hip = at(3.05, 1.55);
+    const shoulder = at(2.05, 2.45);
+    const neck = at(1.75, 2.4);
+    const hand = at(1.45, 1.05);
+    // One leg standing behind, one knelt.
+    limb(at(3.55, y0 + 0.05), hip, 0.34);
+    limb(hip, at(2.45, 0.95), 0.34);
+    limb(at(2.45, 0.95), at(3.05, y0 + 0.08), 0.28);
+    // The bent back, the bowed head low by the shoulder, the arms hanging toward the floor.
+    limb(hip, shoulder, 0.7);
+    b.box(0.42, 0.4, 0.09, { ...relief, at: [neck[0] - side * 0.15, neck[1] - 0.12, z], rot: [0, 0, side * 0.6] });
+    limb(shoulder, at(1.75, 1.75), 0.2);
+    limb(at(1.75, 1.75), hand, 0.18);
+    // Chained at the wrist to a ring in the floor, and at the neck to the king's hand.
+    flat(hand[0], hand[1] + 0.08, 0.22, 0.1);
+    links(hand, at(1.2, y0 + 0.1));
+    flat(neck[0], neck[1] - 0.02, 0.32, 0.08, side * 0.6);
+    links(neck, hands[(side + 1) / 2]);
+  }
 }

@@ -132,7 +132,8 @@ describe("Oakvale's chunk builder", () => {
     // budget's cuts (ticket 38: the far trees deep in the woods, the edge's mountains thinned)
     // take that 266,542 down to 214,824, and clearing what grew where the copper veins stand
     // (professions ticket 13) to 214,310, and where the clumps of herbs grow (ticket 14) to 213,811.
-    expect(triangles).toBe(213811);
+    // The Old North Pass (its slide, cairn, waymark and cart road, and the trees cleared off them) brings it to 215,629.
+    expect(triangles).toBe(215629);
   }, 20000);
 
   it("cuts the budget's triangles in the woods and on the edge's mountains, and leaves the village as it was", () => {

@@ -1,7 +1,7 @@
 import { BufferAttribute, BufferGeometry, Color, Matrix4, Vector3 } from 'three';
 import { CONFIG } from '../../config';
 import type { HeightGrid } from '../heightGrid';
-import { FOREST, type ForestLayout, worldToLocal } from './layout';
+import { FOREST, type ForestLayout, northPassScar, worldToLocal } from './layout';
 import { hash01, mulberry32, smoothstep, valueNoise } from './noise';
 import { EARTH, GREEN } from './palette';
 
@@ -12,6 +12,16 @@ import { EARTH, GREEN } from './palette';
 // the same whenever and wherever it's built.
 
 const _c = new Color();
+
+/**
+ * How much old snow lies at (x, z), `h` m up with its ground facing `ny` up:
+ * in patches on the northern ridge's flatter tops, more the higher and
+ * farther north, none on steep rock. Toward Greyfell, over the Old North Pass.
+ */
+export function snowAt(x: number, z: number, h: number, ny: number): number {
+  const patches = smoothstep(0.35, 0.6, valueNoise(x * 0.07, z * 0.07, 49) + smoothstep(-110, -138, z) * 0.3);
+  return smoothstep(24, 32, h) * smoothstep(-100, -118, z) * smoothstep(0.5, 0.72, ny) * patches * 0.9;
+}
 const _n = new Vector3();
 
 /** A chunk's square, and whether a point belongs to it. */
@@ -198,6 +208,7 @@ export function addGround(raw: MeshBuffer, layout: ForestLayout, region: Region,
   const sand = new Color(EARTH.sand);
   const mud = new Color(EARTH.mud);
   const soil = new Color(EARTH.soil);
+  const snow = new Color(EARTH.snow);
   const color = new Color();
 
   const colourAt = (x: number, z: number, h: number, ny: number, sh: number, rd: number, jitter: number): Color => {
@@ -207,6 +218,11 @@ export function addGround(raw: MeshBuffer, layout: ForestLayout, region: Region,
     color.lerp(dirtDark, smoothstep(0.86, 0.66, ny) * 0.7);
     color.lerp(cliff, smoothstep(0.66, 0.5, ny));
     if (h > 12) color.lerp(_c.copy(moss).lerp(rock, valueNoise(x * 0.05, z * 0.05, 47) * 0.6), smoothstep(12, 30, h) * 0.7);
+    // The Old North Pass's scar: bare grey rubble where the slide came down.
+    const scar = northPassScar(x, z);
+    if (scar > 0) color.lerp(_c.copy(rock).lerp(cliff, valueNoise(x * 0.4, z * 0.4, 53)), scar * 0.85);
+    // Old snow lying on the northern ridge's tops, toward Greyfell.
+    if (h > 24 && z < -100) color.lerp(snow, snowAt(x, z, h, ny));
     // Worn verges: the ribbon draws the road itself, this just browns the grass beside it.
     if (rd < 2) color.lerp(verge, smoothstep(2, 0, rd) * 0.5);
     // A stand-in has no ribbons, so its ground is the road.

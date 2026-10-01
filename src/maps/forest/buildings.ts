@@ -1,12 +1,12 @@
-import { type BufferGeometry, IcosahedronGeometry } from 'three';
+import { type BufferGeometry, DodecahedronGeometry, Euler, IcosahedronGeometry, Matrix4, Vector3 } from 'three';
 import { ModelBuilder, type PartOpts, type Vec3 } from '../../models/kit';
 import { PAL } from '../../models/palette';
-import type { Deck, Field, ForestLayout, Structure } from './layout';
+import type { Boulder, Deck, Field, ForestLayout, Structure } from './layout';
 import { HOUSE } from './house';
 import { INN } from './inn';
-import { COTTAGE_CHIMNEY, localToWorld, MAP_BOARD, SIGNPOSTS, type SignpostPlan, standingStones, TENT } from './layout';
+import { COTTAGE_CHIMNEY, localToWorld, MAP_BOARD, NORTH_PASS, SIGNPOSTS, type SignpostPlan, standingStones, TENT, worldToLocal } from './layout';
 import { MINE } from './mine';
-import { mulberry32 } from './noise';
+import { lerp, mulberry32 } from './noise';
 import { stump } from './nature';
 import { SMITHY } from './smithy';
 import { BUILD, CROP, EARTH, GREEN, WATER } from './palette';
@@ -53,6 +53,8 @@ export function buildStructure(s: Structure, ctx: StructureContext): BufferGeome
     case 'dock': dock(b, ctx.layout.dock); break;
     case 'boat': boat(b); break;
     case 'bridge': bridge(b, ctx.layout.bridge); break;
+    case 'cairn': cairn(b, rand); break;
+    case 'rockslide': rockslide(b, s, ctx.layout.slide); break;
   }
   return b.build();
 }
@@ -439,13 +441,56 @@ function well(b: ModelBuilder): void {
  * are one mesh of their own (wayfinding.ts).
  */
 function signpost(b: ModelBuilder, plan: SignpostPlan): void {
-  const { post, length, height, boards } = plan;
-  b.box(0.14, post, 0.14, { at: [0, post / 2, 0], color: BUILD.timber }).cone(0.1, 0.14, 4, { at: [0, post + 0.07, 0], color: BUILD.timber });
+  const { post, length, height, boards, faded } = plan;
+  const wood = faded ? BUILD.weathered : BUILD.timber;
+  const plank = faded ? BUILD.weatheredPlank : BUILD.plank;
+  // A weathered post leans a little, as it would wedged in a cairn's stones.
+  const lean: Vec3 = faded ? [0.06, 0, -0.05] : [0, 0, 0];
+  b.box(0.14, post, 0.14, { at: [0, post / 2, 0], rot: lean, color: wood });
+  if (!faded) b.cone(0.1, 0.14, 4, { at: [0, post + 0.07, 0], color: wood });
   for (const { a, y } of boards) {
     const dir: Vec3 = [Math.sin(a), 0, Math.cos(a)];
-    b.box(length, height, 0.05, { at: [dir[0] * length / 2, y, dir[2] * length / 2], rot: [0, a - PI / 2, 0], color: BUILD.plank })
-      .box(height, height, 0.05, { at: [dir[0] * (length + 0.02), y, dir[2] * (length + 0.02)], rot: [0, a - PI / 2 + PI / 4, 0], color: BUILD.plank });
+    b.box(length, height, 0.05, { at: [dir[0] * length / 2, y, dir[2] * length / 2], rot: [0, a - PI / 2, 0], color: plank })
+      .box(height, height, 0.05, { at: [dir[0] * (length + 0.02), y, dir[2] * (length + 0.02)], rot: [0, a - PI / 2 + PI / 4, 0], color: plank });
   }
+}
+
+/** The Old North Pass's rockslide: each boulder an angular lump of fresh grey stone, in the slide's frame. */
+function rockslide(b: ModelBuilder, s: Structure, boulders: readonly Boulder[]): void {
+  const shades = [EARTH.rock, EARTH.rockDark, PAL.stone, PAL.stoneLight, EARTH.cliff];
+  for (const r of boulders) {
+    const [lx, lz] = worldToLocal(s, r.x, r.z);
+    const g = r.shade < 0.5 ? new IcosahedronGeometry(r.r, 0) : new DodecahedronGeometry(r.r, 0);
+    g.scale(1, r.squash, 1.15);
+    b.shape(g, { at: [lx, r.y - s.y + r.r * r.squash * 0.5, lz], rot: [r.tilt, r.yaw - s.yaw, r.tilt * 0.5], color: shades[Math.floor(r.shade * shades.length)], jitter: 0.14 });
+  }
+}
+
+/**
+ * The weathered cairn below the Old North Pass: rough stones heaped round a
+ * squat core, mossed on top, with the waymark's post wedged in its middle
+ * (the waymark is a signpost of its own).
+ */
+function cairn(b: ModelBuilder, rand: () => number): void {
+  const h = NORTH_PASS.cairn.h;
+  const layers = 5;
+  b.taper(1.3, 1.3, 0.55, 0.55, h * 0.8, { at: [0, -0.1, 0], color: PAL.stoneDark, jitter: 0.12 });
+  for (let i = 0; i < layers; i++) {
+    const t = i / (layers - 1);
+    const r = 0.68 * (1 - t * 0.6);
+    const count = Math.max(3, Math.round(7 - i * 1.2));
+    for (let k = 0; k < count; k++) {
+      const a = (k / count) * PI * 2 + i * 0.7 + rand() * 0.4;
+      const s = 0.28 + rand() * 0.14 - t * 0.06;
+      b.box(s * 1.3, s * 0.75, s, {
+        at: [Math.cos(a) * r, 0.1 + t * h * 0.95, Math.sin(a) * r],
+        rot: [(rand() - 0.5) * 0.4, a, (rand() - 0.5) * 0.4],
+        color: rand() < 0.5 ? PAL.stone : rand() < 0.5 ? PAL.stoneLight : PAL.stoneDark,
+        jitter: 0.18,
+      });
+    }
+  }
+  b.box(0.5, 0.12, 0.44, { at: [0.08, h * 0.98, -0.05], rot: [0, 0.5, 0.1], color: GREEN.moss, jitter: 0.2 });
 }
 
 /**
@@ -825,19 +870,60 @@ export function standingStone(b: ModelBuilder, at: Vec3, h: number, yaw: number,
   b.box(0.7, 0.3, 0.45, { at: [x, y + h * 0.45, z], rot: [0, yaw, 0], color: GREEN.moss });
 }
 
-/** Seven weathered standing stones round a low altar with a few faint runes. */
+/**
+ * Seven weathered standing stones round a low altar with a few faint runes.
+ * The tallest has a carving worn almost smooth on its face to the altar: the
+ * same crowned king and bowing, chained giants as the wall behind the
+ * Warden's throne (mineModel.ts), so the Deepkings were here above ground too.
+ */
 function stones(b: ModelBuilder, s: Structure, rand: () => number): void {
-  for (const [x, z] of standingStones(s)) {
+  const placed = standingStones(s).map(([x, z]) => {
     const lx = x - s.x;
     const lz = z - s.z;
     const h = 2.3 + rand() * 1.0;
     const tilt = [(rand() - 0.5) * 0.12, (rand() - 0.5) * 0.12] as const;
-    standingStone(b, [lx, 0, lz], h, Math.atan2(lx, lz), tilt, rand() >= 0.5);
-  }
+    const light = rand() >= 0.5;
+    standingStone(b, [lx, 0, lz], h, Math.atan2(lx, lz), tilt, light);
+    return { lx, lz, h, tilt, light };
+  });
+  const tallest = placed.reduce((a, c) => (c.h > a.h ? c : a));
+  wornCarving(b, tallest);
   b.box(1.9, 0.55, 1.2, { at: [0, 0.2, 0], color: PAL.stoneDark })
     .box(2.1, 0.12, 1.35, { at: [0, 0.53, 0], color: PAL.stone });
   for (let i = 0; i < 5; i++) {
     b.box(0.2, 0.02, 0.06, { at: [-0.7 + i * 0.35, 0.6, (i % 2) * 0.2 - 0.1], rot: [0, 0.4 + i, 0], color: PAL.rune, glow: 0.5, jitter: 0 });
+  }
+}
+
+/**
+ * The carving on a standing stone's inner face (toward the altar, its own
+ * −Z), in shallow relief a shade off the stone's own colour: a crowned figure
+ * over two great figures bowed toward it, a chain at each one's neck.
+ */
+function wornCarving(b: ModelBuilder, st: { lx: number; lz: number; h: number; tilt: readonly [number, number]; light: boolean }): void {
+  const yaw = Math.atan2(st.lx, st.lz);
+  const turn = new Matrix4().makeRotationFromEuler(new Euler(st.tilt[0], yaw, st.tilt[1]));
+  const p = new Vector3();
+  // Worn almost smooth: barely a shade off the stone.
+  const color = st.light ? 0x847e74 : 0x645f58;
+  // On the face: `u` across it, `v` up it, `w` m wide and `h` tall, turned `r` in the face's plane.
+  const cut = (u: number, v: number, w: number, h: number, r = 0) => {
+    // The stone tapers from 0.55 m deep at its foot to 0.4 at its top (standingStone), set 0.3 m into the ground.
+    const depth = lerp(0.55, 0.4, (v + 0.3) / st.h) / 2;
+    p.set(u, v + 0.3, -depth - 0.008).applyMatrix4(turn);
+    b.box(w, h, 0.03, { at: [st.lx + p.x, p.y - 0.3, st.lz + p.z], rot: [st.tilt[0], yaw, st.tilt[1] + r], color, jitter: 0.25 });
+  };
+  const y = st.h * 0.55;
+  // The king, crowned, over the middle.
+  cut(0, y + 0.42, 0.07, 0.2);
+  cut(0, y + 0.58, 0.08, 0.07);
+  for (const u of [-0.04, 0, 0.04]) cut(u, y + 0.65, 0.025, 0.05);
+  // The giants either side, bent low toward the king, a chain from each one's neck to the ground.
+  for (const side of [-1, 1]) {
+    cut(side * 0.15, y + 0.1, 0.12, 0.28, side * 0.75);
+    cut(side * 0.07, y + 0.2, 0.08, 0.08);
+    cut(side * 0.2, y - 0.12, 0.05, 0.22);
+    cut(side * 0.06, y - 0.05, 0.015, 0.4, side * -0.2);
   }
 }
 

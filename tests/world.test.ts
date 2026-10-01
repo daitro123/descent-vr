@@ -1244,8 +1244,9 @@ describe("Oakvale's ways of finding your way", () => {
 
   it("paints each signpost's names on one mesh, a quad on each face of each board", () => {
     const names = named('sign-names');
-    expect(names).toHaveLength(2);
-    expect(names.map(triangles)).toEqual([5 * 4, 4 * 4]);
+    // The crossroads', the fork's, and the Old North Pass's waymark.
+    expect(names).toHaveLength(3);
+    expect(names.map(triangles)).toEqual([5 * 4, 4 * 4, 1 * 4]);
   });
 
   it('draws the map board in under 100 triangles and two draw calls: its frame and posts with the zone, its painted face one quad', () => {
