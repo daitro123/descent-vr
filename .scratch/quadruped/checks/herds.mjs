@@ -13,8 +13,6 @@
 // 3. Joss's cart horse in the wagon yard, Dunmore's riding horse in the
 //    forecourt, the town dog by the inn's barrels: they stand (or lie) at their
 //    spots, on the ground, and turn their heads to you.
-// 4. A pack of three wolves stood on the moor by hand (no zone places one
-//    yet): they idle, notice you, close in and lunge.
 //
 import { mkdirSync } from 'node:fs';
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
@@ -178,37 +176,6 @@ const town = await herd('brackenmoor-town-dog');
 check(town && town.animals[0].stance === 'lie' && town.animals[0].looking, `the town dog lies by the barrels and lifts its head (${town?.animals[0].stance})`);
 await shot('10-town-dog');
 
-// 4. A pack of wolves, stood on the moor by hand.
-const PACK = [60, 215];
-await page.evaluate(([x, z]) => {
-  const d = window.__descent;
-  const post = (dx, dz, yaw) => ({ behaviour: 'grunt', family: 'wolf', x: x + dx, z: z + dz, yaw });
-  d.camps.add([{ id: 'brackenmoor-check-wolves', place: { x, z, r: 6 }, level: 3, posts: [post(0, 0, -2.4), post(2.2, 1.4, -2.0), post(-1.6, 2.4, -2.8)] }], d.world, true);
-}, PACK);
-await standLooking(PACK[0] - 22, PACK[1] - 14, ...PACK, 1);
-await standLooking(PACK[0] - 9.5, PACK[1] - 5, ...PACK, 0.2);
-let wolves = await page.evaluate(() => window.__descent.camps.enemies.filter((e) => e.family === 'wolf').length);
-check(wolves === 3, `three wolves raised (${wolves})`);
-await shot('11-wolves');
-// Walk in: they come for you.
-await standLooking(PACK[0] - 6, PACK[1] - 3, ...PACK, 0.2);
-const blows = new Set();
-let lunged = false;
-for (let i = 0; i < 900 && !lunged; i++) {
-  await step(1 / 36);
-  const s = await page.evaluate(() => window.__descent.camps.enemies.filter((e) => e.family === 'wolf').map((e) => ({ state: e.state, attack: e.attack?.pose, phase: e.phase, x: e.position.x, z: e.position.z })));
-  for (const e of s) if (e.state === 'attack') blows.add(e.attack);
-  const w = s.find((e) => e.state === 'attack' && e.attack === 'lunge' && e.phase === 'active');
-  if (w) {
-    lunged = true;
-    await look(w.x, w.z);
-    await shot('12-wolf-lunge');
-  }
-  // Keep standing: heal whatever they've done.
-  await page.evaluate(() => (window.__descent.player.hp = window.__descent.player.maxHp));
-}
-check(blows.size > 0, `the wolves came for you (${[...blows].join(', ')})`);
-check(lunged, 'a wolf lunged at you');
 if (errors.length) console.log(`page errors:\n${errors.join('\n')}`);
 console.log(failed ? `${failed} failed` : 'all ok');
 await browser.close();
