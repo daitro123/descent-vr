@@ -730,7 +730,7 @@ export function planAldhaven(): AldhavenPlan {
   building('forge', -60, 93, PI, 16, 7.5, { district: 'guild' });
   building('hall', -5, 93, PI, 14, 7.5, { storeys: 2, variant: 4, district: 'guild' });
   // The harbour: warehouses on both quays, the treadwheel crane on the Long Quay.
-  for (const [x, w] of [[59, 12], [72, 12], [96, 10], [107, 10]] as const) building('warehouse', x, 6, 0, w, 12, { storeys: 2, variant: x % 3 });
+  for (const [x, w] of [[59, 12], [72, 12], [95.5, 10], [106, 10]] as const) building('warehouse', x, 6, 0, w, 12, { storeys: 2, variant: x % 3 });
   for (const [x, w] of [[59, 12], [72, 12], [87, 12], [104, 14]] as const) building('warehouse', x, 105, PI, w, 9, { storeys: 2, variant: (x + 1) % 3 });
   put('crane', 82, 26, 0, { w: 6, d: 6, h: 14 }, 'box');
   // The King's Garden: its wall, the ranger lodge, the archery butts and the pond.
@@ -851,6 +851,8 @@ export function planAldhaven(): AldhavenPlan {
   for (const [x, z, yaw] of [[-86, -27.5, PI], [-54, -27.5, PI], [-90, -70, PI / 2], [-74, -82, -PI / 2], [-96, -60, PI], [20, -24, -PI / 2], [30, 10, PI]] as const) put('bench', x, z, yaw, { w: 2, d: 0.6 }, 'none');
 
   // ---- The houses: rows along every street inside the walls, fronts to the street.
+  /** The row houses' doors, for what stands outside them (see below). */
+  const doors: { x: number; z: number; yaw: number; w: number; d: number; door: number; district: District; street: Street }[] = [];
   for (const s of streets) {
     if (s.dirt) continue;
     for (const side of [-1, 1]) {
@@ -873,7 +875,9 @@ export function planAldhaven(): AldhavenPlan {
           plot.claim(f);
           const storeys = Math.round(spec.storeys[0] + rand() * (spec.storeys[1] - spec.storeys[0]));
           const kind: PieceKind = district === 'harbour' && rand() < 0.35 ? 'warehouse' : 'house';
-          put(kind, f.x, f.z, f.yaw, { w, d, storeys, district, variant: Math.floor(rand() * 4) });
+          const variant = Math.floor(rand() * 4);
+          put(kind, f.x, f.z, f.yaw, { w, d, storeys, district, variant });
+          if (kind === 'house') doors.push({ ...f, door: ((variant % 3) - 1) * (w / 4), district, street: s });
           i += Math.max(1, Math.round(w + 0.1));
         } else i += 1;
       }
@@ -917,6 +921,50 @@ export function planAldhaven(): AldhavenPlan {
     }
   }
 
+  // ---- Outside the row houses' doors, beside them: the household's barrels, a crate, a planter, a bench to sit out on, sacks
+  // at a shop's. Kept to the strip between the street and the house front. Their own dice, so the city's layout stands.
+  const dress = mulberry32(4211);
+  for (const h of doors) {
+    if (dress() > 0.45) continue;
+    const [fx, fz] = [Math.sin(h.yaw), Math.cos(h.yaw)];
+    const [ax, az] = [Math.cos(h.yaw), -Math.sin(h.yaw)];
+    // Beside the door, on the side with the more wall.
+    const side = h.door > 0 ? -1 : h.door < 0 ? 1 : dress() < 0.5 ? -1 : 1;
+    const along = h.door + side * (1.7 + dress() * Math.max(0, h.w / 2 - Math.abs(h.door) - 2.6));
+    const out = h.d / 2 + 0.6;
+    const [x, z] = [h.x + fx * out + ax * along, h.z + fz * out + az * along];
+    if (nearestOnPolyline(h.street.line, x, z).d < h.street.width / 2 + 0.3 || !taken.fits({ x, z, w: 1, d: 0.8, yaw: h.yaw })) continue;
+    const r = dress();
+    const shop = h.district === 'market' || h.district === 'guild';
+    if (r < 0.3) put('barrels', x, z, h.yaw, { w: 0.9, d: 0.9, variant: Math.floor(dress() * 3) }, 'circle');
+    else if (r < 0.5) put(shop ? 'sacks' : 'crates', x, z, h.yaw, { w: 0.9, d: 0.9, variant: Math.floor(dress() * 3) }, 'circle');
+    else if (r < 0.75 && h.district !== 'harbour') put('planter', x, z, h.yaw, { w: 1.4, d: 0.6, h: 0.5, variant: Math.floor(dress() * 3) });
+    else put('bench', x, z, h.yaw, { w: 1.6, d: 0.5 }, 'none');
+  }
+
+  // ---- Kerbs along the wider streets' edges, where they pass between houses: a pale line of stone, so a street reads apart
+  // from a square. Not across another street's mouth, a square, a bridge or the river.
+  const inOpen = (x: number, z: number) => OPEN.some(([x0, x1, z0, z1]) => x > x0 - 1 && x < x1 + 1 && z > z0 - 1 && z < z1 + 1);
+  for (const s of streets) {
+    if (s.dirt || s.width < 5) continue;
+    const others = streets.filter((o) => o !== s && !o.dirt);
+    for (const side of [-1, 1]) {
+      for (let i = 2; i + 3 < s.line.length - 2; i += 3) {
+        const [ax, az] = s.line[i];
+        const [bx, bz] = s.line[i + 3];
+        const len = Math.hypot(bx - ax, bz - az) || 1;
+        const [nx, nz] = [(-(bz - az) / len) * side, ((bx - ax) / len) * side];
+        const off = s.width / 2 + 0.15;
+        const [x, z] = [(ax + bx) / 2 + nx * off, (az + bz) / 2 + nz * off];
+        const ends: P2[] = [[ax + nx * off, az + nz * off], [bx + nx * off, bz + nz * off]];
+        if (!insideWalls(x, z, 3) || inRiver(x, z, 2) || deckAtCity(x, z) !== null || inOpen(x, z)) continue;
+        if (ends.some(([ex, ez]) => others.some((o) => nearestOnPolyline(o.line, ex, ez).d < o.width / 2 + 0.8) || inOpen(ex, ez))) continue;
+        if (Math.abs(ground0(...ends[0]) - ground0(...ends[1])) > 0.3 || !taken.fits({ x, z, w: len - 0.4, d: 0.3, yaw: Math.atan2(nx, nz) })) continue;
+        put('kerb', x, z, Math.atan2(nx, nz), { w: len + 0.05, d: 0.3 }, 'none');
+      }
+    }
+  }
+
   // ---- What grows.
   const plants: Omit<CityPlant, 'y'>[] = [];
   const plant = (kind: CityPlantKind, x: number, z: number, scale: number, solid = 0) => {
@@ -946,10 +994,17 @@ export function planAldhaven(): AldhavenPlan {
       else plot.claim(f);
     }
   }
-  // What's still open between the houses, and not a street's or a square's: a yard.
+  // What's still open between the houses, and not a street's or a square's, nor on a street's frontage: a yard.
+  const frontage = new Plot(land.minX, land.minZ, land.maxX, land.maxZ);
+  for (const s of streets) {
+    if (s.dirt) continue;
+    const r = s.width / 2 + 2.5;
+    for (const [px, pz] of s.line) frontage.mark(px - r, px + r, pz - r, pz + r, (x, z) => Math.hypot(x - px, z - pz) < r);
+  }
   const yards = new Uint8Array(plot.taken.length);
   for (let j = 1; j < plot.rows - 1; j++) {
     for (let i = 1; i < plot.cols - 1; i++) {
+      if (frontage.taken[j * plot.cols + i]) continue;
       let open = 0;
       for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) open += plot.taken[(j + dj) * plot.cols + i + di] ? 0 : 1;
       if (open >= 6) yards[j * plot.cols + i] = 1;
@@ -1039,6 +1094,7 @@ export function planAldhaven(): AldhavenPlan {
   for (const b of boxes) colliders.addBox({ ...b, x: b.x + ox, z: b.z + oz });
   for (const c of circles) colliders.addCircle({ ...c, x: c.x + ox, z: c.z + oz });
 
+  const SETTLES: ReadonlySet<PieceKind> = new Set<PieceKind>(['tent', 'shed', 'stall', 'woodpile', 'vats', 'rack', 'nets', 'cart', 'haystack', 'planter', 'bench']);
   /** The buildings that stand at their door: level with the street in front, dug into the slope behind. */
   const DOORS: ReadonlySet<PieceKind> = new Set<PieceKind>(['house', 'warehouse', 'inn', 'hall', 'townhouse', 'barracks', 'forge', 'lodge', 'stables', 'barn', 'collegium', 'cathedral', 'keep']);
   const footY = (p: Omit<Piece, 'y'>): { y: number; drop: number } => {
@@ -1050,6 +1106,8 @@ export function planAldhaven(): AldhavenPlan {
     const under = Plot.samples(p, 0).map(([x, z]) => ground0(x, z));
     // Walls and towers sink their footings into the slope; a prop stands on the ground under it.
     if (p.kind === 'wall' || p.kind === 'tower' || p.kind === 'beacon') return { y: Math.min(...under), drop: 0 };
+    // The wider props on a slope settle halfway between the ground at their middle and at their lowest corner: no side hangs in the air.
+    if (SETTLES.has(p.kind)) return { y: (ground0(p.x, p.z) + Math.min(...under)) / 2, drop: 0 };
     if (SMALL.has(p.kind) || p.kind === 'gatehouse' || p.kind === 'gorgegate') return { y: ground0(p.x, p.z), drop: 0 };
     const top = Math.max(...under);
     if (!DOORS.has(p.kind)) return { y: top, drop: 0 };

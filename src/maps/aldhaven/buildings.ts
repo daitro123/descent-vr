@@ -139,41 +139,88 @@ function looks(district: District, rand: Rand): { stone: number; plaster: number
   };
 }
 
+/** The districts whose houses sometimes turn their gable to the street. */
+const GABLED: ReadonlySet<District> = new Set(['oldTown', 'market', 'harbour', 'guild']);
+
+/** Whether a house turns its gable to the street (decided by its seed, so its stand-in agrees). */
+export function gableFront(p: Pick<Piece, 'district' | 'seed' | 'w'>): boolean {
+  return GABLED.has(p.district) && p.w < 10 && p.seed % 5 < 2;
+}
+
 /**
  * A town house: a plinth (basalt in Old Town and the harbour, where the
  * Deepkings built first), a stone ground floor, jettied plaster floors over
  * it framed in dark timber, a steep slate roof and a chimney; a door, lit and
- * dark windows, and sometimes a shop's sign or awning.
+ * dark windows, and sometimes a shop's sign or awning. Some turn their gable
+ * to the street, a window in it; some have shutters in their door's colour,
+ * window boxes in flower, braces in their framing, dormers in their roofs.
  */
-function house(b: ModelBuilder, w: number, d: number, storeys: number, district: District, variant: number, rand: Rand, footing = 4): void {
+function house(b: ModelBuilder, w: number, d: number, storeys: number, district: District, variant: number, rand: Rand, footing = 4, gabled = false): void {
   const L = looks(district, rand);
   const plinth = 0.5;
   const ground = 3.0;
   const upper = 2.7;
+  const jetty = 0.25;
+  const shutters = rand() < 0.5 ? L.doors[(variant + 1) % L.doors.length] : null;
+  const boxes = district !== 'harbour' && rand() < 0.35;
+  const braced = (district === 'oldTown' || district === 'market' || district === 'guild') && rand() < 0.55;
   slab(b, w + 0.2, footing + plinth, d + 0.2, 0, -footing, 0, L.plinth);
   slab(b, w, ground, d, 0, plinth, 0, L.stone);
   let y = plinth + ground;
+  const flowers = [0xd84a3a, 0xd8b85a, 0x8a6aaa, 0xf0ece0, 0xe07a9a];
   for (let s = 1; s < storeys; s++) {
-    const jetty = 0.25;
+    const zf = d / 2 + jetty;
     slab(b, w + 0.1, upper, d + 2 * jetty, 0, y, 0, L.plaster);
     slab(b, w + 0.16, 0.2, d + 2 * jetty + 0.06, 0, y, 0, C.timber);
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) slab(b, 0.22, upper, 0.22, sx * (w / 2), y, sz * (d / 2 + jetty), C.timber);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) slab(b, 0.22, upper, 0.22, sx * (w / 2), y, sz * zf, C.timber);
     for (const sz of [-1, 1]) {
       const bays = Math.max(2, Math.round(w / 2.4));
-      for (let i = 1; i < bays; i++) slab(b, 0.14, upper, 0.08, -w / 2 + (i * w) / bays, y, sz * (d / 2 + jetty + 0.03), C.timber);
+      for (let i = 1; i < bays; i++) slab(b, 0.14, upper, 0.08, -w / 2 + (i * w) / bays, y, sz * (zf + 0.03), C.timber);
+      // Braces up from the corner posts.
+      if (braced) for (const sx of [-1, 1]) b.bar([sx * (w / 2 - 0.05), y + 0.2, sz * (zf + 0.04)], [sx * (w / 2 - 0.75), y + 1.05, sz * (zf + 0.04)], 0.12, 0.06, { color: C.timber, jitter: 0 });
     }
     const n = Math.max(1, Math.floor(w / 2.4));
     for (let i = 0; i < n; i++) {
       const x = -w / 2 + ((i + 0.5) * w) / n;
       window(b, x, y + 0.8, d + 2 * jetty, 1, rand() < 0.22);
       window(b, x, y + 0.8, d + 2 * jetty, -1, rand() < 0.15);
+      if (shutters !== null) for (const sx of [-1, 1]) slab(b, 0.34, 1.1, 0.05, x + sx * 0.6, y + 0.8, zf + 0.06, shutters, { jitter: 0.08 });
+      if (boxes) {
+        slab(b, 0.95, 0.2, 0.26, x, y + 0.56, zf + 0.15, C.plank);
+        for (const fx of [-0.25, 0.22]) slab(b, 0.3, 0.16, 0.18, x + fx, y + 0.76, zf + 0.15, rand() < 0.4 ? 0x5a8a40 : flowers[Math.floor(rand() * flowers.length)], { jitter: 0.15 });
+      }
     }
     if (d > 6 && rand() < 0.6) sideWindow(b, 0, y + 0.8, w + 0.1, rand() < 0.5 ? 1 : -1, rand() < 0.2);
     y += upper;
   }
-  const rise = Math.min(5.5, d * 0.62);
-  roof(b, w, d + (storeys > 1 ? 0.5 : 0), y, rise, 0.4, rand() < 0.2 ? C.slateLight : C.slate, storeys > 1 ? L.plaster : L.stone);
-  chimney(b, (variant % 2 ? -1 : 1) * (w / 2 - 0.6), (rand() - 0.5) * d * 0.3, y + rise * 0.4, y + rise + 1.0, L.stone === C.basaltLight ? C.basaltLight : C.limestoneShade);
+  const depth = d + (storeys > 1 ? 0.5 : 0);
+  const slate = rand() < 0.2 ? C.slateLight : C.slate;
+  const gable = storeys > 1 ? L.plaster : L.stone;
+  const stack = L.stone === C.basaltLight ? C.basaltLight : C.limestoneShade;
+  if (gabled) {
+    // The gable to the street: the ridge runs back from it, a window high in it.
+    const rise = Math.min(5.5, w * 0.62);
+    roof(b, w, depth, y, rise, 0.4, slate, gable, [0, 0, 0], true);
+    window(b, 0, y + rise * 0.22, depth, 1, rand() < 0.3, 0.7, 1.0);
+    slab(b, 0.16, 0.16, 0.9, 0, y + rise * 0.62, depth / 2 + 0.35, C.timber);
+    chimney(b, (variant % 2 ? -1 : 1) * (w / 4), -depth / 4, y + rise * 0.4, y + rise + 0.9, stack);
+  } else {
+    const rise = Math.min(5.5, d * 0.62);
+    roof(b, w, depth, y, rise, 0.4, slate, gable);
+    chimney(b, (variant % 2 ? -1 : 1) * (w / 2 - 0.6), (rand() - 0.5) * d * 0.3, y + rise * 0.4, y + rise + 1.0, stack);
+    // Dormers in the front slope of the steeper roofs.
+    if (rise >= 4 && w >= 7 && rand() < 0.5) {
+      const count = w >= 10 ? 2 : 1;
+      const zd = depth / 4 + 0.2;
+      const yd = y + rise * 0.5 - 0.35;
+      for (let k = 0; k < count; k++) {
+        const x = count === 1 ? (variant % 2 ? 1 : -1) * w * 0.15 : (k ? 1 : -1) * w * 0.24;
+        slab(b, 1.4, 1.5, 1.6, x, yd, zd, gable);
+        window(b, x, yd + 0.3, 2 * zd + 1.6, 1, rand() < 0.3, 0.7, 0.8);
+        b.taper(1.8, 1.9, 0.04, 1.9, 0.75, { at: [x, yd + 1.5, zd], color: slate, jitter: 0.08 });
+      }
+    }
+  }
   // The ground floor's front: a door, windows either side, a sign or an awning.
   const doorX = ((variant % 3) - 1) * (w / 4);
   door(b, doorX, plinth, d, L.doors[variant % L.doors.length]);
@@ -192,12 +239,13 @@ function house(b: ModelBuilder, w: number, d: number, storeys: number, district:
   if (rand() < 0.25) for (let i = 0; i < 2; i++) slab(b, 0.9, 0.25, 0.3, (i ? 1 : -1) * (w / 4), plinth + ground + 0.55, d / 2 + 0.45, C.plank);
 }
 
-/** A house as a stand-in: its body and its roof. */
-function farHouse(b: ModelBuilder, w: number, d: number, storeys: number, district: District, rand: Rand): void {
+/** A house as a stand-in: its body and its roof, its ridge the way the house's runs. */
+function farHouse(b: ModelBuilder, w: number, d: number, storeys: number, district: District, rand: Rand, gabled = false): void {
   const L = looks(district, rand);
   const top = 3.5 + 2.7 * (storeys - 1);
   slab(b, w + 0.2, top + 4, d + 0.4, 0, -4, 0, storeys > 1 ? L.plaster : L.stone);
-  b.taper(w + 0.8, d + 1, w + 0.8, 0.04, Math.min(5.5, d * 0.62), { at: [0, top, 0], color: C.slate });
+  if (gabled) b.taper(w + 0.8, d + 1, 0.04, d + 1, Math.min(5.5, w * 0.62), { at: [0, top, 0], color: C.slate });
+  else b.taper(w + 0.8, d + 1, w + 0.8, 0.04, Math.min(5.5, d * 0.62), { at: [0, top, 0], color: C.slate });
 }
 
 /** A warehouse: a stone ground floor, a timber upper floor, loading doors one above another, a hoist beam. */
@@ -624,7 +672,7 @@ function aldbridge(b: ModelBuilder, w: number, d: number): void {
     }
   }
   // Its abutments on either bank.
-  for (const s of [-1, 1]) slab(b, w, ALDHAVEN.quay + 3.5, 2, 0, -3.5, s * (half - 1), C.basalt);
+  for (const s of [-1, 1]) slab(b, w, ALDHAVEN.quay + 3.5 - 0.08, 2, 0, -3.5, s * (half - 1), C.basalt);
 }
 
 // ------------------------------------------------------------------ walls and gates
@@ -770,8 +818,8 @@ function marketCross(b: ModelBuilder): void {
 }
 
 function stall(b: ModelBuilder, w: number, d: number, variant: number, rand: Rand): void {
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) slab(b, 0.12, sz > 0 ? 2.2 : 2.6, 0.12, sx * (w / 2 - 0.1), 0, sz * (d / 2 - 0.1), C.timber);
-  slab(b, w, 0.9, 0.7, 0, 0, d / 2 - 0.4, C.plank);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) slab(b, 0.12, (sz > 0 ? 2.2 : 2.6) + 0.4, 0.12, sx * (w / 2 - 0.1), -0.4, sz * (d / 2 - 0.1), C.timber);
+  slab(b, w, 1.3, 0.7, 0, -0.4, d / 2 - 0.4, C.plank);
   slab(b, w + 0.1, 0.08, 0.8, 0, 0.9, d / 2 - 0.4, 0x8a6a44);
   b.box(w + 0.4, 0.08, d + 0.5, { at: [0, 2.4, 0.05], rot: [0.2, 0, 0], color: AWNINGS[variant % AWNINGS.length] });
   const goods = [0xd8782a, 0x7aac5a, 0xc8a26a, 0x9e3a2b, 0xd8b85a, 0x6a8aa8];
@@ -1088,13 +1136,13 @@ function fountain(b: ModelBuilder, w: number, d: number, h: number): void {
 
 /** A low stone kerb. */
 function kerb(b: ModelBuilder, w: number, d: number): void {
-  slab(b, w, 0.5, d, 0, -0.25, 0, C.limestoneDark);
+  slab(b, w, 0.62, d, 0, -0.5, 0, C.limestoneShade, { jitter: 0.1 });
 }
 
 /** A refugee's shelter: patched canvas over a ridge pole, its open end (+Z) dark. */
 function tent(b: ModelBuilder, w: number, d: number, h: number, rand: Rand): void {
   const cloth = [0xb8a888, 0xa89878, 0x9a8a6e][Math.floor(rand() * 3)];
-  b.taper(w, d, 0.06, d, h, { at: [0, 0, 0], color: cloth, jitter: 0.12 });
+  b.taper(w + 0.25, d, 0.06, d, h + 0.35, { at: [0, -0.35, 0], color: cloth, jitter: 0.12 });
   b.taper(w * 0.7, 0.05, 0.05, 0.05, h * 0.82, { at: [0, 0, d / 2 + 0.01], color: 0x2a2620, jitter: 0 });
   for (const z of [-d / 2 - 0.1, d / 2 + 0.1]) slab(b, 0.08, h + 0.2, 0.08, 0, 0, z, C.timber);
   slab(b, 0.9, 0.05, 0.7, w * 0.15, h * 0.4, d * 0.1, cloth === 0xb8a888 ? 0x8a6a44 : 0xc8b898, { jitter: 0 });
@@ -1111,8 +1159,12 @@ function bundle(b: ModelBuilder, rand: Rand): void {
 function nets(b: ModelBuilder, w: number, h: number): void {
   for (const s of [-1, 1]) slab(b, 0.12, h, 0.12, s * (w / 2), 0, 0, C.timber);
   b.box(w + 0.3, 0.1, 0.1, { at: [0, h - 0.05, 0], color: C.timber });
-  for (let k = 0; k < 4; k++) b.box(w / 4 - 0.05, h * (0.55 + (k % 2) * 0.15), 0.04, { at: [-w / 2 + (k + 0.5) * (w / 4), h * (1 - (0.55 + (k % 2) * 0.15) / 2) - 0.1, 0.05], color: k % 2 ? 0x5e5a4e : 0x6e6a5a, jitter: 0.15 });
-  for (let k = 0; k < 3; k++) b.ball(0.08, { at: [-w / 2 + (k + 1) * (w / 4), h * 0.35, 0.08], color: 0xd8a83a });
+  // The nets hang in loose folds from the bar, half its height, the light through them (a mesh of thin cords).
+  const drop = h * 0.5;
+  for (let k = 0; k <= 12; k++) b.box(0.035, drop * (0.8 + 0.2 * Math.sin(k * 1.7)), 0.035, { at: [-w / 2 + 0.1 + (k * (w - 0.2)) / 12, h - 0.1 - (drop * (0.8 + 0.2 * Math.sin(k * 1.7))) / 2, 0.05], color: 0x9a8e70, jitter: 0 });
+  for (let k = 1; k <= 4; k++) b.box(w - 0.2, 0.035, 0.035, { at: [0, h - 0.1 - (k * drop * 0.8) / 4, 0.05], color: 0x8a7e62, jitter: 0 });
+  // Cork floats strung along the bottom cord.
+  for (let k = 0; k < 3; k++) b.ball(0.07, { at: [-w / 2 + (k + 1) * (w / 4), h - 0.1 - drop * 0.8, 0.08], color: 0xb88a4a });
 }
 
 /** The dyers' vats: three wooden tubs of indigo, madder and weld. */
@@ -1211,11 +1263,11 @@ export function buildPiece(p: Piece, far = false): BufferGeometry {
       slab(b, 5.6, 6, 5.6, 0, 0, -1, C.plank);
       b.bar([0, p.h - 1, 1.2], [0, p.h + 1.5, 9.5], 0.45, 0.45, { color: C.timber });
       slab(b, 0.6, p.h - 1, 0.6, 0, 1, 1.6, C.timber);
-    } else farHouse(b, p.w, p.d, p.kind === 'house' || p.kind === 'warehouse' ? p.storeys : 3, p.district, rand);
+    } else farHouse(b, p.w, p.d, p.kind === 'house' || p.kind === 'warehouse' ? p.storeys : 3, p.district, rand, p.kind === 'house' && gableFront(p));
     return b.build();
   }
   switch (p.kind) {
-    case 'house': house(b, p.w, p.d, p.storeys, p.district, p.variant, rand, p.footing); break;
+    case 'house': house(b, p.w, p.d, p.storeys, p.district, p.variant, rand, p.footing, gableFront(p)); break;
     case 'warehouse': warehouse(b, p.w, p.d, p.storeys, p.variant % 3, rand); break;
     case 'inn': inn(b, p.w, p.d, p.storeys, p.variant, rand); break;
     case 'hall': hall(b, p.w, p.d, p.variant, rand); break;

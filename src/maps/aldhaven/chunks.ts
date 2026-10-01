@@ -173,7 +173,7 @@ function addCityGround(raw: MeshBuffer, plan: AldhavenPlan, region: Region, coar
       // The setts' courses: a faint check, a cell to a stone.
       color.multiplyScalar(0.96 + 0.06 * (((Math.floor(x / 2) + Math.floor(z / 2)) & 1) as number));
       // The streets' middles, worn darker by the wheels; the squares' and the quays' setts stay pale.
-      if (here.street) color.lerp(here.basalt ? G.basaltDark : G.settsDark, 0.45).multiplyScalar(0.94);
+      if (here.street) color.lerp(here.basalt ? G.basaltDark : G.settsDark, 0.3).multiplyScalar(0.97);
     } else if (here.yard) {
       // A back yard: packed earth, grass coming through at its edges.
       color.copy(G.yard).lerp(G.yardDark, valueNoise(x * 0.7, z * 0.7, 321) * 0.7);
