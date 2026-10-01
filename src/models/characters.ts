@@ -1,12 +1,14 @@
 import type { Material } from 'three';
 import { BANDITS } from './bandits';
 import { BAILIFFS } from './bailiffs';
+import { BOG } from './bog';
 import { BOG_DEAD } from './bogDead';
 import { LAMP_CREWS } from './diggers';
 import { MOOR_BANDITS } from './moorBandits';
 import { RAIDERS } from './raiders';
 import { LANTERN_MEN, UNDERGATE } from './smugglers';
 import { bow } from './bow';
+import { DROWNED } from './drowned';
 import type { Vec3 } from './kit';
 import { PAL } from './palette';
 import { type BoneName, type DressContext, type Proportions, Rig } from './rig';
@@ -20,15 +22,22 @@ import { type BoneName, type DressContext, type Proportions, Rig } from './rig';
 // (raiders.ts) wear the human body (human.ts). Every family is an entry in
 // FAMILIES.
 
-/** An enemy's behaviour: how it fights. */
-export type EnemyKind = 'grunt' | 'archer' | 'brute' | 'warden';
+/** An enemy's behaviour: how it fights. A biter strikes low at your legs (a leech, an adder). */
+export type EnemyKind = 'grunt' | 'archer' | 'brute' | 'warden' | 'biter';
 
-/** What an enemy family is made of: the dead are skeletons, the living wear the human body, and the bog's dead are whole bodies kept by the peat. */
-export type EnemyBody = 'skeleton' | 'human' | 'corpse';
+/** The behaviours fought on a human body or a skeleton: every one but the biter's, which only crawlers have. */
+export type HumanoidKind = Exclude<EnemyKind, 'biter'>;
+
+/**
+ * What an enemy is made of: the dead are skeletons, the living wear the human
+ * body, the bog's dead are whole bodies kept by the peat (corpses), the bog's
+ * beasts are mud, and leeches and adders are crawlers (crawler.ts).
+ */
+export type EnemyBody = 'skeleton' | 'human' | 'corpse' | 'mud' | 'crawler';
 
 /** The business end of a weapon, in its bone's space. Enemy strikes sweep this segment. */
-export interface WeaponSpec {
-  bone: BoneName;
+export interface WeaponSpec<B extends string = BoneName> {
+  bone: B;
   base: Vec3;
   tip: Vec3;
   radius: number;
@@ -49,19 +58,23 @@ export interface Fighter {
   readonly proportions: Proportions;
   /** Dress it in look `variant` (any whole number: it wraps), and say what it strikes with. */
   dress(ctx: DressContext, variant: number): WeaponSpec;
+  /** Its name over its health bar, if it goes by one: the bosses, and named fighters the fen tales name (the Mire King). */
+  readonly title?: string;
 }
 
 /**
  * An enemy family: who an enemy is, whatever its behaviour. Its body decides
  * how it comes and goes and what flies when it's hit: the dead claw up out of
- * the ground and fall to pieces, the living are simply standing there and
- * fall whole, and corpses claw up as the dead do but fall whole, leaking dark
- * ichor rather than bone chips. A family fights only with the behaviours it
- * dresses for: only the undead have a Warden.
+ * the ground (or come up out of the water) and fall to pieces, the living are
+ * simply standing there and fall whole, corpses claw up as the dead do but
+ * fall whole, leaking dark ichor rather than bone chips, and the bog's beasts
+ * lie sunk in the mud as mounds until they heave up. A family fights only
+ * with the behaviours it dresses for: only the undead and the drowned have a
+ * Warden.
  */
 export interface FamilyDef {
-  readonly body: EnemyBody;
-  readonly fights: Partial<Record<EnemyKind, Fighter>>;
+  readonly body: Exclude<EnemyBody, 'crawler'>;
+  readonly fights: Partial<Record<HumanoidKind, Fighter>>;
   /**
    * Its named fighters: each dressed apart from the rest, for one place, and
    * asked for there by name (a camp post's `named`): the Lantern Men's leaders
@@ -69,13 +82,15 @@ export interface FamilyDef {
    * them, whatever look they're given.
    */
   readonly named?: Readonly<Record<string, NamedFighter>>;
+  /** A camp's lie hidden where they're raised (under the ground, the water, the mud) until you come near: the drowned, the bog's beasts. */
+  readonly lurks?: boolean;
   /** Varies its per-face shading, with its look. */
   readonly seed: number;
 }
 
 /** A family's fighter for one place, a leader or a boss, fighting with the behaviour `kind`. */
 export interface NamedFighter extends Fighter {
-  readonly kind: EnemyKind;
+  readonly kind: HumanoidKind;
 }
 
 const PI = Math.PI;
@@ -83,41 +98,45 @@ const DOWN: Vec3 = [PI, 0, 0]; // taper parts grow along +Y; this flips them dow
 
 // ---------------------------------------------------------------- skeleton parts
 
-interface SkeletonLook {
+/** A skeleton's bones: `s` scales their thickness, `eye` glows in the sockets; `bone` and `shade` stain them (the drowned's peat). */
+export interface SkeletonLook {
   s: number;
   eye: number;
   bone?: number;
+  shade?: number;
 }
 
 function skull(ctx: DressContext, l: SkeletonLook): void {
   const { s, eye } = l;
   const B = l.bone ?? PAL.bone;
+  const S = l.shade ?? PAL.boneShade;
   const neckLen = ctx.p.neck - ctx.p.spine;
   ctx
     .on('head')
-    .box(0.045 * s, neckLen + 0.05 * s, 0.045 * s, { at: [0, (0.05 * s - neckLen) / 2, -0.01 * s], color: PAL.boneShade })
+    .box(0.045 * s, neckLen + 0.05 * s, 0.045 * s, { at: [0, (0.05 * s - neckLen) / 2, -0.01 * s], color: S })
     .box(0.19 * s, 0.16 * s, 0.2 * s, { at: [0, 0.145 * s, 0], color: B })
     .taper(0.19 * s, 0.2 * s, 0.13 * s, 0.15 * s, 0.05 * s, { at: [0, 0.225 * s, 0], color: B })
-    .box(0.2 * s, 0.03 * s, 0.04 * s, { at: [0, 0.168 * s, 0.09 * s], color: PAL.boneShade })
+    .box(0.2 * s, 0.03 * s, 0.04 * s, { at: [0, 0.168 * s, 0.09 * s], color: S })
     .box(0.16 * s, 0.07 * s, 0.05 * s, { at: [0, 0.088 * s, 0.08 * s], color: B })
     .box(0.056 * s, 0.046 * s, 0.03 * s, { at: [-0.046 * s, 0.13 * s, 0.093 * s], color: PAL.socket, jitter: 0 })
     .box(0.056 * s, 0.046 * s, 0.03 * s, { at: [0.046 * s, 0.13 * s, 0.093 * s], color: PAL.socket, jitter: 0 })
     .box(0.024 * s, 0.024 * s, 0.02 * s, { at: [-0.046 * s, 0.13 * s, 0.1 * s], color: eye, glow: 1, jitter: 0 })
     .box(0.024 * s, 0.024 * s, 0.02 * s, { at: [0.046 * s, 0.13 * s, 0.1 * s], color: eye, glow: 1, jitter: 0 })
     .box(0.026 * s, 0.03 * s, 0.02 * s, { at: [0, 0.09 * s, 0.106 * s], color: PAL.socket, jitter: 0 })
-    .box(0.12 * s, 0.022 * s, 0.03 * s, { at: [0, 0.052 * s, 0.09 * s], color: PAL.bone });
+    .box(0.12 * s, 0.022 * s, 0.03 * s, { at: [0, 0.052 * s, 0.09 * s], color: B });
   ctx
     .on('jaw')
     .box(0.14 * s, 0.04 * s, 0.1 * s, { at: [0, 0.01 * s, 0.015 * s], color: B })
-    .box(0.11 * s, 0.018 * s, 0.025 * s, { at: [0, 0.035 * s, 0.045 * s], color: PAL.bone });
+    .box(0.11 * s, 0.018 * s, 0.025 * s, { at: [0, 0.035 * s, 0.045 * s], color: B });
 }
 
 function ribcage(ctx: DressContext, l: SkeletonLook): void {
   const { s } = l;
   const B = l.bone ?? PAL.bone;
+  const S = l.shade ?? PAL.boneShade;
   const L = ctx.p.spine;
   const b = ctx.on('spine');
-  b.box(0.045 * s, L + 0.03 * s, 0.045 * s, { at: [0, L / 2 - 0.015 * s, -0.075 * s], color: PAL.boneShade });
+  b.box(0.045 * s, L + 0.03 * s, 0.045 * s, { at: [0, L / 2 - 0.015 * s, -0.075 * s], color: S });
   const ribs: [number, number, number][] = [
     [L - 0.07 * s, 0.26, 0.17],
     [L - 0.13 * s, 0.28, 0.18],
@@ -132,12 +151,12 @@ function ribcage(ctx: DressContext, l: SkeletonLook): void {
       .box(t, t, d, { at: [w / 2, y, 0], color: B })
       .box(w / 2 - 0.03 * s, t, t, { at: [-(w / 4 + 0.015 * s), y - 0.012 * s, d / 2], color: B })
       .box(w / 2 - 0.03 * s, t, t, { at: [w / 4 + 0.015 * s, y - 0.012 * s, d / 2], color: B })
-      .box(w, t, t, { at: [0, y, -d / 2], color: PAL.boneShade });
+      .box(w, t, t, { at: [0, y, -d / 2], color: S });
   }
   b.box(0.035 * s, 0.2 * s, 0.025 * s, { at: [0, L - 0.16 * s, 0.09 * s], color: B })
     .box(ctx.p.shoulderW * 2, 0.03 * s, 0.035 * s, { at: [0, L - 0.01 * s, 0.03 * s], color: B })
-    .box(0.1 * s, 0.12 * s, 0.02 * s, { at: [-0.09 * s, L - 0.09 * s, -0.1 * s], color: PAL.boneShade })
-    .box(0.1 * s, 0.12 * s, 0.02 * s, { at: [0.09 * s, L - 0.09 * s, -0.1 * s], color: PAL.boneShade });
+    .box(0.1 * s, 0.12 * s, 0.02 * s, { at: [-0.09 * s, L - 0.09 * s, -0.1 * s], color: S })
+    .box(0.1 * s, 0.12 * s, 0.02 * s, { at: [0.09 * s, L - 0.09 * s, -0.1 * s], color: S });
   ctx
     .on('hips')
     .taper(0.16 * s, 0.1 * s, 0.26 * s, 0.14 * s, 0.12 * s, { at: [0, -0.09 * s, 0], color: B })
@@ -147,41 +166,42 @@ function ribcage(ctx: DressContext, l: SkeletonLook): void {
 function skeletonLimbs(ctx: DressContext, l: SkeletonLook): void {
   const { s } = l;
   const B = l.bone ?? PAL.bone;
+  const S = l.shade ?? PAL.boneShade;
   const { upperArm: UA, forearm: FA, thigh: TH, shin: SH } = ctx.p;
   for (const side of ['L', 'R'] as const) {
     ctx
       .on(`upperArm${side}`)
       .ball(0.04 * s, { color: B })
       .box(0.04 * s, UA - 0.05 * s, 0.04 * s, { at: [0, -UA / 2, 0], color: B })
-      .ball(0.034 * s, { at: [0, -UA, 0], color: PAL.boneShade });
+      .ball(0.034 * s, { at: [0, -UA, 0], color: S });
     ctx
       .on(`forearm${side}`)
       .box(0.024 * s, FA - 0.03 * s, 0.024 * s, { at: [-0.012 * s, -FA / 2, 0], color: B })
-      .box(0.024 * s, FA - 0.03 * s, 0.024 * s, { at: [0.012 * s, -FA / 2, 0], color: PAL.boneShade });
+      .box(0.024 * s, FA - 0.03 * s, 0.024 * s, { at: [0.012 * s, -FA / 2, 0], color: S });
     ctx
       .on(`hand${side}`)
       .box(0.05 * s, 0.055 * s, 0.028 * s, { at: [0, -0.035 * s, 0], color: B })
-      .box(0.05 * s, 0.045 * s, 0.045 * s, { at: [0, -0.075 * s, 0.006 * s], color: PAL.boneShade });
+      .box(0.05 * s, 0.045 * s, 0.045 * s, { at: [0, -0.075 * s, 0.006 * s], color: S });
     ctx
       .on(`thigh${side}`)
       .ball(0.045 * s, { color: B })
       .box(0.048 * s, TH - 0.06 * s, 0.048 * s, { at: [0, -TH / 2, 0], color: B })
-      .ball(0.042 * s, { at: [0, -TH, 0.01 * s], color: PAL.boneShade });
+      .ball(0.042 * s, { at: [0, -TH, 0.01 * s], color: S });
     ctx
       .on(`shin${side}`)
       .box(0.042 * s, SH - 0.04 * s, 0.042 * s, { at: [0, -SH / 2, 0], color: B })
-      .box(0.08 * s, 0.045 * s, 0.2 * s, { at: [0, -SH - 0.012 * s, 0.05 * s], color: PAL.boneShade });
+      .box(0.08 * s, 0.045 * s, 0.2 * s, { at: [0, -SH - 0.012 * s, 0.05 * s], color: S });
   }
 }
 
-function skeleton(ctx: DressContext, l: SkeletonLook): void {
+export function skeleton(ctx: DressContext, l: SkeletonLook): void {
   skull(ctx, l);
   ribcage(ctx, l);
   skeletonLimbs(ctx, l);
 }
 
 /** Tattered cloth hanging from the hips, front and back. */
-function loincloth(ctx: DressContext, s: number, color: number, len: number): void {
+export function loincloth(ctx: DressContext, s: number, color: number, len: number): void {
   ctx
     .on('hips')
     .box(0.3 * s, 0.05 * s, 0.18 * s, { at: [0, -0.02 * s, 0], color: PAL.leather })
@@ -245,7 +265,7 @@ function greatsword(ctx: DressContext): WeaponSpec {
 
 // ---------------------------------------------------------------- the bestiary
 
-export const PROPORTIONS: Record<EnemyKind, Proportions> = {
+export const PROPORTIONS: Record<HumanoidKind, Proportions> = {
   grunt: { hipY: 0.92, hipW: 0.09, spine: 0.44, shoulderW: 0.19, neck: 0.48, upperArm: 0.28, forearm: 0.25, thigh: 0.43, shin: 0.43 },
   archer: { hipY: 0.9, hipW: 0.09, spine: 0.43, shoulderW: 0.18, neck: 0.47, upperArm: 0.27, forearm: 0.25, thigh: 0.42, shin: 0.42 },
   brute: {
@@ -426,7 +446,7 @@ const UNDEAD: FamilyDef = {
     grunt: { label: 'Grunt', looks: 6, proportions: PROPORTIONS.grunt, dress: dressGrunt },
     archer: { label: 'Archer', looks: 1, proportions: PROPORTIONS.archer, dress: dressArcher },
     brute: { label: 'Brute', looks: 1, proportions: PROPORTIONS.brute, dress: dressBrute },
-    warden: { label: 'Bone Warden', looks: 1, proportions: PROPORTIONS.warden, dress: dressWarden },
+    warden: { label: 'Bone Warden', looks: 1, proportions: PROPORTIONS.warden, dress: dressWarden, title: 'The Bone Warden' },
   },
 };
 
@@ -442,13 +462,23 @@ export const FAMILIES = {
   smuggler: LANTERN_MEN,
   undergate: UNDERGATE,
   raider: RAIDERS,
+  drowned: DROWNED,
+  bog: BOG,
   moorBandit: MOOR_BANDITS,
   lampCrew: LAMP_CREWS,
   bogDead: BOG_DEAD,
 } satisfies Record<string, FamilyDef>;
 
-/** Who an enemy is, whatever its behaviour: one of FAMILIES. */
+/** Who an enemy on a skeleton or the human body is, whatever its behaviour: one of FAMILIES. */
 export type Family = keyof typeof FAMILIES;
+
+/** Who an enemy is: one of FAMILIES, or the crawlers' leeches and adders, which are only ever biters (crawler.ts). */
+export type EnemyFamily = Family | 'leech' | 'snake';
+
+/** Is it one of FAMILIES, on a skeleton or the human body (not a crawler)? */
+export function isFamily(family: EnemyFamily): family is Family {
+  return family in FAMILIES;
+}
 
 export interface BuildOptions {
   material?: Material;
@@ -465,7 +495,7 @@ export interface BuildOptions {
  * there's none of some (only the undead have a Warden), and a named fighter
  * fights only with its own behaviour.
  */
-export function fighterOf(kind: EnemyKind, family: Family = 'undead', named?: string): Fighter {
+export function fighterOf(kind: HumanoidKind, family: Family = 'undead', named?: string): Fighter {
   if (named !== undefined) {
     const own: NamedFighter | undefined = (FAMILIES[family] as FamilyDef).named?.[named];
     if (!own) throw new Error(`No ${named} among the ${family} family`);
@@ -478,11 +508,11 @@ export function fighterOf(kind: EnemyKind, family: Family = 'undead', named?: st
 }
 
 /** The bone lengths of an enemy with this behaviour and family (or this named fighter of it). */
-export function proportionsOf(kind: EnemyKind, family: Family = 'undead', named?: string): Proportions {
+export function proportionsOf(kind: HumanoidKind, family: Family = 'undead', named?: string): Proportions {
   return fighterOf(kind, family, named).proportions;
 }
 
-export function buildCharacter(kind: EnemyKind, opts: BuildOptions = {}): CharacterModel {
+export function buildCharacter(kind: HumanoidKind, opts: BuildOptions = {}): CharacterModel {
   const variant = opts.variant ?? 0;
   const family = opts.family ?? 'undead';
   const fighter = fighterOf(kind, family, opts.named);

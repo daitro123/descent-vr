@@ -1,7 +1,7 @@
 import { Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { type Clip, clipsFor, type MutablePose } from '../src/inspector/clips';
-import { buildCharacter, type EnemyKind, FAMILIES, type Family, type FamilyDef, proportionsOf } from '../src/models/characters';
+import { buildCharacter, type HumanoidKind as EnemyKind, FAMILIES, type Family, type FamilyDef, proportionsOf } from '../src/models/characters';
 import { GUARDS } from '../src/models/guards';
 import { BUILDS, type BuildName, body, head, type Look, pommelOf } from '../src/models/human';
 import { buildPerson, PEOPLE, type PersonId } from '../src/models/people';

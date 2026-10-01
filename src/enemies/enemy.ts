@@ -3,12 +3,12 @@ import { closestSegmentSegment, type SegmentHit } from '../combat/geometry';
 import type { BladeTarget } from '../combat/strike';
 import type { AttackConfig, EnemyConfig } from '../config';
 import { CONFIG } from '../config';
-import { buildCharacter, type EnemyBody, type EnemyKind, FAMILIES, type Family, type WeaponSpec } from '../models/characters';
+import { buildCharacter, type EnemyBody, type EnemyFamily, type EnemyKind, FAMILIES, fighterOf, isFamily, type WeaponSpec } from '../models/characters';
 import { createModelMaterial, type ModelMaterial } from '../models/materials';
-import { BONES, type BoneName, blendPoses, type Pose, type Rig } from '../models/rig';
+import { BONES, type BoneName, blendPoses, type PoseOf, type Rig, type SkeletonRig } from '../models/rig';
 import { HealthBar } from '../ui/healthBar';
 import type { Ground } from '../world/ground';
-import { ATTACK_POSES, GUARD, type GuardSide, IDLE, KNEEL, KNEEL_DROP, RISE, SEATED, STAGGER, walkOffsets } from './poses';
+import { GUARD, type GuardSide, humanoidAttack, IDLE, KNEEL, KNEEL_DROP, MOUND, MOUND_DROP, RISE, SEATED, STAGGER, SURFACE, walkOffsets } from './poses';
 import type { AttackTokens } from './tokens';
 
 export type EnemyState = 'rising' | 'move' | 'attack' | 'guard' | 'stagger' | 'kneel' | 'seated' | 'sitting' | 'frozen' | 'dead';
@@ -54,14 +54,32 @@ export interface EnemyContext {
   summon(enemy: Enemy, count: number): void;
   /** An attack's wind-up began (sound cue, threat indicator). */
   telegraph(enemy: Enemy, attack: AttackConfig): void;
+  /** One lying in wait began to rise, out of the ground, the water or the mud (a sound, a splash). */
+  emerge?(enemy: Enemy, from: Emergence): void;
 }
+
+/** Where one that rises comes up out of: the earth (the dead), the water it lies in (the drowned), the mud (the bog's beasts). */
+export type Emergence = 'ground' | 'water' | 'mud';
 
 type MutablePose = Record<string, [number, number, number]>;
 
+/** A pose on whatever body it has: bone name → its turn from bind. */
+export type BodyPose = PoseOf<string>;
+
+/**
+ * A body other than its family's human body or skeleton, built for it in its
+ * material (createEnemy): a crawler's (crawler.ts). Its rig is on a skeleton
+ * of its own, and its weapon is whatever part of it strikes (the jaws).
+ */
+export interface EnemyModel {
+  readonly rig: SkeletonRig<string, unknown>;
+  readonly weapon: WeaponSpec<string>;
+}
+
 /** What sets an enemy apart from others with its behaviour: its family and look, its numbers and level (createEnemy fills it in). */
 export interface EnemyTraits {
-  /** Who it is: the undead (the default) are skeletons; the bandits and House Corvane's men wear the human body. */
-  family?: Family;
+  /** Who it is: the undead (the default) are skeletons; the bandits and House Corvane's men wear the human body; leeches and adders are crawlers. */
+  family?: EnemyFamily;
   /** Which of its family's looks for its behaviour. */
   variant?: number;
   /** One of its family's named fighters, dressed for one place: a leader, a boss (FamilyDef.named). */
@@ -70,6 +88,10 @@ export interface EnemyTraits {
   def?: EnemyConfig;
   /** Its level, which `def`'s numbers were made at: what its kill pays for. */
   level?: number;
+  /** Its body, if not its family's human body or skeleton: built in the material given. A crawler's needs it. */
+  model?: (material: ModelMaterial) => EnemyModel;
+  /** Lie hidden where it's raised until you come near or it's called to fight (a camp's, of a family that lurks). */
+  lurks?: boolean;
 }
 
 /** Where an enemy waits when it isn't fighting (see Enemy.post). */
@@ -93,6 +115,11 @@ export interface Seat {
 }
 
 const RISE_DEPTH = 1.9;
+/** m of water over its feet that it comes up out of, rather than the ground under it. */
+const SURFACE_DEPTH = 0.25;
+/** How much longer coming up out of the water, or heaving up out of the mud, takes than clawing out of the ground. */
+const SURFACE_SLOWER = 1.6;
+const MOUND_SLOWER = 1.3;
 const UP = new Vector3(0, 1, 0);
 const _to = new Vector3();
 const _v = new Vector3();
@@ -167,17 +194,24 @@ interface Shard {
 export abstract class Enemy {
   readonly root = new Group();
   readonly position: Vector3; // feet, alias of root.position
-  /** Who it is: the undead, the bandits, House Corvane's men. */
-  readonly family: Family;
+  /** Who it is: the undead, the bandits, House Corvane's men, leeches, adders. */
+  readonly family: EnemyFamily;
   /** What its family is made of: how it comes and goes, and what flies when it's hit. */
   readonly body: EnemyBody;
+  /** Which of its family's named fighters it is (FamilyDef.named), or null for an ordinary fighter. */
+  readonly named: string | null;
+  /** Lying hidden where it was raised, still to rise: until you come near or its camp fights. */
+  lurking: boolean;
   /** Which of its family's bodies and weapons it fights with, for the aim measured once per body. */
   private readonly fighter: string;
   readonly def: EnemyConfig;
   /** Its level, which `def`'s numbers were made at (createEnemy): what its kill pays for. */
   readonly level: number;
-  readonly rig: Rig;
-  readonly weapon: WeaponSpec;
+  /** Which of its family's looks for its behaviour. */
+  readonly variant: number;
+  /** Its rig: the human body or a skeleton, or another body's (EnemyModel). */
+  readonly rig: SkeletonRig<string, unknown>;
+  readonly weapon: WeaponSpec<string>;
   readonly material: ModelMaterial;
   readonly healthBar: HealthBar;
   hp: number;
@@ -214,7 +248,8 @@ export abstract class Enemy {
    */
   chaseSpeed = 0;
 
-  private readonly pose: MutablePose = {};
+  /** Its pose this frame, eased in place. */
+  protected readonly pose: MutablePose = {};
   private readonly snapshot: MutablePose = {};
   private readonly windupPose: MutablePose = {};
   private readonly strikePose: MutablePose = {};
@@ -229,6 +264,8 @@ export abstract class Enemy {
   private staggerSide = 1;
   private steady = 0; // s left in which blows can't stagger it (def.steadyTime)
   private readonly riseTime: number;
+  /** Rising: what out of, how deep it starts, its pose and how long it takes, and whether you roused it. Set as it starts. */
+  private emerging: { from: Emergence; depth: number; pose: BodyPose; time: number; roused: boolean } | null = null;
   private readonly prevBase = new Vector3();
   private readonly prevTip = new Vector3();
   private readonly base = new Vector3();
@@ -268,6 +305,8 @@ export abstract class Enemy {
   private rootedTime = 0;
   /** s left that it can't heal (Mortal Strike's wound), walking home included. */
   woundedFor = 0;
+  /** Its rig when that's the human body or a skeleton; null on another body. */
+  private readonly limbs: Rig | null;
 
   constructor(
     /** Its behaviour: how it fights. */
@@ -276,35 +315,49 @@ export abstract class Enemy {
     z: number,
     traits: EnemyTraits = {},
   ) {
-    const { family = 'undead', variant = 0, named, def = CONFIG.enemies[kind], level = 1 } = traits;
+    const { family = 'undead', variant = 0, named, def = CONFIG.enemies[kind], level = 1, lurks = false } = traits;
     this.family = family;
-    this.body = FAMILIES[family].body;
+    this.variant = variant;
+    this.body = isFamily(family) ? FAMILIES[family].body : 'crawler';
     this.fighter = `${family}:${kind}:${named ?? variant}`;
+    this.named = named ?? null;
+    this.lurking = lurks;
     this.def = def;
     this.level = level;
     this.hp = this.maxHp = this.def.hp;
     this.material = createModelMaterial();
-    const model = buildCharacter(kind, { material: this.material, family, variant, named });
-    this.rig = model.rig;
-    this.weapon = model.weapon;
+    if (traits.model) {
+      const model = traits.model(this.material);
+      this.rig = model.rig;
+      this.weapon = model.weapon;
+      this.limbs = null;
+    } else {
+      if (kind === 'biter' || !isFamily(family)) throw new Error(`A ${family} ${kind} needs its body built (createEnemy)`);
+      const model = buildCharacter(kind, { material: this.material, family, variant, named });
+      this.rig = this.limbs = model.rig;
+      this.weapon = model.weapon;
+    }
     this.position = this.root.position;
     this.root.position.set(x, 0, z);
     this.root.add(this.visual);
     this.visual.add(this.rig.mesh);
     this.riseTime = kind === 'warden' ? 2.4 : 1.1;
-    if (this.body !== 'human') {
-      // The dead claw their way up out of the ground (the bog's out of the peat).
+    if (this.body === 'skeleton' || this.body === 'corpse' || this.body === 'mud') {
+      // The dead claw their way up out of the ground (or the water they lie in; the bog's dead out of the peat), the bog's beasts heave up out of the mud: out of sight till then.
       this.visual.position.y = -RISE_DEPTH * this.heightScale;
-      copyPose(RISE, this.pose); // copies: poses are shared constants, and this.pose is eased in place
+      // copies: poses are shared constants, and this.pose is eased in place
+      copyPose(this.body === 'mud' ? MOUND : lurks ? SURFACE : RISE, this.pose);
     } else {
       // The living are simply there, standing.
       this.state = 'move';
-      copyPose(IDLE[kind], this.pose);
+      copyPose(this.idlePose(), this.pose);
     }
 
+    // A boss (the Warden, the Reeve) has its name over a long bar; a named fighter with a title (the Mire King) over a red one a little longer than the rest.
     const big = kind === 'warden';
-    this.healthBar = big ? new HealthBar(1.4, 0.1, 0x6ad0ff, 'THE BONE WARDEN') : new HealthBar(0.5, 0.05, 0xc81e1e);
-    this.healthBar.root.position.y = this.headTopY() + (big ? 0.5 : 0.28);
+    const title = kind !== 'biter' && isFamily(family) ? fighterOf(kind, family, named).title?.toUpperCase() : undefined;
+    this.healthBar = big ? new HealthBar(1.4, 0.1, 0x6ad0ff, title) : title ? new HealthBar(0.7, 0.06, 0xc81e1e, title) : new HealthBar(0.5, 0.05, 0xc81e1e);
+    this.healthBar.root.position.y = this.barHeight() + (title && !big ? 0.06 : 0);
     this.root.add(this.healthBar.root);
   }
 
@@ -344,12 +397,86 @@ export abstract class Enemy {
 
   /** 1 for human-sized skeletons; the boss is ~1.5. */
   protected get heightScale(): number {
-    return this.rig.proportions.hipY / 0.92;
+    return this.humanoid.proportions.hipY / 0.92;
+  }
+
+  /**
+   * Its rig as the human body or a skeleton, for what only a body with arms
+   * and legs does: raise a guard, sit, aim a slash, draw a bow, shatter.
+   */
+  private get humanoid(): Rig {
+    if (!this.limbs) throw new Error(`A ${this.family} ${this.kind} has no arms and legs`);
+    return this.limbs;
   }
 
   private headTopY(): number {
-    const p = this.rig.proportions;
+    const p = this.humanoid.proportions;
     return p.hipY + 0.06 + p.neck + 0.26 * (p.head ?? 1);
+  }
+
+  // ------------------------------------------------------------ its body
+  // The human body's and the skeletons' by default; another body (Biter's
+  // crawler) overrides these, and the hurt volumes and weapon below.
+
+  /** How high over its feet its health bar floats. */
+  protected barHeight(): number {
+    return this.headTopY() + (this.kind === 'warden' ? 0.5 : 0.28);
+  }
+
+  /** Standing ready to fight: the pose it eases back to. */
+  protected idlePose(): BodyPose {
+    return IDLE[this.humanoidKind];
+  }
+
+  /** Reeling from a blow that staggered it. */
+  protected staggerPose(): BodyPose {
+    return STAGGER;
+  }
+
+  /** An attack's two keyframes: wound up, and the blow. */
+  protected attackPoses(attack: AttackConfig): { readonly windup: BodyPose; readonly strike: BodyPose } {
+    return humanoidAttack(attack);
+  }
+
+  /** Its walk, `phase` rad through the cycle and `amount` (0 to 1) of full pace: offsets on top of its pose. */
+  protected walkOffsets(phase: number, amount: number, out: MutablePose): void {
+    walkOffsets(phase, amount, out);
+  }
+
+  /** rad/s its walk cycle turns at full pace (bigger bodies take longer strides). */
+  protected strideRate(): number {
+    return 7 * (this.def.speed / Math.max(0.8, this.heightScale));
+  }
+
+  /** A blow that didn't stagger it jolts it, `amount` (up to 0.25) of the way. */
+  protected flinchBy(amount: number): void {
+    this.humanoid.bones.spine.rotation.x -= amount * 0.6;
+  }
+
+  /** Set its root this frame (`dt` s on), `bob` m up or down as it walks (and its hips drop as it kneels or sits). */
+  protected placeRoot(bob: number, _dt: number): void {
+    this.rig.setHipOffset(0, bob - this.hipDrop * this.humanoid.proportions.hipY, 0);
+  }
+
+  /** How high its feet are at (x, z): on the ground. A swimmer floats on the water. */
+  protected standY(ground: Ground, x: number, z: number): number {
+    return ground.heightAt(x, z);
+  }
+
+  /** How far through the phase of its attack it is: 0 to 1. */
+  protected get phaseProgress(): number {
+    return Math.min(1, this.phaseTime / this.phaseDuration);
+  }
+
+  /** How much of its full pace it's walking at: 0 standing, 1 at its speed. */
+  protected get pace(): number {
+    return this.moveAmount;
+  }
+
+  /** Its behaviour as one the human body and skeletons fight with. */
+  private get humanoidKind(): Exclude<EnemyKind, 'biter'> {
+    if (this.kind === 'biter') throw new Error('A biter has no arms and legs');
+    return this.kind;
   }
 
   /** Hurt capsule axis (feet to neck), world space. Follows lean and kneel. */
@@ -362,7 +489,7 @@ export abstract class Enemy {
 
   /** Head sphere (crit zone), world space. */
   headSphere(outCentre: Vector3): number {
-    const s = this.rig.proportions.head ?? 1;
+    const s = this.humanoid.proportions.head ?? 1;
     const head = this.rig.bones.head;
     outCentre.set(0, 0.14 * s, 0.02 * s).applyMatrix4(head.matrixWorld);
     return 0.13 * s;
@@ -390,7 +517,7 @@ export abstract class Enemy {
 
   /** World position of a point in a bone's space. */
   bonePoint(bone: BoneName, x: number, y: number, z: number, out: Vector3): Vector3 {
-    return out.set(x, y, z).applyMatrix4(this.rig.bones[bone].matrixWorld);
+    return out.set(x, y, z).applyMatrix4(this.humanoid.bones[bone].matrixWorld);
   }
 
   // ------------------------------------------------------------ taking hits
@@ -581,9 +708,24 @@ export abstract class Enemy {
     this.enter('rising');
   }
 
+  /**
+   * How it rises where it stands: the bog's beasts heave up out of the mud,
+   * sunk to the shoulders as a mound (MOUND); the dead come up out of water
+   * standing over their feet, from just under its surface (SURFACE), or else
+   * claw up out of the ground from well under it (RISE).
+   */
+  private emergence(ground: Ground): { from: Emergence; depth: number; pose: BodyPose; time: number; roused: boolean } {
+    const { x, z } = this.position;
+    const bed = ground.heightAt(x, z);
+    const water = Math.max(0, (ground.waterAt?.(x, z) ?? bed) - bed);
+    if (this.body === 'mud') return { from: 'mud', depth: water - MOUND_DROP * this.humanoid.proportions.hipY, pose: MOUND, time: this.riseTime * MOUND_SLOWER, roused: false };
+    if (water > SURFACE_DEPTH) return { from: 'water', depth: Math.min(0, water - this.headTopY() - 0.1), pose: SURFACE, time: this.riseTime * SURFACE_SLOWER, roused: false };
+    return { from: 'ground', depth: -RISE_DEPTH * this.heightScale, pose: RISE, time: this.riseTime, roused: false };
+  }
+
   /** The hip drop that sits its hips at `seat`'s height, as a share of its hip height. */
   private seatDrop(seat: Seat): number {
-    return 1 - seat.hip / this.rig.proportions.hipY;
+    return 1 - seat.hip / this.humanoid.proportions.hipY;
   }
 
   /** A block or parry stopped its blow. Subclasses can react differently (the Warden kneels). */
@@ -633,7 +775,7 @@ export abstract class Enemy {
       this.shards = [];
       _v.copy(push).setY(0).applyAxisAngle(UP, -this.root.rotation.y);
       for (const name of BONES) {
-        const bone = this.rig.bones[name];
+        const bone = this.humanoid.bones[name];
         this.rig.mesh.attach(bone);
         const out = bone.position.clone().setY(0).normalize();
         this.shards.push({
@@ -654,7 +796,7 @@ export abstract class Enemy {
     this.phaseDuration = attack.windup * windupScale;
     this.struck = false;
     copyPose(this.pose, this.snapshot);
-    const poses = ATTACK_POSES[attack.pose];
+    const poses = this.attackPoses(attack);
     copyPose(poses.windup, this.windupPose);
     copyPose(poses.strike, this.strikePose);
     if (attack.aim) this.aimAt(attack, ctx);
@@ -683,14 +825,14 @@ export abstract class Enemy {
     // Sample the arc at bind proportions, facing +Z from the origin, and find
     // where the tip crosses straight ahead.
     const cal = this.atOrigin(() => {
-      const poses = ATTACK_POSES[attack.pose];
+      const poses = this.attackPoses(attack);
       let best = { x: Infinity, y: 0, z: 0, shoulderY: 0, shoulderZ: 0 };
       for (let t = 0; t <= 1.0001; t += 0.02) {
         this.rig.apply(blendPoses(poses.windup, poses.strike, t, this.scratch));
         this.root.updateMatrixWorld(true);
         this.weaponSegment(_a, _b);
         if (_b.z > 0.3 && Math.abs(_b.x) < Math.abs(best.x)) {
-          this.rig.bones.upperArmR.getWorldPosition(_a);
+          this.humanoid.bones.upperArmR.getWorldPosition(_a);
           best = { x: _b.x, y: _b.y, z: _b.z, shoulderY: _a.y, shoulderZ: _a.z };
         }
       }
@@ -722,7 +864,7 @@ export abstract class Enemy {
     // Twist about the vertical, then tip about the horizontal axis across the
     // shot, so the arrow's pitch changes by exactly `bend` whatever the stance.
     _q2.setFromAxisAngle(_v.set(Math.cos(cal.yaw + turn), 0, -Math.sin(cal.yaw + turn)), bend);
-    const poses = ATTACK_POSES[this.attack!.pose];
+    const poses = this.attackPoses(this.attack!);
     for (const [base, out] of [
       [poses.windup, this.windupPose],
       [poses.strike, this.strikePose],
@@ -735,12 +877,12 @@ export abstract class Enemy {
   }
 
   private calibrateDraw(): DrawCalibration {
-    const pose = this.attack!.pose;
-    const key = `${this.fighter}:${pose}`;
+    const attack = this.attack!;
+    const key = `${this.fighter}:${attack.pose}`;
     const hit = drawCache.get(key);
     if (hit) return hit;
     const cal = this.atOrigin(() => {
-      this.rig.apply(ATTACK_POSES[pose].windup);
+      this.rig.apply(this.attackPoses(attack).windup);
       this.root.updateMatrixWorld(true);
       const nock = this.bonePoint('handR', ...NOCK, new Vector3());
       const dir = this.bonePoint('handL', ...GRIP, _a).sub(nock).normalize();
@@ -797,16 +939,17 @@ export abstract class Enemy {
     this.phaseTime += this.phase === 'windup' ? dt * (1 - this.slowness) : dt;
     const k = Math.min(1, this.phaseTime / this.phaseDuration);
 
+    const bones = this.rig.boneNames;
     if (this.phase === 'windup') {
       this.faceToward(ctx.playerFeet, dt);
       if (a.kind === 'shot') this.aimBow(ctx);
-      blendPoses(this.snapshot, this.windupPose, easeOut(k), this.pose);
+      blendPoses(this.snapshot, this.windupPose, easeOut(k), this.pose, bones);
       if (a.kind === 'shot') this.nock(ctx);
       if (k >= 1) this.nextPhase('active', a.active);
       return;
     }
     if (this.phase === 'active') {
-      blendPoses(this.windupPose, this.strikePose, easeIn(k), this.pose);
+      blendPoses(this.windupPose, this.strikePose, easeIn(k), this.pose, bones);
       if (k >= 1) {
         this.finishSwing(ctx);
         if (this.attack) this.nextPhase('recover', a.recover);
@@ -814,8 +957,7 @@ export abstract class Enemy {
       return;
     }
     // Recover.
-    const idle = IDLE[this.kind];
-    blendPoses(this.strikePose, idle, smooth(k), this.pose);
+    blendPoses(this.strikePose, this.idlePose(), smooth(k), this.pose, bones);
     if (k >= 1) {
       const next = a.next !== undefined ? this.def.attacks[a.next] : undefined;
       this.endAttack();
@@ -959,7 +1101,7 @@ export abstract class Enemy {
     _v.addVectors(blade.base, blade.tip).multiplyScalar(0.5);
     const headR = this.headSphere(_a);
     if (_v.y > _a.y + headR) return 'high';
-    if (blade.tip.y < this.rig.bones.hips.getWorldPosition(_a).y) return 'low';
+    if (blade.tip.y < this.humanoid.bones.hips.getWorldPosition(_a).y) return 'low';
     return this.localX(blade.tip) >= 0 ? 'left' : 'right';
   }
 
@@ -973,14 +1115,14 @@ export abstract class Enemy {
    */
   guardCovers(point: Vector3, motion: Vector3): boolean {
     if (!this.guarding || this.localZ(point) < 0) return false; // from behind: wide open
-    if (this.guardSide === 'low') return point.y < this.rig.bones.hips.getWorldPosition(_a).y + 0.1 * this.heightScale;
+    if (this.guardSide === 'low') return point.y < this.humanoid.bones.hips.getWorldPosition(_a).y + 0.1 * this.heightScale;
     const chop = motion.y < -0.7 * motion.length();
-    if (this.guardSide === 'high') return chop && point.y >= this.rig.bones.upperArmR.getWorldPosition(_a).y - 0.1;
+    if (this.guardSide === 'high') return chop && point.y >= this.humanoid.bones.upperArmR.getWorldPosition(_a).y - 0.1;
     if (chop) return false;
     // Down to the guard's lower end or the hips, whichever is lower: the side
     // and low guards overlap, so there is no gap at the belt.
     this.weaponSegment(_a, _b);
-    const hips = this.rig.bones.hips.getWorldPosition(_v).y;
+    const hips = this.humanoid.bones.hips.getWorldPosition(_v).y;
     if (point.y < Math.min(_a.y, _b.y, hips) - 0.1 * this.heightScale) return false;
     // The halves overlap a little, so a thrust at the middle is still covered.
     const x = this.localX(point);
@@ -1151,8 +1293,8 @@ export abstract class Enemy {
     }
 
     const dist = _to.subVectors(ctx.playerFeet, this.position).setY(0).length();
-    const idle = IDLE[this.kind];
-    let target: Pose = idle;
+    const idle = this.idlePose();
+    let target: BodyPose = idle;
     let snap = false; // attacks drive the pose exactly (the arc is the hitbox)
 
     switch (this.state) {
@@ -1169,11 +1311,26 @@ export abstract class Enemy {
           }
           break;
         }
-        const k = Math.min(1, this.stateTime / this.riseTime);
-        this.visual.position.y = -RISE_DEPTH * this.heightScale * (1 - easeOut(k));
-        this.faceToward(this.post ? this.postFacing(_home) : ctx.playerFeet, dt, 0.5);
-        target = k < 0.7 ? RISE : idle;
-        if (k >= 1) this.enter('move');
+        const e = (this.emerging ??= this.emergence(ctx.ground));
+        if (this.lurking) {
+          // Lying in wait where it was raised, until you come near or its camp fights.
+          this.stateTime = 0;
+          if (dist < CONFIG.camps.lurk.wake || !this.post) {
+            this.lurking = false;
+            e.roused = true;
+            ctx.emerge?.(this, e.from);
+          }
+        }
+        const k = Math.min(1, this.stateTime / e.time);
+        this.visual.position.y = e.depth * (1 - easeOut(k));
+        // It comes up facing its post's way, or you if you roused it.
+        this.faceToward(this.post && !e.roused ? this.postFacing(_home) : ctx.playerFeet, dt, 0.5);
+        // Lying in wait it's bowed with its arms down, so nothing it holds pokes up out of the ground; then it claws its way up.
+        target = this.lurking ? (e.from === 'mud' ? MOUND : SURFACE) : k < 0.7 ? e.pose : idle;
+        if (k >= 1) {
+          this.emerging = null;
+          this.enter('move');
+        }
         break;
       }
       case 'move':
@@ -1208,7 +1365,7 @@ export abstract class Enemy {
         break;
       case 'stagger': {
         const k = Math.min(1, this.stateTime / this.staggerDuration);
-        target = k < 0.6 ? STAGGER : idle;
+        target = k < 0.6 ? this.staggerPose() : idle;
         if (k >= 1) this.enter('move');
         break;
       }
@@ -1247,12 +1404,12 @@ export abstract class Enemy {
       const walkPose = this.scratch;
       for (const k of Object.keys(walkPose)) delete walkPose[k];
       if (this.moveAmount > 0.01 && (this.state === 'move' || this.state === 'rising')) {
-        this.walkPhase += dt * 7 * this.moveAmount * this.stride * (this.def.speed / Math.max(0.8, this.heightScale));
-        walkOffsets(this.walkPhase, this.moveAmount, walkPose);
+        this.walkPhase += dt * this.strideRate() * this.moveAmount * this.stride;
+        this.walkOffsets(this.walkPhase, this.moveAmount, walkPose);
       }
       const ease = this.state === 'stagger' ? 18 : this.state === 'guard' ? CONFIG.guard.raiseRate : 10;
       const rate = 1 - Math.exp(-ease * dt);
-      for (const name of BONES) {
+      for (const name of this.rig.boneNames) {
         const t = target[name];
         const w = walkPose[name];
         const cur = (this.pose[name] ??= [0, 0, 0]);
@@ -1264,11 +1421,11 @@ export abstract class Enemy {
       }
     }
 
-    this.position.y = ctx.ground.heightAt(this.position.x, this.position.z);
+    this.position.y = this.standY(ctx.ground, this.position.x, this.position.z);
     this.rig.apply(this.pose);
-    if (this.flinch > 0) this.rig.bones.spine.rotation.x -= this.flinch * 0.6;
+    if (this.flinch > 0) this.flinchBy(this.flinch);
     const bob = this.state === 'move' ? -Math.abs(Math.sin(this.walkPhase)) * 0.03 * this.moveAmount : 0;
-    this.rig.setHipOffset(0, bob - this.hipDrop * this.rig.proportions.hipY, 0);
+    this.placeRoot(bob, dt);
     this.root.updateMatrixWorld(true);
     if (this.state === 'attack') this.sampleWeapon(ctx);
     else {
@@ -1308,7 +1465,8 @@ export abstract class Enemy {
     else e.setRGB(0, 0, 0);
   }
 
-  private updateDeath(dt: number): boolean {
+  /** One frame of dying; false once it's gone and can be removed. */
+  protected updateDeath(dt: number): boolean {
     const t = this.stateTime;
     this.material.emissive.setRGB(0, 0, 0);
     this.material.telegraph.setRGB(0, 0, 0);
@@ -1316,7 +1474,7 @@ export abstract class Enemy {
     if (this.shards) {
       const settle = t > 1.6;
       BONES.forEach((name, i) => {
-        const bone = this.rig.bones[name];
+        const bone = this.humanoid.bones[name];
         const s = this.shards![i];
         if (!settle) {
           s.vel.y -= 9.8 * dt;
@@ -1359,7 +1517,7 @@ export function keepApart(enemies: readonly Enemy[], feet: Vector3, ground: Grou
       if (!b.alive || b.seated) continue;
       _v.subVectors(a.position, b.position).setY(0);
       const d = _v.length();
-      const min = a.def.radius + b.def.radius + 0.15;
+      const min = (a.def.crowd ?? a.def.radius) + (b.def.crowd ?? b.def.radius) + 0.15;
       if (d >= min || d < 1e-6) continue;
       _v.multiplyScalar((min - d) / d / 2);
       a.position.add(_v);
@@ -1367,13 +1525,13 @@ export function keepApart(enemies: readonly Enemy[], feet: Vector3, ground: Grou
     }
     _v.subVectors(a.position, feet).setY(0);
     const d = _v.length();
-    const minD = a.def.radius + CONFIG.player.bodyRadius;
+    const minD = (a.def.crowd ?? a.def.radius) + CONFIG.player.bodyRadius;
     if (d < minD && d > 1e-6) a.position.addScaledVector(_v, (minD - d) / d);
     ground.resolve(a.position, a.def.radius);
   }
 }
 
-function copyPose(src: Pose, out: MutablePose): void {
+function copyPose(src: BodyPose, out: MutablePose): void {
   for (const k of Object.keys(out)) delete out[k];
   for (const [k, v] of Object.entries(src)) out[k] = [v![0], v![1], v![2]];
 }

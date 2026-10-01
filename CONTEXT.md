@@ -77,16 +77,20 @@ One thing a quest asks before it can be handed in: defeat enemies at a place, fi
 _Avoid_: task, goal, requirement
 
 **Behaviour**:
-How an enemy fights, and so what it tests in the player: the grunt (reading a swing), the archer (ranged pressure), the brute (an unblockable slam) or the Warden (a boss fight). One behaviour can wear many looks.
+How an enemy fights, and so what it tests in the player: the grunt (reading a swing), the archer (ranged pressure), the brute (an unblockable slam), the biter (a small fighter's lunge at your legs, blocked low: leeches and adders) or the Warden (a boss fight). One behaviour can wear many looks.
 _Avoid_: kind, type, class, AI
 
 **Family**:
-Who an enemy is, whatever its behaviour: the bandits, House Corvane's bailiffs, the Lantern Men or the undead. A bandit archer and an undead archer share a behaviour but not a family. A family wears one body, the human body, the skeleton or a corpse, and fields a look for each behaviour it fights with.
+Who an enemy is, whatever its behaviour: the bandits, House Corvane's bailiffs, the Lantern Men, the undead, the drowned, the bog dead, the bog's beasts, leeches or adders. A bandit archer and an undead archer share a behaviour but not a family. A family wears one body, the human body, the skeleton, a corpse (the bog dead), mud (the bog's beasts) or the crawler, and fields a look for each behaviour it fights with (leeches and adders only bite, the bog's beasts only fight as brutes). The drowned are the dead of Vellmar, skeletons stained peat brown, and their Warden is the Drowned Reeve.
 _Avoid_: faction, race, type
 
 **Named fighter**:
-One of a family's fighters dressed for one place, and never one of its everyday looks: a camp's leader (the Lantern Men's bosun in his woad sash, Abel Thatch at Cockle End) or a named enemy such as Captain Silas Crake. It fights with an ordinary behaviour, at the post in its camp that names it; a boss fight of its own, as the Warden's, is something else.
+One of a family's fighters dressed for one place, and never one of its everyday looks: a camp's leader (the Lantern Men's bosun in his woad sash, Abel Thatch at Cockle End) or a named enemy such as Captain Silas Crake, the Old Lantern Man or the Mire King. It fights with an ordinary behaviour, at the post in its camp that names it; a boss fight of its own, as the Warden's, is something else.
 _Avoid_: unique, elite, rare, champion
+
+**Lying in wait**:
+How the drowned and the bog's beasts wait at their camp's posts: out of sight under the ground, under the water, or sunk in the mud as a mound with only their backs and reeds showing, until you come near or their camp fights. Then they rise: the drowned claw up out of the grave or come up out of the water, a bog lurker heaves up out of the mud.
+_Avoid_: dormant, hidden spawn, ambush
 
 **Rooted**, **frozen**, **slowed**:
 What an ability can hold an enemy in for a while. Rooted, it can't walk but strikes what's in reach; frozen, it does nothing until the time runs out or a hit breaks it; slowed, it walks and winds up slower by a fraction. Brutes take half; the Warden ignores roots and freezes.
@@ -111,6 +115,14 @@ _Avoid_: body type, size
 **Gait**:
 How a build walks: the length of its step, its pace, how its arms swing and how far its feet roll heel to toe. A child takes quick short steps; an elder shuffles, slow and flat-footed.
 _Avoid_: walk style, locomotion
+
+**Crawler**:
+The long, low body leeches and adders wear: a chain of segments that ripples (a leech) or slithers (an adder) along the ground or on the water, rears and lunges.
+_Avoid_: worm model, snake rig
+
+**Critter**:
+A small creature that lives about its spot and never fights: a hare or rabbit that bolts zig-zagging, a frog that leaps into the water, a rat that scurries along its wall into a gap. Each comes back once you've been away a while. Not an enemy, and not a villager.
+_Avoid_: ambient animal, wildlife, mob
 
 **Camp**:
 A group of enemies that lives at one place and refills some time after it is cleared: the bandits at the farm, at the lumber camp and at the watchtower, and the undead in the mine. A boss is never part of a camp. (The lumber camp is a place; the bandits there are its camp.) A camp can be neutral until a quest turns it, leaving you be unless you hurt one of it, and can come or go with a quest.

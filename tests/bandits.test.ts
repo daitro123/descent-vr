@@ -11,6 +11,7 @@ import { type EnemyKind, FAMILIES, type Family } from '../src/models/characters'
 import { LAMP_CREW_BUILDS } from '../src/models/diggers';
 import { BUILDS } from '../src/models/human';
 import { MOOR_BANDIT_BUILDS } from '../src/models/moorBandits';
+import type { Rig } from '../src/models/rig';
 import { Arena } from '../src/world/arena';
 import type { Ground } from '../src/world/ground';
 
@@ -75,7 +76,7 @@ describe.each(LIVING)('a %s %s', (family, kind) => {
     living.update(DT, far());
     undead.update(DT, far());
     expect(living.hittable).toBe(true);
-    expect(hipsY(living)).toBeCloseTo(living.rig.proportions.hipY, 1);
+    expect(hipsY(living)).toBeCloseTo((living.rig as Rig).proportions.hipY, 1);
     expect(undead.hittable).toBe(false);
     expect(hipsY(undead)).toBeLessThan(0);
   });
@@ -118,7 +119,7 @@ describe.each(['grunt', 'brute'] as EnemyKind[])('a bog dead %s', (kind) => {
     expect(hipsY(e)).toBeLessThan(0);
     for (let t = 0; t < 3; t += DT) e.update(DT, far());
     expect(e.hittable).toBe(true);
-    expect(hipsY(e)).toBeCloseTo(e.rig.proportions.hipY, 1);
+    expect(hipsY(e)).toBeCloseTo((e.rig as Rig).proportions.hipY, 1);
   });
 
   it('falls whole when killed', () => {

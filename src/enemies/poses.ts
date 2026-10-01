@@ -1,5 +1,5 @@
-import type { AttackPoseName } from '../config';
-import type { EnemyKind } from '../models/characters';
+import type { AttackConfig, HumanoidAttack } from '../config';
+import type { HumanoidKind } from '../models/characters';
 import type { Pose } from '../models/rig';
 
 // Keyframe poses (see rig.ts for the rotation conventions). Attack poses are
@@ -10,7 +10,7 @@ import type { Pose } from '../models/rig';
 
 const HALF_PI = Math.PI / 2;
 
-export const IDLE: Record<EnemyKind, Pose> = {
+export const IDLE: Record<HumanoidKind, Pose> = {
   grunt: {
     spine: [0.08, 0, 0],
     head: [-0.06, 0, 0],
@@ -357,6 +357,47 @@ export const RISE: Pose = {
   shinR: [0.5, 0, 0],
 };
 
+/**
+ * Coming up out of the water it waited under (the drowned): bowed, head
+ * hanging, arms trailing limp behind; it straightens and lifts its head as
+ * it clears the surface.
+ */
+export const SURFACE: Pose = {
+  spine: [0.55, 0, 0],
+  head: [0.55, 0, 0],
+  jaw: [0.25, 0, 0],
+  upperArmR: [0.35, 0, -0.12],
+  forearmR: [-0.15, 0, 0],
+  handR: [0.3, 0, 0],
+  upperArmL: [0.4, 0, 0.12],
+  forearmL: [-0.1, 0, 0],
+  thighL: [-0.25, 0, 0],
+  shinL: [0.45, 0, 0],
+  thighR: [-0.05, 0, 0],
+  shinR: [0.3, 0, 0],
+};
+
+/**
+ * Sunk in the mud as a mound, waiting (a bog lurker): squatting, its back
+ * bowed level and its head tucked under, its arms down at its sides. Goes
+ * with MOUND_DROP, which sinks it to the shoulders, so all that shows above
+ * the mud is the hump of its back and the reeds out of it.
+ */
+export const MOUND: Pose = {
+  spine: [1.15, 0, 0],
+  head: [0.75, 0, 0],
+  upperArmR: [-1.1, 0, -0.15],
+  forearmR: [-0.3, 0, 0],
+  upperArmL: [-1.1, 0, 0.15],
+  forearmL: [-0.3, 0, 0],
+  thighL: [-2.0, 0, 0.35],
+  shinL: [2.5, 0, 0],
+  thighR: [-2.0, 0, -0.35],
+  shinR: [2.5, 0, 0],
+};
+/** Hip drop that goes with MOUND, as a fraction of hip height: below the mud. */
+export const MOUND_DROP = 1.15;
+
 /** Walk cycle offsets, added on top of a base pose. `phase` in radians, `amount` 0–1. */
 export function walkOffsets(phase: number, amount: number, out: Record<string, [number, number, number]>): void {
   const s = Math.sin(phase);
@@ -370,7 +411,7 @@ export function walkOffsets(phase: number, amount: number, out: Record<string, [
   out.spine = [0.06 * amount, 0.1 * amount * s, 0];
 }
 
-export const ATTACK_POSES: Record<AttackPoseName, AttackPoses> = {
+export const ATTACK_POSES: Record<HumanoidAttack, AttackPoses> = {
   chop: CHOP,
   slashR: SLASH_R,
   slashL: SLASH_L,
@@ -378,3 +419,9 @@ export const ATTACK_POSES: Record<AttackPoseName, AttackPoses> = {
   draw: DRAW,
   summon: SUMMON,
 };
+
+/** The keyframes `attack` swings with on the human body or a skeleton; a lunge is only a crawler's (crawler.ts). */
+export function humanoidAttack(attack: AttackConfig): AttackPoses {
+  if (attack.pose === 'lunge') throw new Error('A lunge is a crawler’s attack');
+  return ATTACK_POSES[attack.pose];
+}

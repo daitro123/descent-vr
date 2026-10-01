@@ -79,6 +79,10 @@ const MODELS: Readonly<Record<string, ItemLook>> = {
   cloth: { look: 'cloth', tint: 0x8a6a5a },
   charm: { look: 'charm', tint: PAL.bone },
   dust: { look: 'dust', tint: 0x9a9488 },
+  slime: { look: 'dust', tint: 0x4a5a34 },
+  teeth: { look: 'charm', tint: 0xd8cfb0 },
+  snakeskin: { look: 'cloth', tint: 0x8a7e66 },
+  fang: { look: 'charm', tint: 0xe8e0c8 },
   // House Corvane's bailiffs' junk: a notched tally of the tithes owed, and the house's pewter badge.
   tally: { look: 'charm', tint: 0x9a7a4a },
   'key-badge': { look: 'trinket', tint: 0x4a4a52 },
@@ -96,8 +100,14 @@ const MODELS: Readonly<Record<string, ItemLook>> = {
   'pick-tip': { look: 'charm', tint: 0x5a5c62 },
   // Corvane's lamp crews: a chip of the Deepkings' black stone with part of a glyph on it.
   'glyph-chip': { look: 'charm', tint: 0x2e2e36 },
-  // The bog dead: a length of the rope that hanged them.
+  // The bog dead: a length of the rope that hanged them, and a torc gone black in the peat.
   rope: { look: 'cloth', tint: 0x7a6440 },
+  torc: { look: 'trinket', tint: 0x4a3a22 },
+  // The drowned's junk and the bog beasts'.
+  'deep-coin': { look: 'trinket', tint: 0x5a8670 },
+  'silted-bone': { look: 'charm', tint: 0x9a8762 },
+  'gas-bladder': { look: 'pouch', tint: 0x8a9a5a },
+  peat: { look: 'dust', tint: 0x3e3828 },
   // Professions' materials and what they make (the pouch stands in for ore, stone, bars and herbs).
   'ore-copper': { look: 'pouch', tint: 0xb8733a },
   'stone-rough': { look: 'pouch', tint: 0x8a8680 },

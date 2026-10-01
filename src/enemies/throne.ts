@@ -205,7 +205,7 @@ export class Throne {
     this.raised.clear();
   }
 
-  /** The Warden calls up the dead round you, as in the arena: at its level, in no camp, paying nothing. */
+  /** The Warden calls up the dead round you, as in the arena: its own family's, at its level, in no camp, paying nothing. */
   private summon(from: Enemy, count: number): void {
     const { ctx } = this;
     const feet = ctx.playerFeet;
@@ -218,7 +218,7 @@ export class Throne {
       ctx.ground.resolve(p, r);
       this.plan.keepIn(p, r);
       p.y = ctx.ground.heightAt(p.x, p.z);
-      const e = createEnemy('grunt', p.x, p.z, { level: CONFIG.warden.hall.level, variant: Math.floor(Math.random() * 6) });
+      const e = createEnemy('grunt', p.x, p.z, { level: CONFIG.warden.hall.level, family: from.family, variant: Math.floor(Math.random() * 6) });
       e.position.y = p.y;
       e.root.rotation.y = Math.atan2(feet.x - p.x, feet.z - p.z);
       this.raised.add(e);

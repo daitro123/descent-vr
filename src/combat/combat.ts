@@ -72,6 +72,19 @@ const FIRE = CONFIG.talents.trees.mage.fire;
 const FROST = CONFIG.talents.trees.mage.frost;
 /** What flies from a bandit when a blow lands. */
 const HUMAN_BLOOD = 0x7a1812;
+/** And from a bog lurker: wet peat. */
+const MUD = 0x3a3022;
+/** What flies from the living that aren't people: a leech's the blood it drank, darkened; an adder's. */
+const CREATURE_BLOOD: Partial<Record<Enemy['family'], number>> = { leech: 0x3a0e0c, snake: 0x6a1410 };
+
+/** The blood that flies from `enemy`, or null for the dead, who are bones (bar the brute's and the bog's corpses' dark ichor, the default). */
+function bloodOf(enemy: Enemy): number | undefined | null {
+  if (enemy.body === 'human') return HUMAN_BLOOD;
+  if (enemy.body === 'mud') return MUD;
+  if (enemy.body === 'corpse') return undefined;
+  if (enemy.body === 'crawler') return CREATURE_BLOOD[enemy.family];
+  return enemy.kind === 'brute' ? undefined : null;
+}
 const _to = new Vector3();
 const _p = new Vector3();
 const _a = new Vector3();
@@ -202,6 +215,8 @@ export class Combat implements ArrowResolver {
       torsoTop: new Vector3(),
       torsoBottom: new Vector3(),
       torsoRadius: B.torsoRadius,
+      legsBottom: new Vector3(),
+      legsRadius: B.legsRadius,
       shieldInverse: null,
       shieldHalf: new Vector3(S.width / 2 + S.blockMargin, S.height / 2 + S.blockMargin, S.depth / 2 + S.blockMargin),
       swordBase: null,
@@ -231,6 +246,7 @@ export class Combat implements ArrowResolver {
     const d = this.defender;
     const { player } = this;
     player.body(d.head, d.torsoTop, d.torsoBottom);
+    player.feetPosition(d.legsBottom).y += CONFIG.player.body.ankles;
     const { shield, sword } = player;
     if (shield.canBlock && player.alive) {
       shield.board.updateWorldMatrix(true, false);
@@ -696,8 +712,7 @@ export class Combat implements ArrowResolver {
     _a.lerp(_b, 0.75);
     const burn = kind === 'burn';
     if (burn) this.fx.particles.burst('embers', _a, 6, undefined, ABILITY_COLOUR.fireball);
-    else if (enemy.body === 'human') this.fx.particles.burst('blood', _a, 4, undefined, HUMAN_BLOOD);
-    else this.fx.particles.burst('blood', _a, 4);
+    else this.fx.particles.burst('blood', _a, 4, undefined, bloodOf(enemy) ?? undefined);
     this.fx.text.spawn(`${dealt}`, _a, { color: burn ? '#ff9a50' : '#d05050', scale: 0.13 });
     this.events.onEnemyHit(enemy, killed);
     if (killed) this.onKill(enemy);
@@ -839,12 +854,12 @@ export class Combat implements ArrowResolver {
     this.fx.text.spawn('Evade', at.clone().setY(at.y + 0.2), { color: '#c0c0c0', scale: 0.16 });
   }
 
-  /** Red from the living, dark ichor from the undead brute and the bog's corpses, bone chips from skeletons; sparks on crits. */
+  /** Red from the living, leeches and adders, mud from the bog's beasts, dark ichor from the undead brute, bone chips from skeletons; sparks on crits. */
   private impactFx(enemy: Enemy, at: Vector3, dir: Vector3, bright: boolean): void {
     _vel.copy(dir).normalize();
-    if (enemy.body === 'human') this.fx.particles.burst('blood', at, 8, _vel, HUMAN_BLOOD);
-    else if (enemy.kind === 'brute' || enemy.body === 'corpse') this.fx.particles.burst('blood', at, 10, _vel);
-    else this.fx.particles.burst('bone', at, 6, _vel);
+    const blood = bloodOf(enemy);
+    if (blood === null) this.fx.particles.burst('bone', at, 6, _vel);
+    else this.fx.particles.burst('blood', at, enemy.kind === 'brute' ? 10 : 8, _vel, blood);
     if (bright) this.fx.particles.burst('sparks', at, 14, _vel);
   }
 
@@ -859,11 +874,10 @@ export class Combat implements ArrowResolver {
     combatStats.kills++;
     enemy.capsule(_a, _b);
     _a.lerp(_b, 0.5);
-    const living = enemy.body === 'human';
-    sfx.death(_a, { big: enemy.kind === 'warden' || enemy.kind === 'brute', bones: !living });
-    if (living) this.fx.particles.burst('blood', _a, 12, undefined, HUMAN_BLOOD);
-    else if (enemy.kind === 'brute' || enemy.body === 'corpse') this.fx.particles.burst('blood', _a, 24);
-    else this.fx.particles.burst('bone', _a, enemy.kind === 'warden' ? 40 : 14);
+    const blood = bloodOf(enemy);
+    sfx.death(_a, { big: enemy.kind === 'warden' || enemy.kind === 'brute', bones: enemy.body === 'skeleton' });
+    if (blood === null) this.fx.particles.burst('bone', _a, enemy.kind === 'warden' ? 40 : 14);
+    else this.fx.particles.burst('blood', _a, enemy.kind === 'brute' ? 24 : enemy.kind === 'biter' ? 8 : 12, undefined, blood);
     if (enemy.kind === 'warden') {
       this.fx.particles.burst('magic', _a, 60);
       this.fx.shockwaves.trigger(enemy.position, 5, 0x6ad0ff, 0.9);
@@ -1026,7 +1040,7 @@ export class Combat implements ArrowResolver {
   sweep(enemy: Enemy, attack: AttackConfig, prevBase: Vector3, prevTip: Vector3, base: Vector3, tip: Vector3): StrikeOutcome | null {
     const player = this.player;
     if (!player.alive) return null;
-    const res = sweepStrike(prevBase, prevTip, base, tip, enemy.weapon.radius, 6, this.defender, attack.blockable, _sweep);
+    const res = sweepStrike(prevBase, prevTip, base, tip, enemy.weapon.radius, 6, this.defender, attack.blockable, attack.low, _sweep);
     if (!res) return null;
 
     if (res.contact === 'body') {

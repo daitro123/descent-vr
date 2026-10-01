@@ -246,9 +246,15 @@ export const BOG_BRUTE: Proportions = {
   headZ: 0.16,
 };
 
-/** The bog dead: grunts in the human body's bones, the brute in the undead brute's; they rise from the peat and fall whole. */
+/**
+ * The bog dead: grunts in the human body's bones, the brute in the undead
+ * brute's. A camp of them lies hidden under the peat or the pool where it's
+ * raised until you come near, then rises (out of the water standing, as the
+ * drowned do), and falls whole.
+ */
 export const BOG_DEAD: FamilyDef = {
   body: 'corpse',
+  lurks: true,
   seed: 71,
   fights: {
     grunt: { label: 'Bog dead', looks: 6, proportions: GRUNT, dress: dressBogGrunt },

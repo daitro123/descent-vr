@@ -5,7 +5,7 @@ import { CHAINS } from './quests';
 import { Combat } from './combat/combat';
 import { CONFIG } from './config';
 import { type Camp, type CampHooks, Camps, type Member, type You } from './enemies/camps';
-import type { Enemy } from './enemies/enemy';
+import type { Emergence, Enemy } from './enemies/enemy';
 import { Throne } from './enemies/throne';
 import { Ambience } from './fx/ambience';
 import { FloatingText } from './fx/floatingText';
@@ -62,10 +62,13 @@ import { Dropped } from './world/dropped';
 import { StashChest } from './world/stashChest';
 import type { Mine } from './world/mine';
 import { World } from './world/world';
+import { Critters } from './world/critters';
 import { pointsAt, type Talent, TALENT_POINT_LINE, type TalentRefusal } from './talents';
 
 const _a = new Vector3();
 const _b = new Vector3();
+/** What's thrown up round one that rises: earth, fen water, wet peat. */
+const EMERGE: Record<Emergence, number> = { ground: 0x6a5e52, water: 0x8a9a8a, mud: 0x3a3022 };
 const _gaze = new Vector3();
 const _haleHead = new Vector3();
 const _herbalist = { feet: new Vector3(), head: new Vector3() };
@@ -151,6 +154,8 @@ export class Adventure {
   readonly people: Population;
   /** What they hang from: hidden with the outdoors. */
   private readonly peopleRoot: Object3D;
+  /** Every zone's critters (hares, frogs, rats), living and drawn only near you. */
+  readonly critters: Critters;
   /** The alchemy bench in the house by the well; null in a zone without the house. The herbalist at its end is a villager. */
   readonly bench: AlchemyBench | null = null;
   /** The wind, the birds in the trees and each place's sound where it is. */
@@ -393,6 +398,14 @@ export class Adventure {
         e.weaponSegment(_a, _b);
         sfx.windup(_b, a.blockable);
       },
+      // One lying in wait comes up: earth, a splash of fen water or wet peat thrown up round it.
+      emerge: (e, from) => {
+        sfx.rise(e.position, from);
+        const big = e.kind === 'brute' || e.kind === 'warden';
+        _a.copy(e.position);
+        if (from === 'water') _a.y = this.world.waterAt(_a.x, _a.z) ?? _a.y;
+        this.particles.burst(from === 'mud' ? 'blood' : 'dust', _a, big ? 18 : 10, undefined, EMERGE[from]);
+      },
     };
     this.camps = new Camps(
       zone.camps,
@@ -456,6 +469,9 @@ export class Adventure {
     this.peopleRoot = people.root;
     scene.add(this.peopleRoot);
     this.world.stageWith(null, this.peopleRoot);
+    this.critters = new Critters(this.world, new BlobShadows(CONFIG.critters.most));
+    scene.add(this.critters.root);
+    this.world.stageWith(null, this.critters.root);
     this.populate(zone, false);
     for (const n of neighbours) this.populate(n, true);
     // The smith's hammer rings on the anvil with each blow of their work.
@@ -541,6 +557,7 @@ export class Adventure {
    */
   private populate(zone: Zone, lazy: boolean): void {
     this.people.add(zone.people);
+    this.critters.add(zone.critters ?? []);
     if (lazy) this.camps.add(zone.camps, this.world, true);
   }
 
@@ -552,7 +569,7 @@ export class Adventure {
     this.world.update(dt, player.camera);
     // With a door shut behind you, what stands outside isn't drawn either.
     const outdoors = this.world.outdoorsShown;
-    this.pickups.root.visible = this.villagers.root.visible = this.peopleRoot.visible = this.chests.outdoors.visible = outdoors;
+    this.pickups.root.visible = this.villagers.root.visible = this.peopleRoot.visible = this.critters.root.visible = this.chests.outdoors.visible = outdoors;
     // The starting zone's own people, out of doors, are drawn from another zone only near, as anyone's are.
     this.hale.root.visible = outdoors && this.drawn(this.distance(this.hale.root.position));
     for (const v of this.villagers.all) if (!v.spot.interior) v.root.visible = this.drawn(this.distance(v.root.position));
@@ -624,6 +641,7 @@ export class Adventure {
     this.updateBag(dt);
     this.villagers.update(dt, you.head, this.state);
     this.people.update(dt, you.head, this.crowdAt(you.head));
+    if (outdoors) this.critters.update(dt, you.head);
     // Talking to the herbalist holds the bench off: it takes your hands once the talk ends.
     this.bench?.update(dt, this.fighting, this.herbalistBoard.isOpen);
     this.pickUp();
