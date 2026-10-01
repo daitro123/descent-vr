@@ -53,6 +53,13 @@ export const MOOR_LAND = {
   cotton: 0x8a845a,
   cobble: 0x7c776c,
   cobbleDark: 0x67625a,
+  /** Cairnford's setts and flags: the street's darker, the footways' and the square's paler, worn. */
+  sett: [0x6e6a62, 0x77726a, 0x645f58, 0x7d786e] as const,
+  flag: [0x8a8478, 0x958f82, 0x7f7a6e, 0x9c9588] as const,
+  /** Grass worn short round the town, and the neighbours' greens their seams fade to. */
+  worn: 0x7a7a48,
+  aldhaven: 0x7f9a50,
+  fens: 0x6b7a44,
   improved: 0x6f9440,
   improvedLight: 0x82a44a,
   straw: 0xb0a060,
@@ -83,5 +90,21 @@ export const MOOR_BUILD = {
   peat: 0x3e2e20,
   peatCut: 0x5a4430,
   charred: 0x2a2420,
-  water: { deep: 0x3e3a2e, shallow: 0x5e5a48 },
+  /** A peaty beck, brown-green and clear at its edges, darker than the fens' it runs into. */
+  water: { deep: 0x313d36, shallow: 0x5c6a58 },
+  gritWarm: 0x928878,
+  gritSoot: 0x6a665e,
+  sill: 0xa8a294,
+  warm: 0xffc46a,
+  pot: 0x8a4e32,
+  /** Painted doors: moss green, oxblood, slate blue, plain oak, black, ochre. */
+  doors: [0x3a4c34, 0x5c2a22, 0x2e3e52, 0x4a3524, 0x26262a, 0x7a5e2a] as const,
+  /** Stall awnings in the moor's own dyes: ochre, moss, madder, woad. */
+  dyes: [0xa8823a, 0x5c6e3c, 0x8e3c2c, 0x3e5272] as const,
+  hay: 0xb8a25a,
+  hayDark: 0x9a8648,
+  hedge: 0x3a5628,
+  hedgeLight: 0x46642e,
+  cut: 0x9c968a,
+  trough: 0x46565a,
 } as const;

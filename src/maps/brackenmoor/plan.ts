@@ -8,24 +8,27 @@ import { type Deck, deckBetween, Decks } from '../decks';
 import { FEN_ROAD, fenRoadHeight, fenRoadSeam } from '../fenRoad';
 import { KINGSROAD, kingsroadHeight, kingsroadSeam } from '../kingsroad';
 import { HeightGrid } from '../heightGrid';
-import { along, flattenTo, heightsAlong, type LineField, lineField, smoothHeights } from '../lines';
+import { along, flattenTo, heightsAlong, lengths, type LineField, lineField, pointAlong, smoothHeights } from '../lines';
 import type { Seam, SideSeam, Spot } from '../types';
 import { Walkable } from '../walkable';
+import { houseLook, placeCairnford, TOWN } from './cairnford';
 import { MOOR_LIGHT, MOOR_SKY } from './palette';
 
 // Brackenmoor: the high, wet moor south of Oakvale's pass (see the zone's
 // spec, /zones/brackenmoor.md in the project's files). Over the crest the land
 // falls into Passfoot's basin; the pass road runs on south over a saddle by
 // the Long Stones to Cairnford, a grey stone market town at a three-arched
-// bridge over the Brack Beck. The beck rises in the Blackmire, a flat peat bog
-// in the west with Turfmoss's crofts on its edge, and runs east through the
-// town and south-east to Beck's Foot, where the Fen road leaves for the
-// Sallows. The Kingsroad climbs east through the landlord's walled enclosure
-// past Fellgate Hall to a tollhouse on the escarpment, and on through a
-// cutting in the ridge down to Aldhaven; the Sunreach road runs
-// south to the Rockfall Gap in the south ridge, closed by a rockfall. The fells
-// rise in the north-west round Raven Scar's old quarry, and in the north-east
-// the High Fells carry the barrows and Hollowhill. Nothing lives here yet.
+// bridge over the Brack Beck (cairnford.ts lays the town out). The beck rises
+// in the Blackmire, a flat peat bog in the west with Turfmoss's crofts on its
+// edge, and runs east between the town's quays and south-east to Beck's Foot,
+// where the Fen road leaves for the Sallows. The Kingsroad climbs east through
+// the landlord's walled enclosure past Fellgate Hall's park to a tollhouse on
+// the escarpment, and on through a cutting in the ridge down to Aldhaven; the
+// Sunreach road runs south to the Rockfall Gap in the south ridge, closed by a
+// rockfall. The fells rise in the north-west round Raven Scar's old quarry,
+// and in the north-east the High Fells carry the barrows and Hollowhill, its
+// stone door at the end of a walled passage cut into the mound. Nothing lives
+// here yet.
 //
 // This file is the plan only: heights, roads, water, what stands where, what
 // you bump into. No three.js meshes, so it runs in tests and in its worker.
@@ -56,11 +59,15 @@ export const MOOR = {
   /** The Blackmire's bog: its middle, its half sizes, and its pools' one level. */
   bog: { x: -138, z: 400, rx: 62, rz: 66, level: 8.2 },
   /** Cairnford's market square: its middle and half sizes. */
-  square: { x: 38, z: 372, hw: 14, hd: 11 },
+  square: TOWN.square,
   /** Raven Scar's quarry pit: its middle, its half sizes, and how deep it's cut. */
   scar: { x: -158, z: 218, hw: 24, hd: 17, depth: 11 },
-  /** Hollowhill on the High Fells: its middle, its radius and height. */
-  hollowhill: { x: 190, z: 198, r: 16, h: 7 },
+  /**
+   * Hollowhill on the High Fells: its middle, its radius and height, how far
+   * south of its middle its door stands, and the half width of the walled
+   * passage cut into the mound from its foot to the door.
+   */
+  hollowhill: { x: 190, z: 196, r: 18, h: 9, door: 11.5, passage: 2 },
   /** The Long Stones' row along the ridge, from one end to the other. */
   longStones: { from: [42, 287] as P2, to: [100, 298] as P2, count: 9 },
 } as const;
@@ -82,7 +89,7 @@ export const MOOR_ATMOSPHERE: Atmosphere = {
 };
 
 /** What grows or lies on the moor. Bracken, heather, cotton grass and reeds are undergrowth, too small for a stand-in. */
-export type MoorKind = 'bracken' | 'heather' | 'bush' | 'gorse' | 'rock' | 'pine' | 'hawthorn' | 'rowan' | 'reed' | 'cotton' | 'cypress';
+export type MoorKind = 'bracken' | 'heather' | 'bush' | 'gorse' | 'rock' | 'pine' | 'hawthorn' | 'rowan' | 'reed' | 'cotton' | 'cypress' | 'crag' | 'scree';
 
 export interface MoorPlant {
   readonly kind: MoorKind;
@@ -104,8 +111,11 @@ const TREE_HEIGHT: Partial<Record<MoorKind, number>> = { pine: 7, hawthorn: 3.4,
 export type MoorStructureKind =
   | 'house' | 'inn' | 'mootHall' | 'chapel' | 'smithy' | 'mill' | 'cottage' | 'croft' | 'ruin' | 'fold'
   | 'hall' | 'gatehouse' | 'flag' | 'tollhouse' | 'tollgate' | 'cairn' | 'signpost' | 'mapboard' | 'bridge'
-  | 'barrow' | 'hollowhill' | 'spoil' | 'tent' | 'ragPole' | 'ladder' | 'lookout' | 'peatStack' | 'peatBank'
-  | 'hut' | 'jetty' | 'boat' | 'grave' | 'stall' | 'cart' | 'garden' | 'hide' | 'crates' | 'borderStone' | 'longStone' | 'marketCross';
+  | 'barrow' | 'hollowhill' | 'dromos' | 'spoil' | 'tent' | 'ragPole' | 'ladder' | 'lookout' | 'peatStack' | 'peatBank'
+  | 'hut' | 'jetty' | 'boat' | 'grave' | 'stall' | 'cart' | 'garden' | 'hide' | 'crates' | 'borderStone' | 'longStone' | 'marketCross'
+  | 'quay' | 'well' | 'trough' | 'bench' | 'barrels' | 'postbox' | 'woodpile' | 'cartShed' | 'wagon' | 'hayrick' | 'townGate'
+  | 'bollard' | 'graves' | 'stable' | 'hedge' | 'sundial' | 'fieldGate' | 'campfire' | 'crane' | 'blocks' | 'eelTraps'
+  | 'waymark' | 'tor' | 'rack';
 
 /**
  * One building or set piece: where its footprint's middle stands, which way
@@ -125,6 +135,8 @@ export interface MoorStructure {
   /** A per-piece number for its look: which way a board points, an abandoned croft, a broken barrow. */
   readonly variant: number;
   readonly seed: number;
+  /** What else a kind's model needs, as it reads it: a bridge's deck heights over the water, a signpost's boards, a passage's walls. */
+  readonly extra?: readonly number[];
 }
 
 /** A road or a track: its centre line (about a metre between samples), its width, and its bed's heights along it. */
@@ -139,6 +151,12 @@ export interface MoorRoad {
 export interface MoorWall {
   readonly pts: readonly P2[];
   readonly dressed: boolean;
+}
+
+/** Where Cairnford is paved with setts: its square and waterside as rectangles, its streets as strips along their lines. */
+export interface Paving {
+  readonly rects: readonly { readonly minX: number; readonly maxX: number; readonly minZ: number; readonly maxZ: number }[];
+  readonly strips: readonly { readonly line: readonly P2[]; readonly half: number }[];
 }
 
 export interface MoorPlan {
@@ -157,13 +175,15 @@ export interface MoorPlan {
   readonly roads: readonly MoorRoad[];
   /** Distance to the nearest road's edge at each ground vertex (negative on it; Infinity far from any). */
   readonly roadDistance: Float32Array;
-  /** The Brack Beck's centre line, from its source in the Blackmire to the Fen road's seam, and its water's level along it. */
-  readonly beck: { readonly line: readonly P2[]; readonly levels: readonly number[]; readonly half: number };
+  /** The Brack Beck's centre line, from its source in the Blackmire to the Fen road's seam, its water's level and its half width along it. */
+  readonly beck: { readonly line: readonly P2[]; readonly levels: readonly number[]; readonly halves: readonly number[] };
   /** The water's level at (x, z): the beck's, the bog's pools', or NaN where there's none. */
   waterLevel(x: number, z: number): number;
   readonly plants: readonly MoorPlant[];
   readonly structures: readonly MoorStructure[];
   readonly walls: readonly MoorWall[];
+  /** Cairnford's setts. */
+  readonly paving: Paving;
   /** The bridge's deck and the Blackmire's boardwalk: what you walk on above the ground. */
   readonly decks: readonly Deck[];
   /** The border stone by the road on the crest, and which way its face turns. */
@@ -184,16 +204,27 @@ export interface MoorPlan {
 
 // ------------------------------------------------------------------ the lie of the land
 
-/** Roads' and tracks' centre lines, before they're sampled. The pass road's first points come from the crest. */
-const ROADS: { id: string; width: number; pts: P2[] }[] = [
+/**
+ * Roads' and tracks' centre lines, before they're sampled. The pass road's
+ * first points come from the crest. A track that `join`s another road starts
+ * on that road's line, where its first point falls, so the two meet.
+ */
+const ROADS: { id: string; width: number; pts: P2[]; join?: string }[] = [
   { id: 'kingsroad', width: 4, pts: [[52, 369], [72, 367], [96, 364], [120, 360], [145, 356], [170, 351], [195, 345], [215, 338], [232, 331], [244, 331], [254, 334], [KINGSROAD.x, KINGSROAD.road.z]] },
   { id: 'fen', width: 3.4, pts: [[46, 405], [70, 420], [100, 432], [130, 446], [160, 466], [190, 492], [215, 515], [238, 532], [252, 540], [262, FEN_ROAD.road.z]] },
   { id: 'sunreach', width: 3.4, pts: [[46, 405], [37, 428], [24, 460], [8, 492], [-6, 520], [-15, 545], [-20, 562]] },
-  { id: 'hob', width: 2.2, pts: [[-1, 215], [-12, 219], [-24, 223]] },
-  { id: 'oldFold', width: 2.2, pts: [[3, 250], [-9, 272], [-22, 297], [-33, 318]] },
-  { id: 'scar', width: 2.2, pts: [[-40, 322], [-62, 300], [-88, 277], [-112, 257], [-132, 243]] },
-  { id: 'turfmoss', width: 2.2, pts: [[26, 381], [12, 381.5], [0, 378], [-30, 369], [-60, 361], [-86, 352]] },
-  { id: 'fells', width: 2.2, pts: [[112, 361], [122, 333], [138, 302], [152, 270], [168, 242], [184, 222]] },
+  // Tracks: to Hob's Fold's croft door, past the Old Fold's ruin and on to Raven Scar's pit, along the beck to
+  // Turfmoss and the Blackmire's boardwalk, up the High Fells to Hollowhill's passage, Fellgate Hall's drive,
+  // the chapel's lane, the mill lane on the south bank, and the eel-trapper's path at Beck's Foot.
+  { id: 'hob', width: 2.2, join: 'pass', pts: [[-1, 215], [-12, 219], [-20.5, 226], [-24.6, 236.6]] },
+  { id: 'oldFold', width: 2.2, join: 'pass', pts: [[4, 250], [-9, 272], [-22, 297], [-33, 318], [-36, 325.5]] },
+  { id: 'scar', width: 2.2, join: 'oldFold', pts: [[-33, 318], [-48, 309], [-64, 298], [-88, 277], [-112, 257], [-132, 243], [-143, 234], [-151, 225]] },
+  { id: 'turfmoss', width: 2.2, pts: [[26, 381], [12, 381.5], [0, 378.6], [-30, 369], [-60, 361], [-85, 353], [-89.6, 357.6], [-91.6, 361.2]] },
+  { id: 'fells', width: 2.2, join: 'kingsroad', pts: [[112, 361], [122, 333], [138, 302], [152, 270], [168, 242], [183, 224], [190, MOOR.hollowhill.z + MOOR.hollowhill.r + 2]] },
+  { id: 'hall', width: 3, join: 'kingsroad', pts: [[160, 353], [160, 342], [160, 329.4]] },
+  { id: 'chapel', width: 2, join: 'pass', pts: [[33, 338.2], [26, 338.6], [18.5, 340.2], [TOWN.chapel.x + 7.4, TOWN.chapel.z]] },
+  { id: 'mill', width: 2.4, pts: [[45, 405.6], [36, 407.6], [24, 408.7], [12, 409.3], [2, 408.6]] },
+  { id: 'beckFoot', width: 2, join: 'fen', pts: [[219, 519], [218.4, 513.2]] },
 ];
 
 /** The pass road on from the crest's crossing: down through Passfoot, over the Long Stones' saddle, into Cairnford's square. */
@@ -205,11 +236,11 @@ const BECK: P2[] = [
   [135, 425], [165, 448], [195, 478], [222, 500], [245, 514], [262, FEN_ROAD.beck.z],
 ];
 
-/** The beck's half width at the water, its depth in the middle, and its banks' width. */
-const BECK_SHAPE = { half: 2.2, depth: 0.7, bank: 4 } as const;
+/** The beck's half width at the water over the open moor, its depth in the middle, and its banks' width. Through Cairnford it runs wider between quays (TOWN.quays). */
+const BECK_SHAPE = { half: 2.6, depth: 0.75, bank: 5 } as const;
 
 /** Cairnford's bridge: its middle's x, and where it starts and ends either side of the beck. */
-const BRIDGE = { x: 46, from: 385, to: 402, width: 4.6, rise: 0.9 } as const;
+const BRIDGE = TOWN.bridge;
 
 /** The general fall of the land, high north-west to low south-east, and its swells. */
 function base(x: number, z: number): number {
@@ -236,17 +267,34 @@ export function inEnclosure(x: number, z: number): number {
   return smoothstep(116, 121, x) * smoothstep(220, 215, x) * smoothstep(256, 261, z) * smoothstep(427, 422, z);
 }
 
+/** How far into Cairnford (x, z) is: 1 among its houses, easing out to the moor round it. */
+export function inTown(x: number, z: number): number {
+  return Math.max(smoothstep(70, 46, Math.hypot((x - 46) * 0.8, z - 378)), smoothstep(26, 14, Math.hypot(x - TOWN.chapel.x, z - TOWN.chapel.z)));
+}
+
+/** Hollowhill's mound over the fells at (x, z), and how far into its passage's cut (x, z) is (1 on its floor). */
+function hollowhill(x: number, z: number): { mound: number; cut: number; dip: number } {
+  const hh = MOOR.hollowhill;
+  const r = Math.hypot(x - hh.x, z - hh.z) / hh.r;
+  const mound = r < 1 ? hh.h * Math.sqrt(1 - r * r) * (0.9 + 0.1 * smoothstep(1, 0.5, r)) : 0;
+  // The passage: straight in from the mound's south foot to the door, its floor dipping a little toward it.
+  const door = hh.z + hh.door;
+  const mouth = hh.z + hh.r + 1;
+  const across = smoothstep(hh.passage + 1.4, hh.passage + 0.2, Math.abs(x - hh.x));
+  const cut = across * smoothstep(door - 0.6, door + 0.4, z) * smoothstep(mouth + 3, mouth, z);
+  return { mound, cut, dip: 0.5 * smoothstep(mouth, door, z) };
+}
+
 /** The moor's own height at (x, z), before the beck, the roads, the crest and the edges. */
 function moorHeight(x: number, z: number): number {
   let h = base(x, z);
   // The north-west fells round Raven Scar.
   h += 27 * smoothstep(-70, -178, x) * smoothstep(360, 228, z);
-  // The High Fells, a broad dome in the north-east, and Hollowhill on its crown.
+  // The High Fells, a broad dome in the north-east, and Hollowhill on its crown, its passage cut into it.
   const fells = Math.hypot(x - 185, z - 205);
   h += 17 * smoothstep(82, 8, fells);
-  const { hollowhill: hh } = MOOR;
-  const r = Math.hypot(x - hh.x, z - hh.z) / hh.r;
-  if (r < 1) h += hh.h * Math.sqrt(1 - r * r) * (0.9 + 0.1 * smoothstep(1, 0.5, r));
+  const hh = hollowhill(x, z);
+  h += hh.mound * (1 - hh.cut) - hh.dip * hh.cut;
   // The Long Stones' ridge, parted where the pass road crosses it in a saddle.
   const ridge = toSegment(x, z, [-12, 285], [128, 300]);
   h += 8 * smoothstep(34, 6, ridge) * (1 - 0.75 * smoothstep(24, 6, Math.abs(x - 24)));
@@ -254,8 +302,9 @@ function moorHeight(x: number, z: number): number {
   h += (14 + 10 * fbm(x * 0.02, 7, 111)) * smoothstep(505, 575, z) * smoothstep(240, 150, x);
   // Beck's Foot: the ground sinks toward the fens.
   h -= 2.4 * smoothstep(70, 10, Math.hypot(x - 222, z - 512));
-  // Cairnford's fold: a shallow hollow round the bridge.
+  // Cairnford's fold: a shallow hollow round the bridge, and the chapel's rise above it to the north-west.
   h -= 1.5 * smoothstep(80, 20, Math.hypot(x - 40, z - 385));
+  h += TOWN.chapel.rise * smoothstep(30, 9, Math.hypot(x - TOWN.chapel.x, z - TOWN.chapel.z));
   // The Blackmire: flat peat at the bog's level, its pools where the peat dips under it.
   const wet = inBog(x, z);
   if (wet > 0) h = lerp(h, MOOR.bog.level + 0.2 + (fbm(x * 0.09, z * 0.09, 131) - 0.5) * 1.5, wet);
@@ -265,12 +314,16 @@ function moorHeight(x: number, z: number): number {
 /**
  * The rim: hills past where you can walk, rising with the distance from it
  * (`out` m), and steepening to a wall by the land's edges where no neighbour
- * meets it, so the land's end is never seen.
+ * meets it, so the land's end is never seen. Its slopes break in a step or
+ * two, as the fells' do, where its crags stand (placePlants).
  */
 function rimHeight(x: number, z: number, out: number): number {
   const { land } = MOOR;
   const lump = 0.75 + 0.5 * fbm(x * 0.03 + 9, z * 0.03 - 4, 141);
-  let h = 30 * lump * smoothstep(5, 48, out);
+  const rise = smoothstep(5, 48, out);
+  // A bench part way up: the slope eases, then steepens again into the next crag.
+  const bench = 0.08 * Math.sin(rise * Math.PI * 2) * smoothstep(0, 0.3, rise) * (0.6 + 0.8 * fbm(x * 0.05, z * 0.05, 143));
+  let h = 30 * lump * (rise - bench);
   const edge = Math.min(x - land.minX, land.maxX - x, land.maxZ - z, z - land.minZ);
   h += 16 * lump * smoothstep(26, 0, edge) * smoothstep(0, 10, out);
   return h;
@@ -301,6 +354,17 @@ function scarCut(x: number, z: number): number {
   return smoothstep(1.08, 0.86, e - mouth * 0.9) * (1 - 0.65 * mouth);
 }
 
+// ------------------------------------------------------------------ the beck
+
+/** Along the beck's line, its half width (wider between Cairnford's quays) and how far its banks are quays (1) rather than the moor's own (0). */
+function beckShape(line: readonly P2[]): { halves: number[]; quays: number[] } {
+  const { from, to, half } = TOWN.quays;
+  const quays = line.map(([x]) => smoothstep(from - 3, from, x) * smoothstep(to + 3, to, x));
+  // Wider through the town, easing out to the moor's width either side of its quays.
+  const wide = line.map(([x]) => smoothstep(from - 14, from - 1, x) * smoothstep(to + 14, to + 1, x));
+  return { halves: wide.map((w) => lerp(BECK_SHAPE.half, half, w)), quays };
+}
+
 // ------------------------------------------------------------------ the plan
 
 /**
@@ -317,7 +381,17 @@ export function planBrackenmoor(crest: Seam): MoorPlan {
   const ground = new HeightGrid(land.minX, land.minZ, cols, rows, cell);
   const [crossing] = crest.roads;
   const pass = sampleCurve([[crossing.x, land.minZ], [crossing.x + crossing.dir[0] * 10, land.minZ + crossing.dir[1] * 10], ...PASS_ROAD], 1);
-  const roadLines = [{ id: 'pass', width: crossing.width, line: pass }, ...ROADS.map((r) => ({ id: r.id, width: r.width, line: sampleCurve(r.pts, 1) }))];
+  const roadLines: { id: string; width: number; line: P2[] }[] = [{ id: 'pass', width: crossing.width, line: pass }];
+  for (const r of ROADS) {
+    const pts = [...r.pts];
+    if (r.join) {
+      // Start on the joined road's line, where the first point falls.
+      const other = roadLines.find((o) => o.id === r.join)!.line;
+      const { i, t } = nearestOnPolyline(other, ...pts[0]);
+      pts[0] = [lerp(other[i][0], other[i + 1][0], t), lerp(other[i][1], other[i + 1][1], t)];
+    }
+    roadLines.push({ id: r.id, width: r.width, line: sampleCurve(pts, 1) });
+  }
   const walkable = new Walkable(walkableAreas(crossing.x, pass));
 
   // 1. The moor's own lie of the land, and the rim past where you walk.
@@ -328,11 +402,14 @@ export function planBrackenmoor(crest: Seam): MoorPlan {
     ground.data[k] = gapNotch(x, z, h + rimHeight(x, z, walkable.distance(x, z)));
   });
 
-  // 2. The beck: a channel down its line, its water falling all the way from the bog to the fens.
+  // 2. The beck: a channel down its line, its water falling all the way from the bog to the fens; between quays through the town.
   const beckLine = sampleCurve(BECK, 1);
-  const beckField = lineField(ground, beckLine, BECK_SHAPE.half + BECK_SHAPE.bank + 2);
+  const { halves, quays } = beckShape(beckLine);
+  const beckField = lineField(ground, beckLine, TOWN.quays.half + BECK_SHAPE.bank + 2);
   const levels = beckLevels(ground, beckLine);
-  carveBeck(ground, beckField, levels);
+  carveBeck(ground, beckField, levels, halves, quays);
+  const nearestBeckAt = (x: number, z: number) => nearestBeck(beckLine, x, z);
+  const halfAt = (at: number) => along(halves, at);
 
   // 3. The roads, each eased into the land along a smoothed line of its heights (the pass road's first held: it's the crest's).
   const roads: MoorRoad[] = [];
@@ -340,10 +417,10 @@ export function planBrackenmoor(crest: Seam): MoorPlan {
   for (const r of roadLines) {
     const field = lineField(ground, r.line, r.width / 2 + 4);
     const raw = heightsAlong(ground, r.line).map((h, i) => {
-      // Over the beck and its banks a road rides high, onto the bridge's ends.
+      // Over the beck and its banks a road rides high.
       const [x, z] = r.line[i];
-      const b = nearestOnPolyline(beckLine, x, z).d;
-      return b < BECK_SHAPE.half + 3 ? Math.max(h, along(levels, nearestBeck(beckLine, x, z)) + 0.9) : h;
+      const b = nearestOnPolyline(beckLine, x, z);
+      return b.d < halfAt(b.i + b.t) + 3 ? Math.max(h, along(levels, b.i + b.t) + 0.9) : h;
     });
     const seamY = r.id === 'fen' ? FEN_ROAD.road.y : r.id === 'kingsroad' ? KINGSROAD.road.y : undefined;
     const smooth = smoothHeights(raw, 5, 4, { first: r.id === 'pass', last: seamY !== undefined });
@@ -357,10 +434,14 @@ export function planBrackenmoor(crest: Seam): MoorPlan {
   // 4. Level pads: the square, and every building's footprint.
   const sq = MOOR.square;
   pad(ground, sq.x, sq.z, sq.hw, sq.hd, 0, ground.at(sq.x, sq.z), 3);
-  const structures = placeStructures(ground, roads);
+  const beckLevelAt = (at: number) => along(levels, at);
+  const structures = placeStructures(ground, roads, { line: beckLine, half: halfAt, level: beckLevelAt });
   for (const s of structures) {
     const p = PADS[s.kind];
-    if (p) pad(ground, s.x, s.z, s.w / 2 + p, s.d / 2 + p, s.yaw, s.y, 2.5);
+    if (p === undefined) continue;
+    // Round things on round pads; the rest on their footprints.
+    if (s.kind === 'barrow' || s.kind === 'fold' || s.kind === 'tor') pad(ground, s.x, s.z, s.w * p, s.w * p, 0, s.y, 3);
+    else pad(ground, s.x, s.z, s.w / 2 + p, s.d / 2 + p, s.yaw, s.y, 2.5);
   }
 
   // 5. Last, the edges blend to the neighbours' heights, so the zones agree exactly on their lines.
@@ -368,16 +449,39 @@ export function planBrackenmoor(crest: Seam): MoorPlan {
   // Along the Kingsroad's stretch the blend leaves the road's own bed be: the seam's cutting meets it on the line.
   const kingsroad = roads.find((r) => r.id === 'kingsroad')!;
   meetEast(ground, fields[roads.indexOf(kingsroad)], kingsroad.width);
-  // The fens' blend mustn't fill the beck's channel on its way out: cut it again, and hold the seams' own heights on their line.
-  carveBeck(ground, beckField, levels);
+  // The fens' blend and the pads mustn't fill the beck's channel: cut it again, and hold the seams' own heights on their line.
+  carveBeck(ground, beckField, levels, halves, quays);
   holdEastSeams(ground);
 
   // The structures stand on the ground as it ends up.
-  const beckWater = { line: beckLine, levels, half: BECK_SHAPE.half };
+  const beckWater = { line: beckLine, levels, halves };
   const waterLevel = (x: number, z: number) => waterAt(beckWater, x, z);
   // A boat floats, and a jetty stands from the water, wherever the bed under them is.
   const afloat = (x: number, z: number) => Math.max(ground.at(x, z), waterLevel(x, z) || -Infinity);
-  const placed = structures.map((s) => ({ ...s, y: s.kind === 'bridge' ? s.y : s.kind === 'boat' ? afloat(s.x, s.z) - 0.08 : s.kind === 'jetty' ? afloat(s.x, s.z) : ground.at(s.x, s.z) }));
+  const bridgeWater = beckLevelAt(nearestBeckAt(BRIDGE.x, (BRIDGE.from + BRIDGE.to) / 2));
+  const [bridgeY0, bridgeY1] = [ground.at(BRIDGE.x, BRIDGE.from), ground.at(BRIDGE.x, BRIDGE.to)];
+  const placed = structures.map((s): MoorStructure => {
+    switch (s.kind) {
+      case 'bridge': {
+        // Its deck's ends over the water, and where the channel under it runs from and to, in its own frame.
+        const at = nearestBeckAt(s.x, s.z);
+        const mid = (BRIDGE.from + BRIDGE.to) / 2;
+        const lz = beckLine[Math.round(at)][1] - mid;
+        return { ...s, y: bridgeWater, extra: [bridgeY0 - bridgeWater, bridgeY1 - bridgeWater, lz - halfAt(at), lz + halfAt(at)] };
+      }
+      case 'quay': {
+        // Its top at the bank behind it.
+        const [ox, oz] = [-Math.sin(s.yaw), -Math.cos(s.yaw)];
+        return { ...s, y: ground.at(s.x + ox * 1.6, s.z + oz * 1.6) };
+      }
+      case 'boat':
+        return { ...s, y: afloat(s.x, s.z) - 0.08 };
+      case 'jetty': case 'eelTraps':
+        return { ...s, y: afloat(s.x, s.z) };
+      default:
+        return { ...s, y: ground.at(s.x, s.z) };
+    }
+  });
 
   const roadDistance = new Float32Array(ground.data.length).fill(Infinity);
   roads.forEach((r, i) => {
@@ -385,7 +489,7 @@ export function planBrackenmoor(crest: Seam): MoorPlan {
     for (let k = 0; k < roadDistance.length; k++) roadDistance[k] = Math.min(roadDistance[k], f.d[k] - r.width / 2);
   });
 
-  const bridgeDeck = deckBetween([BRIDGE.x, BRIDGE.from], [BRIDGE.x, BRIDGE.to], BRIDGE.width, ground.at(BRIDGE.x, BRIDGE.from), ground.at(BRIDGE.x, BRIDGE.to), BRIDGE.rise);
+  const bridgeDeck = deckBetween([BRIDGE.x, BRIDGE.from], [BRIDGE.x, BRIDGE.to], BRIDGE.width, bridgeY0, bridgeY1, BRIDGE.rise);
   const decks = [bridgeDeck, ...boardwalk(ground)];
   const deckIndex = new Decks(decks);
   const heightAt = (x: number, z: number) => Math.max(ground.at(x, z), deckIndex.at(x, z));
@@ -401,8 +505,9 @@ export function planBrackenmoor(crest: Seam): MoorPlan {
   const walls = planWalls(roads, decks);
   for (const w of walls) addWallColliders(colliders, w);
 
+  const paving = planPaving(roads);
   const rockfall = roads.find((r) => r.id === 'sunreach')!.line.at(-1)!;
-  const plants = placePlants(ground, walkable, colliders, roadDistance, stone, rockfall, beckWater, deckIndex).filter((p) => {
+  const plants = placePlants(ground, walkable, colliders, roadDistance, stone, rockfall, beckWater, deckIndex, paving).filter((p) => {
     const r = TRUNK[p.kind];
     if (!r || walkable.distance(p.x, p.z) > 2) return true;
     // A trunk or rock that would leave a gap too narrow for the widest body beside another is left out, so no pocket is shut in.
@@ -416,6 +521,7 @@ export function planBrackenmoor(crest: Seam): MoorPlan {
   const trees = plants.filter((p) => TREE_HEIGHT[p.kind]).map((p) => ({ x: p.x, y: p.y, z: p.z, height: TREE_HEIGHT[p.kind]! * p.scale }));
   const fen = fenRoadSeam();
   const kings = kingsroadSeam([1, 0]);
+  const hh = MOOR.hollowhill;
   return {
     walkable,
     seam: { ...crest, heights: crest.heights.map((_, i) => ground.at(crest.minX + i * cell, crest.z)) },
@@ -430,6 +536,7 @@ export function planBrackenmoor(crest: Seam): MoorPlan {
     plants,
     structures: placed,
     walls,
+    paving,
     decks,
     stone,
     rockfall,
@@ -441,17 +548,17 @@ export function planBrackenmoor(crest: Seam): MoorPlan {
       { label: 'The Long Stones', x: 66, z: 300 },
       { label: 'Cairnford', x: sq.x, z: sq.z },
       { label: 'The Old Fold', x: -30, z: 336 },
-      { label: 'Fellgate Hall', x: 160, z: 340 },
+      { label: 'Fellgate Hall', x: 160, z: 338 },
       { label: 'The tollhouse', x: 226, z: 336 },
       { label: 'Turfmoss', x: -86, z: 356 },
       { label: 'The Blackmire', x: -126, z: 396 },
       { label: 'Raven Scar', x: -150, z: 226 },
-      { label: 'Hollowhill', x: 188, z: 222 },
-      { label: "Beck's Foot", x: 226, z: 524 },
+      { label: 'Hollowhill', x: hh.x, z: hh.z + hh.r + 4 },
+      { label: "Beck's Foot", x: 222, z: 524 },
       { label: 'The Rockfall Gap', x: rockfall[0] + 2, z: rockfall[1] - 12 },
     ],
     trees,
-    sounds: [{ id: 'stream', x: BRIDGE.x, y: along(levels, nearestBeck(beckLine, BRIDGE.x, 393)), z: 393, interior: null }],
+    sounds: [{ id: 'stream', x: BRIDGE.x, y: bridgeWater, z: 393, interior: null }],
     heightAt,
   };
 }
@@ -519,29 +626,41 @@ function beckLevels(ground: HeightGrid, line: readonly P2[]): number[] {
   return levels;
 }
 
-/** Cut the beck's channel: its bed under its water down its line, its banks a little over it. */
-function carveBeck(ground: HeightGrid, field: LineField, levels: readonly number[]): void {
-  const { half, depth, bank } = BECK_SHAPE;
+/**
+ * Cut the beck's channel: its bed under its water down its line, `halves`
+ * wide; over the open moor its banks shelve down to a little over the water,
+ * and between the town's quays (`quays` 1) the bank stands square at a quay's
+ * height over the water, the quays' walls holding it.
+ */
+function carveBeck(ground: HeightGrid, field: LineField, levels: readonly number[], halves: readonly number[], quays: readonly number[]): void {
+  const { depth, bank } = BECK_SHAPE;
   for (let k = 0; k < ground.data.length; k++) {
     const d = field.d[k];
     if (!Number.isFinite(d)) continue;
     const level = along(levels, field.at[k]);
-    const bed = level - depth * (1 - Math.min(1, (d / (half + 0.6)) ** 2)) - 0.05;
-    if (d <= half + 0.6) ground.data[k] = Math.min(ground.data[k], bed);
-    else {
-      // The banks: no higher than a little over the water near it, easing back to the land.
-      const top = level + 0.25 + (d - half - 0.6) * 0.6;
-      const t = smoothstep(half + 0.6 + bank, half + 0.6, d);
-      ground.data[k] = lerp(ground.data[k], Math.min(ground.data[k], top), t);
+    const half = along(halves, field.at[k]);
+    const q = along(quays, field.at[k]);
+    // A flatter, deeper bed between the quays.
+    const bed = level - (depth + 0.35 * q) * (1 - Math.min(1, (d / (half + 0.6)) ** (2 + 4 * q))) - 0.05;
+    if (d <= half + 0.6 * (1 - q)) {
+      ground.data[k] = Math.min(ground.data[k], bed);
+      continue;
     }
+    // The moor's banks: no higher than a little over the water near it, easing back to the land.
+    const top = level + 0.2 + (d - half - 0.6) * 0.45;
+    const t = smoothstep(half + 0.6 + bank, half + 0.6, d);
+    const natural = lerp(ground.data[k], Math.min(ground.data[k], top), t);
+    // The quays' banks: up at the quay's height over the water, wherever the town's ground lies lower.
+    const quayed = lerp(ground.data[k], Math.max(ground.data[k], level + TOWN.quays.rise), smoothstep(half + 7, half + 1, d));
+    ground.data[k] = lerp(natural, quayed, q);
   }
 }
 
 /** The water's level at (x, z): the beck's near its line, the Blackmire's pools, or NaN. */
-function waterAt(beck: { line: readonly P2[]; levels: readonly number[]; half: number }, x: number, z: number): number {
+function waterAt(beck: { line: readonly P2[]; levels: readonly number[]; halves: readonly number[] }, x: number, z: number): number {
   if (inBog(x, z) > 0.5) return MOOR.bog.level;
   const { d, i, t } = nearestOnPolyline(beck.line, x, z);
-  if (d <= beck.half + BECK_SHAPE.bank + 2) return along(beck.levels, i + t);
+  if (d <= along(beck.halves, i + t) + BECK_SHAPE.bank + 2) return along(beck.levels, i + t);
   // Beck's Foot's pools hold the fens' water a little over it.
   if (Math.hypot(x - 222, z - 512) < 44) return 0.35;
   return NaN;
@@ -695,10 +814,11 @@ function walkableAreas(crossX: number, line: readonly P2[]): P2[][] {
 
 // ------------------------------------------------------------------ what stands where
 
-/** How far round its footprint each kind's ground is levelled (m), for those that are. */
+/** How far round its footprint each kind's ground is levelled (m), for those that are; for round things, the share of their radius. */
 const PADS: Partial<Record<MoorStructureKind, number>> = {
   house: 1, inn: 1.2, mootHall: 1.2, chapel: 1, smithy: 1, mill: 0.8, cottage: 1, croft: 1, ruin: 0.8, hall: 2, gatehouse: 0.5,
-  tollhouse: 1, fold: 0.5, tent: 0.6, hut: 0.5, stall: 0.4, garden: 0.5, hide: 0.5,
+  tollhouse: 1, fold: 1.1, tent: 0.6, hut: 0.5, stall: 0.4, garden: 0.5, hide: 0.5, barrow: 0.75, cartShed: 0.8, stable: 1,
+  campfire: 0.6, tor: 0.6,
 };
 
 /** Its footprint, if you can't walk through it: half sizes in its own frame, or a circle. */
@@ -709,7 +829,25 @@ function addStructureColliders(c: Colliders, s: MoorStructure): void {
     c.addBox({ x: s.x + ox * cos + oz * sin, z: s.z - ox * sin + oz * cos, hw, hd, yaw: s.yaw });
   };
   switch (s.kind) {
-    case 'house': case 'inn': case 'mootHall': case 'chapel': case 'mill': case 'cottage': case 'croft': case 'hall': case 'tollhouse': case 'hut':
+    case 'house': {
+      box(s.w / 2 + 0.1, s.d / 2 + 0.1);
+      // Its lean-to at the back.
+      const { outshut } = houseLook(s.variant);
+      if (outshut !== 0) box(s.w / 4, 1.05, outshut * (s.w / 4), -s.d / 2 - 1.0);
+      break;
+    }
+    case 'inn':
+      box(s.w / 2 + 0.1, s.d / 2 + 0.1);
+      // Its porch, and the kitchen's lean-to.
+      box(1.5, 0.85, 0, s.d / 2 + 0.8);
+      box(s.w / 4, 1.25, -s.w / 4, -s.d / 2 - 1.2);
+      break;
+    case 'mootHall':
+      box(s.w / 2 + 0.1, s.d / 2 + 0.1);
+      // The stair up its gable.
+      box(0.65, s.d / 2, -s.w / 2 - 0.75, 0);
+      break;
+    case 'chapel': case 'mill': case 'cottage': case 'croft': case 'hall': case 'tollhouse': case 'hut': case 'stable':
       box(s.w / 2 + 0.1, s.d / 2 + 0.1);
       break;
     case 'smithy':
@@ -718,6 +856,12 @@ function addStructureColliders(c: Colliders, s: MoorStructure): void {
       box(0.3, s.d / 2, -s.w / 2 + 0.3, 0);
       box(0.3, s.d / 2, s.w / 2 - 0.3, 0);
       box(0.8, 0.8, -s.w / 4, -s.d / 4);
+      break;
+    case 'cartShed':
+      // Open-fronted: its back wall and its end walls.
+      box(s.w / 2, 0.3, 0, -s.d / 2 + 0.3);
+      box(0.3, s.d / 2, -s.w / 2 + 0.3, 0);
+      box(0.3, s.d / 2, s.w / 2 - 0.3, 0);
       break;
     case 'ruin':
       // Its standing walls, the doorway gap left.
@@ -732,26 +876,40 @@ function addStructureColliders(c: Colliders, s: MoorStructure): void {
       box(0.6, 0.6, -s.w / 2, 0);
       box(0.6, 0.6, s.w / 2, 0);
       break;
+    case 'townGate':
+      box(0.7, 0.7, -s.w / 2 - 0.5, 0);
+      box(0.7, 0.7, s.w / 2 + 0.5, 0);
+      break;
     case 'tollgate':
       // Its posts either side of the road; the bar is raised.
       box(0.2, 0.2, -s.w / 2, 0);
       box(0.2, 0.2, s.w / 2, 0);
       break;
-    case 'cairn': case 'longStone': case 'borderStone': case 'marketCross':
-      c.addCircle({ x: s.x, z: s.z, r: s.kind === 'cairn' ? 0.5 + s.h * 0.25 : 0.55 });
+    case 'quay':
+      // Its parapet along the water's edge.
+      box(s.w / 2, 0.25, 0, 0.2);
       break;
-    case 'signpost': case 'ragPole': case 'flag':
-      c.addCircle({ x: s.x, z: s.z, r: 0.15 });
+    case 'cairn': case 'longStone': case 'borderStone': case 'marketCross': case 'well': case 'tor':
+      c.addCircle({ x: s.x, z: s.z, r: s.kind === 'cairn' ? 0.5 + s.h * 0.25 : s.kind === 'marketCross' ? 1.2 : s.kind === 'well' ? 0.95 : s.kind === 'tor' ? s.w * 0.55 : 0.55 });
+      break;
+    case 'signpost': case 'ragPole': case 'flag': case 'postbox': case 'bollard': case 'waymark': case 'sundial':
+      c.addCircle({ x: s.x, z: s.z, r: s.kind === 'waymark' || s.kind === 'sundial' ? 0.3 : 0.15 });
       break;
     case 'mapboard':
       box(0.8, 0.15);
       break;
-    case 'tent': case 'stall': case 'cart': case 'peatStack': case 'crates': case 'lookout':
+    case 'tent': case 'stall': case 'cart': case 'peatStack': case 'crates': case 'lookout': case 'trough': case 'bench': case 'barrels': case 'woodpile':
+    case 'wagon': case 'hayrick': case 'hedge': case 'blocks': case 'rack':
       box(s.w / 2, s.d / 2);
       break;
     case 'hollowhill':
-      // The door's frame stands proud of the mound; the mound itself you can walk over.
-      box(2.2, 0.6, 0, 0);
+      // The door's frame and the stone face it's set in, across the passage's end.
+      box(s.w / 2 + 1.6, 0.6, 0, 0);
+      break;
+    case 'dromos':
+      // Its two walls either side of the passage, from the door out to the mouth.
+      box(0.4, s.d / 2, -s.w / 2 - 0.4, s.d / 2);
+      box(0.4, s.d / 2, s.w / 2 + 0.4, s.d / 2);
       break;
     default:
       break;
@@ -774,23 +932,27 @@ function facing(x: number, z: number, tx: number, tz: number): number {
   return Math.atan2(tx - x, tz - z);
 }
 
+/** A signpost's boards, each pointing at a place from where it stands. */
+function ways(x: number, z: number, ...to: P2[]): number[] {
+  return to.map(([tx, tz]) => facing(x, z, tx, tz));
+}
+
 /** Every building and set piece, by place. Their heights are read again once the ground's done. */
-function placeStructures(ground: HeightGrid, roads: readonly MoorRoad[]): MoorStructure[] {
+function placeStructures(ground: HeightGrid, roads: readonly MoorRoad[], beck: { line: readonly P2[]; half(at: number): number; level(at: number): number }): MoorStructure[] {
   const out: MoorStructure[] = [];
   let seed = 1;
-  const add = (kind: MoorStructureKind, x: number, z: number, yaw: number, w = 1, d = 1, h = 1, variant = 0) => {
-    out.push({ kind, x, y: ground.at(x, z), z, yaw, w, d, h, variant, seed: seed++ });
+  const add = (kind: MoorStructureKind, x: number, z: number, yaw: number, w = 1, d = 1, h = 1, variant = 0, extra?: readonly number[]) => {
+    out.push({ kind, x, y: ground.at(x, z), z, yaw, w, d, h, variant, seed: seed++, ...(extra ? { extra } : {}) });
   };
   const road = (id: string) => roads.find((r) => r.id === id)!;
-  const sq = MOOR.square;
-  const toSquare = (x: number, z: number) => facing(x, z, sq.x, sq.z);
 
-  // Passfoot: Hob's Fold, Wenna's croft and fold by the first track, and a weathered map board by the road.
-  add('fold', -34, 223, 1.2, 6);
-  add('croft', -31, 236, facing(-31, 236, -12, 219), 9, 4.6, 1);
-  add('peatStack', -24, 238, 0.3, 2.2, 1.2, 1.1);
+  // Passfoot: Hob's Fold, Wenna's croft and fold at the end of the first track, and a weathered map board by the road.
+  add('fold', -36, 222, 1.2, 6);
+  add('croft', -30.5, 236.6, Math.PI / 2, 9, 4.6, 1);
+  add('peatStack', -27.6, 243.6, 0.3, 2.2, 1.2, 1.1);
+  add('woodpile', -34.5, 231, 0, 2.2, 0.9, 1);
   add('mapboard', 5, 211, facing(5, 211, -1, 215));
-  add('signpost', 2, 216, 0, 1, 1, 1, 0);
+  add('signpost', 2.2, 217.6, 0, 1, 1, 1, 0, ways(2.2, 217.6, [0, 150], [10, 300], [-24, 224]));
 
   // The Long Stones, black against the sky along the ridge, and their hawthorns (planted with the plants).
   const { from, to, count } = MOOR.longStones;
@@ -798,116 +960,165 @@ function placeStructures(ground: HeightGrid, roads: readonly MoorRoad[]): MoorSt
     const t = i / (count - 1);
     const x = lerp(from[0], to[0], t);
     const z = lerp(from[1], to[1], t) + Math.sin(i * 1.7) * 0.6;
-    add('longStone', x, z, facing(from[0], from[1], to[0], to[1]) + Math.PI / 2 + Math.sin(i * 3.1) * 0.15, 1, 1, 2.6 + ((i * 37) % 10) / 10, i);
+    add('longStone', x, z, facing(from[0], from[1], to[0], to[1]) + Math.PI / 2 + Math.sin(i * 3.1) * 0.15, 1, 1, 2.9 + ((i * 37) % 10) / 8, i);
   }
 
-  // Cairnford: the square, the inn on its north side, the moot hall on its west, the smithy at its east
-  // corner by the Kingsroad, the chapel on its rise, the mill and the herb garden over the bridge.
-  add('marketCross', sq.x, sq.z, 0, 1, 1, 3.2);
-  add('mapboard', sq.x - 9, sq.z + 6, toSquare(sq.x - 9, sq.z + 6));
-  add('stall', sq.x + 7, sq.z - 4, Math.PI / 2, 3, 2, 1);
-  add('stall', sq.x + 7, sq.z + 3, Math.PI / 2, 3, 2, 1);
-  add('stall', sq.x - 7, sq.z - 5, -Math.PI / 2, 3, 2, 1);
-  add('inn', 53, 352, 0, 12, 8, 2);
-  add('mootHall', 16, 371, Math.PI / 2, 12, 8, 2);
-  add('smithy', 64, 383, Math.PI, 7, 6, 1);
-  add('chapel', 6, 344, facing(6, 344, 20, 360), 6, 13, 1);
-  add('mill', 22, 404, Math.PI, 7, 6, 2);
-  add('cottage', 18, 420, Math.PI / 2, 6, 5, 1);
-  add('garden', 28, 425, 0, 8, 6, 1);
-  add('cart', 72, 358, 0.4, 2, 3.4, 1);
-  add('cart', 78, 360, -0.2, 2, 3.4, 1);
-  add('cairn', 56, 389, 0, 1, 1, 3.2, 0);
-  add('cairn', 59, 391, 0, 1, 1, 1.4, 1);
-  add('signpost', 52, 408, 0, 1, 1, 1, 1);
-  add('signpost', 30, 366, 0, 1, 1, 1, 2);
-  // The flat-boat to Reedholm, moored at the bridge's foot.
-  add('boat', 60, 396.2, Math.PI / 2 + 0.12, 1, 4.2, 1);
+  // Cairnford (cairnford.ts) and its bridge, its quays along the beck either side of it.
+  placeCairnford({ add, road, ground, beck });
   add('bridge', BRIDGE.x, (BRIDGE.from + BRIDGE.to) / 2, 0, BRIDGE.width, BRIDGE.to - BRIDGE.from, BRIDGE.rise);
-  // The houses: two storeys of grey stone up the market street, along the Kingsroad and over the bridge.
-  const houses: [number, number, number, number][] = [
-    [27, 338, 6, 7], [27, 349, 6, 6], [46, 336, 7, 6], [15, 356, 7, 6], [63, 343, 7, 6],
-    [84, 356, 8, 6], [104, 353, 7, 6], [90, 377, 7, 6], [64, 405, 7, 6], [22, 441, 6, 6], [67, 428, 6, 6], [8, 388, 6, 6],
-  ];
-  const nearestRoad = (x: number, z: number): P2 => {
-    let best: P2 = [x, z + 1];
-    let bd = Infinity;
-    for (const r of roads) {
-      for (const p of r.line) {
-        const d = Math.hypot(p[0] - x, p[1] - z);
-        if (d < bd) [best, bd] = [p, d];
-      }
-    }
-    return best;
-  };
-  houses.forEach(([x, z, w, d], i) => {
-    const [tx, tz] = nearestRoad(x, z);
-    // Facing the road it stands by.
-    add('house', x, z, facing(x, z, tx, tz), w, d, 2, i);
-  });
+  placeQuays(add, beck, out);
+  add('signpost', 48.6, 411.4, 0, 1, 1, 1, 0, ways(48.6, 411.4, [46, 380], [24, 460], [100, 432]));
 
-  // The Old Fold: a burnt longhouse the Kerchiefs camped in, and its broken fold.
+  // Waymark stones along the pass road and the Kingsroad, a stone every so often by the verge.
+  for (const [id, every, start, stop] of [['pass', 46, 30, 170], ['kingsroad', 44, 70, 190], ['fen', 50, 40, 230], ['sunreach', 48, 30, 150]] as const) {
+    const r = road(id);
+    const lens = lengths(r.line);
+    for (let s = start; s < Math.min(stop, lens.at(-1)! - 10); s += every) {
+      const p = pointAlong(r.line, s);
+      const side = Math.floor(s / every) % 2 ? 1 : -1;
+      const off = r.width / 2 + 1.3;
+      add('waymark', p.x - p.dz * off * side, p.z + p.dx * off * side, Math.atan2(p.dx, p.dz), 1, 1, 0.9 + (s % 3) * 0.12);
+    }
+  }
+
+  // The Old Fold: a burnt longhouse the Kerchiefs camp in, its broken fold, their tent, fire and rag pole.
   add('ruin', -44, 331, 0.35, 12, 5.5, 1);
-  add('fold', -28, 344, 0.8, 5, 1, 1, 1);
-  add('spoil', -50, 342, 0, 3, 3, 1);
+  add('fold', -27, 345, 0.8, 5, 1, 1, 1);
+  add('tent', -34.5, 337.6, facing(-34.5, 337.6, -41, 334), 3, 3.6, 1);
+  add('campfire', -38.6, 336, 0, 1.4, 1.4, 1);
+  add('ragPole', -49.5, 324.5, 0.4, 1, 1, 3.4);
+  add('crates', -42, 337.5, 0.5, 1.6, 1.2, 1);
+  add('woodpile', -52, 336, 0.35, 2.4, 1, 1.1);
 
   // Three abandoned crofts, their doors hanging open, an empty fold by each.
-  for (const [x, z, fx, fz] of [[-92, 262, -100, 250], [112, 472, 120, 484], [-128, 498, -116, 508]] as const) {
+  for (const [x, z, fx, fz] of [[-92, 262, -101, 250], [112, 472, 121, 485], [-128, 498, -116, 509]] as const) {
     add('croft', x, z, facing(x, z, x + 10, z - 4), 8.5, 4.4, 1, 1);
     add('fold', fx, fz, 0.4, 4.5, 1, 1, 1);
   }
+  // Empty sheepfolds out on the open moor, and the moor's gritstone tors on its rises.
+  for (const [x, z, r] of [[-60, 470, 5], [84, 520, 4.5], [-150, 300, 5], [150, 500, 4]] as const) add('fold', x, z, (x * 0.37) % 6, r, 1, 1, 1);
+  for (const [x, z, r, v] of [[-70, 240, 3.2, 0], [70, 248, 2.6, 1], [100, 290, 2.2, 2], [-100, 455, 3, 3], [30, 515, 2.8, 4], [140, 395, 2.4, 5], [-170, 330, 3.4, 6], [205, 270, 2.6, 7], [-30, 440, 2.4, 8]] as const) {
+    add('tor', x, z, (x * 0.13 + z * 0.07) % 6, r, r, 1, v);
+  }
 
-  // Fellgate Hall on its rise in the enclosure: dressed stone, its yard's gate posts, and the noble house's flag.
+  // Fellgate Hall in its walled park in the enclosure: dressed stone, its drive up from the Kingsroad through
+  // the gate posts to its porch, the stable block across the forecourt, a knot of clipped hedges round a sundial,
+  // and the noble house's flag.
   add('hall', 160, 318, 0, 18, 11, 3);
-  add('gatehouse', 160, 342, 0, 6, 1, 1);
-  add('flag', 172, 326, 0, 1, 1, 9);
+  add('gatehouse', 160, 346, 0, 6, 1, 1);
+  add('flag', 150.5, 335.5, 0, 1, 1, 9);
+  add('stable', 174.6, 331, -Math.PI / 2, 12, 6, 1);
+  add('sundial', 147.6, 324.6, 0, 1, 1, 1);
+  for (const [x, z, w, d] of [[147.6, 320.4, 6, 1.1], [147.6, 328.8, 6, 1.1], [143.4, 324.6, 1.1, 5], [151.8, 321.6, 1.1, 1.2], [151.8, 327.6, 1.1, 1.2]] as const) add('hedge', x, z, 0, w, d, 1.1);
 
-  // The Kingsroad's tollhouse at the escarpment's top, its gate's bar raised: the road runs on through the cutting to Aldhaven.
-  add('tollhouse', 223, 322, facing(223, 322, 232, 331), 6, 5, 1);
-  const gate = road('kingsroad').line.reduce((best, p) => (Math.abs(p[0] - 238) < Math.abs(best[0] - 238) ? p : best));
+  // The Kingsroad's tollhouse at the escarpment's top beside its gate, the gate's bar raised: the road runs on
+  // through the cutting to Aldhaven.
+  add('tollhouse', 231, 324.6, 0, 6, 5, 1);
+  add('bench', 227.2, 327.6, 0, 1.6, 0.5, 1);
+  const gate = road('kingsroad').line.reduce((best, p) => (Math.abs(p[0] - 239) < Math.abs(best[0] - 239) ? p : best));
   add('tollgate', gate[0], gate[1], Math.PI / 2, 6, 1, 1);
+  add('signpost', 117.6, 366.2, 0, 1, 1, 1, 0, ways(117.6, 366.2, [40, 372], [180, 349], [130, 320]));
 
-  // Turfmoss, the peat cutters' crofts on the Blackmire's edge; their stacks, and the banks they cut.
-  add('croft', -94, 340, facing(-94, 340, -86, 352), 8, 4.4, 1);
-  add('croft', -106, 354, facing(-106, 354, -86, 352), 7.5, 4.2, 1);
-  add('croft', -80, 366, facing(-80, 366, -86, 352), 8, 4.4, 1);
-  add('peatStack', -98, 362, 0.6, 2.4, 1.3, 1.2);
-  add('peatStack', -88, 334, 1.2, 2, 1.2, 1);
-  for (const [x, z, yaw] of [[-104, 376, 0.9], [-112, 368, 0.6], [-96, 384, 1.2]] as const) add('peatBank', x, z, yaw, 9, 1.4, 1);
+  // Turfmoss, the peat cutters' crofts on the Blackmire's edge round their green; their stacks, the banks they cut,
+  // a drying rack and a peat cart.
+  add('croft', -95, 341, facing(-95, 341, -86, 353), 8, 4.4, 1);
+  add('croft', -106, 354, facing(-106, 354, -87, 354), 7.5, 4.2, 1);
+  add('croft', -77, 366, facing(-77, 366, -86, 353), 8, 4.4, 1);
+  add('peatStack', -100, 364, 0.6, 2.4, 1.3, 1.2);
+  add('peatStack', -86, 336, 1.2, 2, 1.2, 1);
+  add('rack', -80, 344, 0.9, 3.4, 1.0, 1);
+  add('cart', -90, 347, 2.4, 2, 3.4, 1, 1);
+  for (const [x, z, yaw] of [[-106, 378, 0.9], [-114, 370, 0.6], [-98, 386, 1.2]] as const) add('peatBank', x, z, yaw, 9, 1.4, 1);
   // The Kerchiefs' hide in a drained pool, out across the boardwalk.
   add('hide', -152, 430, 0.5, 4, 3, 1);
   add('crates', -148, 434, 0.2, 1.6, 1.2, 1);
 
-  // Raven Scar: the Kerchiefs' tents in the quarry pit, red rags on poles along its lip, the ladder path up the
-  // scar to the lookout, and a fresh grave behind it with a shepherd's crook.
+  // Raven Scar: the Kerchiefs' tents in the quarry pit round their fire, red rags on poles along its lip, the ladder
+  // path up the scar to the lookout, the old quarry's cut blocks and its timber crane, and a fresh grave behind it
+  // with a shepherd's crook.
   const { scar } = MOOR;
-  add('tent', scar.x - 8, scar.z - 2, facing(scar.x - 8, scar.z - 2, scar.x + 10, scar.z + 10), 3, 3.6, 1);
-  add('tent', scar.x + 6, scar.z - 6, facing(scar.x + 6, scar.z - 6, scar.x + 10, scar.z + 10), 3, 3.6, 1);
-  add('tent', scar.x - 2, scar.z + 7, facing(scar.x - 2, scar.z + 7, scar.x + 10, scar.z + 10), 3.4, 4, 1);
-  add('crates', scar.x + 2, scar.z + 1, 0.4, 1.6, 1.2, 1);
+  const hearth: P2 = [scar.x + 1, scar.z + 3];
+  add('tent', scar.x - 8, scar.z - 2, facing(scar.x - 8, scar.z - 2, ...hearth), 3, 3.6, 1);
+  add('tent', scar.x + 6, scar.z - 6, facing(scar.x + 6, scar.z - 6, ...hearth), 3, 3.6, 1);
+  add('tent', scar.x - 7, scar.z + 9, facing(scar.x - 7, scar.z + 9, ...hearth), 3.4, 4, 1);
+  add('campfire', ...hearth, 0, 1.4, 1.4, 1);
+  add('crates', scar.x + 7, scar.z + 3, 0.4, 1.6, 1.2, 1);
+  add('barrels', scar.x - 12, scar.z + 4, 0.2, 1.4, 1.4, 1, 1);
+  add('blocks', scar.x - 15, scar.z - 9, 0.3, 3.4, 2.2, 1);
+  add('blocks', scar.x + 12, scar.z - 9, -0.4, 2.8, 2, 1, 1);
   add('ladder', scar.x + 4, scar.z - scar.hd + 1.6, Math.PI, 1, 1, scar.depth);
   add('lookout', scar.x + 4, scar.z - scar.hd - 3, 0, 3, 3, 1);
-  for (const [x, z] of [[scar.x - 14, scar.z - scar.hd - 4], [scar.x - 24, scar.z - 4], [scar.x + 14, scar.z - scar.hd - 3], [scar.x - 4, scar.z - scar.hd - 5]] as const) add('ragPole', x, z, (Math.abs(x * 7) % 3) - 1.5, 1, 1, 3.2);
+  add('crane', scar.x - 8, scar.z - scar.hd - 2.5, 0.2, 1, 1, 7);
+  for (const [x, z] of [[scar.x - 14, scar.z - scar.hd - 4], [scar.x - 26, scar.z - 4], [scar.x + 14, scar.z - scar.hd - 3], [scar.x - 3, scar.z - scar.hd - 5]] as const) add('ragPole', x, z, (Math.abs(x * 7) % 3) - 1.5, 1, 1, 3.2);
   add('grave', scar.x - 12, scar.z - scar.hd - 14, 0.3, 1, 2, 1);
 
-  // The High Fells' barrow field: seven small barrows, three broken open with the diggers' spoil, and Hollowhill.
-  const barrows: [number, number, boolean][] = [[148, 200, false], [158, 234, true], [212, 236, true], [232, 210, false], [222, 186, false], [166, 186, true], [196, 254, false]];
-  for (const [x, z, broken] of barrows) {
-    add('barrow', x, z, facing(x, z, 190, 198), 5, 5, 2, broken ? 1 : 0);
-    if (broken) add('spoil', x + 4, z + 3, 0.5, 2.6, 2.6, 1);
-  }
+  // The High Fells' barrow field: seven small barrows, three broken open with the diggers' spoil, and Hollowhill:
+  // its stone door at the end of a passage walled in drystone, cut into the mound from its south foot.
   const hh = MOOR.hollowhill;
-  add('hollowhill', hh.x, hh.z + hh.r - 1.2, 0, 4, 1, 3.4);
+  const barrows: [number, number, boolean][] = [[146, 196, false], [156, 232, true], [214, 236, true], [232, 206, false], [222, 178, false], [164, 176, true], [204, 252, false]];
+  for (const [x, z, broken] of barrows) {
+    const yaw = facing(x, z, hh.x, hh.z) + Math.PI;
+    add('barrow', x, z, yaw, 5, 5, 2, broken ? 1 : 0);
+    if (broken) add('spoil', x + Math.sin(yaw) * 7 + Math.cos(yaw) * 2.5, z + Math.cos(yaw) * 7 - Math.sin(yaw) * 2.5, 0.5, 2.6, 2.6, 1);
+  }
+  const door = hh.z + hh.door;
+  const mouth = hh.z + hh.r + 1.2;
+  add('hollowhill', hh.x, door, 0, 4, 1, 3.4);
+  // The passage's walls, from the door to its mouth: their tops follow the mound's face either side.
+  const len = mouth - door;
+  const tops: number[] = [];
+  const floor0 = ground.at(hh.x, door);
+  for (let k = 0; k <= Math.ceil(len); k++) {
+    const z = Math.min(mouth, door + k);
+    // Over the door's floor: as high as the mound beside it, and never under knee height over the passage's own.
+    tops.push(Math.max(ground.at(hh.x, z) + 0.6, ground.at(hh.x + hh.passage + 2.4, z)) - floor0);
+  }
+  add('dromos', hh.x, door, 0, hh.passage * 2, len, 1, 0, tops);
+  add('spoil', hh.x + 6, mouth + 2, 0.4, 2.8, 2.8, 1);
+  add('crates', hh.x - 4.6, mouth + 1.4, 0.7, 1.6, 1.2, 1);
 
-  // Beck's Foot: the eel-trapper's hut on the bank, a jetty into the beck and a boat at it.
-  add('hut', 230, 492, facing(230, 492, 230, 504), 4, 3.5, 1);
-  add('jetty', 232, 498.5, 0, 1.6, 5, 1);
-  add('boat', 234.5, 500, 0.15, 1, 3.6, 1);
+  // Beck's Foot: the eel-trapper's hut on the south bank by the Fen road, a jetty out into the beck with a boat at
+  // it and eel traps in the water; a smugglers' boat drawn up on the bank, its crates beside it.
+  add('hut', 218.4, 510.6, 0, 4, 3.5, 1);
+  add('jetty', 225.4, 505.4, Math.PI, 1.6, 5.4, 1);
+  add('boat', 227.6, 503.4, 0.15, 1, 3.6, 1);
+  add('eelTraps', 231.4, 503, 0.4, 3, 2, 1);
+  add('boat', 240.4, 518.2, 1.1, 1, 4, 1);
+  add('crates', 237, 520.6, 0.3, 1.6, 1.2, 1);
 
-  // Signposts at the forks.
-  add('signpost', 114, 366, 0, 1, 1, 1, 3);
-  add('signpost', 50, 401, 0, 1, 1, 1, 4);
+  // At the Rockfall Gap, the Sunreach road's last signpost, a plank nailed across its board for Vinhold, and a cart
+  // left broken where the rocks came down.
+  const end = road('sunreach').line.at(-1)!;
+  add('signpost', end[0] + 4.2, end[1] - 9, 0, 1, 1, 1, 1, ways(end[0] + 4.2, end[1] - 9, [end[0], end[1] + 20], [46, 405]));
+  add('cart', end[0] - 4.6, end[1] - 4, 0.7, 2, 3.4, 1, 2);
   return out;
+}
+
+/**
+ * The quays: a stone wall square along each bank of the beck where it runs
+ * through Cairnford, a stretch every few metres, its face to the water, but
+ * where the bridge's abutments and the mill's wall stand at the water's edge.
+ */
+function placeQuays(add: (kind: MoorStructureKind, x: number, z: number, yaw: number, w?: number, d?: number, h?: number, variant?: number) => void, beck: { line: readonly P2[]; half(at: number): number }, placed: readonly MoorStructure[]): void {
+  const { from, to } = TOWN.quays;
+  const lens = lengths(beck.line);
+  const mill = placed.find((s) => s.kind === 'mill')!;
+  const start = lens[beck.line.findIndex((p) => p[0] >= from)];
+  const stop = lens[beck.line.findIndex((p) => p[0] >= to)];
+  const step = 3.2;
+  for (let s = start + step / 2; s < stop; s += step) {
+    const p = pointAlong(beck.line, s);
+    const at = nearestBeck(beck.line, p.x, p.z);
+    for (const side of [-1, 1]) {
+      const [nx, nz] = [-p.dz * side, p.dx * side];
+      const off = beck.half(at) + 0.45;
+      const [x, z] = [p.x + nx * off, p.z + nz * off];
+      if (Math.abs(x - BRIDGE.x) < BRIDGE.width / 2 + 1.4) continue;
+      if (side > 0 && Math.abs(x - mill.x) < mill.w / 2 + 0.6 && Math.abs(z - mill.z) < mill.d / 2 + 2) continue;
+      // Its face (its own +Z) toward the water.
+      add('quay', x, z, Math.atan2(-nx, -nz), step + 0.1, 1, 1);
+    }
+  }
 }
 
 /** The Blackmire's boardwalk from Turfmoss out across the bog to the Kerchiefs' hide: decks a little over the peat. */
@@ -927,43 +1138,72 @@ function boardwalk(ground: HeightGrid): Deck[] {
   return decks;
 }
 
+/** Cairnford's setts: its square and the waterside below it, the market street, the Kingsroad to the east gate, and the street over the bridge's south end. */
+function planPaving(roads: readonly MoorRoad[]): Paving {
+  const sq = MOOR.square;
+  const part = (id: string, keep: (x: number, z: number) => boolean) => roads.find((r) => r.id === id)!.line.filter(([x, z]) => keep(x, z));
+  const half = 2 + TOWN.set - 0.2;
+  return {
+    rects: [
+      { minX: sq.x - sq.hw, maxX: sq.x + sq.hw, minZ: sq.z - sq.hd, maxZ: sq.z + sq.hd },
+      { minX: sq.x - sq.hw + 2, maxX: sq.x + sq.hw + 6, minZ: sq.z + sq.hd, maxZ: sq.z + sq.hd + 4.6 },
+    ],
+    strips: [
+      { line: part('pass', (_, z) => z > 321 && z < sq.z - sq.hd + 1), half },
+      { line: part('kingsroad', (x) => x > sq.x + sq.hw - 1 && x < TOWN.gate + 2), half },
+      { line: part('sunreach', (_, z) => z < 420), half: 1.7 + 0.8 },
+      { line: part('fen', (x) => x < 82), half: 1.7 + 0.8 },
+    ],
+  };
+}
+
 /**
  * The walls: field walls of rough gritstone across the moor, the landlord's
- * enclosure in dressed stone (built straight across an older wall), and
- * Cairnford's square's low wall. Each is broken where a road, a track, the
- * beck or a deck runs through.
+ * enclosure in dressed stone (built straight across an older wall) and
+ * Fellgate Hall's park inside it, Cairnford's back-yard walls and the
+ * chapel's graveyard. Each is broken where a road, a track, the beck or a deck
+ * runs through.
  */
 function planWalls(roads: readonly MoorRoad[], decks: readonly Deck[]): MoorWall[] {
+  const ch = TOWN.chapel;
   const rough: P2[][] = [
     // Across the middle moor, from the Old Fold's slopes east to the Long Stones' ridge.
     [[-70, 296], [-40, 290], [-10, 290], [12, 296], [24, 302]],
-    [[-60, 410], [-20, 412], [10, 416]],
+    [[-60, 410], [-20, 412], [-2, 416]],
     [[-50, 440], [-30, 470], [-14, 500], [-10, 520]],
     [[60, 446], [80, 470], [96, 500], [120, 520], [160, 528]],
     [[-70, 250], [-62, 280], [-62, 300]],
     [[44, 316], [70, 318], [100, 322], [114, 326]],
+    // Cairnford's intakes: the walled fields round the town, north of it either side of the market street and south of the beck.
+    [[-14, 324], [-10, 304], [16, 300]],
+    [[48, 318], [62, 322], [86, 330], [90, 344]],
+    [[-6, 432], [10, 446], [28, 446]],
+    [[56, 440], [84, 446], [108, 452], [112, 440]],
     // The old wall the enclosure was built straight across.
     [[84, 300], [118, 294], [150, 290]],
+    // The back walls of the Kingsroad's yards, and the wagon yard's.
+    [[56, 350.5], [70, 349.2], [80, 347.8], [92, 346.2]],
+    [[92, 346.2], [106, 345.4], [106, 356]],
+    [[91, 346.2], [91, 357]],
+    [[66, 386.4], [80, 384.6], [94, 382]],
+    // The chapel's graveyard wall, its gate toward the town.
+    [[ch.x + 10.5, ch.z - 3], [ch.x + 10.5, ch.z - 12], [ch.x - 12, ch.z - 12], [ch.x - 12, ch.z + 12], [ch.x + 10.5, ch.z + 12], [ch.x + 10.5, ch.z + 3]],
   ];
   const dressed: P2[][] = [
     // The enclosure: its outer wall and the fields inside it.
     [[118, 258], [218, 258], [218, 425], [118, 425], [118, 258]],
     // The fields' cross walls, each with a gate gap.
-    [[118, 300], [148, 300]],
-    [[154, 300], [218, 300]],
+    [[118, 300], [150, 300]],
+    [[156, 300], [218, 300]],
     [[118, 392], [182, 392]],
     [[188, 392], [218, 392]],
-    [[170, 300], [170, 340]],
-  ];
-  const sq = MOOR.square;
-  const square: P2[][] = [
-    [[sq.x - sq.hw, sq.z - sq.hd], [sq.x - sq.hw, sq.z + sq.hd]],
-    [[sq.x + sq.hw, sq.z - sq.hd], [sq.x + sq.hw, sq.z + sq.hd]],
+    // Fellgate Hall's park: its gate on the drive, in from the Kingsroad.
+    [[157, 346], [140, 346], [140, 306], [182, 306], [182, 346], [163, 346]],
   ];
   const deckIndex = new Decks(decks);
   const beck = sampleCurve(BECK, 2);
   const open = (x: number, z: number) =>
-    roads.some((r) => nearestOnPolyline(r.line, x, z).d < r.width / 2 + 1.6) || deckIndex.on(x, z, 1) || nearestOnPolyline(beck, x, z).d < BECK_SHAPE.half + 1.5;
+    roads.some((r) => nearestOnPolyline(r.line, x, z).d < r.width / 2 + 1.6) || deckIndex.on(x, z, 1) || nearestOnPolyline(beck, x, z).d < TOWN.quays.half + 1.5;
   const out: MoorWall[] = [];
   const split = (line: readonly P2[], isDressed: boolean) => {
     // Every metre or two along it, kept where nothing runs through.
@@ -986,17 +1226,17 @@ function planWalls(roads: readonly MoorRoad[], decks: readonly Deck[]): MoorWall
   };
   for (const l of rough) split(l, false);
   for (const l of dressed) split(l, true);
-  for (const l of square) split(l, false);
   return out;
 }
 
 /**
  * The moor's plants: bracken and heather in their patches over where you
- * walk, low bushes and gorse, grey rocks (more on slopes and the fells), a
+ * walk and up the rim, low bushes and gorse, grey rocks (more on slopes and
+ * the fells), gritstone crags and scree breaking the rim's steep slopes, a
  * few lone pines, hawthorns at the Long Stones, rowans by the beck, cotton
- * grass on the bog, reeds where the beck widens toward the fens, boulders
- * round Raven Scar's crags, and the rockfall across the Sunreach road's end.
- * Seeded, so the same every time.
+ * grass on the bog, reeds in the wet where the beck widens toward the fens,
+ * boulders round Raven Scar's crags, and the rockfall across the Sunreach
+ * road's end. Seeded, so the same every time.
  */
 function placePlants(
   ground: HeightGrid,
@@ -1005,8 +1245,9 @@ function placePlants(
   roadDistance: Float32Array,
   stone: { x: number; z: number },
   rockfall: P2,
-  beck: { line: readonly P2[]; levels: readonly number[] },
+  beck: { line: readonly P2[]; levels: readonly number[]; halves: readonly number[] },
   decks: Decks,
+  paving: Paving,
 ): MoorPlant[] {
   const rand = mulberry32(4711);
   const { land, scar } = MOOR;
@@ -1017,11 +1258,24 @@ function placePlants(
     return roadDistance[j * ground.cols + i];
   };
   const onLand = (x: number, z: number) => x > land.minX + 1 && x < land.maxX - 1 && z > land.minZ + 0.5 && z < land.maxZ - 1;
+  const paved = (x: number, z: number) =>
+    paving.rects.some((r) => x > r.minX - 1 && x < r.maxX + 1 && z > r.minZ - 1 && z < r.maxZ + 1) || paving.strips.some((s) => s.line.length > 1 && nearestOnPolyline(s.line, x, z).d < s.half + 0.8);
   const clear = (x: number, z: number, margin: number) =>
     onLand(x, z) && roadAt(x, z) > margin + 1 && Math.hypot(x - stone.x, z - stone.z) > 1.5 + margin && !colliders.blocked(x, z, margin + 0.3) && !decks.on(x, z, margin + 0.4);
+  const beckAt = (x: number, z: number) => {
+    const b = nearestOnPolyline(beck.line, x, z);
+    return { d: b.d, half: along(beck.halves, b.i + b.t), level: along(beck.levels, b.i + b.t) };
+  };
   const wet = (x: number, z: number) => {
-    const level = MOOR.bog.level;
-    return inBog(x, z) > 0.5 ? ground.at(x, z) < level + 0.05 : nearestOnPolyline(beck.line, x, z).d < BECK_SHAPE.half + 0.4;
+    if (inBog(x, z) > 0.5) return ground.at(x, z) < MOOR.bog.level + 0.05;
+    const b = beckAt(x, z);
+    return b.d < b.half + 0.4;
+  };
+  // Beck's Foot's reed beds: low, wet ground near the water there, not the road's dry verges.
+  const reedy = (x: number, z: number) => {
+    if (Math.hypot(x - 222, z - 512) > 44) return false;
+    const b = beckAt(x, z);
+    return ground.at(x, z) < 0.9 || (b.d < b.half + 3 && ground.at(x, z) < b.level + 0.7);
   };
   const grade = (x: number, z: number) => Math.hypot(ground.at(x + 1, z) - ground.at(x - 1, z), ground.at(x, z + 1) - ground.at(x, z - 1)) / 2;
   const add = (kind: MoorKind, x: number, z: number, scale: number) =>
@@ -1032,7 +1286,7 @@ function placePlants(
     }
   };
   const near = (x: number, z: number, m: number) => walkable.distance(x, z) < m;
-  const town = (x: number, z: number) => Math.hypot(x - 40, z - 380) < 52;
+  const town = (x: number, z: number) => inTown(x, z) > 0.4;
   const sq = MOOR.square;
   const inSquare = (x: number, z: number) => Math.abs(x - sq.x) < sq.hw + 2 && Math.abs(z - sq.z) < sq.hd + 2;
 
@@ -1046,17 +1300,28 @@ function placePlants(
     if (rand() > 0.08 + 0.4 * Math.min(1, grade(x, z) * 1.5) || !clear(x, z, 1) || inBog(x, z) > 0.3 || town(x, z) || inEnclosure(x, z) > 0) return;
     add('rock', x, z, 0.5 + rand() * (near(x, z, 4) ? 1 : 2.2));
   });
+  // The rim's crags: long gritstone edges where its slopes stand steepest, with scree spilled below them; past where you walk.
+  scatter(9, (x, z) => {
+    const out = walkable.distance(x, z);
+    if (out < 6 || !onLand(x, z) || rand() > 0.75) return;
+    const g = grade(x, z);
+    if (g > 0.55 && rand() < 0.55) add('crag', x, z, 2.4 + rand() * 2.6);
+    else if (g > 0.3 && rand() < 0.35) add('scree', x, z, 0.8 + rand() * 0.9);
+  });
   // Low bilberry bushes and yellow-flecked gorse, scattered where you walk.
   scatter(7, (x, z) => {
     if (rand() > 0.2 || !clear(x, z, 0.8) || !near(x, z, 30) || inBog(x, z) > 0.3 || town(x, z) || inEnclosure(x, z) > 0) return;
     add(rand() < 0.35 ? 'gorse' : 'bush', x, z, 0.6 + rand() * 0.4);
   });
-  // Bracken and heather in their patches where you walk and a little past; cotton grass on the bog; reeds by the water.
+  // Bracken and heather in their patches where you walk and up the rim's lower slopes; cotton grass on the bog; reeds in the wet.
   scatter(2.4, (x, z) => {
-    if (!near(x, z, 12) || !clear(x, z, 0.4) || inSquare(x, z) || inEnclosure(x, z) > 0.5) return;
+    const out = walkable.distance(x, z);
+    if (out > 22 || !clear(x, z, 0.4) || inSquare(x, z) || paved(x, z) || inEnclosure(x, z) > 0.5) return;
+    // Thinning out up the rim, where it's seen only from afar.
+    if (out > 8 && rand() < smoothstep(8, 22, out) * 0.8) return;
     const roll = rand();
-    if (wet(x, z) || Math.hypot(x - 222, z - 512) < 40) {
-      if (roll < 0.5 && (Math.hypot(x - 222, z - 512) < 44 || nearestOnPolyline(beck.line, x, z).d > 1)) add('reed', x, z, 1.2 + rand() * 0.6);
+    if (wet(x, z) || reedy(x, z)) {
+      if (roll < 0.5 && (reedy(x, z) || beckAt(x, z).d > 1)) add('reed', x, z, 1.2 + rand() * 0.6);
       return;
     }
     if (inBog(x, z) > 0.4) {
@@ -1064,7 +1329,7 @@ function placePlants(
       else if (roll < 0.6) add('heather', x, z, 0.45 + rand() * 0.3);
       return;
     }
-    if (town(x, z) && roll < 0.85) return;
+    if (town(x, z) && roll < 0.93) return;
     const b = bracken(x, z);
     const h = heather(x, z);
     if (roll < 0.8 * b) add('bracken', x, z, 1.4 + rand() * 0.9);
@@ -1077,10 +1342,10 @@ function placePlants(
     const side = rand() < 0.5 ? -1 : 1;
     const [nx, nz] = beck.line[i + 1];
     const len = Math.hypot(nx - x, nz - z) || 1;
-    const off = BECK_SHAPE.half + 2.5 + rand() * 2;
+    const off = beck.halves[i] + 2.5 + rand() * 2;
     const px = x + (-(nz - z) / len) * off * side;
     const pz = z + ((nx - x) / len) * off * side;
-    if (clear(px, pz, 1.5) && inBog(px, pz) === 0 && !inSquare(px, pz)) add('rowan', px, pz, 0.85 + rand() * 0.3);
+    if (clear(px, pz, 1.5) && inBog(px, pz) === 0 && !inSquare(px, pz) && !town(px, pz)) add('rowan', px, pz, 0.85 + rand() * 0.3);
   }
   // A stand of old hawthorns at the Long Stones.
   const { from, to } = MOOR.longStones;
@@ -1100,12 +1365,16 @@ function placePlants(
   }
   // Through the gap, on its saddle: the first dark cypresses of Sunreach.
   for (const [dx, z, sc] of [[-3.5, 574, 1.1], [2.5, 577, 0.9], [6, 573, 0.75]] as const) add('cypress', MOOR.gap.x + dx, z, sc);
-  // The rockfall: big rocks piled across the Sunreach road's end and the gap either side.
+  // The rockfall: big rocks piled across the Sunreach road's end and the gap either side, and scree spilled up its walls.
   const [ex, ez] = rockfall;
   for (let i = 0; i < MOOR.rockfall.count; i++) {
     const x = ex + (rand() - 0.5) * 2 * MOOR.rockfall.spread;
     const z = ez + 1 + rand() * 7;
     add('rock', x, z, MOOR.rockfall.scale[0] + rand() * (MOOR.rockfall.scale[1] - MOOR.rockfall.scale[0]));
+  }
+  for (let i = 0; i < 14; i++) {
+    const side = i % 2 ? 1 : -1;
+    add('scree', ex + side * (MOOR.gap.half + 2 + rand() * 6), ez - 6 + rand() * 14, 0.9 + rand() * 0.8);
   }
   return plants;
 }
