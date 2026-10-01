@@ -7,12 +7,15 @@
 // `teleport`). What it checks:
 //
 // 1. Oakvale is as it was: its four villagers, Hale and its camps stand from
-//    the start, and nobody placed by data is built there.
+//    the start, all drawn, and nobody placed by data is built there.
+//    (From Cairnford, 300 m off, Oakvale's own aren't drawn.)
 // 2. Walking into Cairnford, Brackenmoor's villagers are built as you come
 //    within 100 m, and stand on the ground at their spots.
 // 3. The goodwife strolls the square's east side; she stops and turns to you
 //    as you come close, and barks her first line, then her next on the next visit.
-// 4. Walking well away (back over the pass), they're dropped.
+// 4. Two fallen bodies, placed as a zone would (`fallen: true`), lie face
+//    down on the green, still, and aren't solid.
+// 5. Walking well away (back over the pass), they're dropped.
 //
 import { mkdirSync } from 'node:fs';
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
@@ -59,11 +62,18 @@ const standLooking = async (x, z, tx, tz, settle = 0.5) => {
   }
   await xrFrames(3);
 };
+/** How many of Oakvale's own out of doors (Hale, its villagers, its camps) are drawn, of how many. */
+const oakvalers = () =>
+  page.evaluate(() => {
+    const a = window.__descent.adventure;
+    const roots = [a.hale.root, ...a.villagers.all.filter((v) => !v.spot.interior).map((v) => v.root), ...a.camps.camps.filter((c) => !c.lazy && !c.plan.interior).map((c) => c.root)];
+    return { drawn: roots.filter((r) => r.visible).length, of: roots.length };
+  });
 const people = () =>
   page.evaluate(() =>
     window.__descent.people.built.map(({ plan, person }) => {
       const p = person.root.position;
-      return { id: plan.id, x: p.x, y: p.y, z: p.z, bark: person.bark.mesh.visible, attend: person.attend, ground: window.__descent.world.heightAt(p.x, p.z) };
+      return { id: plan.id, x: p.x, y: p.y, z: p.z, bark: person.bark?.mesh.visible, attend: person.attend, ground: window.__descent.world.heightAt(p.x, p.z) };
     }),
   );
 
@@ -96,6 +106,8 @@ check(oak.zone === 'forest', `in Oakvale (${oak.zone})`);
 check(oak.villagers.join() === 'innkeeper,smith,farmer,herbalist', `Oakvale's villagers: ${oak.villagers.join(', ')}`);
 check([...oak.camps].sort().join() === 'farm,lumberCamp,mine,patrol,watchtower', `Oakvale's camps stand from the start: ${oak.camps.join(', ')}`);
 check(oak.built === 0, `nobody placed by data built in Oakvale (${oak.built})`);
+const home = await oakvalers();
+check(home.drawn === home.of, `Oakvale's own all drawn in Oakvale (${home.drawn} of ${home.of})`);
 
 // 2. Over the pass and down into Cairnford's square: its people are built as you come near.
 await standLooking(5, 200, 38, 372);
@@ -106,6 +118,8 @@ built = await people();
 check(built.length === 2, `80 m from the square, both built: ${built.map((p) => p.id).join(', ')}`);
 for (const p of built) check(Math.abs(p.y - p.ground) < 0.01, `${p.id} stands on the ground (${p.y.toFixed(2)} vs ${p.ground.toFixed(2)})`);
 check((await page.evaluate(() => window.__descent.world.zone.id)) === 'brackenmoor', 'in Brackenmoor');
+const away = await oakvalers();
+check(away.drawn === 0, `Oakvale's own not drawn from Cairnford, 300 m off (${away.drawn} of ${away.of})`);
 
 // The square from its south side, both in view, once the zone's name has floated away.
 await standLooking(36, 382, 38, 366, 8);
@@ -136,7 +150,28 @@ await standLooking(d.x - 2, d.z + 1.2, d.x, d.z, 0.5);
 await shot('04-goodwife-bark');
 check(line, 'her bark shows over her head');
 
-// 4. Back over the pass: dropped.
+// 4. The fallen: two lying on the square's west side, as the diggers by the open barrow will.
+await page.evaluate(() =>
+  window.__descent.people.add([
+    { id: 'check-fallen-1', cast: 'goodwife', x: 27.5, z: 373.5, yaw: 2.2, fallen: true },
+    { id: 'check-fallen-2', cast: 'smith', x: 24.8, z: 371.2, yaw: -0.4, fallen: true },
+  ]),
+);
+await standLooking(28.5, 378.5, 26, 372, 1);
+const fallen = await page.evaluate(() =>
+  window.__descent.people.built
+    .filter(({ plan }) => plan.fallen)
+    .map(({ plan, person }) => {
+      const d = window.__descent;
+      const box = new person.rig.mesh.geometry.boundingBox.constructor().setFromObject(person.rig.mesh, true);
+      return { id: plan.id, low: box.min.y - d.world.heightAt(plan.x, plan.z), high: box.max.y - d.world.heightAt(plan.x, plan.z), still: !person.root.matrixAutoUpdate };
+    }),
+);
+check(fallen.length === 2, `both fallen built: ${fallen.map((f) => f.id).join(', ')}`);
+for (const f of fallen) check(f.low > -0.3 && f.high < 0.8 && f.still, `${f.id} lies still on the ground (${f.low.toFixed(2)} to ${f.high.toFixed(2)} m over it)`);
+await shot('05-fallen');
+
+// 5. Back over the pass: dropped.
 await standLooking(0, 60, 0, 0, 1);
 built = await people();
 check(built.length === 0, `back in Oakvale, nobody of Cairnford's built (${built.length})`);

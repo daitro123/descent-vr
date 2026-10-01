@@ -47,6 +47,8 @@ export function buildBrackenmoor(given?: MoorPlan): Zone {
     mine: null,
     villagers: [],
     people: MOOR_PEOPLE,
+    // The east gate on the Kingsroad will have 35 within 100 m (brackenmoor-inhabitants.md).
+    crowd: { near: 100, most: 35 },
     respawnPoints: [],
     pickups: [],
     chests: [],

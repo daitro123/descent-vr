@@ -45,8 +45,9 @@ describe("a chest's roll", () => {
   });
 
   it('keeps its gear within the loot levels', () => {
-    const r = rollChest(9, 'warrior', seeded(3));
-    expect(r.coins).toBe(45);
+    const level = CONFIG.loot.levels + 4;
+    const r = rollChest(level, 'warrior', seeded(3));
+    expect(r.coins).toBe(CONFIG.loot.chest.coins * level);
     expect(itemOf(r.items[0])!.level).toBe(CONFIG.loot.levels);
   });
 });
