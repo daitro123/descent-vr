@@ -21,7 +21,7 @@ import { MeshBuffer } from './terrain';
 let rippleTexture: Texture | null = null;
 
 /** 32×32 ripples: a mid tone with scattered light dashes, magnified crisp like every other texture. */
-function ripples(): Texture {
+export function ripples(): Texture {
   if (rippleTexture) return rippleTexture;
   const size = 32;
   const canvas = document.createElement('canvas');

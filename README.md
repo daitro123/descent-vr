@@ -1,6 +1,6 @@
 # Descent VR
 
-A single-player action RPG for VR that runs in the browser (Three.js + WebXR), growing into a WoW-style world of zones joined without loading screens. The plain URL is the **Adventure**: Oakvale, the starting zone, where Marshal Hale waits at the crossroads with a chain of three quests that take a new character from level 1 to 5, and south over the pass lies Brackenmoor, a small second zone you walk into without a loading screen (see [Playing Oakvale](#playing-oakvale), and `.scratch/oakvale-starting-zone/` for the spec and its tickets). The **arena** at `?arena` is the combat prototype that came first: one crypt hall, four enemy types including a boss, seven waves.
+A single-player action RPG for VR that runs in the browser (Three.js + WebXR), growing into a WoW-style world of zones joined without loading screens. The plain URL is the **Adventure**: Oakvale, the starting zone, where Marshal Hale waits at the crossroads with a chain of three quests that take a new character from level 1 to 5, and south over the pass lies Brackenmoor, a full second zone of moor, bog and fell round the market town of Cairnford that you walk into without a loading screen (its land and buildings only, so far) (see [Playing Oakvale](#playing-oakvale), and `.scratch/oakvale-starting-zone/` for the spec and its tickets). The **arena** at `?arena` is the combat prototype that came first: one crypt hall, four enemy types including a boss, seven waves.
 
 For why this stack, other options, and the pixel-art pipeline, see [docs/tech-research.md](docs/tech-research.md).
 
@@ -171,7 +171,7 @@ Only kills of the quest's own camp, made while it's active, count. Every kill pa
 
 **The village** is at work: the smith hammers at the anvil, the innkeeper polishes tankards behind the bar of the Golden Tankard and the farmer waits by the well, and each has a line for you as you pass that changes as the chain moves on. The inn and the house by the well open as you walk up to their doors, and you can walk in under the smithy's roof.
 
-**Brackenmoor**: the road climbs south out of Oakvale to the crest of a pass. Walk over it and the light, the haze and the wind blend into the moor's, "Brackenmoor" floats up and the game saves, all without a loading screen. Its road ends at a rockfall in the far hills, the way on to a later zone. Nothing lives there yet.
+**Brackenmoor**: the road climbs south out of Oakvale to the crest of a pass. Walk over it and the light, the haze and the wind blend into the moor's, "Brackenmoor" floats up and the game saves, all without a loading screen. The moor is about 480 by 440 m: the road runs down through Passfoot and Hob's Fold, over the Long Stones' ridge, to Cairnford, a grey stone market town at a three-arched bridge over the Brack Beck. West lie Turfmoss and the Blackmire's bog with its boardwalk, and Raven Scar's quarry in the fells; east, the landlord's walled green enclosure, Fellgate Hall and the Kingsroad's tollhouse, its gate shut toward Aldhaven; north-east, the barrows on the High Fells and Hollowhill's door; south-east, the beck runs out past Beck's Foot by the Fen road toward the Sallows; south, the Sunreach road ends at a rockfall in the Rockfall Gap. Nothing lives there yet (see the zone's spec, `zones/brackenmoor.md` in the project's files).
 
 ### Characters
 
@@ -273,7 +273,9 @@ src/
     crypt/           the crypt hall (world/arena.ts) as a map
     forest/          Oakvale, the starting zone: layout.ts is the plan (heights, roads, what stands where,
                      camps, places, colliders, unit tested); chunks.ts builds a 40 m chunk of it (in a worker)
-    brackenmoor/     Brackenmoor, the moor over the southern pass: its plan and chunk builder
+    brackenmoor/     Brackenmoor, the moor over the southern pass: its plan, buildings and chunk builder
+    decks.ts, lines.ts, props.ts, recolour.ts, waterSheet.ts  pieces any zone builds with: decks you walk on, roads laid into a height grid, building parts, Oakvale's plants recoloured, a water sheet
+    fenRoad.ts       the Fen road's seam between Brackenmoor and the Sallows, its heights fixed so either zone plans alone
   fx/                particles, sword trail, shockwaves, floating text, spatial synthesised SFX and ambience
   ui/                belt HUD and vignettes, enemy health bars, Hale's talk board, the quest tracker and arrow,
                      the zone's name, debug text panel, ?perf readout; the page before VR's characters and forms
@@ -298,6 +300,6 @@ src/
 ## Next steps (suggested)
 
 1. Play Oakvale on the Quest: the "For Tom, on the headset" list on ticket 38 says what to check.
-2. More of Brackenmoor past the rockfall, and the next zone after it.
+2. Brackenmoor's people, enemies and quests, and the zones past it.
 3. Loot drops with rolled stats.
 4. Real models (Blender or Blockbench, glTF) once the look is settled. The rig and pose system can drive them.
