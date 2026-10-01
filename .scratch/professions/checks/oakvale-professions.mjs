@@ -1339,7 +1339,7 @@ async function alchemist({ only = null } = {}) {
 }
 
 // ---------------------------------------------------------------- the budget (the whole-zone run's)
-const BUDGET = { calls: 300, triangles: 300_000, lights: 4 };
+const BUDGET = { calls: 300, triangles: 600_000, lights: 4 }; // triangles: CONFIG.streaming.budget.frame
 const measured = [];
 /** The frame's draw calls, triangles and shader programs, both eyes, looking each way in `yaws`: the worst of them. */
 async function measure(label, yaws) {
@@ -1725,7 +1725,7 @@ await outside();
 s = await look();
 for (const m of measured) {
   check(m.calls <= BUDGET.calls && m.lights <= BUDGET.lights, `${m.label}: ${m.calls} draw calls (about ${BUDGET.calls}), ${m.lights} point lights (at most ${BUDGET.lights})`);
-  note(`${(m.triangles / 1000).toFixed(1)}k triangles, ${m.triangles <= BUDGET.triangles ? 'within' : 'over'} the rule of thumb of 250k to 300k`);
+  note(`${(m.triangles / 1000).toFixed(1)}k triangles, ${m.triangles <= BUDGET.triangles ? 'within' : 'over'} the budget of 600k`);
 }
 for (const p of ['mining', 'smithing', 'herbalism', 'alchemy']) {
   check(t25[p] !== undefined, `${p}: learned at ${min(t0[p])}, Apprentice 25 at ${t25[p] !== undefined ? min(t25[p]) : 'never'}: ${t25[p] !== undefined ? min(t25[p] - t0[p]) : '-'} to 25`);

@@ -143,7 +143,7 @@ describe("the Sallows' land and water", () => {
     // From the landing along the main walkway, over the square, to the moot hall's island.
     const { landing, square, moot } = REEDHOLM;
     const walk: [number, number][] = [];
-    for (let x = landing.x + 2; x <= moot.x - 5; x += 0.25) walk.push([x, x < square.x + square.half ? 610.5 : 612]);
+    for (let x = landing.x + 2; x <= moot.x - 5; x += 0.25) walk.push([x, square.z]);
     expect(walksFreely(walk)).toBeNull();
     for (const [x, z] of walk.filter(([x]) => x > landing.x + 8 && x < moot.x - 7)) expect(plan.heightAt(x, z), `x ${x}`).toBeCloseTo(SALLOWS.deck, 6);
   });
@@ -241,13 +241,17 @@ describe('what stands in the Sallows', () => {
         const d = Math.min(...road.line.filter(([x, z]) => inside(x, z)).map(([x, z]) => Math.hypot(x - s.x, z - s.z)));
         expect(d - road.width / 2, `${s.kind} at (${s.x.toFixed(1)}, ${s.z.toFixed(1)}) by ${road.id}`).toBeGreaterThan(Math.min(s.w, s.d) / 2);
       }
-      // The forge stands on its own stone footing, the lanterns on the square.
+      // The forge stands on its own stone footing, the lanterns on the walkways' edges, the market's stalls and crates round the square's edges.
+      const square = plan.decks.find((d) => d.x === REEDHOLM.square.x && d.z === REEDHOLM.square.z);
       for (const deck of s.kind === 'forge' || s.kind === 'lanternPost' ? [] : plan.decks) {
         const dx = s.x - deck.x;
         const dz = s.z - deck.z;
         const lx = dx * Math.cos(deck.yaw) - dz * Math.sin(deck.yaw);
         const lz = dx * Math.sin(deck.yaw) + dz * Math.cos(deck.yaw);
-        expect(Math.abs(lx) < deck.hw && Math.abs(lz) < deck.hd, `${s.kind} at (${s.x.toFixed(1)}, ${s.z.toFixed(1)}) on a deck`).toBe(false);
+        const on = Math.abs(lx) < deck.hw && Math.abs(lz) < deck.hd;
+        // Well off the main walkway across the square's middle.
+        if ((s.kind === 'stall' || s.kind === 'crates') && deck === square) expect(on && Math.abs(s.z - REEDHOLM.square.z) < 4, `${s.kind} at (${s.x.toFixed(1)}, ${s.z.toFixed(1)}) in the square's way`).toBe(false);
+        else expect(on, `${s.kind} at (${s.x.toFixed(1)}, ${s.z.toFixed(1)}) on a deck`).toBe(false);
       }
     }
   });
@@ -302,11 +306,11 @@ describe("the Sallows' chunks", () => {
     }
   }, 60000);
 
-  it("keeps within the headset's budget: no full chunk over 16k triangles, stand-ins cheaper still", () => {
+  it("keeps within the headset's budget: no full chunk over the chunk budget's triangles, stand-ins cheaper still", () => {
     for (const key of sallowsChunks()) {
       const full = buildSallowsChunk(plan, key, 'full').position.length / 9;
       const standIn = buildSallowsChunk(plan, key, 'standIn').position.length / 9;
-      expect(full, key).toBeLessThan(16000);
+      expect(full, key).toBeLessThan(CONFIG.streaming.budget.chunk);
       expect(standIn, key).toBeLessThan(full);
     }
   }, 60000);

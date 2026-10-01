@@ -1091,6 +1091,12 @@ export const CONFIG = {
     // full chunk's trees are the far set too. Past where you can walk, in the ring
     // of chunks round the zone's edge, one tree in `thin` is kept.
     trees: { clearing: 6, thin: 2 },
+    // The triangle budget (docs/quest-3-browser-performance-budget.md), as
+    // renderer.info counts it in XR, both eyes: `frame` for a whole frame and
+    // `chunk` for one full-detail chunk. Doubled from 300k and 16k on Tom's call
+    // (2026-10-01) and not yet measured on the headset: the check is `?perf` at
+    // Oakvale's mine front holding 72 fps on the Quest.
+    budget: { frame: 600_000, chunk: 32_000 },
   },
 
   // The old mine (world/mine.ts): you're in it once you walk in through its

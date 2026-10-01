@@ -521,7 +521,7 @@ async function throughDeath() {
 }
 
 // ---------------------------------------------------------------- the budget
-const BUDGET = { calls: 300, triangles: 300_000, lights: 4 };
+const BUDGET = { calls: 300, triangles: 600_000, lights: 4 }; // triangles: CONFIG.streaming.budget.frame
 const measured = [];
 /**
  * The frame's draw calls, triangles and shader programs, both eyes, looking
@@ -950,7 +950,7 @@ let s = await look();
 for (const m of measured) {
   const { worst, calls } = m;
   check(calls <= BUDGET.calls && worst.lights <= BUDGET.lights, `${m.label}: ${calls} draw calls (about ${BUDGET.calls}), ${worst.lights} point lights (at most ${BUDGET.lights}), ${worst.programs} programs`);
-  note(`${(worst.triangles / 1000).toFixed(1)}k triangles, ${worst.triangles <= BUDGET.triangles ? 'within' : 'over'} the rule of thumb of 250k to 300k`);
+  note(`${(worst.triangles / 1000).toFixed(1)}k triangles, ${worst.triangles <= BUDGET.triangles ? 'within' : 'over'} the budget of 600k`);
 }
 {
   const now = await page.evaluate(() => window.__play.drops);
