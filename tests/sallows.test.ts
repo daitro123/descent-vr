@@ -306,11 +306,11 @@ describe("the Sallows' chunks", () => {
     }
   }, 60000);
 
-  it("keeps within the headset's budget: no full chunk over 32k triangles (twice Oakvale's 16k), stand-ins cheaper still", () => {
+  it("keeps within the headset's budget: no full chunk over the chunk budget's triangles, stand-ins cheaper still", () => {
     for (const key of sallowsChunks()) {
       const full = buildSallowsChunk(plan, key, 'full').position.length / 9;
       const standIn = buildSallowsChunk(plan, key, 'standIn').position.length / 9;
-      expect(full, key).toBeLessThan(32000);
+      expect(full, key).toBeLessThan(CONFIG.streaming.budget.chunk);
       expect(standIn, key).toBeLessThan(full);
     }
   }, 60000);

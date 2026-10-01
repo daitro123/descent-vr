@@ -1,8 +1,8 @@
 import type { BufferGeometry } from 'three';
 import { ModelBuilder, type PartOpts, type Vec3 } from '../../models/kit';
-import { mulberry32 } from '../forest/noise';
+import { lerp, mulberry32 } from '../forest/noise';
 import { AWNINGS, CITY_BUILD as C, DISTRICT_DOORS, HERALDRY as H, type District } from './palette';
-import { ALDHAVEN, deckHeight, type Piece } from './plan';
+import { ALDHAVEN, deckHeight, kingsDeck, type Piece } from './plan';
 
 // Aldhaven's buildings, landmarks and props, each in its own frame: origin on
 // the ground at its footprint's middle (the lowest corner's height), front
@@ -56,25 +56,67 @@ function window(b: ModelBuilder, x: number, y: number, d: number, face: 1 | -1, 
   const z = face * (d / 2 + 0.03);
   slab(b, w + 0.2, 0.12, 0.1, x, y - 0.12, z, C.limestoneShade);
   slab(b, w, h, 0.07, x, y, z, lit ? C.warmWindow : C.window, lit ? { glow: 0.55, jitter: 0 } : { jitter: 0.04 });
+  // Its frame, and the glazing bars that cross it in four lights.
+  const zf = face * (d / 2 + 0.05);
+  slab(b, w + 0.18, 0.1, 0.08, x, y + h - 0.03, zf, C.timber, { jitter: 0 });
+  for (const s of [-1, 1]) slab(b, 0.08, h, 0.08, x + s * (w / 2), y, zf, C.timber, { jitter: 0 });
+  const zb = face * (d / 2 + 0.075);
+  slab(b, 0.04, h, 0.04, x, y, zb, C.timber, { jitter: 0 });
+  slab(b, w, 0.04, 0.04, x, y + h * 0.58, zb, C.timber, { jitter: 0 });
 }
 
 /** A window on a side wall (`side` -1 west, 1 east) of a box w wide. */
 function sideWindow(b: ModelBuilder, z: number, y: number, w: number, side: 1 | -1, lit: boolean): void {
-  slab(b, 0.07, 1.1, 0.8, side * (w / 2 + 0.03), y, z, lit ? C.warmWindow : C.window, lit ? { glow: 0.55, jitter: 0 } : { jitter: 0.04 });
+  const h = 1.1;
+  slab(b, 0.1, 0.12, 1.0, side * (w / 2 + 0.03), y - 0.12, z, C.limestoneShade);
+  slab(b, 0.07, h, 0.8, side * (w / 2 + 0.03), y, z, lit ? C.warmWindow : C.window, lit ? { glow: 0.55, jitter: 0 } : { jitter: 0.04 });
+  const xf = side * (w / 2 + 0.05);
+  slab(b, 0.08, 0.1, 0.98, xf, y + h - 0.03, z, C.timber, { jitter: 0 });
+  for (const s of [-1, 1]) slab(b, 0.08, h, 0.08, xf, y, z + s * 0.4, C.timber, { jitter: 0 });
+  const xb = side * (w / 2 + 0.075);
+  slab(b, 0.04, h, 0.04, xb, y, z, C.timber, { jitter: 0 });
+  slab(b, 0.04, 0.04, 0.8, xb, y + h * 0.58, z, C.timber, { jitter: 0 });
 }
 
-/** A door on the front of a box d deep: its leaf, a lintel, a step. */
+/** A colour darkened by `f` (0 black, 1 as it was). */
+function shade(color: number, f: number): number {
+  return (Math.round(((color >> 16) & 255) * f) << 16) | (Math.round(((color >> 8) & 255) * f) << 8) | Math.round((color & 255) * f);
+}
+
+/** A door on the front of a box d deep: its planked, iron-strapped leaf in a stone frame, a lintel, a step. */
 function door(b: ModelBuilder, x: number, y: number, d: number, color: number, w = 1.2, h = 2.2, face: 1 | -1 = 1): void {
   const z = face * (d / 2 + 0.04);
   slab(b, w, h, 0.08, x, y, z, color);
   slab(b, w + 0.4, 0.22, 0.16, x, y + h, z, C.limestoneDark);
   slab(b, w + 0.5, 0.18, 0.5, x, y - 0.1, face * (d / 2 + 0.25), C.limestoneDark);
+  for (const s of [-1, 1]) slab(b, 0.16, h, 0.14, x + s * (w / 2 + 0.08), y, face * (d / 2 + 0.06), C.limestoneDark);
+  const zl = face * (d / 2 + 0.085);
+  const seam = shade(color, 0.6);
+  for (const s of [-1, 1]) slab(b, 0.03, h - 0.08, 0.02, x + (s * w) / 6, y, zl, seam, { jitter: 0 });
+  for (const yh of [0.4, h - 0.55]) slab(b, w * 0.75, 0.06, 0.02, x - face * w * 0.1, y + yh, zl + face * 0.005, C.iron, { jitter: 0 });
+  b.ball(0.05, { at: [x + face * w * 0.3, y + 1.05, face * (d / 2 + 0.11)], color: C.iron });
+}
+
+/**
+ * Steps down from a building's floor (y 0) to the street `drop` m below it,
+ * out from its front wall (d deep) in front of its door at `x`.
+ */
+function steps(b: ModelBuilder, x: number, d: number, drop: number, w: number, color: number = C.limestoneDark): void {
+  const n = Math.max(1, Math.round(drop / 0.2));
+  for (let k = 0; k < n; k++) {
+    const top = -(drop * k) / n;
+    slab(b, w, top + drop + 0.4, 0.34, x, -drop - 0.4, d / 2 + 0.66 + k * 0.32, color, { jitter: 0.08 });
+  }
+  // Cheeks either side.
+  for (const s of [-1, 1]) slab(b, 0.3, drop + 0.5, n * 0.32 + 0.2, x + s * (w / 2 + 0.15), -drop - 0.4, d / 2 + 0.5 + (n * 0.32) / 2, C.limestoneShade);
 }
 
 /** A chimney from inside the roof up past its ridge. */
 function chimney(b: ModelBuilder, x: number, z: number, from: number, to: number, color: number = C.limestoneShade): void {
   slab(b, 0.8, to - from, 0.8, x, from, z, color);
   slab(b, 0.95, 0.2, 0.95, x, to, z, C.basaltLight);
+  // Two clay pots on its cap.
+  for (const s of [-1, 1]) b.cyl(0.11, 0.14, 0.42, 6, { at: [x + s * 0.2, to + 0.41, z], color: 0xa0583a, jitter: 0.05 });
 }
 
 /** A painted sign on a wrought bracket, out from the front wall at `x`. */
@@ -125,41 +167,88 @@ function looks(district: District, rand: Rand): { stone: number; plaster: number
   };
 }
 
+/** The districts whose houses sometimes turn their gable to the street. */
+const GABLED: ReadonlySet<District> = new Set(['oldTown', 'market', 'harbour', 'guild']);
+
+/** Whether a house turns its gable to the street (decided by its seed, so its stand-in agrees). */
+export function gableFront(p: Pick<Piece, 'district' | 'seed' | 'w'>): boolean {
+  return GABLED.has(p.district) && p.w < 10 && p.seed % 5 < 2;
+}
+
 /**
  * A town house: a plinth (basalt in Old Town and the harbour, where the
  * Deepkings built first), a stone ground floor, jettied plaster floors over
  * it framed in dark timber, a steep slate roof and a chimney; a door, lit and
- * dark windows, and sometimes a shop's sign or awning.
+ * dark windows, and sometimes a shop's sign or awning. Some turn their gable
+ * to the street, a window in it; some have shutters in their door's colour,
+ * window boxes in flower, braces in their framing, dormers in their roofs.
  */
-function house(b: ModelBuilder, w: number, d: number, storeys: number, district: District, variant: number, rand: Rand): void {
+function house(b: ModelBuilder, w: number, d: number, storeys: number, district: District, variant: number, rand: Rand, footing = 4, gabled = false): void {
   const L = looks(district, rand);
   const plinth = 0.5;
   const ground = 3.0;
   const upper = 2.7;
-  slab(b, w + 0.2, 4 + plinth, d + 0.2, 0, -4, 0, L.plinth);
+  const jetty = 0.25;
+  const shutters = rand() < 0.5 ? L.doors[(variant + 1) % L.doors.length] : null;
+  const boxes = district !== 'harbour' && rand() < 0.35;
+  const braced = (district === 'oldTown' || district === 'market' || district === 'guild') && rand() < 0.55;
+  slab(b, w + 0.2, footing + plinth, d + 0.2, 0, -footing, 0, L.plinth);
   slab(b, w, ground, d, 0, plinth, 0, L.stone);
   let y = plinth + ground;
+  const flowers = [0xd84a3a, 0xd8b85a, 0x8a6aaa, 0xf0ece0, 0xe07a9a];
   for (let s = 1; s < storeys; s++) {
-    const jetty = 0.25;
+    const zf = d / 2 + jetty;
     slab(b, w + 0.1, upper, d + 2 * jetty, 0, y, 0, L.plaster);
     slab(b, w + 0.16, 0.2, d + 2 * jetty + 0.06, 0, y, 0, C.timber);
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) slab(b, 0.22, upper, 0.22, sx * (w / 2), y, sz * (d / 2 + jetty), C.timber);
-    for (const sz of [-1, 1]) {
-      const bays = Math.max(2, Math.round(w / 2.4));
-      for (let i = 1; i < bays; i++) slab(b, 0.14, upper, 0.08, -w / 2 + (i * w) / bays, y, sz * (d / 2 + jetty + 0.03), C.timber);
-    }
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) slab(b, 0.22, upper, 0.22, sx * (w / 2), y, sz * zf, C.timber);
     const n = Math.max(1, Math.floor(w / 2.4));
+    for (const sz of [-1, 1]) {
+      // Posts between the windows, never across one.
+      for (let i = 1; i < n; i++) slab(b, 0.14, upper, 0.08, -w / 2 + (i * w) / n, y, sz * (zf + 0.03), C.timber);
+      // Braces up from the corner posts.
+      if (braced) for (const sx of [-1, 1]) b.bar([sx * (w / 2 - 0.05), y + 0.2, sz * (zf + 0.04)], [sx * (w / 2 - 0.75), y + 1.05, sz * (zf + 0.04)], 0.12, 0.06, { color: C.timber, jitter: 0 });
+    }
     for (let i = 0; i < n; i++) {
       const x = -w / 2 + ((i + 0.5) * w) / n;
       window(b, x, y + 0.8, d + 2 * jetty, 1, rand() < 0.22);
       window(b, x, y + 0.8, d + 2 * jetty, -1, rand() < 0.15);
+      if (shutters !== null) for (const sx of [-1, 1]) slab(b, 0.34, 1.1, 0.05, x + sx * 0.6, y + 0.8, zf + 0.06, shutters, { jitter: 0.08 });
+      if (boxes) {
+        slab(b, 0.95, 0.2, 0.26, x, y + 0.56, zf + 0.15, C.plank);
+        for (const fx of [-0.25, 0.22]) slab(b, 0.3, 0.16, 0.18, x + fx, y + 0.76, zf + 0.15, rand() < 0.4 ? 0x5a8a40 : flowers[Math.floor(rand() * flowers.length)], { jitter: 0.15 });
+      }
     }
     if (d > 6 && rand() < 0.6) sideWindow(b, 0, y + 0.8, w + 0.1, rand() < 0.5 ? 1 : -1, rand() < 0.2);
     y += upper;
   }
-  const rise = Math.min(5.5, d * 0.62);
-  roof(b, w, d + (storeys > 1 ? 0.5 : 0), y, rise, 0.4, rand() < 0.2 ? C.slateLight : C.slate, storeys > 1 ? L.plaster : L.stone);
-  chimney(b, (variant % 2 ? -1 : 1) * (w / 2 - 0.6), (rand() - 0.5) * d * 0.3, y + rise * 0.4, y + rise + 1.0, L.stone === C.basaltLight ? C.basaltLight : C.limestoneShade);
+  const depth = d + (storeys > 1 ? 0.5 : 0);
+  const slate = rand() < 0.2 ? C.slateLight : C.slate;
+  const gable = storeys > 1 ? L.plaster : L.stone;
+  const stack = L.stone === C.basaltLight ? C.basaltLight : C.limestoneShade;
+  if (gabled) {
+    // The gable to the street: the ridge runs back from it, a window high in it.
+    const rise = Math.min(5.5, w * 0.62);
+    roof(b, w, depth, y, rise, 0.4, slate, gable, [0, 0, 0], true);
+    window(b, 0, y + rise * 0.22, depth, 1, rand() < 0.3, 0.7, 1.0);
+    slab(b, 0.16, 0.16, 0.9, 0, y + rise * 0.62, depth / 2 + 0.35, C.timber);
+    chimney(b, (variant % 2 ? -1 : 1) * (w / 4), -depth / 4, y + rise * 0.4, y + rise + 0.9, stack);
+  } else {
+    const rise = Math.min(5.5, d * 0.62);
+    roof(b, w, depth, y, rise, 0.4, slate, gable);
+    chimney(b, (variant % 2 ? -1 : 1) * (w / 2 - 0.6), (rand() - 0.5) * d * 0.3, y + rise * 0.4, y + rise + 1.0, stack);
+    // Dormers in the front slope of the steeper roofs.
+    if (rise >= 4 && w >= 7 && rand() < 0.5) {
+      const count = w >= 10 ? 2 : 1;
+      const zd = depth / 4 + 0.2;
+      const yd = y + rise * 0.5 - 0.35;
+      for (let k = 0; k < count; k++) {
+        const x = count === 1 ? (variant % 2 ? 1 : -1) * w * 0.15 : (k ? 1 : -1) * w * 0.24;
+        slab(b, 1.4, 1.5, 1.6, x, yd, zd, gable);
+        window(b, x, yd + 0.3, 2 * zd + 1.6, 1, rand() < 0.3, 0.7, 0.8);
+        b.taper(1.8, 1.9, 0.04, 1.9, 0.75, { at: [x, yd + 1.5, zd], color: slate, jitter: 0.08 });
+      }
+    }
+  }
   // The ground floor's front: a door, windows either side, a sign or an awning.
   const doorX = ((variant % 3) - 1) * (w / 4);
   door(b, doorX, plinth, d, L.doors[variant % L.doors.length]);
@@ -178,12 +267,13 @@ function house(b: ModelBuilder, w: number, d: number, storeys: number, district:
   if (rand() < 0.25) for (let i = 0; i < 2; i++) slab(b, 0.9, 0.25, 0.3, (i ? 1 : -1) * (w / 4), plinth + ground + 0.55, d / 2 + 0.45, C.plank);
 }
 
-/** A house as a stand-in: its body and its roof. */
-function farHouse(b: ModelBuilder, w: number, d: number, storeys: number, district: District, rand: Rand): void {
+/** A house as a stand-in: its body and its roof, its ridge the way the house's runs. */
+function farHouse(b: ModelBuilder, w: number, d: number, storeys: number, district: District, rand: Rand, gabled = false): void {
   const L = looks(district, rand);
   const top = 3.5 + 2.7 * (storeys - 1);
   slab(b, w + 0.2, top + 4, d + 0.4, 0, -4, 0, storeys > 1 ? L.plaster : L.stone);
-  b.taper(w + 0.8, d + 1, w + 0.8, 0.04, Math.min(5.5, d * 0.62), { at: [0, top, 0], color: C.slate });
+  if (gabled) b.taper(w + 0.8, d + 1, 0.04, d + 1, Math.min(5.5, w * 0.62), { at: [0, top, 0], color: C.slate });
+  else b.taper(w + 0.8, d + 1, w + 0.8, 0.04, Math.min(5.5, d * 0.62), { at: [0, top, 0], color: C.slate });
 }
 
 /** A warehouse: a stone ground floor, a timber upper floor, loading doors one above another, a hoist beam. */
@@ -610,7 +700,7 @@ function aldbridge(b: ModelBuilder, w: number, d: number): void {
     }
   }
   // Its abutments on either bank.
-  for (const s of [-1, 1]) slab(b, w, ALDHAVEN.quay + 3.5, 2, 0, -3.5, s * (half - 1), C.basalt);
+  for (const s of [-1, 1]) slab(b, w, ALDHAVEN.quay + 3.5 - 0.08, 2, 0, -3.5, s * (half - 1), C.basalt);
 }
 
 // ------------------------------------------------------------------ walls and gates
@@ -677,31 +767,82 @@ function waterGate(b: ModelBuilder, w: number, d: number, h: number): void {
   }
 }
 
-/** The Gorgegate: a fortified toll arch across the valley road at the gorge's mouth (along X), walls out to the cliffs. */
+/**
+ * The Gorgegate across the valley road where the Ald comes out of the gorge
+ * (along X, its front +Z to the north): twin towers either side of the way,
+ * the portcullis down and the gates shut behind it, curtain walls out to a
+ * round tower on the river's bank, and from it a chain boom sagging across the
+ * Ald to a ring in the far cliff. Shut: the road north waits on Greyfell.
+ */
 function gorgegate(b: ModelBuilder, w: number, d: number, h: number): void {
-  const gap = 8;
+  const gap = 7;
+  const half = w / 2;
+  const tx = gap / 2 + 3;
   for (const s of [-1, 1]) {
-    slab(b, 6, h + 6, 6, s * (gap / 2 + 3), -6, 0, C.limestoneShade);
-    pyramid(b, 6.6, 3.6, s * (gap / 2 + 3), h, 0, C.slateDark);
-    const wl = w / 2 - gap / 2 - 6;
-    slab(b, wl, h - 4 + 8, 3, s * (gap / 2 + 6 + wl / 2), -8, 0, C.limestoneDark);
-    merlons(b, wl, h - 4, 1.2, C.limestoneDark);
+    slab(b, 6, h + 8, 6, s * tx, -8, 0, C.limestoneShade);
+    slab(b, 6.4, 0.4, 6.4, s * tx, h, 0, C.limestoneDark);
+    pyramid(b, 6.6, 4, s * tx, h + 0.4, 0, C.slateDark);
+    for (const face of [-1, 1]) slab(b, 0.5, 1.4, 0.1, s * tx, h - 4, face * 3.05, C.window);
+    // The curtain wall out to the end tower, its walk crenellated on the outer face.
+    const from = tx + 3;
+    const len = half - 2 - from;
+    slab(b, len, h - 4 + 9, 3, s * (from + len / 2), -9, 0, C.limestoneDark);
+    merlons(b, len, h - 4, 1.2, C.limestoneDark);
+    b.cyl(2.4, 2.8, h + 8, 10, { at: [s * (half - 1.5), (h + 8) / 2 - 8, 0], color: C.limestoneShade });
+    ringMerlons(b, 2.4, h, 9, C.limestoneShade);
   }
-  slab(b, gap + 0.4, 4.5, d, 0, 6, 0, C.limestoneShade);
-  merlons(b, gap, 10.5, d / 2 - 0.3, C.limestoneShade, 1.8);
-  slab(b, gap + 0.3, 0.5, d + 0.2, 0, 5.6, 0, C.basalt);
-  slab(b, 1.6, 3.6, 0.06, 0, 6.4, d / 2 + 0.06, H.royalBlue);
-  slab(b, 1.6, 0.4, 0.08, 0, 9.2, d / 2 + 0.08, H.gold);
-  // The toll bar, raised.
-  b.bar([-gap / 2 + 0.5, 1.1, -d / 2 - 1], [-gap / 2 + 2.5, 5, -d / 2 - 1], 0.15, 0.15, { color: 0xc8c0a8 });
-  slab(b, 0.4, 1.2, 0.4, -gap / 2 + 0.5, 0, -d / 2 - 1, C.timber);
+  // Over the way: the arch's block, its machicolations, the crown's colours both ways.
+  slab(b, gap + 0.4, h - 7, d, 0, 7, 0, C.limestone);
+  merlons(b, gap, h, d / 2 - 0.3, C.limestone, 1.8);
+  merlons(b, gap, h, -d / 2 + 0.3, C.limestone, 1.8);
+  slab(b, gap + 0.4, 0.5, d + 0.2, 0, 6.6, 0, C.basalt);
+  for (const face of [-1, 1]) {
+    slab(b, 1.6, 3.4, 0.06, 0, 7.6, face * (d / 2 + 0.06), H.royalBlue);
+    slab(b, 1.6, 0.4, 0.08, 0, 10.2, face * (d / 2 + 0.08), H.gold);
+  }
+  // The portcullis, down, in front of the shut gates.
+  const pz = d / 2 - 0.7;
+  for (let k = 0; k <= 10; k++) slab(b, 0.12, 6.6, 0.12, -gap / 2 + (k * gap) / 10, 0, pz, C.iron, { jitter: 0 });
+  for (let k = 1; k <= 7; k++) slab(b, gap, 0.1, 0.12, 0, k * 0.85, pz, C.iron, { jitter: 0 });
+  for (const s of [-1, 1]) {
+    slab(b, gap / 2 - 0.05, 6.4, 0.25, (s * gap) / 4, 0, 0, 0x5a3a22);
+    for (const y of [1.2, 3.2, 5.2]) slab(b, gap / 2 - 0.3, 0.18, 0.06, (s * gap) / 4, y, 0.15, C.iron, { jitter: 0 });
+  }
+  // The chain boom: from the end tower over the bank across the Ald, sagging nearly to the water, to its ring in the cliff.
+  const a: Vec3 = [half - 0.5, 0.2, 0.5];
+  const z: Vec3 = [half + 13, 1.2, 0.5];
+  const links = 14;
+  let prev = a;
+  for (let k = 1; k <= links; k++) {
+    const t = k / links;
+    const next: Vec3 = [a[0] + (z[0] - a[0]) * t, a[1] + (z[1] - a[1]) * t - 2.4 * 4 * t * (1 - t), a[2]];
+    b.bar(prev, next, 0.16, 0.16, { color: C.iron, jitter: 0 });
+    prev = next;
+  }
+  b.cyl(0.35, 0.35, 0.12, 8, { at: [z[0], z[1], z[2]], rot: [0, 0, PI / 2], color: C.iron });
+  slab(b, 1.6, 2.6, 1.6, z[0] + 0.6, z[1] - 2, z[2], C.granite);
 }
 
 /** A stretch of quay wall `w` long, its top at the quay's level (y 0), its face (+Z) to the water: basalt to the river bed, a limestone coping and a lip. */
-function quay(b: ModelBuilder, w: number, d: number): void {
+function quay(b: ModelBuilder, w: number, d: number, seed: number): void {
   slab(b, w, 5.2, d, 0, -6.4, 0, C.basalt);
   slab(b, w, 1.2, d, 0, -1.2, 0, C.limestoneShade);
   slab(b, w, 0.3, 0.4, 0, 0, -d / 2 + 0.25, C.limestoneDark);
+  // Its face to the water (-Z): every so often an iron ladder down to the boats, its rails bent over the coping;
+  // between them, mooring rings.
+  const face = -d / 2 - 0.06;
+  if (seed % 4 === 0) {
+    for (const s of [-1, 1]) {
+      slab(b, 0.05, 3.5, 0.05, s * 0.24, -2.9, face, C.iron, { jitter: 0 });
+      b.box(0.05, 0.05, 0.42, { at: [s * 0.24, 0.6, face + 0.19], color: C.iron, jitter: 0 });
+      slab(b, 0.05, 0.3, 0.05, s * 0.24, 0.3, face + 0.38, C.iron, { jitter: 0 });
+    }
+    for (let y = -2.6; y < 0.45; y += 0.3) b.box(0.48, 0.04, 0.04, { at: [0, y, face], color: C.iron, jitter: 0 });
+  } else if (seed % 4 === 2) {
+    // A ring on a staple, hanging.
+    b.box(0.08, 0.08, 0.08, { at: [0, -0.7, face + 0.02], color: C.iron, jitter: 0 });
+    for (const [x, y, r] of [[-0.1, -0.88, 0.6], [0.1, -0.88, -0.6], [0, -1.02, PI / 2]] as const) b.box(0.04, 0.2, 0.04, { at: [x, y, face - 0.02], rot: [0, 0, r], color: C.iron, jitter: 0 });
+  }
 }
 
 /** A low wall with a coping: the close's, the King's Garden's. */
@@ -720,8 +861,8 @@ function marketCross(b: ModelBuilder): void {
 }
 
 function stall(b: ModelBuilder, w: number, d: number, variant: number, rand: Rand): void {
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) slab(b, 0.12, sz > 0 ? 2.2 : 2.6, 0.12, sx * (w / 2 - 0.1), 0, sz * (d / 2 - 0.1), C.timber);
-  slab(b, w, 0.9, 0.7, 0, 0, d / 2 - 0.4, C.plank);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) slab(b, 0.12, (sz > 0 ? 2.2 : 2.6) + 0.4, 0.12, sx * (w / 2 - 0.1), -0.4, sz * (d / 2 - 0.1), C.timber);
+  slab(b, w, 1.3, 0.7, 0, -0.4, d / 2 - 0.4, C.plank);
   slab(b, w + 0.1, 0.08, 0.8, 0, 0.9, d / 2 - 0.4, 0x8a6a44);
   b.box(w + 0.4, 0.08, d + 0.5, { at: [0, 2.4, 0.05], rot: [0.2, 0, 0], color: AWNINGS[variant % AWNINGS.length] });
   const goods = [0xd8782a, 0x7aac5a, 0xc8a26a, 0x9e3a2b, 0xd8b85a, 0x6a8aa8];
@@ -835,7 +976,19 @@ function ship(b: ModelBuilder, w: number, d: number, variant: number): void {
   flag(b, 0, 2 + 13, d * 0.15, 1.2, [[H.ashby, H.royalBlue, H.ashby][variant % 3], [H.ashbyShip, H.gold, H.gold][variant % 3]]);
 }
 
-function boat(b: ModelBuilder, w: number, d: number): void {
+function boat(b: ModelBuilder, w: number, d: number, variant: number, rand: Rand): void {
+  if (variant === 1) {
+    // A river barge: a flat, low hull, its cargo under canvas, a little cabin aft, the steering oar.
+    b.taper(w * 0.85, d * 0.9, w, d, 0.9, { at: [0, -0.4, 0], color: C.tar });
+    slab(b, w + 0.05, 0.2, d, 0, 0.45, 0, 0x5a3a22);
+    slab(b, w - 0.4, 0.06, d - 0.6, 0, 0.42, 0, C.plank);
+    slab(b, w - 0.6, 1.4, 2.4, 0, 0.45, -d / 2 + 1.6, C.plank);
+    b.box(w - 0.3, 0.1, 2.8, { at: [0, 1.95, -d / 2 + 1.6], color: C.slateDark });
+    for (let k = 0; k < 3; k++) slab(b, 1.0 + rand() * 0.4, 0.7, 1.2, (rand() - 0.5) * 0.6, 0.45, -1 + k * 2.2, rand() < 0.5 ? C.plank : 0x8a6a44);
+    b.box(w - 0.6, 0.06, 4.8, { at: [0, 1.25, 1.2], rot: [0, 0, 0.05], color: C.canvas });
+    b.bar([0, 1.0, -d / 2 + 0.2], [0.3, 0.1, -d / 2 - 2.2], 0.12, 0.12, { color: C.timber });
+    return;
+  }
   b.taper(w * 0.55, d * 0.8, w, d, 0.6, { at: [0, -0.15, 0], color: 0x6a4a2a });
   slab(b, w * 0.8, 0.06, 0.25, 0, 0.32, 0, C.plank);
   b.bar([-0.3, 0.45, -0.4], [-1.4, 0.0, 0.6], 0.06, 0.06, { color: C.timber });
@@ -916,10 +1069,283 @@ function pondRim(b: ModelBuilder, w: number): void {
   }
 }
 
+/**
+ * The Kingsbridge: the Kingsroad's last stretch, three arches over the Ald to
+ * the Kingsgate (along X). Its deck follows the plan's line and hump
+ * (kingsDeck), so you walk on what you see; parapets either side, cutwaters on
+ * its piers against the current, a lantern on each end post.
+ */
+function kingsbridge(b: ModelBuilder, w: number, d: number): void {
+  const { x0, x1 } = ALDHAVEN.kingsbridge;
+  const mid = (x0 + x1) / 2;
+  const deck = (x: number) => kingsDeck(x + mid);
+  const half = w / 2;
+  const n = 14;
+  for (let k = 0; k < n; k++) {
+    const xa = -half + (k * w) / n;
+    const xb = -half + ((k + 1) * w) / n;
+    b.bar([xa, deck(xa) - 0.45, 0], [xb, deck(xb) - 0.45, 0], 0.9, d, { color: C.limestoneShade, jitter: 0.04 });
+    for (const s of [-1, 1]) b.bar([xa, deck(xa) + 0.45, s * (d / 2 - 0.2)], [xb, deck(xb) + 0.45, s * (d / 2 - 0.2)], 0.9, 0.4, { color: C.limestone });
+  }
+  // Piers down to the river bed, cutwaters up- and downstream; abutments into either bank.
+  const piers = [-3.6, 3.6];
+  const pierW = 2.2;
+  for (const x of piers) {
+    slab(b, pierW, deck(x) + 3.5, d - 0.2, x, -4, 0, C.basalt);
+    for (const s of [-1, 1]) b.box(1.6, 4.6, 1.6, { at: [x, -1.6, s * (d / 2 - 0.1)], rot: [0, PI / 4, 0], color: C.basalt });
+  }
+  for (const s of [-1, 1]) slab(b, 3.2, deck(s * (half - 1.6)) + 3.5, d, s * (half - 1.6), -4, 0, C.basalt);
+  // The arches: each opening's spandrels in slices, so the arch reads from the water.
+  const edges = [-half + 3.2, ...piers.flatMap((x) => [x - pierW / 2, x + pierW / 2]), half - 3.2];
+  for (let e = 0; e < edges.length; e += 2) {
+    const [e0, e1] = [edges[e], edges[e + 1]];
+    const c = (e0 + e1) / 2;
+    const r = (e1 - e0) / 2;
+    const slices = 7;
+    for (let i = 0; i < slices; i++) {
+      const x = e0 + ((i + 0.5) * (e1 - e0)) / slices;
+      const archY = 0.6 + Math.sqrt(Math.max(0, r * r - (x - c) ** 2)) * 0.9;
+      const top = deck(x) - 0.8;
+      if (top > archY) slab(b, (e1 - e0) / slices + 0.02, top - archY, d - 0.4, x, archY, 0, i === 0 || i === slices - 1 ? C.limestoneShade : C.limestone);
+      slab(b, (e1 - e0) / slices + 0.02, 0.3, d - 0.2, x, archY - 0.3, 0, C.limestoneDark);
+    }
+  }
+  // End posts, a lantern on each.
+  for (const ex of [-half + 0.3, half - 0.3]) {
+    for (const s of [-1, 1]) {
+      const y = deck(ex);
+      slab(b, 0.7, 1.5, 0.7, ex, y - 0.2, s * (d / 2 - 0.2), C.limestoneDark);
+      b.cyl(0.05, 0.06, 1.0, 5, { at: [ex, y + 1.8, s * (d / 2 - 0.2)], color: C.iron });
+      b.box(0.3, 0.38, 0.3, { at: [ex, y + 2.4, s * (d / 2 - 0.2)], color: C.warmWindow, glow: 1, jitter: 0 });
+      b.cone(0.26, 0.2, 4, { at: [ex, y + 2.68, s * (d / 2 - 0.2)], rot: [0, PI / 4, 0], color: C.iron });
+    }
+  }
+}
+
+/** Westwatch: the old beacon tower on the moor's last crest, a broken ring of grey stone, its fire basket long cold. */
+function beacon(b: ModelBuilder, w: number, h: number, rand: Rand): void {
+  const r = w / 2 - 0.6;
+  b.cyl(r + 0.7, r + 1.0, 4, 10, { at: [0, -1.4, 0], color: C.granite });
+  const n = 11;
+  for (let k = 0; k < n; k++) {
+    const a = (k / n) * PI * 2;
+    // Whole on the side towards the city (+X), fallen to stumps on the moor's.
+    const whole = 0.5 + 0.5 * Math.cos(a - PI / 2);
+    const top = 1.2 + (h - 1.2) * whole * (0.75 + rand() * 0.25);
+    if (top < 1.4 && rand() < 0.4) continue;
+    b.box((2 * PI * r) / n + 0.15, top + 1, 0.9, { at: [Math.sin(a) * r, top / 2 - 0.5, Math.cos(a) * r], rot: [0, a, 0], color: rand() < 0.5 ? C.granite : C.graniteDark, jitter: 0.12 });
+  }
+  // A window slit in the standing side, and the fire basket on its iron arm at the top.
+  b.box(0.3, 1.2, 0.2, { at: [r + 0.36, h * 0.6, 0], rot: [0, PI / 2, 0], color: C.window });
+  b.bar([r * 0.6, h - 0.6, 0], [r * 0.6 + 1.2, h + 0.6, 0], 0.12, 0.12, { color: C.iron, jitter: 0 });
+  b.cyl(0.6, 0.35, 0.6, 6, { at: [r * 0.6 + 1.3, h + 0.9, 0], color: C.iron });
+  // The fallen stones round its foot.
+  for (let k = 0; k < 9; k++) {
+    const a = PI + (rand() - 0.5) * 2.6;
+    const dd = r + 1 + rand() * 2.5;
+    b.box(0.6 + rand() * 0.7, 0.4 + rand() * 0.3, 0.5 + rand() * 0.5, { at: [Math.sin(a) * dd, 0.1, Math.cos(a) * dd], rot: [rand() * 0.4, rand() * PI, rand() * 0.3], color: rand() < 0.5 ? C.granite : C.graniteDark });
+  }
+}
+
+/** A length of the harbour mole (along Z, its top at y 0): basalt from the sea bed, paved, kerbed both sides, bollards along it; or its round head (variant 1). */
+function mole(b: ModelBuilder, w: number, d: number, variant: number): void {
+  if (variant === 1) {
+    const r = w / 2;
+    b.cyl(r, r + 0.6, 9.4, 14, { at: [0, -4.7, 0], color: C.basalt });
+    b.cyl(r - 0.1, r - 0.1, 0.2, 14, { at: [0, 0.0, 0], color: C.limestoneShade });
+    for (let k = 0; k < 14; k++) {
+      const a = (k / 14) * PI * 2;
+      b.box((2 * PI * r) / 14 + 0.05, 0.45, 0.45, { at: [Math.sin(a) * (r - 0.25), 0.3, Math.cos(a) * (r - 0.25)], rot: [0, a, 0], color: C.limestoneDark });
+    }
+    return;
+  }
+  slab(b, w, 9.4, d, 0, -9.4, 0, C.basalt, { jitter: 0.08 });
+  slab(b, w - 0.4, 0.2, d, 0, -0.1, 0, C.limestoneShade);
+  for (const s of [-1, 1]) slab(b, 0.45, 0.45, d, s * (w / 2 - 0.25), 0.05, 0, C.limestoneDark);
+  for (let z = -d / 2 + 3; z < d / 2 - 1; z += 7) {
+    b.cyl(0.2, 0.24, 0.6, 6, { at: [w / 2 - 0.8, 0.4, z], color: C.iron });
+    b.cyl(0.26, 0.26, 0.1, 6, { at: [w / 2 - 0.8, 0.7, z], color: C.iron });
+  }
+}
+
+/** A stone horse trough under a spout on its pillar, water in it. */
+function fountain(b: ModelBuilder, w: number, d: number, h: number): void {
+  slab(b, w, 0.8, d, 0, -0.2, 0, C.limestoneShade);
+  slab(b, w - 0.3, 0.05, d - 0.3, 0, 0.55, 0, 0x3e7f8c, { jitter: 0 });
+  slab(b, 0.7, h, 0.5, 0, -0.2, -d / 2 - 0.2, C.limestone);
+  b.box(0.3, 0.3, 0.4, { at: [0, h - 0.6, -d / 2 + 0.1], color: C.iron });
+  b.box(0.08, 0.6, 0.08, { at: [0, h - 1.0, -d / 2 + 0.3], color: 0x9ec8d0, jitter: 0 });
+}
+
+/** A low stone kerb. */
+function kerb(b: ModelBuilder, w: number, d: number): void {
+  slab(b, w, 0.62, d, 0, -0.5, 0, C.limestoneShade, { jitter: 0.1 });
+}
+
+/** A refugee's shelter: patched canvas over a ridge pole, its open end (+Z) dark. */
+function tent(b: ModelBuilder, w: number, d: number, h: number, rand: Rand): void {
+  const k = Math.floor(rand() * 3);
+  const cloth = [0xd6c8a4, 0xc9b88f, 0xbfae86][k];
+  b.taper(w + 0.25, d, 0.06, d, h + 0.35, { at: [0, -0.35, 0], color: cloth, jitter: 0.06 });
+  b.taper(w * 0.7, 0.05, 0.05, 0.05, h * 0.82, { at: [0, 0, d / 2 + 0.01], color: 0x2a2620, jitter: 0 });
+  // Its poles and ridge pole, and guy ropes out to pegs.
+  for (const z of [-d / 2 - 0.1, d / 2 + 0.1]) slab(b, 0.08, h + 0.2, 0.08, 0, 0, z, C.timber);
+  b.box(0.07, 0.07, d + 0.3, { at: [0, h + 0.02, 0], color: C.timber, jitter: 0 });
+  for (const s of [-1, 1]) {
+    b.bar([0, h + 0.1, s * (d / 2 + 0.1)], [0, 0, s * (d / 2 + 1.1)], 0.025, 0.025, { color: C.rope, jitter: 0 });
+    for (const t of [-0.3, 0.3]) b.bar([s * (w / 2 + 0.1) * 0.45, h * 0.55, t * d], [s * (w / 2 + 0.8), 0, t * d * 1.2], 0.025, 0.025, { color: C.rope, jitter: 0 });
+  }
+  // A patch sewn over a tear, flat on one slope.
+  const side = k === 1 ? -1 : 1;
+  const a = Math.atan2(h + 0.35, (w + 0.25) / 2);
+  const [px, py] = [(w + 0.25) / 4 + Math.sin(a) * 0.02, -0.35 + (h + 0.35) / 2 + Math.cos(a) * 0.02];
+  b.box(0.7, 0.03, 0.6, { at: [side * px, py, d * 0.1], rot: [0, 0, -side * a], color: [0x8a6a44, 0xa89470, 0x9a8a6e][k], jitter: 0 });
+}
+
+/** A bundle of someone's belongings: a tied sack and a box. */
+function bundle(b: ModelBuilder, rand: Rand): void {
+  b.ball(0.4, { at: [0, 0.3, 0], color: 0xb09a70, jitter: 0.1 });
+  b.box(0.05, 0.3, 0.05, { at: [0, 0.75, 0], color: C.rope });
+  slab(b, 0.5, 0.35, 0.4, 0.5, 0, 0.1, rand() < 0.5 ? C.plank : 0x8a6a44, { jitter: 0.03 });
+  for (const y of [0.1, 0.25]) slab(b, 0.52, 0.04, 0.42, 0.5, y, 0.1, C.iron, { jitter: 0 });
+}
+
+/** Fishing nets hung to dry on a pole frame. */
+function nets(b: ModelBuilder, w: number, h: number): void {
+  for (const s of [-1, 1]) slab(b, 0.12, h, 0.12, s * (w / 2), 0, 0, C.timber);
+  b.box(w + 0.3, 0.1, 0.1, { at: [0, h - 0.05, 0], color: C.timber });
+  // The nets hang in loose folds from the bar, half its height, the light through them (a mesh of thin cords).
+  const drop = h * 0.5;
+  for (let k = 0; k <= 12; k++) b.box(0.035, drop * (0.8 + 0.2 * Math.sin(k * 1.7)), 0.035, { at: [-w / 2 + 0.1 + (k * (w - 0.2)) / 12, h - 0.1 - (drop * (0.8 + 0.2 * Math.sin(k * 1.7))) / 2, 0.05], color: 0x9a8e70, jitter: 0 });
+  for (let k = 1; k <= 4; k++) b.box(w - 0.2, 0.035, 0.035, { at: [0, h - 0.1 - (k * drop * 0.8) / 4, 0.05], color: 0x8a7e62, jitter: 0 });
+  // Cork floats strung along the bottom cord.
+  for (let k = 0; k < 3; k++) b.ball(0.07, { at: [-w / 2 + (k + 1) * (w / 4), h - 0.1 - drop * 0.8, 0.08], color: 0xb88a4a });
+}
+
+/**
+ * A washing line across a street, from one upper floor to the one opposite:
+ * its piece's middle at the line's height, the line along X `w` long, rising
+ * `rise` from its west end to its east, sagging in the middle under shirts,
+ * sheets and hose pegged along it.
+ */
+function washing(b: ModelBuilder, w: number, rise: number, rand: Rand): void {
+  const sag = 0.25 + w * 0.03;
+  const end = (s: -1 | 1): Vec3 => [(s * w) / 2, (s * rise) / 2, 0];
+  const mid: Vec3 = [0, -sag, 0];
+  const yAt = (x: number) => (x < 0 ? lerp(-rise / 2, -sag, (x + w / 2) / (w / 2)) : lerp(-sag, rise / 2, x / (w / 2)));
+  b.bar(end(-1), mid, 0.025, 0.025, { color: C.rope, jitter: 0 });
+  b.bar(mid, end(1), 0.025, 0.025, { color: C.rope, jitter: 0 });
+  // The iron hooks it hangs from, out of each wall.
+  for (const s of [-1, 1] as const) b.box(0.3, 0.05, 0.05, { at: [s * (w / 2 + 0.05), (s * rise) / 2, 0], color: C.iron, jitter: 0 });
+  const CLOTHS = [0xf0ece0, 0xe8e0c8, 0xd8ccb0, 0x8aa0b8, 0xb85a4a, 0x6a8a5a, 0xd8b85a, 0x5a6a8a];
+  for (let x = -w / 2 + 0.6; x < w / 2 - 0.5; ) {
+    const kind = rand();
+    const cw = kind < 0.25 ? 0.9 + rand() * 0.4 : 0.4 + rand() * 0.25;
+    if (x + cw > w / 2 - 0.4) break;
+    if (rand() < 0.8) {
+      const cx = x + cw / 2;
+      const top = yAt(cx) - 0.02;
+      const color = CLOTHS[Math.floor(rand() * CLOTHS.length)];
+      const tilt = (yAt(x + cw) - yAt(x)) / cw;
+      if (kind < 0.25) {
+        // A sheet, long and pale.
+        b.box(cw, 0.7 + rand() * 0.3, 0.02, { at: [cx, top - 0.4, 0], rot: [0, 0, Math.atan(tilt)], color: rand() < 0.7 ? 0xf0ece0 : color, jitter: 0.03 });
+      } else if (kind < 0.7) {
+        // A shirt: its body and its sleeves out either side.
+        b.box(cw * 0.8, 0.55, 0.03, { at: [cx, top - 0.3, 0], color, jitter: 0.03 });
+        b.box(cw * 1.3, 0.16, 0.03, { at: [cx, top - 0.1, 0], color, jitter: 0.03 });
+      } else {
+        // Hose, a pair hung by the feet.
+        for (const s of [-1, 1]) b.box(0.13, 0.5, 0.03, { at: [cx + s * 0.1, top - 0.26, 0], color, jitter: 0.03 });
+      }
+      for (const s of [-1, 1]) b.box(0.03, 0.08, 0.04, { at: [cx + (s * cw) / 2.6, top + 0.02, 0], color: 0x8a6a44, jitter: 0 });
+    }
+    x += cw + 0.15 + rand() * 0.3;
+  }
+}
+
+/** The dyers' vats: three wooden tubs of indigo, madder and weld. */
+function vats(b: ModelBuilder, w: number, variant: number): void {
+  const dyes = variant ? [0xc8a83a, 0x2c3e7a, 0x6a2a4a] : [0x2c3e7a, 0x8a2a2a, 0xc8a83a];
+  for (let k = 0; k < 3; k++) {
+    const x = -w / 2 + 0.7 + (k * (w - 1.4)) / 2;
+    b.cyl(0.65, 0.6, 0.95, 10, { at: [x, 0.45, 0], color: C.plank });
+    for (const y of [0.25, 0.75]) b.cyl(0.67, 0.67, 0.07, 10, { at: [x, y, 0], color: C.iron });
+    b.cyl(0.56, 0.56, 0.04, 10, { at: [x, 0.88, 0], color: dyes[k], jitter: 0 });
+  }
+  b.bar([-w / 2 + 0.7, 0.9, 0.4], [-w / 2 + 1.3, 1.6, 0.9], 0.06, 0.06, { color: C.timber });
+}
+
+/** A tanners' rack: a frame with hides stretched on it. */
+function rack(b: ModelBuilder, w: number, h: number, rand: Rand): void {
+  for (const s of [-1, 1]) slab(b, 0.12, h, 0.12, s * (w / 2), 0, 0, C.timber);
+  b.box(w + 0.2, 0.1, 0.1, { at: [0, h - 0.1, 0], color: C.timber });
+  for (let k = 0; k < 2; k++) {
+    const hide = [0x8a5a34, 0x9a6a3e, 0x7a4e2e][Math.floor(rand() * 3)];
+    b.box(w / 2 - 0.3, h * 0.55, 0.04, { at: [-w / 4 + (k * w) / 2, h * 0.62, 0.04], rot: [0, 0, (rand() - 0.5) * 0.1], color: hide, jitter: 0.1 });
+  }
+}
+
+/** A woodpile: split logs stacked between posts, under a plank lean-to. */
+function woodpile(b: ModelBuilder, w: number, d: number, h: number): void {
+  const rows = Math.max(2, Math.round(h / 0.32));
+  for (let r = 0; r < rows; r++) {
+    const n = Math.max(2, Math.round(w / 0.36));
+    for (let k = 0; k < n; k++) b.cyl(0.16, 0.16, d * 0.8, 5, { at: [-w / 2 + 0.2 + (k * (w - 0.4)) / (n - 1), 0.17 + r * 0.3, 0], rot: [PI / 2, 0, 0], color: k % 3 ? 0x8a6a44 : 0xb0905e, jitter: 0.15 });
+  }
+  for (const s of [-1, 1]) slab(b, 0.12, h + 0.5, 0.12, s * (w / 2 + 0.1), 0, -d / 2 + 0.1, C.timber);
+  b.box(w + 0.6, 0.08, d + 0.3, { at: [0, h + 0.45, 0], rot: [-0.25, 0, 0], color: C.plank });
+}
+
+/** A back-yard shed: plank walls, a door, a mono-pitch roof of slate or boards. */
+function shed(b: ModelBuilder, w: number, d: number, h: number, variant: number): void {
+  const walls = [C.plank, 0x8a6a44, C.limestoneShade][variant % 3];
+  slab(b, w, h - 0.3, d, 0, -0.3, 0, walls);
+  slab(b, 0.9, 1.8, 0.06, -w / 4, 0, d / 2 + 0.03, C.timber);
+  b.box(w + 0.4, 0.1, d + 0.5, { at: [0, h - 0.1, 0], rot: [-0.22, 0, 0], color: variant === 2 ? C.slate : 0x5e4630 });
+}
+
+/** A heap of sacks: grain, flour, wool. */
+function sacks(b: ModelBuilder, rand: Rand): void {
+  for (let i = 0; i < 4; i++) {
+    const x = (rand() - 0.5) * 1.0;
+    const z = (rand() - 0.5) * 1.0;
+    b.box(0.55, 0.42, 0.75, { at: [x, i === 3 ? 0.6 : 0.2, z], rot: [0, rand() * PI, 0], color: rand() < 0.5 ? C.canvas : 0xc8b898, jitter: 0.12 });
+  }
+}
+
+/** A spare anchor lying on the quay. */
+function anchor(b: ModelBuilder, w: number): void {
+  b.bar([-w / 2, 0.15, 0], [w / 2, 0.15, 0], 0.16, 0.16, { color: C.iron, jitter: 0 });
+  for (const s of [-1, 1]) b.bar([w / 2, 0.15, 0], [w / 2 - 0.4, 0.15, s * 0.6], 0.14, 0.14, { color: C.iron, jitter: 0 });
+  b.bar([-w / 2 + 0.25, 0.1, -0.5], [-w / 2 + 0.25, 0.1, 0.5], 0.12, 0.12, { color: C.timber });
+  b.cyl(0.22, 0.22, 0.06, 8, { at: [-w / 2 - 0.2, 0.06, 0], color: C.iron });
+}
+
+/** A stone planter by a door: herbs and flowers. */
+function planter(b: ModelBuilder, w: number, d: number, h: number, variant: number, rand: Rand): void {
+  slab(b, w, h, d, 0, 0, 0, variant === 1 ? C.basaltLight : C.limestoneShade);
+  slab(b, w - 0.2, 0.05, d - 0.2, 0, h, 0, C.soil);
+  const flowers = [0xd84a3a, 0xd8b85a, 0x8a6aaa, 0xf0ece0];
+  for (let k = 0; k < Math.round(w * 2); k++) {
+    b.ball(0.16 + rand() * 0.08, { at: [-w / 2 + 0.25 + rand() * (w - 0.5), h + 0.15, (rand() - 0.5) * (d - 0.4)], color: rand() < 0.5 ? 0x5a8a40 : flowers[Math.floor(rand() * flowers.length)] });
+  }
+}
+
 // ------------------------------------------------------------------ the one entry
 
 /** The kinds built the same near and far: the landmarks, the walls and gates, which make the city's skyline. */
-const SKYLINE: ReadonlySet<Piece['kind']> = new Set(['cathedral', 'keep', 'collegium', 'lighthouse', 'bridge', 'wall', 'tower', 'gatehouse', 'waterGate', 'gorgegate', 'quay', 'windmill', 'lowWall']);
+const SKYLINE: ReadonlySet<Piece['kind']> = new Set(['cathedral', 'keep', 'collegium', 'lighthouse', 'bridge', 'kingsbridge', 'beacon', 'mole', 'wall', 'tower', 'gatehouse', 'waterGate', 'gorgegate', 'quay', 'windmill', 'lowWall']);
+
+/** The big buildings, whose steps up from the street run wide. */
+const STEPS_WIDE: ReadonlySet<Piece['kind']> = new Set(['cathedral', 'keep', 'hall', 'townhouse', 'barracks', 'forge', 'stables', 'barn', 'warehouse']);
+
+/** Where a building's door is along its front (the house's model picks it by its variant). */
+function doorX(p: Piece): number {
+  if (p.kind === 'house') return ((p.variant % 3) - 1) * (p.w / 4);
+  if (p.kind === 'collegium') return -p.w / 2 + 4.5;
+  return 0;
+}
 
 /** The model of one piece in its own frame, at full detail or as a stand-in. */
 export function buildPiece(p: Piece, far = false): BufferGeometry {
@@ -934,11 +1360,11 @@ export function buildPiece(p: Piece, far = false): BufferGeometry {
       slab(b, 5.6, 6, 5.6, 0, 0, -1, C.plank);
       b.bar([0, p.h - 1, 1.2], [0, p.h + 1.5, 9.5], 0.45, 0.45, { color: C.timber });
       slab(b, 0.6, p.h - 1, 0.6, 0, 1, 1.6, C.timber);
-    } else farHouse(b, p.w, p.d, p.kind === 'house' || p.kind === 'warehouse' ? p.storeys : 3, p.district, rand);
+    } else farHouse(b, p.w, p.d, p.kind === 'house' || p.kind === 'warehouse' ? p.storeys : 3, p.district, rand, p.kind === 'house' && gableFront(p));
     return b.build();
   }
   switch (p.kind) {
-    case 'house': house(b, p.w, p.d, p.storeys, p.district, p.variant, rand); break;
+    case 'house': house(b, p.w, p.d, p.storeys, p.district, p.variant, rand, p.footing, gableFront(p)); break;
     case 'warehouse': warehouse(b, p.w, p.d, p.storeys, p.variant % 3, rand); break;
     case 'inn': inn(b, p.w, p.d, p.storeys, p.variant, rand); break;
     case 'hall': hall(b, p.w, p.d, p.variant, rand); break;
@@ -960,7 +1386,7 @@ export function buildPiece(p: Piece, far = false): BufferGeometry {
     case 'gatehouse': gatehouse(b, p.w, p.d, p.h); break;
     case 'waterGate': waterGate(b, p.w, p.d, p.h); break;
     case 'gorgegate': gorgegate(b, p.w, p.d, p.h); break;
-    case 'quay': quay(b, p.w, p.d); break;
+    case 'quay': quay(b, p.w, p.d, far ? 1 : p.seed); break;
     case 'lowWall': lowWall(b, p.w, p.d, p.h); break;
     case 'marketCross': marketCross(b); break;
     case 'stall': stall(b, p.w, p.d, p.variant, rand); break;
@@ -975,7 +1401,8 @@ export function buildPiece(p: Piece, far = false): BufferGeometry {
     case 'barrels': barrels(b, rand); break;
     case 'cart': cart(b); break;
     case 'ship': ship(b, p.w, p.d, p.variant); break;
-    case 'boat': boat(b, p.w, p.d); break;
+    case 'boat': boat(b, p.w, p.d, p.variant, rand); break;
+    case 'washing': washing(b, p.w, p.h, rand); break;
     case 'signpost': signpost(b, p.h, p.variant); break;
     case 'mapboard': mapboard(b); break;
     case 'banner': banner(b, p.h, p.variant); break;
@@ -983,6 +1410,22 @@ export function buildPiece(p: Piece, far = false): BufferGeometry {
     case 'haystack': haystack(b, p.w, p.h); break;
     case 'bollard': bollard(b); break;
     case 'pondRim': pondRim(b, p.w); break;
+    case 'kingsbridge': kingsbridge(b, p.w, p.d); break;
+    case 'beacon': beacon(b, p.w, p.h, rand); break;
+    case 'mole': mole(b, p.w, p.d, p.variant); break;
+    case 'fountain': fountain(b, p.w, p.d, p.h); break;
+    case 'kerb': kerb(b, p.w, p.d); break;
+    case 'tent': tent(b, p.w, p.d, p.h, rand); break;
+    case 'bundle': bundle(b, rand); break;
+    case 'nets': nets(b, p.w, p.h); break;
+    case 'vats': vats(b, p.w, p.variant); break;
+    case 'rack': rack(b, p.w, p.h, rand); break;
+    case 'woodpile': woodpile(b, p.w, p.d, p.h); break;
+    case 'shed': shed(b, p.w, p.d, p.h, p.variant); break;
+    case 'sacks': sacks(b, rand); break;
+    case 'anchor': anchor(b, p.w); break;
+    case 'planter': planter(b, p.w, p.d, p.h, p.variant, rand); break;
   }
+  if (p.drop) steps(b, doorX(p), p.d, p.drop, STEPS_WIDE.has(p.kind) ? Math.min(8, p.w * 0.4) : 1.8);
   return b.build();
 }

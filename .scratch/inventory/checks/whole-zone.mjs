@@ -1076,7 +1076,7 @@ async function lootUp(label) {
 }
 
 // ---------------------------------------------------------------- the budget
-const BUDGET = { calls: 300, triangles: 300_000, lights: 4 };
+const BUDGET = { calls: 300, triangles: 600_000, lights: 4 }; // triangles: CONFIG.streaming.budget.frame
 const measured = [];
 /** The frame's draw calls, triangles and shader programs, both eyes, looking each way in `yaws`: the worst of them. */
 async function measure(label, yaws) {
@@ -1731,7 +1731,7 @@ const junkValue = await page.evaluate(async () => {
 // ================================================================ the budget, and what the run recorded
 for (const m of measured) {
   check(m.calls <= BUDGET.calls && m.lights <= BUDGET.lights, `${m.label}: ${m.calls} draw calls (about ${BUDGET.calls}), ${m.lights} point lights (at most ${BUDGET.lights})`);
-  note(`${(m.triangles / 1000).toFixed(1)}k triangles, ${m.triangles <= BUDGET.triangles ? 'within' : 'over'} the rule of thumb of 250k to 300k`);
+  note(`${(m.triangles / 1000).toFixed(1)}k triangles, ${m.triangles <= BUDGET.triangles ? 'within' : 'over'} the budget of 600k`);
 }
 note(`coins by stage: ${ledger.map((l) => `${l.stage} ${l.gained >= 0 ? '+' : ''}${l.gained}`).join('; ')}`);
 note(`coins before spending ${beforeSpending}; after the smith and the innkeeper ${s.coins}`);

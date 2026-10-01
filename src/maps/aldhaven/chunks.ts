@@ -103,7 +103,8 @@ export function buildAldhavenChunk(plan: AldhavenPlan, key: ChunkKey, detail: De
   const region: Region = { ...bounds, owns: (x, z) => ownerOf(x, z, keys) === key };
   const raw = new MeshBuffer();
   addCityGround(raw, plan, region, !full);
-  if (full) addRoads(raw, plan.ground, plan.streets.filter((s) => s.dirt), region, CITY_GROUND.grass);
+  // The dirt roads outside the walls, but not over the bridges' decks: the stone shows there.
+  if (full) addRoads(raw, plan.ground, plan.streets.filter((s) => s.dirt), region, CITY_GROUND.grass, (x, z) => plan.deckAt(x, z) !== null);
 
   const m = new Matrix4();
   for (const p of plan.pieces) {
@@ -157,6 +158,8 @@ function addCityGround(raw: MeshBuffer, plan: AldhavenPlan, region: Region, coar
     mud: c(CITY_GROUND.mud),
     granite: c(CITY_GROUND.granite),
     graniteDark: c(CITY_GROUND.graniteDark),
+    yard: c(CITY_GROUND.yard),
+    yardDark: c(CITY_GROUND.yardDark),
   };
   const color = new Color();
   const tint = new Color();
@@ -169,6 +172,12 @@ function addCityGround(raw: MeshBuffer, plan: AldhavenPlan, region: Region, coar
       else color.copy(G.setts).lerp(valueNoise(x * 0.5, z * 0.5, 303) < 0.5 ? G.settsDark : G.settsLight, valueNoise(x * 1.3, z * 1.3, 305) * 0.6);
       // The setts' courses: a faint check, a cell to a stone.
       color.multiplyScalar(0.96 + 0.06 * (((Math.floor(x / 2) + Math.floor(z / 2)) & 1) as number));
+      // The streets' middles, worn darker by the wheels; the squares' and the quays' setts stay pale.
+      if (here.street) color.lerp(here.basalt ? G.basaltDark : G.settsDark, 0.3).multiplyScalar(0.97);
+    } else if (here.yard) {
+      // A back yard: packed earth, grass coming through at its edges.
+      color.copy(G.yard).lerp(G.yardDark, valueNoise(x * 0.7, z * 0.7, 321) * 0.7);
+      color.lerp(G.grass, smoothstep(0.55, 0.8, valueNoise(x * 0.35, z * 0.35, 323)) * 0.7);
     } else if (here.field) {
       const strip = Math.floor((z + 2 * Math.floor(x / 22)) / 7) & 1;
       color.copy(strip ? G.field : G.fieldGold).lerp(G.grass, valueNoise(x * 0.1, z * 0.1, 307) * 0.4);
@@ -178,8 +187,9 @@ function addCityGround(raw: MeshBuffer, plan: AldhavenPlan, region: Region, coar
     // Down to the water: sand, then mud; the beds under it mud.
     if (h < water + 1.0 && !here.paved) color.lerp(G.sand, smoothstep(water + 1.0, water + 0.2, h));
     if (h < water + 0.1) color.lerp(G.mud, smoothstep(water + 0.1, water - 0.8, h));
-    // Steep ground is rock: the gorge's granite, the river's banks.
-    color.lerp(tint.copy(G.granite).lerp(G.graniteDark, valueNoise(x * 0.05, z * 0.05, 311)), smoothstep(0.75, 0.5, ny));
+    // Steep ground is rock: the fells' and the escarpment's granite in its beds, the river's banks; grass holds on its ledges.
+    tint.copy(G.granite).lerp(G.graniteDark, valueNoise(x * 0.05, z * 0.05, 311)).multiplyScalar(0.9 + 0.12 * Math.sin(h * 1.7 + valueNoise(x * 0.1, z * 0.1, 313) * 3));
+    color.lerp(tint, smoothstep(0.78, 0.5, ny) * (0.55 + 0.45 * smoothstep(0.35, 0.6, valueNoise(x * 0.18, z * 0.18, 315))));
     return color.multiplyScalar(0.95 + jitter * 0.1);
   };
   const v = (i: number, j: number): [number, number, number] => [ground.x(i), ground.get(i, j), ground.z(j)];
