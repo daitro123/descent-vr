@@ -964,6 +964,41 @@ export const CONFIG = {
     walk: { speed: 1.1, pause: 4 }, // m/s strolling a route (each build has its own pace: human.ts `Gait`), s standing at each end
   },
 
+  // The animals a zone places (animals/herds.ts): built as you come near, as
+  // its villagers are, and sharing a body per look. Sheep graze about their
+  // home and scatter from you; dogs lie, trot about or follow; horses stand
+  // tethered. (Wolves are enemies: CONFIG.wolf.)
+  animals: {
+    most: 40, // animals built at once, the nearest: a sheep is about 300 triangles, a horse about 600
+    perFrame: 2, // built a frame as you walk: each look's first is a build, the rest share it
+    pad: 0.5, // m round an animal's body at bind that culls it out of view: room for its legs and neck to swing
+    speed: {
+      sheep: { walk: 0.45, run: 2.3 },
+      dog: { walk: 1.2, run: 3.2 },
+      horse: { walk: 1.0, run: 2.6 },
+    },
+    turn: 4, // rad/s an animal turns at its walk (twice that running)
+    radius: { sheep: 0.32, dog: 0.25, horse: 0.55 }, // m: how near another animal it stops, and the solid round a standing horse
+    // A flock grazes about its home: each sheep walks a few metres to a new
+    // patch, grazes `graze` s, and now and then lifts its head (`look`) and looks round.
+    flock: {
+      roam: 6, // m from home a sheep grazes, unless the plan says
+      graze: [5, 14] as const, // s at one patch
+      look: 0.25, // chance it looks up between patches
+      // A shy one runs from you once you're within `fear`, straight away, until
+      // it's `safe` off; it drifts back home only while you're well clear of it.
+      fear: 6,
+      safe: 11,
+      clear: 9, // m: how far you must be from home before they drift back to it
+      aside: 1.4, // m: a flock that isn't shy still steps out of your way this close
+    },
+    // A dog that follows: at a villager's heels, `heel` m behind; round a flock
+    // at its roam plus `round`; or you, a few steps from home (`you`) before it turns back.
+    follow: { heel: 1.4, round: 2.5, you: 8, close: 2.2 },
+    notice: 7, // m: a lying dog lifts its head to you, a tethered horse turns its head
+    sniff: [2, 4] as const, // s a trotting dog sniffs at each end of its round
+  },
+
   // The village's people at work (people/villagers.ts, people/work.ts): the
   // innkeeper behind the bar, the smith at the anvil, the farmer by the well.
   villagers: {

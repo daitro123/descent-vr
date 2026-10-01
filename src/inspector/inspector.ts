@@ -19,11 +19,13 @@ import {
 import { buildCharacter, type EnemyKind, type Family, type WeaponSpec } from '../models/characters';
 import { createModelMaterial, type ModelMaterial } from '../models/materials';
 import { buildPerson, PEOPLE, type PersonId } from '../models/people';
-import type { Rig } from '../models/rig';
+import { ANIMALS, type AnimalId } from '../models/animals';
+import { QuadRig } from '../models/quadruped';
+import type { AnyRig } from '../models/rig';
 import { XRInput } from '../player/input';
 import { TextPanel } from '../ui/panel';
 import { CAST, type CastId, Wardrobe } from '../people/cast';
-import { castClips, type Clip, clipsFor, type MutablePose, personClips } from './clips';
+import { animalClips, castClips, type Clip, clipsFor, type MutablePose, personClips } from './clips';
 
 // `?inspect`: a turntable for every character. One at a time on a plinth in
 // front of you, looping any of its animations with the game's timings, with a
@@ -36,7 +38,9 @@ export type InspectorEntry =
   /** A friendly character: Hale or one of Oakvale's villagers. */
   | { person: PersonId; label: string }
   /** One of the cast a zone places as a villager, beyond Oakvale's (people/cast.ts). */
-  | { cast: CastId; label: string };
+  | { cast: CastId; label: string }
+  /** One of the animals a zone places (models/animals.ts). */
+  | { animal: AnimalId; label: string };
 
 const VARIANTS = [0, 1, 2, 3, 4, 5];
 
@@ -55,6 +59,7 @@ export const ENTRIES: InspectorEntry[] = [
   { kind: 'brute', family: 'bandit', variant: 0, label: 'Bandit leader' },
   ...(Object.keys(PEOPLE) as PersonId[]).map((id) => ({ person: id, label: PEOPLE[id].label })),
   ...(Object.keys(CAST) as CastId[]).filter((id) => !(id in PEOPLE)).map((id) => ({ cast: id, label: CAST[id].label })),
+  ...(Object.keys(ANIMALS) as AnimalId[]).map((id) => ({ animal: id, label: ANIMALS[id].label })),
 ];
 
 export const SPEEDS = [1, 0.5, 0.25, 0.1];
@@ -70,7 +75,7 @@ const _a = new Vector3();
 const _b = new Vector3();
 
 interface Built {
-  rig: Rig;
+  rig: AnyRig;
   /** What it strikes with; friendly characters strike with nothing. */
   weapon: WeaponSpec | null;
   material: ModelMaterial;
@@ -151,6 +156,10 @@ export class Inspector {
       const material = createModelMaterial();
       if ('person' in e) b = { rig: buildPerson(e.person, material), weapon: null, material, clips: personClips(e.person) };
       else if ('cast' in e) b = { rig: new Wardrobe().dress(e.cast, material), weapon: null, material, clips: castClips(e.cast) };
+      else if ('animal' in e) {
+        const a = ANIMALS[e.animal];
+        b = { rig: new QuadRig(a.proportions, a.dress, material, a.seed), weapon: null, material, clips: animalClips(e.animal) };
+      }
       else {
         const { rig, weapon } = buildCharacter(e.kind, { material, family: e.family, variant: e.variant });
         b = { rig, weapon, material, clips: clipsFor(e.kind, e.family) };
