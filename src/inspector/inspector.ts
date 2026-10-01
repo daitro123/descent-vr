@@ -23,12 +23,14 @@ import { CRAWLER_LOOKS, type CrawlerLook } from '../models/crawler';
 import { CRITTER_LOOKS, type CritterLook } from '../models/critters';
 import { createModelMaterial, type ModelMaterial } from '../models/materials';
 import { buildPerson, PEOPLE, type PersonId } from '../models/people';
+import { ANIMALS, type AnimalId } from '../models/animals';
+import { QuadRig } from '../models/quadruped';
 import type { Rig } from '../models/rig';
 import { XRInput } from '../player/input';
 import { TextPanel } from '../ui/panel';
 import { CAST, type CastId, Wardrobe } from '../people/cast';
-import { castClips, type Clip, clipsFor, type MutablePose, personClips } from './clips';
 import { birdShowpiece } from './birds';
+import { animalClips, castClips, type Clip, clipsFor, type MutablePose, personClips } from './clips';
 import { crawlerShowpiece, critterShowpiece, type Moment, type Showpiece } from './creatures';
 
 // `?inspect`: a turntable for every character. One at a time on a plinth in
@@ -47,6 +49,8 @@ export type InspectorEntry =
   | { critter: CritterLook; label: string }
   /** A crawler: a leech or the adder (models/crawler.ts), crawling and fighting as a biter. */
   | { crawler: CrawlerLook; label: string }
+  /** One of the animals a zone places (models/animals.ts), on the four-legged skeleton. */
+  | { animal: AnimalId; label: string }
   /** A bird, alone on the turntable (models/bird.ts): a flock of one. */
   | { bird: BirdLookId; label: string };
 
@@ -62,7 +66,7 @@ const enemies = (Object.keys(FAMILIES) as Family[]).flatMap((family) => [
  * Every model the game builds: each enemy family's (the undead's grunts in
  * six helmet, cloth and weapon combos, the bandits' thugs in six looks and
  * weapons, and so on), then Marshal Hale and the villagers, then the rest of
- * the cast zones place, the critters and crawlers, and the birds.
+ * the cast zones place, the critters, crawlers and animals, and the birds.
  */
 export const ENTRIES: InspectorEntry[] = [
   ...enemies,
@@ -70,6 +74,7 @@ export const ENTRIES: InspectorEntry[] = [
   ...(Object.keys(CAST) as CastId[]).filter((id) => !(id in PEOPLE)).map((id) => ({ cast: id, label: CAST[id].label })),
   ...CRITTER_LOOKS.map((look) => ({ critter: look, label: look.charAt(0).toUpperCase() + look.slice(1) })),
   ...(Object.keys(CRAWLER_LOOKS) as CrawlerLook[]).map((look) => ({ crawler: look, label: CRAWLER_LOOKS[look].label })),
+  ...(Object.keys(ANIMALS) as AnimalId[]).map((id) => ({ animal: id, label: ANIMALS[id].label })),
   ...(Object.keys(BIRD_LOOKS) as BirdLookId[]).map((id) => ({ bird: id, label: BIRD_LOOKS[id].label })),
 ];
 
@@ -177,6 +182,7 @@ export class Inspector {
       if ('person' in e) b = this.rigged(buildPerson(e.person, material), null, material, personClips(e.person));
       else if ('cast' in e) b = this.rigged(new Wardrobe().dress(e.cast, material), null, material, castClips(e.cast));
       else if ('critter' in e) b = this.shown(critterShowpiece(e.critter, material), material);
+      else if ('animal' in e) b = this.animal(e.animal, material);
       else if ('crawler' in e) b = this.shown(crawlerShowpiece(e.crawler, material), material);
       else if ('bird' in e) b = this.shown(birdShowpiece(e.bird, material), material);
       else {
@@ -206,6 +212,32 @@ export class Inspector {
       },
       triangles: rig.triangles,
       height: rig.proportions.hipY / 0.92,
+    };
+  }
+
+  /** An animal on the four-legged skeleton (models/quadruped.ts), posed by its clips; no guides. */
+  private animal(id: AnimalId, material: ModelMaterial): Built {
+    const a = ANIMALS[id];
+    const rig = new QuadRig(a.proportions, a.dress, material, a.seed);
+    const clips = animalClips(id);
+    const pose = this.pose;
+    const geometry = rig.mesh.geometry;
+    if (!geometry.boundingBox) geometry.computeBoundingBox();
+    return {
+      object: rig.mesh,
+      rig: null,
+      weapon: null,
+      material,
+      clips,
+      play(i, t) {
+        const frame = clips[i].sample(t, pose);
+        rig.apply(frame.pose);
+        rig.setHipOffset(0, frame.hipY, 0);
+        return frame;
+      },
+      triangles: rig.triangles,
+      // Its top at bind (a horse's ears) against a skeleton grunt's 1.74 m, as the creatures'.
+      height: geometry.boundingBox!.max.y / 1.74,
     };
   }
 

@@ -53,6 +53,7 @@ export function buildSallows(given?: SallowsPlan): Zone {
     birds: SALLOWS_BIRDS,
     // The fog closes at 75 m anyway; Reedholm's landing will have 29 within it (sallows-inhabitants.md).
     crowd: { near: 80, most: 30 },
+    animals: [],
     respawnPoints: [],
     pickups: [],
     chests: [],

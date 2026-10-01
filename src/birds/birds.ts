@@ -1,12 +1,12 @@
 import { Group, type Material, Vector3 } from 'three';
 import { CONFIG } from '../config';
-import type { FlockPlan, Zone } from '../maps/types';
+import type { BirdFlockPlan, Zone } from '../maps/types';
 import { sharedModelMaterial } from '../models/materials';
 import { FlockMesh } from './flock';
 import { Bird } from './mover';
 import { BRAINS, type BirdCall, type Brain, callOf, type Surroundings, type You } from './ways';
 
-// The birds in the world: every zone's flocks (maps/types.ts `FlockPlan`),
+// The birds in the world: every zone's flocks (maps/types.ts `BirdFlockPlan`),
 // each one mesh and one draw call however many birds are in it. A flock is
 // built as you come within CONFIG.birds.near of where it keeps and dropped
 // once you've gone on, like the villagers (people/population.ts); when it's
@@ -45,7 +45,7 @@ export class Flock {
   private you: { x: number; z: number } = { x: 0, z: 0 };
 
   constructor(
-    readonly plan: FlockPlan,
+    readonly plan: BirdFlockPlan,
     readonly near: Surroundings,
     material: Material,
     private readonly hear: Hear,
@@ -144,7 +144,7 @@ class Seen implements You {
 
 /** One flock placed, built or not. */
 interface Slot {
-  readonly plan: FlockPlan;
+  readonly plan: BirdFlockPlan;
   readonly near: Surroundings;
   readonly you: Seen;
   flock: Flock | null;
@@ -167,12 +167,12 @@ export class Birds {
   }
 
   /** Take in a zone's flocks (as it's loaded), each living in `near`: none is built until you come near. */
-  add(flocks: readonly FlockPlan[], near: Surroundings): void {
+  add(flocks: readonly BirdFlockPlan[], near: Surroundings): void {
     for (const plan of flocks) this.slots.push({ plan, near, you: new Seen(near), flock: null, far: Infinity, rank: Infinity });
   }
 
   /** Every flock placed, built or not. */
-  get placed(): readonly FlockPlan[] {
+  get placed(): readonly BirdFlockPlan[] {
     return this.slots.map((s) => s.plan);
   }
 

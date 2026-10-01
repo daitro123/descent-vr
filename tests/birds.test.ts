@@ -7,7 +7,7 @@ import { perchesFor, perchSpots, type Surroundings, type You } from '../src/bird
 import { CONFIG } from '../src/config';
 import { BirdStand } from '../src/inspector/birds';
 import { MAPS } from '../src/maps/registry';
-import type { FlockPlan, Zone } from '../src/maps/types';
+import type { BirdFlockPlan, Zone } from '../src/maps/types';
 import { BIRD_BONE_COUNT, BIRD_LOOKS, type BirdLookId } from '../src/models/bird';
 
 // The birds (birds/): one small skeleton of ten bones, five families of looks
@@ -47,7 +47,7 @@ function live(flock: Flock, seconds: number, you: You, each?: (t: number) => voi
   }
 }
 
-const flockOf = (plan: Omit<FlockPlan, 'id'>, near = FLAT) => new Flock({ id: `test-${plan.ways}`, ...plan }, near, material, () => {});
+const flockOf = (plan: Omit<BirdFlockPlan, 'id'>, near = FLAT) => new Flock({ id: `test-${plan.ways}`, ...plan }, near, material, () => {});
 
 describe('the bird skeleton', () => {
   it('builds every look in code on ten bones, under 150 triangles a bird', () => {
@@ -279,7 +279,7 @@ describe('a flock of', () => {
 });
 
 describe('the birds in the world', () => {
-  const plans = (n: number): FlockPlan[] => Array.from({ length: n }, (_, i) => ({ id: `test-${i}`, ways: 'perch', birds: ['crow', 'crow'], x: i * 50, z: 0, r: 5, perches: [{ x: i * 50, y: 2, z: 0 }] }));
+  const plans = (n: number): BirdFlockPlan[] => Array.from({ length: n }, (_, i) => ({ id: `test-${i}`, ways: 'perch', birds: ['crow', 'crow'], x: i * 50, z: 0, r: 5, perches: [{ x: i * 50, y: 2, z: 0 }] }));
 
   it('builds no flock until you come near, then the nearest first, one a frame, one mesh each; and drops it once you’ve gone on', () => {
     const birds = new Birds(() => {}, material);

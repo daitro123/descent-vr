@@ -678,7 +678,7 @@ function crest(colour: number, plumes: number): Extras {
   };
 }
 
-/** Every bird a zone can place, by name (`FlockPlan.look`). */
+/** Every bird a zone can place, by name (`BirdFlockPlan.birds`). */
 export const BIRD_LOOKS = {
   pigeon: {
     label: 'Pigeon',

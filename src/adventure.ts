@@ -22,6 +22,7 @@ import { findMap } from './maps/registry';
 import type { Crowd, Respawn, StartingZone, Zone } from './maps/types';
 import { Hale } from './people/hale';
 import { type Population, worldPopulation } from './people/population';
+import { type Herds, worldHerds } from './animals/herds';
 import { Villagers } from './people/villagers';
 import { type AlchemyBench, standInHouse } from './professions/bench';
 import { PROFESSION_NAMES, type Profession, type ProfessionsEffects } from './professions/professions';
@@ -157,6 +158,9 @@ export class Adventure {
   private readonly peopleRoot: Object3D;
   /** Every zone's birds, flock by flock, built as you come near them (their root hidden with the outdoors). */
   readonly birds = new Birds((call, x, y, z) => sfx[call](new Vector3(x, y, z)));
+  /** Every zone's sheep, dogs and horses placed by data, built as you come near them. */
+  readonly herds: Herds;
+  private readonly herdsRoot: Object3D;
   /** Every zone's critters (hares, frogs, rats), living and drawn only near you. */
   readonly critters: Critters;
   /** The alchemy bench in the house by the well; null in a zone without the house. The herbalist at its end is a villager. */
@@ -473,6 +477,12 @@ export class Adventure {
     scene.add(this.peopleRoot, this.birds.root);
     this.world.stageWith(null, this.peopleRoot);
     this.world.stageWith(null, this.birds.root);
+    // And their animals.
+    const herds = worldHerds(this.world);
+    this.herds = herds.herds;
+    this.herdsRoot = herds.root;
+    scene.add(this.herdsRoot);
+    this.world.stageWith(null, this.herdsRoot);
     this.critters = new Critters(this.world, new BlobShadows(CONFIG.critters.most));
     scene.add(this.critters.root);
     this.world.stageWith(null, this.critters.root);
@@ -530,6 +540,7 @@ export class Adventure {
     this.camps.fill(_a.set(x, 0, z));
     this.people.fill(_a, this.crowdAt(_a));
     this.birds.fill(_a, this.birdsNear);
+    this.herds.fill(_a, this.crowdAt(_a));
     // Oakvale round where you stand, all at once behind the page, and compiled now rather than when
     // it first comes into view (the World does that with the first fill). A save made over the pass
     // loads there, in Brackenmoor's air, with Oakvale streaming in behind you.
@@ -568,6 +579,7 @@ export class Adventure {
   private populate(zone: Zone, lazy: boolean): void {
     this.people.add(zone.people);
     this.birds.add(zone.birds, surroundingsOf(zone));
+    this.herds.add(zone.animals);
     this.critters.add(zone.critters ?? []);
     if (lazy) this.camps.add(zone.camps, this.world, true);
   }
@@ -580,7 +592,7 @@ export class Adventure {
     this.world.update(dt, player.camera);
     // With a door shut behind you, what stands outside isn't drawn either.
     const outdoors = this.world.outdoorsShown;
-    this.pickups.root.visible = this.villagers.root.visible = this.peopleRoot.visible = this.birds.root.visible = this.critters.root.visible = this.chests.outdoors.visible = outdoors;
+    this.pickups.root.visible = this.villagers.root.visible = this.peopleRoot.visible = this.herdsRoot.visible = this.birds.root.visible = this.critters.root.visible = this.chests.outdoors.visible = outdoors;
     // The starting zone's own people, out of doors, are drawn from another zone only near, as anyone's are.
     this.hale.root.visible = outdoors && this.drawn(this.distance(this.hale.root.position));
     for (const v of this.villagers.all) if (!v.spot.interior) v.root.visible = this.drawn(this.distance(v.root.position));
@@ -653,6 +665,7 @@ export class Adventure {
     this.villagers.update(dt, you.head, this.state);
     this.people.update(dt, you.head, this.crowdAt(you.head));
     this.birds.update(dt, you.head, this.birdsNear);
+    this.herds.update(dt, you.head, this.crowdAt(you.head));
     if (outdoors) this.critters.update(dt, you.head);
     // Talking to the herbalist holds the bench off: it takes your hands once the talk ends.
     this.bench?.update(dt, this.fighting, this.herbalistBoard.isOpen);
@@ -1435,6 +1448,7 @@ export class Adventure {
     this.camps.fill(_a.set(x, 0, z));
     this.people.fill(_a, this.crowdAt(_a));
     this.birds.fill(_a, this.birdsNear);
+    this.herds.fill(_a, this.crowdAt(_a));
     this.world.fill(x, z);
     this.lastHp = this.player.hp;
     this.combat.clear();

@@ -1,4 +1,4 @@
-import type { FlockPlan, Perch } from '../types';
+import type { BirdFlockPlan, Perch } from '../types';
 
 // Aldhaven's birds (zones/aldhaven-inhabitants.md): pigeons in the market
 // and on the cathedral's forecourt, bursting up onto the cross, the stalls'
@@ -25,7 +25,7 @@ const awning = (x: number, foot: number, z: number, yaw: number): Perch => ({ x,
 const parapet = (a: number): Perch => ({ x: 570 + Math.sin(a) * 6.25, y: 2.93, z: 405 + Math.cos(a) * 6.25, yaw: a });
 const gallery = (a: number): Perch => ({ x: 570 + Math.sin(a) * 3.3, y: 22.8, z: 405 + Math.cos(a) * 3.3, yaw: a });
 
-export const ALDHAVEN_BIRDS: readonly FlockPlan[] = [
+export const ALDHAVEN_BIRDS: readonly BirdFlockPlan[] = [
   {
     id: 'aldhaven-market-pigeons',
     ways: 'flush',

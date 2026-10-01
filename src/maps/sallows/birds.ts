@@ -1,4 +1,4 @@
-import type { FlockPlan } from '../types';
+import type { BirdFlockPlan } from '../types';
 
 // The Sallows' birds (zones/sallows-inhabitants.md "Wildlife"): geese on the
 // landing's holm, herons and egrets standing alone in the shallows, mallards
@@ -8,12 +8,12 @@ import type { FlockPlan } from '../types';
 // or dry, the nearest shallows stand in. The bittern is Later.
 
 /** A grey heron (or a little egret) on its own in the shallows at (x, z). */
-const wader = (id: string, look: 'heron' | 'egret', x: number, z: number): FlockPlan => ({ id: `sallows-${id}`, ways: 'wade', birds: [look], x, z, r: 2 });
+const wader = (id: string, look: 'heron' | 'egret', x: number, z: number): BirdFlockPlan => ({ id: `sallows-${id}`, ways: 'wade', birds: [look], x, z, r: 2 });
 
 /** Four mallards, two drakes and two ducks, on the water round (x, z). */
-const mallards = (id: string, x: number, z: number, r: number): FlockPlan => ({ id: `sallows-${id}-mallards`, ways: 'swim', birds: ['mallard', 'mallardDuck', 'mallard', 'mallardDuck'], x, z, r });
+const mallards = (id: string, x: number, z: number, r: number): BirdFlockPlan => ({ id: `sallows-${id}-mallards`, ways: 'swim', birds: ['mallard', 'mallardDuck', 'mallard', 'mallardDuck'], x, z, r });
 
-export const SALLOWS_BIRDS: readonly FlockPlan[] = [
+export const SALLOWS_BIRDS: readonly BirdFlockPlan[] = [
   { id: 'sallows-landing-geese', ways: 'graze', birds: ['goose', 'goose', 'goose', 'goose', 'goose'], x: 356, z: 606, r: 3 },
 
   wader('heron-gibbet', 'heron', 315, 650),

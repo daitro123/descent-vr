@@ -158,6 +158,8 @@ async function startAdventure(
     people: adventure.people,
     /** Every zone's flocks placed by data: `birds.built` are those near you, `birds.cost` what they draw. */
     birds: adventure.birds,
+    /** Every zone's animals placed by data: `herds.built` are those near you. */
+    herds: adventure.herds,
     /** Every zone's critters: `critters.shown` are those drawn now, nearest first. */
     critters: adventure.critters,
     /** What the fighting has come to: hits, kills, blocks, bolts, freezes. */

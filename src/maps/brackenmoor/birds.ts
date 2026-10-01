@@ -1,4 +1,4 @@
-import type { FlockPlan } from '../types';
+import type { BirdFlockPlan } from '../types';
 
 // Brackenmoor's birds (zones/brackenmoor-inhabitants.md "Animals"): hens in
 // three of Cairnford's yards and gardens, red grouse in pairs down in the
@@ -7,9 +7,9 @@ import type { FlockPlan } from '../types';
 // the heron at Beck's Foot are sound only for now.
 
 /** A covey of two grouse at (x, z), hidden in the heather. */
-const covey = (n: number, x: number, z: number): FlockPlan => ({ id: `brackenmoor-grouse-${n}`, ways: 'covey', birds: ['grouse', 'grouse'], x, z, r: 1.5 });
+const covey = (n: number, x: number, z: number): BirdFlockPlan => ({ id: `brackenmoor-grouse-${n}`, ways: 'covey', birds: ['grouse', 'grouse'], x, z, r: 1.5 });
 
-export const MOOR_BIRDS: readonly FlockPlan[] = [
+export const MOOR_BIRDS: readonly BirdFlockPlan[] = [
   // Hens: pecking about a Kingsroad back yard, Granny Mott's garden gate and the green at Turfmoss.
   { id: 'brackenmoor-kingsroad-hens', ways: 'peck', birds: ['cock', 'hen', 'henSpeckled'], x: 75, z: 352, r: 3 },
   { id: 'brackenmoor-mott-hens', ways: 'peck', birds: ['hen', 'henBlack', 'henWhite'], x: 13.5, z: 418.5, r: 2.5 },

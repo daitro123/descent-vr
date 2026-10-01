@@ -52,6 +52,18 @@ _Avoid_: patrol (a patrol is a camp's), wander, path
 Someone placed lying dead where they fell, face down and still: they say nothing, never turn to you and aren't solid (the diggers by an open barrow). Not an enemy that's just been killed, which falls and sinks away.
 _Avoid_: corpse (a model family's look), body
 
+**Animal**:
+A sheep, dog or horse a zone places as its livestock and pets: it lives about its home and never fights. A wolf has the same body but is an enemy, in a camp.
+_Avoid_: critter (the small things underfoot), creature, mob
+
+**Herd**:
+The animals a zone places together at one home, with what they do there: a flock, a dog on its bed, a horse at its tether.
+_Avoid_: spawn, group, pack
+
+**Flock**:
+Sheep grazing about one home. A shy flock runs from you and drifts home once you've gone; one used to people only steps out of your way.
+_Avoid_: herd (any herd), mob
+
 **Bark**:
 A short line a friendly character says unasked as you walk near, shown as text over their head. It isn't a conversation, and what it says can change as the quest chain moves on.
 _Avoid_: greeting, gossip, chatter, speech bubble
@@ -108,6 +120,10 @@ _Avoid_: uniform, faction colours, team
 A human body's size and shape, and the walk that goes with it (its gait): average, stout, broad or big for grown men; woman; elder and elder woman, stooped; child.
 _Avoid_: body type, size
 
+**Four-legged body**:
+The one body every animal stands on, sheep, dogs, horses and wolves alike, each at its own size and shape and dressed per look. In the code, the quadruped skeleton.
+_Avoid_: animal rig, quadruped model
+
 **Gait**:
 How a build walks: the length of its step, its pace, how its arms swing and how far its feet roll heel to toe. A child takes quick short steps; an elder shuffles, slow and flat-footed.
 _Avoid_: walk style, locomotion
@@ -120,8 +136,8 @@ _Avoid_: worm model, snake rig
 A small creature that lives about its spot and never fights: a hare or rabbit that bolts zig-zagging, a frog that leaps into the water, a rat that scurries along its wall into a gap. Each comes back once you've been away a while. Not an enemy, and not a villager.
 _Avoid_: ambient animal, wildlife, mob
 
-**Flock**:
-Birds a zone places together, living one way: hens pecking about a yard, pigeons that burst up off a market square onto the stalls' awnings, a covey of grouse hidden in the heather, ravens each on its standing stone, gulls circling a harbour, ducks on a pond, a lone heron in the shallows. They take fright as you come near and come back once you've gone. A flock is drawn as one, however many birds are in it. Not an enemy, and not a critter.
+**Bird flock**:
+Birds a zone places together, living one way: hens pecking about a yard, pigeons that burst up off a market square onto the stalls' awnings, a covey of grouse hidden in the heather, ravens each on its standing stone, gulls circling a harbour, ducks on a pond, a lone heron in the shallows. They take fright as you come near and come back once you've gone. It is drawn as one, however many birds are in it. Not an animal (that's livestock and pets), not an enemy, and not a critter. Plain "flock" is the sheep's.
 _Avoid_: bird spawn, bird group, mob
 
 **Camp**:

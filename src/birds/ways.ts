@@ -1,5 +1,5 @@
 import { CONFIG } from '../config';
-import type { BirdWays, FlockPlan, Perch } from '../maps/types';
+import type { BirdWays, BirdFlockPlan, Perch } from '../maps/types';
 import { BIRD_LOOKS, type BirdFamily, type BirdLookId } from '../models/bird';
 import { type Act, type Bird, type Floor, type Footing, WADE } from './mover';
 
@@ -30,7 +30,7 @@ export interface You {
 
 /** What a flock's brain is given: its plan, its birds, where they are, and a way to call. */
 export interface FlockLife {
-  readonly plan: FlockPlan;
+  readonly plan: BirdFlockPlan;
   readonly birds: readonly Bird[];
   readonly near: Surroundings;
   /** `bird` calls: its look's own call, or `call`; `always` past the flock's gap between calls (a flush's clatter). */
@@ -57,7 +57,7 @@ export function callOf(look: BirdLookId): BirdCall | null {
 }
 
 /** How near you come (m) before a bird of `look` takes fright. */
-export function shyOf(look: BirdLookId, plan?: FlockPlan): number {
+export function shyOf(look: BirdLookId, plan?: BirdFlockPlan): number {
   const { shy } = CONFIG.birds;
   return plan?.shy ?? shy[look] ?? shy[BIRD_LOOKS[look].family];
 }
@@ -207,7 +207,7 @@ const FLED = 2;
 const BACK = 3;
 
 abstract class Life implements Brain {
-  protected readonly plan: FlockPlan;
+  protected readonly plan: BirdFlockPlan;
   protected readonly birds: readonly Bird[];
   protected readonly near: Surroundings;
   /** Each bird's state: PEACE, STARTLED, FLED or BACK, as the brain reads them. */
