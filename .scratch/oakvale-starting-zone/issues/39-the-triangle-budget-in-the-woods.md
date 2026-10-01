@@ -1,6 +1,6 @@
 # 39: The triangle budget in the woods
 
-**What to build:** Bring Oakvale's triangles in the open woods under the budget if the headset says they need it. After the spec's three cuts (ticket 38) the village measures 255k triangles over both eyes, but the crest looking north measures 318k arriving from the moor (364k teleporting there from the village, with more chunks held full by the hysteresis), and standing at the mine's front, the farm and the lumber camp 327k to 378k. Draw calls (at most 142) and point lights (4) are well within. The rule of thumb is 250k to 300k; the real limit is 72 fps on the Quest.
+**What to build:** Bring Oakvale's triangles in the open woods under the budget if the headset says they need it. After the spec's three cuts (ticket 38) the village measures 255k triangles over both eyes, but the crest looking north measures 318k arriving from the moor (364k teleporting there from the village, with more chunks held full by the hysteresis), and standing at the mine's front, the farm and the lumber camp 327k to 378k. Draw calls (at most 142) and point lights (4) are well within. The rule of thumb was 250k to 300k; on 2026-10-01 Tom doubled the budget to 600k over both eyes (`CONFIG.streaming.budget`), so every spot measured is now under it. The real limit is still 72 fps on the Quest, and the budget is unverified until the mine's front holds it.
 
 **Spec:** Implementation Decisions › Performance and the triangle budget. User stories 143 and 144.
 
