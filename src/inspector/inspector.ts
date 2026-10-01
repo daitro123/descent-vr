@@ -29,7 +29,8 @@ import { XRInput } from '../player/input';
 import { TextPanel } from '../ui/panel';
 import { CAST, type CastId, Wardrobe } from '../people/cast';
 import { animalClips, castClips, type Clip, clipsFor, type MutablePose, personClips } from './clips';
-import { crawlerShowpiece, critterShowpiece, type Moment, type Showpiece } from './creatures';
+import { crawlerShowpiece, critterShowpiece, type Moment, type Showpiece, wolfShowpiece } from './creatures';
+import { WOLF_COATS } from '../enemies/wolf';
 
 // `?inspect`: a turntable for every character. One at a time on a plinth in
 // front of you, looping any of its animations with the game's timings, with a
@@ -47,6 +48,8 @@ export type InspectorEntry =
   | { critter: CritterLook; label: string }
   /** A crawler: a leech or the adder (models/crawler.ts), crawling and fighting as a biter. */
   | { crawler: CrawlerLook; label: string }
+  /** A wolf in one of its coats (enemies/wolf.ts), trotting and fighting. */
+  | { wolf: number; label: string }
   /** One of the animals a zone places (models/animals.ts), on the four-legged skeleton. */
   | { animal: AnimalId; label: string };
 
@@ -70,6 +73,7 @@ export const ENTRIES: InspectorEntry[] = [
   ...(Object.keys(CAST) as CastId[]).filter((id) => !(id in PEOPLE)).map((id) => ({ cast: id, label: CAST[id].label })),
   ...CRITTER_LOOKS.map((look) => ({ critter: look, label: look.charAt(0).toUpperCase() + look.slice(1) })),
   ...(Object.keys(CRAWLER_LOOKS) as CrawlerLook[]).map((look) => ({ crawler: look, label: CRAWLER_LOOKS[look].label })),
+  ...Array.from({ length: WOLF_COATS }, (_, v) => ({ wolf: v, label: `Wolf v${v}` })),
   ...(Object.keys(ANIMALS) as AnimalId[]).map((id) => ({ animal: id, label: ANIMALS[id].label })),
 ];
 
@@ -179,6 +183,7 @@ export class Inspector {
       else if ('critter' in e) b = this.shown(critterShowpiece(e.critter, material), material);
       else if ('animal' in e) b = this.animal(e.animal, material);
       else if ('crawler' in e) b = this.shown(crawlerShowpiece(e.crawler, material), material);
+      else if ('wolf' in e) b = this.shown(wolfShowpiece(e.wolf, material), material);
       else {
         const { rig, weapon } = buildCharacter(e.kind, { material, family: e.family, variant: e.variant, named: e.named });
         b = this.rigged(rig, weapon, material, clipsFor(e.kind, e.family, e.named));

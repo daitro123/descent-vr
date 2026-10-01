@@ -93,7 +93,7 @@ How an enemy fights, and so what it tests in the player: the grunt (reading a sw
 _Avoid_: kind, type, class, AI
 
 **Family**:
-Who an enemy is, whatever its behaviour: the bandits, House Corvane's bailiffs, the Lantern Men, the undead, the drowned, the bog's beasts, leeches or adders. A bandit archer and an undead archer share a behaviour but not a family. A family wears one body, the human body, the skeleton, mud (the bog's beasts) or the crawler, and fields a look for each behaviour it fights with (leeches and adders only bite, the bog's beasts only fight as brutes). The drowned are the dead of Vellmar, skeletons stained peat brown, and their Warden is the Drowned Reeve.
+Who an enemy is, whatever its behaviour: the bandits, House Corvane's bailiffs, the Lantern Men, the undead, the drowned, the bog's beasts, leeches, adders or wolves. A bandit archer and an undead archer share a behaviour but not a family. A family wears one body, the human body, the skeleton, mud (the bog's beasts), the crawler or the four-legged body, and fields a look for each behaviour it fights with (leeches and adders only bite, the bog's beasts only fight as brutes, wolves only as grunts, springing at you from a few metres out and snapping at your legs up close). The drowned are the dead of Vellmar, skeletons stained peat brown, and their Warden is the Drowned Reeve.
 _Avoid_: faction, race, type
 
 **Named fighter**:

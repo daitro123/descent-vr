@@ -1,5 +1,5 @@
 import { Group, Mesh } from 'three';
-import { CONFIG } from '../config';
+import { type AttackConfig, CONFIG } from '../config';
 import {
   buildCrawler,
   CRAWLER_BONES,
@@ -19,6 +19,10 @@ import { type CritterFrame, type CritterLook, critterModel } from '../models/cri
 import type { ModelMaterial } from '../models/materials';
 import { blendPoses } from '../models/rig';
 import { hopAt } from '../world/critters';
+import { gait, gaitBob } from '../animals/poses';
+import { WOLF_BUILD } from '../models/animals';
+import { QUAD_BONES, type QuadPose } from '../models/quadruped';
+import { buildWolf, WOLF_DEAD, WOLF_HEIGHT, WOLF_IDLE, WOLF_MIDDLE, WOLF_STAGGER, WOLF_STRIDE, WOLF_SWING, wolfStrike } from '../enemies/wolf';
 
 // The inspector's creatures without the humanoid rig: the critters, each in
 // its still frames and moving as it does in a zone (world/critters.ts), and
@@ -37,7 +41,8 @@ export interface Showpiece {
   readonly triangles: number;
   /** Its height against a skeleton grunt's, for the label. */
   readonly height: number;
-  readonly clips: readonly { readonly name: string; readonly duration: number }[];
+  /** Its clips; an attack's carries it, for its glow and its timings on the label. */
+  readonly clips: readonly { readonly name: string; readonly duration: number; readonly attack?: AttackConfig }[];
   /** Show `clip` at `t` s into it. */
   play(clip: number, t: number): Moment;
 }
@@ -233,6 +238,106 @@ export function crawlerShowpiece(look: CrawlerLook, material: ModelMaterial): Sh
       const at = clips[i].at(t, out);
       rig.apply(at.pose);
       rig.setHipOffset(0, at.y, at.z);
+      return at.moment;
+    },
+  };
+}
+
+// ---------------------------------------------------------------- wolves
+
+interface WolfClip {
+  name: string;
+  duration: number;
+  attack?: AttackConfig;
+  /** Its pose `t` s in, how far up off the ground, how far rolled onto its side, and the moment for the label. */
+  at(t: number, out: Record<string, [number, number, number]>): { pose: QuadPose; y: number; roll: number; moment: Moment };
+}
+
+/** A wolf in its coat on the turntable, ready, trotting, biting, springing, reeling from a blow and dying, with the game's timings (Wolf, kinds.ts). */
+export function wolfShowpiece(variant: number, material: ModelMaterial): Showpiece {
+  const rig = buildWolf(variant, material);
+  const object = new Group();
+  object.add(rig.mesh);
+  const W = CONFIG.wolf;
+  const rate = (2 * Math.PI * W.speed) / WOLF_STRIDE;
+  const legs: Record<string, [number, number, number]> = {};
+  /** Ready, into `pose` over 0.3 s, held, and back. */
+  const hold = (name: string, pose: QuadPose, held: number): WolfClip => ({
+    name,
+    duration: REST + 0.3 + held + 0.5 + REST,
+    at: (t, out) => {
+      const u = t - REST;
+      const k = u < 0 ? 0 : u < 0.3 ? ease.smooth(u / 0.3) : u < 0.3 + held ? 1 : 1 - ease.smooth(clamp01((u - 0.3 - held) / 0.5));
+      return { pose: blendPoses(WOLF_IDLE, pose, k, out, QUAD_BONES), y: 0, roll: 0, moment: { phase: k >= 1 ? 'hold' : 'rest', telegraph: 0 } };
+    },
+  });
+  /** Ready, wound up (eased out), the blow (eased in, up off the ground by its leap), back to ready (smooth). */
+  const strike = (attack: AttackConfig): WolfClip => {
+    const poses = wolfStrike(attack);
+    const t1 = REST;
+    const t2 = t1 + attack.windup;
+    const t3 = t2 + attack.active;
+    const t4 = t3 + attack.recover;
+    return {
+      name: attack.pose,
+      duration: t4 + REST,
+      attack,
+      at: (t, out) => {
+        if (t < t1 || t >= t4) return { pose: WOLF_IDLE, y: 0, roll: 0, moment: { phase: 'rest', telegraph: 0 } };
+        if (t < t2) {
+          const k = clamp01((t - t1) / attack.windup);
+          return { pose: blendPoses(WOLF_IDLE, poses.windup, ease.out(k), out, QUAD_BONES), y: 0, roll: 0, moment: { phase: 'windup', telegraph: 0.3 + 1.2 * k * k } };
+        }
+        if (t < t3) {
+          const k = clamp01((t - t2) / attack.active);
+          const y = (attack.leap ?? 0) * Math.sin(Math.PI * k);
+          return { pose: blendPoses(poses.windup, poses.strike, ease.in(k), out, QUAD_BONES), y, roll: 0, moment: { phase: 'active', telegraph: 1.5 } };
+        }
+        const k = clamp01((t - t3) / attack.recover);
+        return { pose: blendPoses(poses.strike, WOLF_IDLE, ease.smooth(k), out, QUAD_BONES), y: 0, roll: 0, moment: { phase: 'recover', telegraph: 0 } };
+      },
+    };
+  };
+  const clips: WolfClip[] = [
+    { name: 'ready', duration: 2, at: () => ({ pose: WOLF_IDLE, y: 0, roll: 0, moment: { phase: 'ready', telegraph: 0 } }) },
+    {
+      name: 'trot',
+      duration: (2 * Math.PI) / rate,
+      at: (t, out) => {
+        for (const k of Object.keys(legs)) delete legs[k];
+        gait(t * rate, 1, WOLF_SWING, 1, legs);
+        for (const bone of QUAD_BONES) {
+          const r = WOLF_IDLE[bone];
+          const o = legs[bone];
+          out[bone] = [(r?.[0] ?? 0) + (o?.[0] ?? 0), (r?.[1] ?? 0) + (o?.[1] ?? 0), (r?.[2] ?? 0) + (o?.[2] ?? 0)];
+        }
+        return { pose: out as QuadPose, y: gaitBob(t * rate, 1, WOLF_BUILD), roll: 0, moment: { phase: 'trot', telegraph: 0 } };
+      },
+    },
+    ...W.attacks.map(strike),
+    hold('stagger', WOLF_STAGGER, W.staggerTime * 0.6),
+    {
+      name: 'die',
+      duration: 2.4,
+      at: (t, out) => {
+        const roll = (Math.PI / 2) * 0.95 * ease.in(clamp01(t / 0.8));
+        return { pose: blendPoses(WOLF_IDLE, WOLF_DEAD, ease.smooth(clamp01(t / 0.6)), out, QUAD_BONES), y: 0, roll, moment: { phase: t < 0.8 ? 'falling' : 'dead', telegraph: 0 } };
+      },
+    },
+  ];
+  const out: Record<string, [number, number, number]> = {};
+  return {
+    object,
+    triangles: rig.triangles,
+    height: WOLF_HEIGHT / 1.74,
+    clips,
+    play(i, t) {
+      const at = clips[i].at(t, out);
+      rig.apply(at.pose);
+      rig.setHipOffset(0, at.y, 0);
+      // Rolled onto its side as Wolf.updateDeath rolls it.
+      rig.mesh.rotation.z = at.roll;
+      rig.mesh.position.set(WOLF_MIDDLE * Math.sin(at.roll), 0.1 * Math.sin(at.roll), 0);
       return at.moment;
     },
   };
