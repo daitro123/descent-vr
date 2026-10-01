@@ -1,4 +1,4 @@
-import { type BufferGeometry, ConeGeometry, CylinderGeometry, IcosahedronGeometry } from 'three';
+import { BufferAttribute, BufferGeometry, ConeGeometry, CylinderGeometry, DodecahedronGeometry, IcosahedronGeometry } from 'three';
 import { ModelBuilder, type Vec3 } from '../../models/kit';
 import type { Plant, PlantKind } from './layout';
 import { mulberry32 } from './noise';
@@ -14,7 +14,7 @@ const PI = Math.PI;
 /** How many differently shaped and coloured copies of each kind to model. */
 const VARIANTS: Record<PlantKind, number> = {
   oak: 6, goldOak: 3, pine: 5, young: 3, bush: 4, rock: 5, grass: 3, flower: 6,
-  mushroom: 2, log: 2, stump: 1, reed: 3, lily: 2,
+  mushroom: 2, log: 2, stump: 1, reed: 3, lily: 2, fern: 3, crag: 4, meadow: 4, bloom: 6,
 };
 
 export type Prototypes = Record<PlantKind, BufferGeometry[]>;
@@ -80,6 +80,14 @@ function buildPlant(b: ModelBuilder, p: Plant, lite: boolean, variant: number): 
       return reeds(b, p, rand);
     case 'lily':
       return lily(b, p, rand);
+    case 'fern':
+      return fern(b, p, rand);
+    case 'crag':
+      return crag(b, p, rand);
+    case 'meadow':
+      return meadow(b, p, rand, variant);
+    case 'bloom':
+      return bloom(b, p, rand, FLOWERS[variant % FLOWERS.length]);
   }
 }
 
@@ -186,6 +194,55 @@ function grass(b: ModelBuilder, p: Plant, rand: () => number): void {
   }
 }
 
+/**
+ * A clump of long meadow grass: blades in two rings leaning out, a few gone
+ * dry at the top, and on every other variant a couple of seed stalks.
+ */
+function meadow(b: ModelBuilder, p: Plant, rand: () => number, variant: number): void {
+  const { x, y, z, scale: s, yaw } = p;
+  const blades = 7;
+  for (let i = 0; i < blades; i++) {
+    const outer = i >= 3;
+    const a = yaw + (outer ? (i - 3) * 1.57 + 0.6 : i * 2.09) + (rand() - 0.5) * 0.5;
+    const h = (outer ? 0.32 + rand() * 0.2 : 0.48 + rand() * 0.26) * s;
+    const lean = (outer ? 0.4 : 0.18) + rand() * 0.15;
+    const r = (outer ? 0.16 : 0.05) * s;
+    const g = new ConeGeometry(0.045 * s, h, 3, 1, true);
+    const shade = rand();
+    b.shape(g, {
+      at: [x + Math.cos(a) * (r + Math.sin(lean) * h * 0.5), y + (h / 2) * Math.cos(lean) - 0.03, z + Math.sin(a) * (r + Math.sin(lean) * h * 0.5)],
+      rot: [Math.sin(a) * lean, 0, -Math.cos(a) * lean],
+      color: shade < 0.2 ? GREEN.grassDry : shade < 0.55 ? GREEN.grassLight : shade < 0.85 ? GREEN.grass : GREEN.grassDark,
+      jitter: 0.1,
+    });
+  }
+  if (variant % 2 === 1) {
+    for (let k = 0; k < 2; k++) {
+      const a = yaw + k * PI + 0.8;
+      const h = (0.75 + rand() * 0.2) * s;
+      const lean = 0.12 + rand() * 0.1;
+      const out = Math.sin(lean) * h;
+      const rot: Vec3 = [Math.sin(a) * lean, 0, -Math.cos(a) * lean];
+      b.shape(new ConeGeometry(0.022 * s, h, 3, 1, true), { at: [x + Math.cos(a) * out * 0.5, y + h * 0.5 * Math.cos(lean), z + Math.sin(a) * out * 0.5], rot, color: GREEN.grassDry, jitter: 0 });
+      b.shape(new ConeGeometry(0.035 * s, 0.16 * s, 3, 1, true), { at: [x + Math.cos(a) * out, y + h * Math.cos(lean), z + Math.sin(a) * out], rot, color: CROP.wheatDark, jitter: 0.08 });
+    }
+  }
+}
+
+/** Wild flowers in the long grass: a few slender stems, each with a low head of petals. */
+function bloom(b: ModelBuilder, p: Plant, rand: () => number, color: number): void {
+  const { x, y, z, scale: s } = p;
+  for (let i = 0; i < 5; i++) {
+    const a = rand() * PI * 2;
+    const r = (0.04 + rand() * 0.16) * s;
+    const h = (0.24 + rand() * 0.2) * s;
+    const lean = (rand() - 0.5) * 0.3;
+    const [fx, fz] = [x + Math.cos(a) * r, z + Math.sin(a) * r];
+    b.shape(new ConeGeometry(0.012 * s, h, 3, 1, true), { at: [fx, y + h / 2, fz], rot: [lean, 0, 0], color: CROP.stem, jitter: 0.05 });
+    b.shape(new ConeGeometry(0.065 * s, 0.045 * s, 3, 1, true), { at: [fx, y + h * Math.cos(lean), fz + Math.sin(lean) * h * 0.5], rot: [lean, rand() * PI, 0], color, jitter: 0.08 });
+  }
+}
+
 function flowers(b: ModelBuilder, p: Plant, rand: () => number, color: number): void {
   const { x, y, z, scale: s } = p;
   for (let i = 0; i < 3; i++) {
@@ -243,4 +300,40 @@ function lily(b: ModelBuilder, p: Plant, rand: () => number): void {
   const { x, y, z, scale: s, yaw } = p;
   b.cyl(0.32 * s, 0.32 * s, 0.02, 7, { at: [x, y, z], rot: [0, yaw, 0], color: GREEN.lily, jitter: 0.08 });
   if (rand() < 0.4) b.box(0.08, 0.06, 0.08, { at: [x + 0.08, y + 0.04, z], color: 0xf0d0e0, jitter: 0 });
+}
+
+/** A fern: a ring of fronds rising from its middle and arching over, each leaf-shaped and folded along its rib. */
+function fern(b: ModelBuilder, p: Plant, rand: () => number): void {
+  const { x, y, z, scale: s, yaw } = p;
+  const n = 5 + Math.floor(rand() * 2);
+  for (let i = 0; i < n; i++) {
+    const len = (0.6 + rand() * 0.35) * s;
+    const w = (0.14 + rand() * 0.04) * s;
+    // Up from the middle at `rise`, bending over to droop at its tip.
+    const rise = 0.75 + rand() * 0.35;
+    const [mz, my] = [len * 0.45 * Math.cos(rise), len * 0.45 * Math.sin(rise)];
+    const [tz, ty] = [mz + len * 0.55 * Math.cos(rise - 1.05), my + len * 0.55 * Math.sin(rise - 1.05)];
+    const [B, L, R, M, T] = [[0, 0, 0], [-w, my, mz], [w, my, mz], [0, my + 0.035 * s, mz], [0, ty, tz]];
+    // Its upper face, wound to face up (the leaf's underside is never what you see).
+    const pts = [B, L, M, B, M, R, M, L, T, M, T, R].flat();
+    const g = new BufferGeometry();
+    g.setAttribute('position', new BufferAttribute(new Float32Array(pts), 3));
+    b.shape(g, { at: [x, y + 0.02, z], rot: [0, yaw + (i / n) * PI * 2 + rand() * 0.4, 0], color: pick(GREEN.fern, rand()), jitter: 0.1 });
+  }
+}
+
+/** A crag: two or three angular slabs of the hills' rock standing out of a slope, sunk well into it, some mossed. */
+function crag(b: ModelBuilder, p: Plant, rand: () => number): void {
+  const { x, y, z, scale: s, yaw } = p;
+  const n = 2 + Math.floor(rand() * 2);
+  for (let i = 0; i < n; i++) {
+    const g = new DodecahedronGeometry(1, 0);
+    const [w, h, d] = [(1.1 + rand() * 0.6) * s, (0.75 + rand() * 0.6) * s, (0.7 + rand() * 0.4) * s];
+    g.scale(w, h, d);
+    const a = yaw + i * 2.2 + rand() * 0.6;
+    const off = i === 0 ? 0 : (0.9 + rand() * 0.5) * s;
+    const at: Vec3 = [x + Math.cos(a) * off, y + h * (i === 0 ? 0.35 : 0.1), z + Math.sin(a) * off];
+    b.shape(g, { at, rot: [(rand() - 0.5) * 0.5, a + rand(), (rand() - 0.5) * 0.5], color: pick([EARTH.cliff, EARTH.rock, EARTH.rockDark], rand()), jitter: 0.1 });
+    if (i === 0 && rand() < 0.5) blob(b, w * 0.55, 0.3, [at[0], at[1] + h * 0.8, at[2]], GREEN.moss, a, 0.12);
+  }
 }

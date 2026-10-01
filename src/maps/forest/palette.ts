@@ -11,6 +11,7 @@ export const GREEN = {
   leafGold: [0xb08a2e, 0xc49c36, 0x9a7a2a, 0xa8642a] as const,
   pine: [0x2d5230, 0x355c36, 0x3e663a] as const,
   young: [0x6aa040, 0x7aaa46] as const,
+  fern: [0x4a7a2a, 0x568a30, 0x3f6c26] as const,
   reed: 0x7a8a3e,
   lily: 0x4f8a3a,
 } as const;
@@ -22,6 +23,7 @@ export const EARTH = {
   mud: 0x5e4a34,
   sand: 0x9a8a5e,
   soil: 0x5a3e28,
+  soilDark: 0x46301f,
   rock: 0x7f7a72,
   rockDark: 0x66625c,
   cliff: 0x6e6860,

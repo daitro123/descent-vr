@@ -126,21 +126,31 @@ describe("Oakvale's chunk builder", () => {
 
   it('builds the whole of Oakvale between its chunks, as the one mesh did: every building, field and tree once', () => {
     let triangles = 0;
-    for (const key of keys()) triangles += buildOakvaleChunk(plan, key, 'full').position.length / 9;
+    for (const key of keys()) {
+      const chunk = buildOakvaleChunk(plan, key, 'full').position.length / 9;
+      // None over the headset's budget for a chunk, the farm's (its wheat and pumpkins) the nearest.
+      expect(chunk, key).toBeLessThan(CONFIG.streaming.budget.chunk);
+      triangles += chunk;
+    }
     // Before streaming, the forest's 49 chunk meshes held 264,304 triangles between them;
     // the pass's rocks and pines, opened to the crest (ticket 36), added 2,238. The triangle
     // budget's cuts (ticket 38: the far trees deep in the woods, the edge's mountains thinned)
     // take that 266,542 down to 214,824, and clearing what grew where the copper veins stand
     // (professions ticket 13) to 214,310, and where the clumps of herbs grow (ticket 14) to 213,811.
     // The Old North Pass (its slide, cairn, waymark and cart road, and the trees cleared off them) brings it to 215,629.
-    expect(triangles).toBe(215629);
+    // Oakvale's polish, with the budget doubled: footpaths to every door, worn yards, stream banks, ferns, crags on
+    // the ridge and the pass, the camps' and farms' props, wheat in sheaves, and long grass and wild flowers over
+    // the meadows bring it to 317,789 (the worst heading at the mine's front draws 544k over both eyes, of 600k).
+    expect(triangles).toBe(317789);
   }, 20000);
 
-  it("cuts the budget's triangles in the woods and on the edge's mountains, and leaves the village as it was", () => {
+  it("cuts the budget's triangles in the woods and on the edge's mountains, and spends the polish's on the village and the woods", () => {
     const triangles = (key: ChunkKey) => buildOakvaleChunk(plan, key, 'full').position.length / 9;
     // Before the cuts: the village's chunk 12,035, the woods north-west of it 8,493, the western mountains 2,062.
-    expect(triangles('0,0')).toBe(12035);
-    expect(triangles('-1,-1')).toBeLessThan(8493 * 0.97);
+    // The polish doubled the budget: the village's footpaths, yards, props and long grass take its chunk to 21,030,
+    // and the woods' ferns, the lumber camp's props and its long grass stay within twice the cut woods.
+    expect(triangles('0,0')).toBe(21030);
+    expect(triangles('-1,-1')).toBeLessThan(8493 * 0.97 * 2);
     expect(triangles('-3,0')).toBeLessThan(2062 * 0.75);
   }, 20000);
 

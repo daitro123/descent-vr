@@ -1,15 +1,16 @@
-import { type BufferGeometry, DodecahedronGeometry, Euler, IcosahedronGeometry, Matrix4, Vector3 } from 'three';
+import { BufferAttribute, BufferGeometry, Color, ConeGeometry, CylinderGeometry, DodecahedronGeometry, Euler, IcosahedronGeometry, Matrix4, Vector3 } from 'three';
 import { ModelBuilder, type PartOpts, type Vec3 } from '../../models/kit';
 import { PAL } from '../../models/palette';
 import type { Boulder, Deck, Field, ForestLayout, Structure } from './layout';
+import type { ClutterKind } from './dressing';
 import { HOUSE } from './house';
 import { INN } from './inn';
-import { COTTAGE_CHIMNEY, localToWorld, MAP_BOARD, NORTH_PASS, SIGNPOSTS, type SignpostPlan, standingStones, TENT, worldToLocal } from './layout';
+import { COTTAGE_CHIMNEY, FALLEN_STONE, localToWorld, MAP_BOARD, NORTH_PASS, SIGNPOSTS, type SignpostPlan, standingStones, TENT, worldToLocal } from './layout';
 import { MINE } from './mine';
 import { lerp, mulberry32 } from './noise';
 import { stump } from './nature';
 import { SMITHY } from './smithy';
-import { BUILD, CROP, EARTH, GREEN, WATER } from './palette';
+import { BUILD, CROP, EARTH, FLOWERS, GREEN, WATER } from './palette';
 
 // Buildings and set pieces, each authored in its own frame: origin on the
 // ground at the footprint's centre, front facing +Z. The caller turns and
@@ -55,6 +56,10 @@ export function buildStructure(s: Structure, ctx: StructureContext): BufferGeome
     case 'bridge': bridge(b, ctx.layout.bridge); break;
     case 'cairn': cairn(b, rand); break;
     case 'rockslide': rockslide(b, s, ctx.layout.slide); break;
+    case 'bench': case 'barrels': case 'butt': case 'crates': case 'woodpile': case 'sawhorse': case 'chopblock': case 'planks':
+    case 'timbers': case 'ore': case 'sacks': case 'coop': case 'wagon': case 'vegbed': case 'rack': case 'leanto':
+      clutter(b, s.kind, rand);
+      break;
   }
   return b.build();
 }
@@ -527,6 +532,13 @@ function lamp(b: ModelBuilder, ctx: StructureContext): void {
 }
 
 function cart(b: ModelBuilder): void {
+  cartBed(b);
+  crate(b, -0.3, -0.6, 0.6, 0.2, 0.84);
+  b.ball(0.3, { at: [0.35, 1.08, 0.4], color: BUILD.canvas }).ball(0.26, { at: [0.3, 1.05, -0.1], color: BUILD.canvas });
+}
+
+/** A two-wheeled cart, empty: its bed, sides, wheels and shafts. */
+function cartBed(b: ModelBuilder): void {
   b.box(1.5, 0.12, 2.5, { at: [0, 0.78, 0], color: BUILD.plank });
   for (const x of [-0.72, 0.72]) b.box(0.08, 0.4, 2.5, { at: [x, 1.0, 0], color: PAL.woodDark });
   b.box(1.5, 0.4, 0.08, { at: [0, 1.0, -1.22], color: PAL.woodDark });
@@ -536,8 +548,6 @@ function cart(b: ModelBuilder): void {
     b.bar([x * 0.55, 0.72, 1.1], [x * 0.45, 0.45, 2.7], 0.08, 0.08, { color: PAL.wood });
   }
   b.box(1.6, 0.08, 0.08, { at: [0, 0.52, -0.35], color: PAL.ironDark });
-  crate(b, -0.3, -0.6, 0.6, 0.2, 0.84);
-  b.ball(0.3, { at: [0.35, 1.08, 0.4], color: BUILD.canvas }).ball(0.26, { at: [0.3, 1.05, -0.1], color: BUILD.canvas });
 }
 
 // ------------------------------------------------------------------ the farm
@@ -628,19 +638,108 @@ function trough(b: ModelBuilder): void {
   for (const x of [-0.8, 0.8]) b.box(0.12, 0.2, 0.9, { at: [x, 0.1, 0], color: BUILD.timber });
 }
 
+/** A field's tilled bed: how far above the ground it's laid, how far it runs past its crops, and its furrows' spacing. */
+const BED = { lift: 0.05, margin: 0.4, furrow: 0.375, piece: 3.5 } as const;
+
+/**
+ * The bed a field's crops grow in: furrows along its rows (alternate ridges
+ * and troughs), its margin half grown over, laid over the ground in pieces up
+ * to `piece` m long (the fields lie on ground that's all but flat). Its edges
+ * are the field's own, square and straight, not the ground's triangles.
+ */
+function soilBed(b: ModelBuilder, f: Field, heightAt: (x: number, z: number) => number): void {
+  const { lift, margin, furrow, piece } = BED;
+  const across = (half: number, step: number) => {
+    const n = Math.max(1, Math.round((half * 2) / step));
+    return [-half - margin, ...Array.from({ length: n + 1 }, (_, i) => -half + (i * half * 2) / n), half + margin];
+  };
+  const [xs, zs] = [across(f.hw, piece), across(f.hd, furrow)];
+  const at = (lx: number, lz: number) => {
+    const [x, z] = localToWorld(f, lx, lz);
+    return [x, heightAt(x, z) + lift, z];
+  };
+  const ridge: number[] = [];
+  const trough: number[] = [];
+  const rim: number[] = [];
+  for (let j = 0; j < zs.length - 1; j++) {
+    for (let i = 0; i < xs.length - 1; i++) {
+      const edge = j === 0 || j === zs.length - 2 || i === 0 || i === xs.length - 2;
+      const [p, q, r, s] = [at(xs[i], zs[j]), at(xs[i + 1], zs[j]), at(xs[i], zs[j + 1]), at(xs[i + 1], zs[j + 1])];
+      (edge ? rim : j % 2 ? trough : ridge).push(...p, ...r, ...q, ...q, ...r, ...s);
+    }
+  }
+  const rimColour = new Color(EARTH.soil).lerp(new Color(GREEN.grass), 0.35).getHex();
+  for (const [pts, color] of [[ridge, EARTH.soil], [trough, EARTH.soilDark], [rim, rimColour]] as const) {
+    const g = new BufferGeometry();
+    g.setAttribute('position', new BufferAttribute(new Float32Array(pts), 3));
+    b.shape(g, { color, jitter: 0.05 });
+  }
+}
+
+/** Sheaves to each clump of wheat. */
+const WHEAT_SHEAVES = 3;
+
+/**
+ * A sheaf of wheat 1 m tall: a three-sided prism narrow at the foot and fanning
+ * out to a lid at its top (no floor: it stands in the soil).
+ */
+const SHEAF = (() => {
+  const ring = (r: number, y: number) => [0, 1, 2].map((k) => new Vector3(Math.cos((k * 2 * PI) / 3) * r, y, Math.sin((k * 2 * PI) / 3) * r));
+  const foot = ring(0.035, 0);
+  const top = ring(0.14, 1);
+  const pts: number[] = [];
+  const tri = (a: Vector3, b: Vector3, c: Vector3, out: Vector3) => {
+    const n = new Vector3().subVectors(b, a).cross(new Vector3().subVectors(c, a));
+    for (const v of n.dot(out) >= 0 ? [a, b, c] : [a, c, b]) pts.push(v.x, v.y, v.z);
+  };
+  for (let k = 0; k < 3; k++) {
+    const j = (k + 1) % 3;
+    const out = new Vector3().addVectors(top[k], top[j]).setY(0);
+    tri(foot[k], foot[j], top[k], out);
+    tri(foot[j], top[j], top[k], out);
+  }
+  tri(top[0], top[1], top[2], new Vector3(0, 1, 0));
+  const g = new BufferGeometry();
+  g.setAttribute('position', new BufferAttribute(new Float32Array(pts), 3));
+  return g;
+})();
+
 export function buildField(b: ModelBuilder, f: Field, heightAt: (x: number, z: number) => number): void {
   const rand = mulberry32(Math.floor(f.x * 31 + f.z * 17));
+  soilBed(b, f, heightAt);
   const place = (lx: number, lz: number): Vec3 => {
     const [x, z] = localToWorld(f, lx, lz);
-    return [x, heightAt(x, z), z];
+    return [x, heightAt(x, z) + BED.lift, z];
   };
   if (f.crop === 'wheat') {
+    // Rows of standing wheat with furrows showing between them, each row in clumps of their own height:
+    // sheaves of stalks narrow at the foot and fanning out to their tops, leaning this way and that,
+    // with the heavy ears standing up out of them.
+    const ear = new ConeGeometry(0.035, 0.2, 3, 1, true);
+    const shades = [CROP.wheat, CROP.wheatDark, 0xc9a548] as const;
     for (let lz = -f.hd + 0.4; lz <= f.hd - 0.3; lz += 0.75) {
-      for (let lx = -f.hw + 0.8; lx < f.hw; lx += 1.6) {
-        const [x, y, z] = place(lx, lz);
-        const h = 0.85 + rand() * 0.25;
-        b.box(1.55, h, 0.34, { at: [x, y + h / 2, z], rot: [0, f.yaw, 0], color: CROP.wheat, jitter: 0.1 })
-          .box(1.5, 0.14, 0.4, { at: [x, y + h + 0.03, z], rot: [0, f.yaw, 0], color: CROP.wheatDark, jitter: 0.1 });
+      for (let lx = -f.hw + 0.4; lx < f.hw; lx += 1) {
+        const [, y] = place(lx, lz);
+        const h = 0.75 + rand() * 0.25;
+        for (let k = 0; k < WHEAT_SHEAVES; k++) {
+          const [x, z] = localToWorld(f, lx + (k - (WHEAT_SHEAVES - 1) / 2) * 0.3 + (rand() - 0.5) * 0.08, lz + (rand() - 0.5) * 0.12);
+          const sh = h * (0.86 + rand() * 0.16);
+          const lean: Vec3 = [(rand() - 0.5) * 0.22, rand() * PI, (rand() - 0.5) * 0.22];
+          const g = SHEAF.clone();
+          g.scale(0.85 + rand() * 0.3, sh, 0.85 + rand() * 0.3);
+          b.shape(g, { at: [x, y - 0.02, z], rot: lean, color: shades[Math.floor(rand() * 3)], jitter: 0.1 });
+          // Its top, as tilted, and two ears out of it.
+          const top = new Vector3(0, sh, 0).applyEuler(new Euler(...lean));
+          for (let e = 0; e < 2; e++) {
+            const a = rand() * PI * 2;
+            b.shape(ear.clone(), {
+              at: [x + top.x + Math.cos(a) * 0.06, y + top.y + 0.05, z + top.z + Math.sin(a) * 0.06],
+              rot: [lean[0] + (rand() - 0.5) * 0.3, 0, lean[2] + (rand() - 0.5) * 0.3],
+              color: rand() < 0.5 ? CROP.wheat : 0xe2c870,
+              jitter: 0.08,
+            });
+          }
+        }
       }
     }
   } else if (f.crop === 'pumpkin') {
@@ -893,6 +992,45 @@ function stones(b: ModelBuilder, s: Structure, rand: () => number): void {
   for (let i = 0; i < 5; i++) {
     b.box(0.2, 0.02, 0.06, { at: [-0.7 + i * 0.35, 0.6, (i % 2) * 0.2 - 0.1], rot: [0, 0.4 + i, 0], color: PAL.rune, glow: 0.5, jitter: 0 });
   }
+  weathering(b, placed, rand);
+}
+
+/**
+ * What the years have done round the stones: lichen on their outer faces,
+ * rocks bedded at their feet, an eighth stone fallen long ago in the gap to
+ * the west, and wildflowers and a bowl left on the altar.
+ */
+function weathering(b: ModelBuilder, placed: readonly { lx: number; lz: number; h: number; tilt: readonly [number, number] }[], rand: () => number): void {
+  const p = new Vector3();
+  for (const st of placed) {
+    const yaw = Math.atan2(st.lx, st.lz);
+    const turn = new Matrix4().makeRotationFromEuler(new Euler(st.tilt[0], yaw, st.tilt[1]));
+    for (let k = 0; k < 3; k++) {
+      // Up the stone from its foot, 0.3 m underground (standingStone), on its outer face.
+      const v = 0.8 + rand() * (st.h - 1.3);
+      const depth = lerp(0.55, 0.4, v / st.h) / 2;
+      const across = lerp(0.95, 0.6, v / st.h) / 2;
+      p.set((rand() - 0.5) * across * 1.2, v, depth + 0.01).applyMatrix4(turn);
+      b.box(0.16 + rand() * 0.16, 0.1 + rand() * 0.14, 0.02, { at: [st.lx + p.x, p.y - 0.3, st.lz + p.z], rot: [st.tilt[0], yaw, st.tilt[1] + rand()], color: k === 2 ? 0xa8a476 : 0x98a07a, jitter: 0.15 });
+    }
+    for (const side of [-1, 1]) {
+      const a = yaw + side * (1.2 + rand() * 0.6);
+      const r = 0.16 + rand() * 0.12;
+      const g = new IcosahedronGeometry(r, 0);
+      g.scale(1, 0.6, 1);
+      b.shape(g, { at: [st.lx + Math.sin(a) * 0.62, r * 0.2, st.lz + Math.cos(a) * 0.62], rot: [rand(), rand() * 3, 0], color: side > 0 ? EARTH.rockDark : GREEN.moss });
+    }
+  }
+  // The fallen stone, half sunk in the turf, lying across the gap between two of the seven.
+  const { angle, r, length } = FALLEN_STONE;
+  const [cx, cz] = [Math.cos(angle) * r, Math.sin(angle) * r];
+  const along = angle + PI / 2;
+  const dir = [-Math.cos(along), Math.sin(along)];
+  b.taper(0.95, 0.55, 0.65, 0.42, length, { at: [cx - (dir[0] * length) / 2, -0.12, cz - (dir[1] * length) / 2], rot: [0, along, PI / 2], color: PAL.stone, jitter: 0.1 })
+    .box(1.1, 0.12, 0.5, { at: [cx, 0.38, cz], rot: [0, along + PI / 2, 0], color: GREEN.moss });
+  // On the altar: a wooden bowl and wildflowers.
+  b.cyl(0.15, 0.1, 0.08, 7, { at: [0.45, 0.63, -0.25], color: PAL.woodDark });
+  for (let i = 0; i < 6; i++) b.box(0.07, 0.04, 0.07, { at: [-0.75 + i * 0.22 + (rand() - 0.5) * 0.1, 0.61, 0.3 + (rand() - 0.5) * 0.2], rot: [0, rand() * PI, 0], color: FLOWERS[i % FLOWERS.length], jitter: 0 });
 }
 
 /**
@@ -979,5 +1117,171 @@ function bridge(b: ModelBuilder, deck: Deck): void {
   for (const z of [-hd, hd]) {
     const y = z < 0 ? 0 : y1 - y0;
     for (const side of [-1, 1]) b.box(0.5, 1.2, 0.5, { at: [side * (hw + 0.14), y + 0.35, z], color: PAL.stoneLight });
+  }
+}
+
+// ------------------------------------------------------------------ clutter (dressing.ts places it)
+
+function clutter(b: ModelBuilder, kind: ClutterKind, rand: () => number): void {
+  switch (kind) {
+    case 'bench':
+      b.box(1.7, 0.07, 0.38, { at: [0, 0.46, 0], color: BUILD.plank }).box(1.6, 0.06, 0.06, { at: [0, 0.4, 0.14], color: PAL.woodDark });
+      for (const x of [-0.68, 0.68]) b.box(0.08, 0.42, 0.34, { at: [x, 0.21, 0], color: PAL.woodDark });
+      return;
+    case 'barrels':
+      barrel(b, -0.38, 0.12);
+      barrel(b, 0.36, -0.12);
+      b.cyl(0.2, 0.18, 0.45, 8, { at: [-0.38, 1.08, 0.12], color: PAL.wood }).cyl(0.21, 0.21, 0.04, 8, { at: [-0.38, 1.18, 0.12], color: PAL.ironDark });
+      return;
+    case 'butt':
+      // A water butt under the eaves: open at the top, a tap near its foot.
+      b.cyl(0.36, 0.32, 0.95, 9, { at: [0, 0.475, 0], color: PAL.wood })
+        .cyl(0.37, 0.37, 0.05, 9, { at: [0, 0.22, 0], color: PAL.ironDark })
+        .cyl(0.37, 0.37, 0.05, 9, { at: [0, 0.74, 0], color: PAL.ironDark })
+        .cyl(0.31, 0.31, 0.02, 9, { at: [0, 0.96, 0], color: WATER.shallow, jitter: 0 })
+        .box(0.05, 0.05, 0.12, { at: [0, 0.16, 0.36], color: PAL.iron });
+      return;
+    case 'crates':
+      crate(b, -0.35, 0.05, 0.7, 0.1);
+      crate(b, 0.4, -0.05, 0.58, -0.25);
+      crate(b, -0.3, 0.02, 0.5, 0.5, 0.7);
+      return;
+    case 'woodpile':
+      return woodpile(b, rand);
+    case 'sawhorse':
+      return sawhorse(b);
+    case 'chopblock':
+      return chopblock(b, rand);
+    case 'planks':
+      for (const x of [-1.1, 0, 1.1]) b.box(0.12, 0.1, 0.8, { at: [x, 0.05, 0], color: PAL.woodDark });
+      for (let layer = 0; layer < 3; layer++) {
+        const y = 0.1 + layer * 0.12;
+        for (let k = 0; k < 3; k++) b.box(2.9, 0.05, 0.24, { at: [(rand() - 0.5) * 0.12, y + 0.025, -0.27 + k * 0.27], color: BUILD.plank, jitter: 0.1 });
+        if (layer < 2) for (const x of [-1.1, 0, 1.1]) b.box(0.04, 0.07, 0.8, { at: [x, y + 0.085, 0], color: PAL.woodDark });
+      }
+      return;
+    case 'timbers':
+      // Pit props for the galleries, stacked to season: beams, a pair across, beams.
+      for (const [layer, y] of [[0, 0.09], [1, 0.27], [2, 0.45]] as const) {
+        if (layer === 1) for (const x of [-1.05, 1.05]) b.box(0.18, 0.18, 1.0, { at: [x, y, 0], color: PAL.woodDark });
+        else for (const z of layer ? [-0.18, 0.18] : [-0.36, 0, 0.36]) b.box(2.6, 0.18, 0.18, { at: [(rand() - 0.5) * 0.15, y, z], color: PAL.wood, jitter: 0.1 });
+      }
+      return;
+    case 'ore':
+      return oreHeap(b, rand);
+    case 'sacks':
+      for (const [x, z, lying] of [[-0.28, 0.05, false], [0.3, -0.08, false], [0.05, 0.3, true]] as const) {
+        const g = new IcosahedronGeometry(0.3, 0);
+        if (lying) g.scale(1.25, 0.6, 0.8);
+        else g.scale(0.85, 1.2, 0.75);
+        b.shape(g, { at: [x, lying ? 0.17 : 0.34, z], rot: [0, rand() * PI, 0], color: BUILD.canvas, jitter: 0.08 });
+        if (!lying) b.cyl(0.07, 0.09, 0.1, 5, { at: [x, 0.7, z], color: BUILD.thatchDark });
+      }
+      return;
+    case 'coop':
+      return coop(b);
+    case 'wagon':
+      // The hay wagon: an empty cart, piled high.
+      cartBed(b);
+      b.box(1.4, 0.6, 2.3, { at: [0, 1.15, 0], color: BUILD.thatch, jitter: 0.12 }).box(1.15, 0.32, 1.9, { at: [0, 1.6, 0.05], rot: [0, 0.05, 0], color: BUILD.thatchDark, jitter: 0.12 });
+      return;
+    case 'vegbed':
+      return vegBed(b, rand);
+    case 'rack':
+      for (const x of [-0.7, 0.7]) b.box(0.09, 1.3, 0.09, { at: [x, 0.65, 0], color: PAL.woodDark });
+      b.box(1.6, 0.07, 0.09, { at: [0, 1.1, 0], color: PAL.wood }).box(1.6, 0.07, 0.25, { at: [0, 0.18, 0.05], color: PAL.wood });
+      for (let i = 0; i < 4; i++) {
+        const x = -0.5 + i * 0.33;
+        b.bar([x, 0.2, 0.12], [x + 0.03, 2.0, -0.07], 0.04, 0.04, { color: PAL.wood }).cone(0.05, 0.22, 4, { at: [x + 0.03, 2.1, -0.075], color: PAL.steel });
+      }
+      return;
+    case 'leanto':
+      // A lean-to: two tall posts in front, two short behind, a tarp sloping back over a bedroll and a pack.
+      for (const x of [-1.2, 1.2]) b.box(0.12, 1.7, 0.12, { at: [x, 0.85, 0.9], color: EARTH.bark }).box(0.1, 0.6, 0.1, { at: [x, 0.3, -0.9], color: EARTH.bark });
+      b.box(2.7, 0.05, 2.2, { at: [0, 1.18, 0], rot: [-0.55, 0, 0], color: BUILD.canvas, jitter: 0.06 });
+      b.cyl(0.16, 0.16, 0.9, 7, { at: [0.25, 0.16, -0.25], rot: [0, 0, PI / 2], color: BUILD.blue })
+        .box(0.4, 0.42, 0.26, { at: [-0.7, 0.21, -0.35], color: PAL.leather });
+      return;
+  }
+}
+
+/** Split logs stacked end-out in a rack under a little plank roof that sheds the rain forward. */
+function woodpile(b: ModelBuilder, rand: () => number): void {
+  for (const x of [-1.15, 1.15]) b.box(0.1, 1.25, 0.1, { at: [x, 0.62, -0.28], color: PAL.woodDark }).box(0.1, 1.05, 0.1, { at: [x, 0.52, 0.28], color: PAL.woodDark });
+  b.box(2.5, 0.05, 0.8, { at: [0, 1.15, 0], rot: [0.22, 0, 0], color: BUILD.plank });
+  for (let row = 0; row < 3; row++) {
+    for (let k = 0; k < (row === 2 ? 6 : 7); k++) {
+      const [x, y] = [-0.9 + k * 0.3 + (row % 2) * 0.15, 0.15 + row * 0.27];
+      const r = 0.12 + rand() * 0.035;
+      const spin = rand() * PI;
+      // Bark round the outside, open-ended; the cut wood inside it shows at its ends.
+      b.shape(new CylinderGeometry(r, r, 0.6, 5, 1, true), { at: [x, y, 0], rot: [PI / 2, spin, 0], color: EARTH.bark, jitter: 0.12 });
+      b.cyl(r * 0.9, r * 0.9, 0.62, 5, { at: [x, y, 0], rot: [PI / 2, spin, 0], color: EARTH.cutWood, jitter: 0.08 });
+    }
+  }
+}
+
+/** A sawhorse with a log across it, half sawn through, the saw left in the cut and sawdust under it. */
+function sawhorse(b: ModelBuilder): void {
+  for (const x of [-0.6, 0.6]) {
+    b.bar([x, 0, -0.32], [x, 0.85, 0.12], 0.07, 0.07, { color: PAL.wood }).bar([x, 0, 0.32], [x, 0.85, -0.12], 0.07, 0.07, { color: PAL.wood });
+  }
+  b.box(1.3, 0.06, 0.06, { at: [0, 0.32, 0], color: PAL.woodDark })
+    .cyl(0.17, 0.19, 1.9, 7, { at: [0.05, 0.82, 0], rot: [0, 0, PI / 2], color: EARTH.bark })
+    .cyl(0.16, 0.16, 0.02, 7, { at: [1.01, 0.82, 0], rot: [0, 0, PI / 2], color: EARTH.cutWood })
+    .box(0.015, 0.16, 0.55, { at: [-0.25, 0.97, 0.05], color: PAL.steel, jitter: 0 })
+    .box(0.05, 0.14, 0.14, { at: [-0.25, 1.02, 0.38], color: PAL.wood })
+    .cyl(0.55, 0.55, 0.02, 7, { at: [-0.25, 0.01, 0], color: EARTH.cutWood, jitter: 0.1 });
+}
+
+/** A chopping block with an axe sunk in it, split wood fallen round it. */
+function chopblock(b: ModelBuilder, rand: () => number): void {
+  b.cyl(0.33, 0.38, 0.5, 7, { at: [0, 0.25, 0], color: EARTH.bark, jitter: 0.1 }).cyl(0.31, 0.31, 0.02, 7, { at: [0, 0.505, 0], color: EARTH.cutWood, jitter: 0.04 });
+  b.box(0.03, 0.12, 0.2, { at: [0, 0.56, 0], rot: [0, 0.4, 0], color: PAL.iron }).bar([0, 0.58, 0.02], [0.22, 1.15, 0.24], 0.045, 0.045, { color: PAL.wood });
+  for (let i = 0; i < 5; i++) {
+    const a = rand() * PI * 2;
+    const d = 0.5 + rand() * 0.2;
+    b.box(0.1, 0.1, 0.34, { at: [Math.cos(a) * d, 0.05, Math.sin(a) * d], rot: [0, rand() * PI, 0], color: rand() < 0.5 ? EARTH.cutWood : EARTH.bark });
+  }
+}
+
+/** A heap of ore by the mine's mouth, some of it green with copper, and a wheelbarrow beside it. */
+function oreHeap(b: ModelBuilder, rand: () => number): void {
+  for (let i = 0; i < 10; i++) {
+    const a = rand() * PI * 2;
+    const d = rand() * 0.55;
+    const r = 0.16 + rand() * 0.14;
+    const g = new IcosahedronGeometry(r, 0);
+    g.scale(1, 0.75, 1);
+    const color = rand() < 0.3 ? 0x4f8a6a : rand() < 0.5 ? EARTH.rockDark : EARTH.rock;
+    b.shape(g, { at: [-0.45 + Math.cos(a) * d, r * 0.5 + (0.55 - d) * 0.45, Math.sin(a) * d], rot: [rand(), rand() * 3, 0], color });
+  }
+  b.taper(0.5, 0.75, 0.64, 0.9, 0.28, { at: [0.65, 0.48, 0], color: PAL.wood })
+    .cyl(0.2, 0.2, 0.06, 8, { at: [0.65, 0.2, 0.6], rot: [0, 0, PI / 2], color: PAL.woodDark });
+  for (const x of [0.43, 0.87]) b.bar([x, 0.42, 0.45], [x + (0.65 - x) * 0.2, 0.62, -0.85], 0.05, 0.05, { color: PAL.wood }).box(0.05, 0.36, 0.05, { at: [x, 0.18, -0.3], color: PAL.woodDark });
+  for (const [x, z] of [[0.58, 0.1], [0.74, -0.15]] as const) b.ball(0.13, { at: [x, 0.66, z], color: EARTH.rockDark });
+}
+
+/** A hen house on legs: plank walls, a pitched red roof, a ramp up to its door. */
+function coop(b: ModelBuilder): void {
+  for (const x of [-0.6, 0.6]) for (const z of [-0.45, 0.45]) b.box(0.08, 0.45, 0.08, { at: [x, 0.225, z], color: PAL.woodDark });
+  b.box(1.4, 0.75, 1.0, { at: [0, 0.82, 0], color: BUILD.plank }).box(0.3, 0.32, 0.02, { at: [0.3, 0.62, 0.51], color: 0x2a1c14, jitter: 0 });
+  // The gables under the roof, then its two slopes meeting at a ridge along X.
+  b.box(1.38, 0.42, 0.42, { at: [0, 1.19, 0], rot: [PI / 4, 0, 0], color: BUILD.plank });
+  for (const side of [-1, 1]) b.box(1.6, 0.05, 0.68, { at: [0, 1.36, side * 0.3], rot: [side * 0.55, 0, 0], color: BUILD.redWood });
+  b.box(0.3, 0.03, 0.8, { at: [0.3, 0.3, 0.84], rot: [0.62, 0, 0], color: PAL.wood });
+}
+
+/** A raised bed in a cottage garden: plank sides, dark soil, rows of cabbages and leeks. */
+function vegBed(b: ModelBuilder, rand: () => number): void {
+  for (const z of [-0.65, 0.65]) b.box(2.8, 0.22, 0.06, { at: [0, 0.11, z], color: BUILD.plank });
+  for (const x of [-1.37, 1.37]) b.box(0.06, 0.22, 1.3, { at: [x, 0.11, 0], color: BUILD.plank });
+  b.box(2.7, 0.18, 1.24, { at: [0, 0.09, 0], color: EARTH.soil, jitter: 0.05 });
+  for (let row = 0; row < 3; row++) {
+    for (let k = 0; k < 6; k++) {
+      const [x, z] = [-1.1 + k * 0.44 + (rand() - 0.5) * 0.06, -0.4 + row * 0.4];
+      if (row === 1) b.cone(0.08, 0.3, 4, { at: [x, 0.33, z], color: GREEN.young[0] });
+      else b.ball(0.12 + rand() * 0.04, { at: [x, 0.25, z], color: rand() < 0.5 ? CROP.cabbage : GREEN.young[1] });
+    }
   }
 }

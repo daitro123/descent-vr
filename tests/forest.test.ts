@@ -2,6 +2,7 @@ import { Vector3 } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
 import { buildLayout, CHESTS, FOREST, type ForestLayout, HALE, HERBS, localToWorld, MAP_BOARD, NORTH_PASS, POND, SIGNPOSTS, type StructureKind, TENT, VEINS, worldToLocal } from '../src/maps/forest/layout';
+import { CLUTTER_SIZE } from '../src/maps/forest/dressing';
 import { MINE, minePiece } from '../src/maps/forest/mine';
 import type { CampPlan, ChestPlan } from '../src/maps/types';
 import { nearestOnPolyline } from '../src/maps/forest/noise';
@@ -829,8 +830,10 @@ describe('finding the way', () => {
   });
 
   it("raises smoke from the inn's two chimneys, the two cottages that have one, the smithy's forge and the lumber camp's fire, not the farmhouse", () => {
+    // Which building each rises from: the nearest one (the barrels and woodpiles stacked against their walls aren't buildings).
+    const buildings = layout.structures.filter((s) => !(s.kind in CLUTTER_SIZE));
     const from = layout.smoke.map((p) => {
-      const s = layout.structures.reduce((a, b) => (Math.hypot(b.x - p.x, b.z - p.z) < Math.hypot(a.x - p.x, a.z - p.z) ? b : a));
+      const s = buildings.reduce((a, b) => (Math.hypot(b.x - p.x, b.z - p.z) < Math.hypot(a.x - p.x, a.z - p.z) ? b : a));
       return `${s.kind}${s.kind === 'house' ? s.variant : ''}${p.fire ? ' fire' : ''}`;
     });
     expect(from.sort()).toEqual(['campfire fire', 'house0', 'house2', 'inn', 'inn', 'smithy']);
