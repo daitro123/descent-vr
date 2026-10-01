@@ -1,4 +1,4 @@
-import { type BufferGeometry, Matrix4 } from 'three';
+import { BoxGeometry, type BufferGeometry, Matrix4 } from 'three';
 import { ModelBuilder, type PartOpts, type Vec3 } from '../../models/kit';
 import { PAL } from '../../models/palette';
 import { standingStone } from '../forest/buildings';
@@ -7,7 +7,7 @@ import { EARTH } from '../forest/palette';
 import { barrel, cairn, crate, door, pile, punt, type RoofLook, signpost, walls, windowOn } from '../props';
 import { houseLook } from './cairnford';
 import type { MoorStructure } from './plan';
-import { MOOR_BUILD as B, MOOR_TREES } from './palette';
+import { MOOR_BUILD as B, MOOR_LAND, MOOR_TREES } from './palette';
 
 // Brackenmoor's buildings and set pieces, each in its own frame (origin on the
 // ground at its footprint's middle, front facing +Z), as Oakvale's are: grey
@@ -56,7 +56,7 @@ export function buildMoorStructure(s: MoorStructure): BufferGeometry {
     case 'bridge': bridge(b, s.w, s.d, s.h, s.extra ?? [1.2, 1.2, -5, 5]); break;
     case 'quay': quay(b, s.w, rand); break;
     case 'barrow': barrow(b, s.w, s.h, s.variant === 1, rand); break;
-    case 'hollowhill': hollowDoor(b, s.w, s.h); break;
+    case 'hollowhill': hollowDoor(b, s.w, s.h, s.extra?.[0] ?? s.h + 1.5, s.extra?.[1] ?? s.h + 1, rand); break;
     case 'dromos': dromos(b, s.w, s.d, s.extra ?? [1], rand); break;
     case 'spoil': spoil(b, s.w, rand); break;
     case 'tent': tent(b, s.w, s.d); break;
@@ -220,12 +220,13 @@ function lantern(b: ModelBuilder, x: number, y: number, face: number): void {
   b.box(0.3, 0.07, 0.3, { at: [x, y + 0.18, face + s * 0.42], color: PAL.ironDark, jitter: 0 });
 }
 
-/** Dressed corner stones up a building's two front corners, long and short in turn. */
+/** Dressed corner stones up a building's two front corners, long and short in turn, standing a finger proud of its face. */
 function frontQuoins(b: ModelBuilder, w: number, d: number, h: number, color: number): void {
-  for (const x of [-w / 2, w / 2]) {
-    for (let y = 0.6, i = 0; y < h - 0.2; y += 0.6, i++) {
-      const long = i % 2 === 0;
-      b.box(long ? 0.54 : 0.32, 0.5, long ? 0.32 : 0.54, { at: [x, y, d / 2], color, jitter: 0.08 });
+  const s = Math.sign(d) || 1;
+  for (const side of [-1, 1]) {
+    for (let y = 0.65, i = 0; y < h - 0.2; y += 0.55, i++) {
+      const len = i % 2 === 0 ? 0.62 : 0.36;
+      b.box(len, 0.5, 0.3, { at: [side * (Math.abs(w) / 2 - len / 2 + 0.03), y, d / 2 - s * 0.12], color, jitter: 0.08 });
     }
   }
 }
@@ -746,7 +747,7 @@ function bridge(b: ModelBuilder, width: number, len: number, rise: number, extra
     return { a0, a1: a0 + span, mid: a0 + span / 2 };
   });
   const spring = 0.25;
-  const archRise = Math.min(span * 0.48, 1.2);
+  const archRise = Math.min(span * 0.48, 1.35);
   const intrados = (z: number) => {
     for (const a of arches) if (z > a.a0 && z < a.a1) return spring + archRise * Math.sqrt(Math.max(0, 1 - ((z - a.mid) / (span / 2)) ** 2));
     return null;
@@ -806,7 +807,9 @@ function bridge(b: ModelBuilder, width: number, len: number, rise: number, extra
  * low parapet along its edge.
  */
 function quay(b: ModelBuilder, w: number, rand: Rand): void {
-  b.box(w + 0.02, 3.3, 1.7, { at: [0, -1.6, -0.45], color: rand() < 0.5 ? B.grit : B.gritDark, jitter: 0.14 });
+  // Deep enough to hold the bank behind it; its top flagged, a little under the street's setts, which run on over it.
+  b.box(w + 0.02, 3.2, 3.8, { at: [0, -1.64, -1.5], color: rand() < 0.5 ? B.grit : B.gritDark, jitter: 0.14 });
+  b.box(w + 0.02, 0.06, 3.7, { at: [0, -0.04, -1.5], color: MOOR_LAND.flag[Math.floor(rand() * MOOR_LAND.flag.length)], jitter: 0.1 });
   for (const y of [-0.55, -1.75]) b.box(w + 0.02, 0.12, 0.06, { at: [0, y, 0.42], color: B.gritDark, jitter: 0.1 });
   b.box(w + 0.02, 0.3, 0.06, { at: [0, -1.25, 0.43], color: 0x4a5236, jitter: 0.1 });
   b.box(w + 0.02, 0.16, 0.75, { at: [0, 0.06, 0.1], color: B.sill, jitter: 0.08 });
@@ -1041,30 +1044,75 @@ function barrow(b: ModelBuilder, r: number, h: number, broken: boolean, rand: Ra
 }
 
 /**
- * Hollowhill's door at the end of its passage: a frame of black Deepking
- * stone with its faint inlaid line, set in a face of great dressed blocks
- * that runs on into the mound either side and up under its turf; the stone
- * door standing ajar, the dark beyond, the diggers' rope and pick.
+ * A block over `x0`..`x1` and `z0`..`z1`, its foot level at `y0` and its top
+ * sloping from `t0` at `z0` to `t1` at `z1`: a run of wall following the ground.
  */
-function hollowDoor(b: ModelBuilder, w: number, h: number): void {
-  const line: PartOpts = { color: B.deepLine, glow: 0.35, jitter: 0 };
-  // The face it's set in.
-  for (let row = 0; row < 4; row++) {
-    for (const s of [-1, 1]) {
-      const bw = 1.6 + (row % 2) * 0.4;
-      b.box(bw, 1.2, 1.3, { at: [s * (w / 2 + 0.45 + bw / 2), -0.4 + row * 1.2 + 0.6, -0.1], color: row % 2 ? B.gritSoot : B.deep, jitter: 0.08 });
-    }
+function sloped(b: ModelBuilder, x0: number, x1: number, z0: number, z1: number, y0: number, t0: number, t1: number, o: PartOpts): void {
+  const g = new BoxGeometry(1, 1, 1);
+  const pos = g.getAttribute('position');
+  for (let i = 0; i < pos.count; i++) {
+    const u = pos.getZ(i) + 0.5;
+    pos.setXYZ(i, x0 + (pos.getX(i) + 0.5) * (x1 - x0), pos.getY(i) > 0 ? t0 + (t1 - t0) * u : y0, z0 + u * (z1 - z0));
   }
-  b.box(w + 5.6, 1.6, 1.3, { at: [0, h + 1.5, -0.15], color: B.gritSoot, jitter: 0.08 });
+  g.computeVertexNormals();
+  b.shape(g, o);
+}
+
+/**
+ * Hollowhill's door at the end of its passage: a frame of black Deepking
+ * stone with its faint inlaid line, the stone door standing ajar on the dark,
+ * the diggers' rope and pick at the threshold. Over it, a face of great
+ * dressed blocks runs up to the turf at `top`, a relieving triangle of the
+ * same black stone set in it over the lintel, and the mound's turf over all;
+ * past the passage walls' tops (`walls`) it narrows to stand clear of them.
+ */
+function hollowDoor(b: ModelBuilder, w: number, h: number, top: number, walls: number, rand: Rand): void {
+  const line: PartOpts = { color: B.deepLine, glow: 0.35, jitter: 0 };
+  const half = w / 2 + 2.45;
+  // The frame: jambs, the lintel over them, the inlaid line round the opening.
   for (const s of [-1, 1]) {
     b.box(0.9, h + 0.6, 1.3, { at: [(s * w) / 2, (h + 0.6) / 2 - 0.3, 0], color: B.deep, jitter: 0.05 });
     b.box(0.06, h - 0.2, 0.04, { ...line, at: [(s * w) / 2 - s * 0.12, h / 2, 0.67] });
+    // A plinth block at each jamb's foot.
+    b.box(1.1, 0.4, 1.5, { at: [(s * w) / 2, 0.1, 0.05], color: B.deep, jitter: 0.05 });
   }
   b.box(w + 1.8, 0.9, 1.45, { at: [0, h + 0.3, 0], color: B.deep, jitter: 0.05 });
   b.box(w + 1.2, 0.05, 0.04, { ...line, at: [0, h + 0.2, 0.74] });
-  // The dark beyond, and the door slab swung in.
-  b.box(w - 0.9, h, 0.2, { at: [0, h / 2, -0.4], color: 0x0c0b0a, jitter: 0 });
-  b.box(w * 0.55, h - 0.1, 0.35, { at: [w / 4, h / 2, -0.5], rot: [0, -0.9, 0], color: B.deep, jitter: 0.05 });
+  // The dark beyond, right behind the frame where the mound comes down to the door, a raised sill before it, and
+  // the door slab, hung on the east jamb, standing ajar.
+  b.box(w - 0.9, h, 2, { at: [0, h / 2, -1.12], color: 0x0c0b0a, jitter: 0 });
+  b.box(w - 0.9, 0.65, 0.7, { at: [0, 0.18, 0.1], color: B.deep, jitter: 0.05 });
+  const ajar = 0.6;
+  b.box(w * 0.55, h - 0.5, 0.35, { at: [w / 2 - 0.45 - Math.cos(ajar) * w * 0.275, (h - 0.5) / 2 + 0.5, 0.1 + Math.sin(ajar) * w * 0.275], rot: [0, ajar, 0], color: B.deep, jitter: 0.05 });
+  b.box(0.05, h - 1.0, 0.04, { ...line, at: [w / 2 - 0.45 - Math.cos(ajar) * w * 0.275 + Math.sin(ajar) * 0.18, h / 2 + 0.25, 0.1 + Math.sin(ajar) * w * 0.275 + Math.cos(ajar) * 0.18], rot: [0, ajar, 0] });
+  // The face over the lintel, course on course of dressed blocks, each course's joints off the one below.
+  const y0 = h + 0.75;
+  const courses = Math.max(1, Math.round((top - 0.3 - y0) / 0.9));
+  const rh = (top - 0.3 - y0) / courses;
+  const upper = w / 2 + 1.3;
+  for (let c = 0; c < courses; c++) {
+    const y = y0 + c * rh;
+    const hw = y + rh > walls + 0.2 ? upper : half;
+    let x = -hw - (c % 2) * 0.7;
+    while (x < hw - 0.2) {
+      const x1 = Math.min(hw, x + 1.5 + rand() * 0.8);
+      const x0 = Math.max(-hw, x);
+      b.box(x1 - x0 - 0.05, rh - 0.05, 2.6, { at: [(x0 + x1) / 2, y + rh / 2, -0.9 - rand() * 0.04], color: rand() < 0.5 ? B.grit : B.gritWarm, jitter: 0.06 });
+      x = x1;
+    }
+  }
+  // The relieving triangle over the lintel, black stone with the line inlaid round it.
+  const r = Math.max(0.6, Math.min(2.3, (top - 0.4 - y0) / 1.5));
+  const tri = (rr: number, z: number, o: PartOpts) => b.cyl(rr, rr, 0.1, 3, { ...o, at: [0, y0 + r / 2, z], rot: [-PI / 2, 0, 0] });
+  tri(r, 0.38, { color: B.deep, jitter: 0.04 });
+  tri(r * 0.82, 0.42, line);
+  tri(r * 0.74, 0.46, { color: B.deep, jitter: 0.04 });
+  // A cornice course along the top, and the mound's turf over it.
+  const cap = top > walls + 0.2 ? upper : half;
+  b.box(cap * 2 + 0.3, 0.32, 2.9, { at: [0, top - 0.14, -0.95], color: B.gritDark, jitter: 0.06 });
+  for (let i = 0; i < 4; i++) b.box(cap * 0.5 - 0.06, 0.26, 2.7, { at: [-cap * 0.75 + i * cap * 0.5, top + 0.13, -1.0], rot: [0, 0, (rand() - 0.5) * 0.04], color: rand() < 0.5 ? B.gritDark : B.gritSoot, jitter: 0.08 });
+  // Bracken rooted along the top, the mound's turf creeping over.
+  for (let i = 0; i < 6; i++) b.cone(0.22, 0.5 + rand() * 0.3, 4, { at: [-cap + 0.5 + (i / 5) * (cap * 2 - 1), top + 0.45, -0.6 - rand() * 1.2], color: rand() < 0.5 ? B.mound : 0x7c4524, jitter: 0.12 });
   // The diggers' rope and a pick left at the threshold.
   b.box(0.06, 0.06, 1.2, { at: [-0.5, 0.06, 1.2], rot: [0, 0.4, 0], color: PAL.wood }).box(0.6, 0.08, 0.08, { at: [-0.25, 0.08, 1.7], rot: [0, 0.4, 0], color: PAL.iron });
   b.cyl(0.3, 0.3, 0.12, 8, { at: [0.6, 0.06, 1.0], color: 0x8a7a5a });
@@ -1072,17 +1120,38 @@ function hollowDoor(b: ModelBuilder, w: number, h: number): void {
 
 /**
  * The passage cut into Hollowhill from its foot to its door, along its own
- * +Z from the door: dry stone walls either side, `w` apart, their tops
- * (`tops`, a metre apart, over the door's floor) following the mound's face.
+ * +Z from the door: dry stone walls either side, `w` apart, holding the
+ * mound back, their copes following its face (`tops`, a metre apart, over
+ * the door's floor), and its turf carried over their backs to the copes.
  */
 function dromos(b: ModelBuilder, w: number, len: number, tops: readonly number[], rand: Rand): void {
   for (let k = 0; k < tops.length - 1 && k < len; k++) {
     const z0 = k;
     const z1 = Math.min(len, k + 1);
-    const top = (tops[k] + tops[k + 1]) / 2;
+    const t0 = tops[k];
+    const t1 = tops[k] + (tops[k + 1] - tops[k]) * (z1 - z0);
     for (const s of [-1, 1]) {
-      b.taper(0.95, z1 - z0 + 0.02, 0.7, z1 - z0 + 0.02, top + 2, { at: [s * (w / 2 + 0.42), -2, (z0 + z1) / 2], color: rand() < 0.5 ? B.grit : B.gritDark, jitter: 0.16 });
-      b.box(0.5, 0.2, z1 - z0, { at: [s * (w / 2 + 0.42), top + 0.08, (z0 + z1) / 2], rot: [0, 0, 0.1 * (rand() - 0.5)], color: B.gritDark, jitter: 0.18 });
+      // Out from the passage's side, `a` to `c`, on this side.
+      const span = (a: number, c: number): [number, number] => (s > 0 ? [w / 2 + a, w / 2 + c] : [-w / 2 - c, -w / 2 - a]);
+      const [wx0, wx1] = span(-0.05, 0.85);
+      sloped(b, wx0, wx1, z0, z1, -2.5, t0 - 0.1, t1 - 0.1, { color: rand() < 0.5 ? B.grit : B.gritDark, jitter: 0.16 });
+      // The turf over its back, where the mound beside stands high enough to need holding.
+      const [tx0, tx1] = span(0.8, 2.5);
+      if (Math.min(t0, t1) > 0.8) sloped(b, tx0, tx1, z0, z1, -2.5, t0 - 0.04, t1 - 0.04, { color: B.mound, jitter: 0.1 });
+      // Its copes, stones set on edge along the top.
+      const cx = s * (w / 2 + 0.4);
+      for (let c = 0; c < 2; c++) {
+        const u0 = c / 2;
+        const u1 = (c + 1) / 2;
+        const y = (u: number) => t0 + (t1 - t0) * u + 0.08;
+        b.bar([cx, y(u0), z0 + (z1 - z0) * u0], [cx, y(u1), z0 + (z1 - z0) * u1], 1.0 + rand() * 0.1, 0.3, { color: rand() < 0.5 ? B.gritDark : B.gritSoot, jitter: 0.18 });
+      }
+      // A few stones standing proud of its face.
+      const tall = (t0 + t1) / 2;
+      for (let i = 0; i < 2 && tall > 1.4; i++) {
+        const zz = z0 + rand() * (z1 - z0);
+        b.box(0.12, 0.3 + rand() * 0.2, 0.5 + rand() * 0.4, { at: [s * (w / 2 - 0.05), 0.4 + rand() * (tall - 1.2), zz], color: rand() < 0.5 ? B.gritLight : B.gritDark, jitter: 0.12 });
+      }
     }
   }
 }

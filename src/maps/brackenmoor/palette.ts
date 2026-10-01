@@ -107,4 +107,6 @@ export const MOOR_BUILD = {
   hedgeLight: 0x46642e,
   cut: 0x9c968a,
   trough: 0x46565a,
+  /** The bracken turf over Hollowhill's walls and face, the mound's own rust. */
+  mound: 0x8a5c36,
 } as const;

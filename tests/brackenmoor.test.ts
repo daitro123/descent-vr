@@ -151,7 +151,7 @@ describe('the World as Ground across the seam', () => {
   it('walks every road and track clear end to end, through the tollgate standing open on the Kingsroad, but for the rockfall that ends the Sunreach road', () => {
     const p = new Vector3();
     const [gate] = of('tollgate');
-    expect(moor.roads.map((road) => road.id)).toEqual(['pass', 'kingsroad', 'fen', 'sunreach', 'hob', 'oldFold', 'scar', 'turfmoss', 'fells']);
+    expect(moor.roads.map((road) => road.id)).toEqual(['pass', 'kingsroad', 'fen', 'sunreach', 'hob', 'oldFold', 'scar', 'turfmoss', 'fells', 'hall', 'chapel', 'mill', 'beckFoot']);
     for (const road of moor.roads) {
       for (const [x, z] of road.line) {
         // Where you walk, a body's width in from its edge.
@@ -503,12 +503,12 @@ describe("Brackenmoor's chunks", () => {
     }
   }, 60000);
 
-  it('makes stand-ins cheaper than full detail, and keeps every full chunk within what an Oakvale chunk costs', () => {
+  it('makes stand-ins cheaper than full detail, and keeps every full chunk within half as much again as an Oakvale chunk costs', () => {
     for (const key of moorChunks()) {
       const full = buildMoorChunk(moor, key, 'full').position.length;
       expect(buildMoorChunk(moor, key, 'standIn').position.length, key).toBeLessThan(full);
-      // Oakvale's busiest full chunks come to about 16k triangles.
-      expect(full / 9, key).toBeLessThan(16000);
+      // Oakvale's busiest full chunks come to about 16k triangles; the moor may spend half as much again, for Cairnford's detail.
+      expect(full / 9, key).toBeLessThan(24000);
     }
   }, 60000);
 

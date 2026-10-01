@@ -17,7 +17,7 @@ export const TOWN = {
   /** The market square: its middle and half sizes. */
   square: { x: 38, z: 372, hw: 14, hd: 11 },
   /** The bridge: its middle's x, where its deck starts and ends either side of the beck, its width and how far its middle rises. */
-  bridge: { x: 46, from: 385, to: 402, width: 4.6, rise: 0.85 },
+  bridge: { x: 46, from: 385, to: 402, width: 4.6, rise: 1.1 },
   /** Where the beck runs between quays (along x), its half width there, and how far the quays' tops stand over its water. */
   quays: { from: 4, to: 90, half: 5, rise: 1.2 },
   /** The chapel's middle on its rise, and how high the rise lifts it. */
@@ -102,6 +102,39 @@ function row(ctx: TownContext, id: string, from: P2, lots: readonly Lot[], gap =
   return out;
 }
 
+/** The market street's west side: where it starts, its houses, and which lot is the gap the chapel lane runs up. */
+const MARKET_WEST = {
+  from: [24, 323] as P2,
+  lots: [
+    [7, 6, 2, 0],
+    [6.5, 6.2, 2, 4],
+    [3.6, 0, 0, 0],
+    [6, 6.5, 1, 9],
+    [7, 6, 2, 2],
+    [6.2, 7, 2, 7],
+  ] as readonly Lot[],
+  lane: 2,
+};
+
+/**
+ * The chapel lane's points, off the pass road (`pass`, its line) through the
+ * gap between the market street's houses, round behind them and up the rise
+ * to the chapel's door.
+ */
+export function chapelLane(pass: readonly P2[]): P2[] {
+  const lens = lengths(pass);
+  const { from, lots, lane } = MARKET_WEST;
+  let s = arcAt(pass, lens, ...from);
+  for (let i = 0; i < lane; i++) s += lots[i][0] + 0.15;
+  s += lots[lane][0] / 2;
+  const p = pointAlong(pass, s);
+  const side = Math.sign((from[0] - p.x) * -p.dz + (from[1] - p.z) * p.dx) || 1;
+  const [nx, nz] = [-p.dz * side, p.dx * side];
+  const at = (k: number): P2 => [p.x + nx * k, p.z + nz * k];
+  const ch = TOWN.chapel;
+  return [at(0), at(4), at(8.5), at(12), [ch.x + 11, ch.z + 0.4], [ch.x + 7.4, ch.z]];
+}
+
 /** Every building and set piece of Cairnford. */
 export function placeCairnford(ctx: TownContext): void {
   const { add } = ctx;
@@ -110,14 +143,7 @@ export function placeCairnford(ctx: TownContext): void {
 
   // The market street: the pass road's last stretch, terraced both sides down to the square.
   // West side, with the lane up to the chapel between the second and third houses.
-  row(ctx, 'pass', [24, 323], [
-    [7, 6, 2, 0],
-    [6.5, 6.2, 2, 4],
-    [3.4, 0, 0, 0],
-    [6, 6.5, 1, 9],
-    [7, 6, 2, 2],
-    [6.2, 7, 2, 7],
-  ]);
+  row(ctx, 'pass', MARKET_WEST.from, MARKET_WEST.lots);
   // East side, its last house a few steps short of the inn's gable.
   row(ctx, 'pass', [42, 326], [
     [6.5, 6, 2, 1],
@@ -138,7 +164,7 @@ export function placeCairnford(ctx: TownContext): void {
   add('mapboard', 33.6, 362.6, toSquare(33.6, 362.6));
   for (const x of [43, 50]) add('bench', x, 360.4, 0, 1.8, 0.5, 1);
   add('barrels', 53.6, 357.8, 0.2, 1.4, 1.4, 1, 0);
-  add('cart', 25.8, 381, 1.9, 2, 3.4, 1);
+  add('cart', 50.6, 380.6, 1.75, 2, 3.4, 1);
   // The postbox by the moot hall's door, as the spec has it for later.
   add('postbox', 24.6, 368.2, Math.PI / 2, 1, 1, 1);
 
@@ -176,11 +202,11 @@ export function placeCairnford(ctx: TownContext): void {
   add('cairn', 52.6, 386.6, 0, 1, 1, 3.2, 0);
   add('cairn', 56, 387.4, 0, 1, 1, 1.4, 1);
   add('boat', 61, 392.4, Math.PI / 2 + 0.1, 1, 4.2, 1);
-  add('bollard', 58.6, 390.2, 0, 1, 1, 1);
-  add('barrels', 64.5, 390.5, 0, 1.4, 1.4, 1, 1);
+  add('bollard', 58.6, 389.4, 0, 1, 1, 1);
+  add('barrels', 64.5, 389.4, 0, 1.4, 1.4, 1, 1);
   // West of the moot hall, two cottages along the Turfmoss track, facing the water.
   add('house', 7, 374.4, 0.12, 7, 5.6, 1, 18);
-  add('house', -3.6, 372.6, 0.22, 6.5, 5.4, 1, 19);
+  add('house', -3.4, 370.4, 0.22, 6.5, 5.4, 1, 19);
 
   // The chapel up on its rise, its door east toward the town, its graveyard round it.
   const ch = TOWN.chapel;
