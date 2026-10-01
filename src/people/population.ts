@@ -27,8 +27,8 @@ const _spot: FileSpot = { x: 0, z: 0, yaw: 0 };
 export interface Placed {
   /** Are they drawn (not hidden with the outdoors)? */
   readonly shown: boolean;
-  /** One frame with your head at `you`. */
-  update(dt: number, you: Vector3): unknown;
+  /** One frame with your head at `you`, `time` s since the population began (for a work everyone keeps time at). */
+  update(dt: number, you: Vector3, time: number): unknown;
   /** How far your head is from them, on the floor plane. */
   far(you: Vector3): number;
   /** Show `line` over their head, or hide it (null). */
@@ -69,6 +69,8 @@ export class Population<P extends Placed = Villager<string>> {
   /** The slots by how near they are, sorted afresh each frame (kept to spare the garbage collector). */
   private readonly order: Slot<P>[] = [];
   private readonly fars: number[] = [];
+  /** Seconds it's been running: the clock a drill keeps, so everyone at it strikes together. */
+  private time = 0;
 
   constructor(private readonly builder: Builder<P>) {}
 
@@ -113,11 +115,12 @@ export class Population<P extends Placed = Villager<string>> {
   update(dt: number, you: Vector3, near: number = CONFIG.population.near): void {
     this.reckon(dt, you);
     this.rebuild(CONFIG.population.perFrame, near);
+    this.time += dt;
     const { slots, fars } = this;
     for (let i = 0; i < slots.length; i++) {
       const s = slots[i];
       if (s.person) {
-        s.person.update(dt, you);
+        s.person.update(dt, you, this.time);
         s.far = s.person.far(you);
       }
       fars[i] = s.person?.shown && s.plan.barks?.length ? s.far : Infinity;

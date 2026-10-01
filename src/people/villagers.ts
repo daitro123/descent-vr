@@ -241,9 +241,11 @@ export class Villager<Id extends string = VillagerId> {
 
   /**
    * One frame: at work, or stopped and looking at you while you're within
-   * `notice` m. Returns how many of the smith's blows landed this frame.
+   * `notice` m. A work everyone keeps time at together (the drill) runs on
+   * `together`, the seconds everyone placed has been at it, when it's given.
+   * Returns how many of the smith's blows landed this frame.
    */
-  update(dt: number, you: Vector3): number {
+  update(dt: number, you: Vector3, together?: number): number {
     const V = CONFIG.villagers;
     this.walk(dt);
     const far = this.shown ? this.far(you) : Infinity;
@@ -251,7 +253,8 @@ export class Villager<Id extends string = VillagerId> {
     const near = far < V.notice || this.away;
     this.attend = clamp(this.attend + (near ? 1 : -1) * V.attend * dt, 0, 1);
     const was = this.clock;
-    this.clock += dt * (1 - this.attend);
+    if (this.work.together && together !== undefined) this.clock = together;
+    else this.clock += dt * (1 - this.attend);
     // A blow half-stopped by your coming doesn't ring.
     const blows = this.attend < 0.3 ? strikesBetween(this.work, was, this.clock) : 0;
     this.breath += dt;

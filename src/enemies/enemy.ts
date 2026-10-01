@@ -3,7 +3,7 @@ import { closestSegmentSegment, type SegmentHit } from '../combat/geometry';
 import type { BladeTarget } from '../combat/strike';
 import type { AttackConfig, EnemyConfig } from '../config';
 import { CONFIG } from '../config';
-import { buildCharacter, type EnemyKind, type Family, type WeaponSpec } from '../models/characters';
+import { buildCharacter, type EnemyBody, type EnemyKind, FAMILIES, type Family, type WeaponSpec } from '../models/characters';
 import { createModelMaterial, type ModelMaterial } from '../models/materials';
 import { BONES, type BoneName, blendPoses, type Pose, type Rig } from '../models/rig';
 import { HealthBar } from '../ui/healthBar';
@@ -60,7 +60,7 @@ type MutablePose = Record<string, [number, number, number]>;
 
 /** What sets an enemy apart from others with its behaviour: its family and look, its numbers and level (createEnemy fills it in). */
 export interface EnemyTraits {
-  /** Who it is: the undead (the default) are skeletons; bandits wear the human body. */
+  /** Who it is: the undead (the default) are skeletons; the bandits and House Corvane's men wear the human body. */
   family?: Family;
   /** Which of its family's looks for its behaviour. */
   variant?: number;
@@ -165,8 +165,10 @@ interface Shard {
 export abstract class Enemy {
   readonly root = new Group();
   readonly position: Vector3; // feet, alias of root.position
-  /** Who it is: undead or bandit. Its body, how it dies and what flies when it's hit. */
+  /** Who it is: the undead, the bandits, House Corvane's men. */
   readonly family: Family;
+  /** What its family is made of: how it comes and goes, and what flies when it's hit. */
+  readonly body: EnemyBody;
   readonly def: EnemyConfig;
   /** Its level, which `def`'s numbers were made at (createEnemy): what its kill pays for. */
   readonly level: number;
@@ -272,6 +274,7 @@ export abstract class Enemy {
   ) {
     const { family = 'undead', variant = 0, def = CONFIG.enemies[kind], level = 1 } = traits;
     this.family = family;
+    this.body = FAMILIES[family].body;
     this.def = def;
     this.level = level;
     this.hp = this.maxHp = this.def.hp;
@@ -284,7 +287,7 @@ export abstract class Enemy {
     this.root.add(this.visual);
     this.visual.add(this.rig.mesh);
     this.riseTime = kind === 'warden' ? 2.4 : 1.1;
-    if (family === 'undead') {
+    if (this.body === 'skeleton') {
       // The dead claw their way up out of the ground.
       this.visual.position.y = -RISE_DEPTH * this.heightScale;
       copyPose(RISE, this.pose); // copies: poses are shared constants, and this.pose is eased in place
@@ -619,7 +622,7 @@ export abstract class Enemy {
     this.enter('dead');
     this.releaseTokens();
     this.root.updateMatrixWorld(true);
-    if (this.family === 'undead' && this.def.death === 'shatter') {
+    if (this.body === 'skeleton' && this.def.death === 'shatter') {
       // Rigid skinning means every bone can fly free: the skeleton collapses
       // into a pile of its own parts, still in one draw call.
       this.shards = [];

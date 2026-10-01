@@ -1,12 +1,12 @@
 import { type AttackConfig, CONFIG, type EnemyConfig } from '../config';
 import { SUMMON_ATTACK } from '../enemies/kinds';
 import { ATTACK_POSES, GUARD, type GuardSide, IDLE, KNEEL, KNEEL_DROP, RISE, STAGGER, walkOffsets } from '../enemies/poses';
-import { type EnemyKind, type Family, proportionsOf } from '../models/characters';
-import { PEOPLE, type PersonId } from '../models/people';
+import { type EnemyKind, FAMILIES, type Family, proportionsOf } from '../models/characters';
+import { PEOPLE, type Person, type PersonId } from '../models/people';
 import { BONES, blendPoses, type Pose, type Proportions } from '../models/rig';
 import { CAST, type CastId } from '../people/cast';
 import { BREATH_PERIOD, friendlyPose } from '../people/poses';
-import { WORKS, workLoop } from '../people/work';
+import { WORKS, type WorkLoop, workLoop } from '../people/work';
 
 // The inspector's animations: every pose the game plays for a kind, as a
 // looping clip with the game's own timings and easing (see Enemy.updateAttack),
@@ -153,7 +153,7 @@ export function clipsFor(kind: EnemyKind, family: Family = 'undead'): Clip[] {
   clips.push(holdClip(kind, 'stagger', STAGGER, def.staggerTime * 0.6));
   if (kind === 'warden') clips.push(holdClip(kind, 'kneel', KNEEL, CONFIG.warden.kneelTime, KNEEL_DROP * p.hipY));
   // Only the dead claw up out of the ground.
-  if (family === 'undead') clips.push(holdClip(kind, 'rise', RISE, 0.8));
+  if (FAMILIES[family].body === 'skeleton') clips.push(holdClip(kind, 'rise', RISE, 0.8));
   return clips;
 }
 
@@ -189,27 +189,35 @@ export function personClips(id: PersonId): Clip[] {
   return clips;
 }
 
+/** A work loop as a clip, breathing as the villager does at it. */
+function workClip(name: string, work: WorkLoop): Clip {
+  return {
+    name,
+    duration: work.duration,
+    sample: (t, out) => {
+      const at = work.at(t);
+      return { pose: copyInto(friendlyPose(at.pose, t), out), hipY: at.hip[1], phase: 'work', telegraph: 0 };
+    },
+  };
+}
+
 /**
  * One of the cast a zone places (people/cast.ts): standing at ease, standing
- * about (the work of anyone without one), and strolling, as a villager walks
- * their route at CONFIG.population.walk's pace (people/villagers.ts).
+ * about (the work of anyone without one), strolling, as a villager walks
+ * their route at CONFIG.population.walk's pace (people/villagers.ts), and the
+ * works they're made for (a guard's sentry, a recruit's drill), turning on
+ * the spot aside.
  */
 export function castClips(id: CastId): Clip[] {
-  const { stand } = CAST[id];
+  const person: Person = CAST[id];
+  const { stand } = person;
   const about = WORKS.stand(stand);
   const W = CONFIG.population.walk;
   const rate = W.speed * W.stride;
   const swing: MutablePose = {};
   return [
     { name: 'stand', duration: BREATH_PERIOD, sample: (t, out) => ({ pose: copyInto(friendlyPose(stand, t), out), hipY: 0, phase: 'stand', telegraph: 0 }) },
-    {
-      name: 'stand about',
-      duration: about.duration,
-      sample: (t, out) => {
-        const at = about.at(t);
-        return { pose: copyInto(friendlyPose(at.pose, t), out), hipY: at.hip[1], phase: 'work', telegraph: 0 };
-      },
-    },
+    workClip('stand about', about),
     {
       name: 'walk',
       duration: (4 * Math.PI) / rate,
@@ -224,5 +232,6 @@ export function castClips(id: CastId): Clip[] {
         return { pose: out as Pose, hipY: -Math.abs(Math.sin(phase)) * 0.03, phase: 'walk', telegraph: 0 };
       },
     },
+    ...(person.works ?? []).map((name) => workClip(name, WORKS[name](stand, 0))),
   ];
 }

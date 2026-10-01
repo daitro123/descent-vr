@@ -1,13 +1,14 @@
 import type { BufferGeometry, Material } from 'three';
 import { COMMONERS } from '../models/commoners';
+import { GUARDS } from '../models/guards';
 import { BUILDS } from '../models/human';
 import { PEOPLE, type Person } from '../models/people';
 import { Rig } from '../models/rig';
 
 /**
  * Every friendly character a zone can place as a villager (maps/types.ts
- * `PersonPlan`), by name: Oakvale's four at their trades, and the plain
- * villagers. Each is a body, its clothes, the pose it stands in and its name
+ * `PersonPlan`), by name: Oakvale's four at their trades, the plain
+ * villagers, and the guards (models/guards.ts). Each is a body, its clothes, the pose it stands in and its name
  * over a bark; one of the cast can stand in many places at once (two
  * goodwives at a market). A model family adds its looks here.
  */
@@ -17,6 +18,7 @@ export const CAST = {
   farmer: PEOPLE.farmer,
   herbalist: PEOPLE.herbalist,
   ...COMMONERS,
+  ...GUARDS,
 } satisfies Record<string, Person>;
 
 /** One of the cast, by name. */

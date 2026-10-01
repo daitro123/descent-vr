@@ -1,4 +1,5 @@
 import type { Material } from 'three';
+import type { WorkName } from '../people/work';
 import { apron, BUILDS, body, cuffs, HUE, head, type Look, mail, pauldrons, rolledSleeves, sheathedSword, tabard } from './human';
 import { PAL } from './palette';
 import { type DressContext, type Pose, Rig } from './rig';
@@ -21,6 +22,8 @@ export interface Person {
   dress(ctx: DressContext, look: Look): void;
   /** Varies the per-face shading. */
   seed: number;
+  /** The work loops (people/work.ts) this look is made for, beyond standing about: shown in the model inspector. */
+  works?: readonly WorkName[];
 }
 
 const STAND: Pose = {
@@ -33,8 +36,8 @@ const STAND: Pose = {
   thighR: [0.03, 0, -0.03],
 };
 
-/** Hale: the left hand on the sword's pommel, the right hanging easy. */
-const HALE_STAND: Pose = {
+/** Hale: the left hand on the sword's pommel, the right hanging easy. (And any average build with a sword at the hip.) */
+export const HALE_STAND: Pose = {
   head: [-0.03, 0, 0],
   upperArmL: [0.25, 0, 0.2],
   forearmL: [-1.9, -0.2, 0],

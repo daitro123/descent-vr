@@ -1,4 +1,4 @@
-import { Bone, type BufferGeometry, type Material, Skeleton, SkinnedMesh, Vector3 } from 'three';
+import { Bone, type BufferGeometry, type Material, type Matrix4, Skeleton, SkinnedMesh, Vector3 } from 'three';
 import { ModelBuilder } from './kit';
 
 // A humanoid skeleton shared by every enemy. The character faces +Z, so its
@@ -97,6 +97,40 @@ export interface DressContext {
 
 export type Dresser = (ctx: DressContext) => void;
 
+/** The bones of a body with these proportions, each at bind and hung from its parent. */
+function skeletonOf(p: Proportions): Record<BoneName, Bone> {
+  const offsets = bindOffsets(p);
+  const bones = {} as Record<BoneName, Bone>;
+  for (const name of BONES) {
+    const bone = new Bone();
+    bone.name = name;
+    bone.rotation.order = 'YXZ';
+    bone.position.set(...offsets[name]);
+    bones[name] = bone;
+    const parent = PARENT[name];
+    if (parent) bones[parent].add(bone);
+  }
+  bones.hips.updateMatrixWorld(true);
+  return bones;
+}
+
+/**
+ * Each bone's place in a body of these proportions standing in `pose`, with
+ * nothing built: for a dresser that fits a part to a pose, as the crossbow's
+ * stock is laid from the fist to the cheek at full draw.
+ */
+export function posedBones(p: Proportions, pose: Pose): Record<BoneName, Matrix4> {
+  const bones = skeletonOf(p);
+  for (const name of BONES) {
+    const r = pose[name];
+    if (r) bones[name].rotation.set(r[0], r[1], r[2]);
+  }
+  bones.hips.updateMatrixWorld(true);
+  const out = {} as Record<BoneName, Matrix4>;
+  for (const name of BONES) out[name] = bones[name].matrixWorld.clone();
+  return out;
+}
+
 /**
  * A rigidly skinned humanoid: one SkinnedMesh, one draw call. `dress` adds the
  * parts, each authored in its bone's local space via `on(bone)`. Or, given
@@ -111,20 +145,9 @@ export class Rig {
 
   constructor(p: Proportions, dress: Dresser | BufferGeometry, material?: Material, seed = 1) {
     this.proportions = p;
-    const offsets = bindOffsets(p);
-    const bones = {} as Record<BoneName, Bone>;
+    const bones = skeletonOf(p);
     const bind = {} as Record<BoneName, Vector3>;
-    for (const name of BONES) {
-      const bone = new Bone();
-      bone.name = name;
-      bone.rotation.order = 'YXZ';
-      bone.position.set(...offsets[name]);
-      bind[name] = bone.position.clone();
-      bones[name] = bone;
-      const parent = PARENT[name];
-      if (parent) bones[parent].add(bone);
-    }
-    bones.hips.updateMatrixWorld(true);
+    for (const name of BONES) bind[name] = bones[name].position.clone();
 
     let geometry: BufferGeometry;
     if (typeof dress === 'function') {
