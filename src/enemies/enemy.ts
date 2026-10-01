@@ -64,6 +64,8 @@ export interface EnemyTraits {
   family?: Family;
   /** Which of its family's looks for its behaviour. */
   variant?: number;
+  /** One of its family's named fighters, dressed for one place: a leader, a boss (FamilyDef.named). */
+  named?: string;
   /** Its numbers, already made at its level. */
   def?: EnemyConfig;
   /** Its level, which `def`'s numbers were made at: what its kill pays for. */
@@ -130,7 +132,7 @@ function rand(lo: number, hi: number): number {
   return lo + Math.random() * (hi - lo);
 }
 
-/** Where a slash crosses the enemy's front, measured once per body (family and behaviour) at its bind proportions. */
+/** Where a slash crosses the enemy's front, measured once per body (family, behaviour and look: each carries its own weapon) at its bind proportions. */
 interface AimCalibration {
   angle: number; // elevation of that crossing seen from the right shoulder
   shoulderY: number;
@@ -169,6 +171,8 @@ export abstract class Enemy {
   readonly family: Family;
   /** What its family is made of: how it comes and goes, and what flies when it's hit. */
   readonly body: EnemyBody;
+  /** Which of its family's bodies and weapons it fights with, for the aim measured once per body. */
+  private readonly fighter: string;
   readonly def: EnemyConfig;
   /** Its level, which `def`'s numbers were made at (createEnemy): what its kill pays for. */
   readonly level: number;
@@ -272,14 +276,15 @@ export abstract class Enemy {
     z: number,
     traits: EnemyTraits = {},
   ) {
-    const { family = 'undead', variant = 0, def = CONFIG.enemies[kind], level = 1 } = traits;
+    const { family = 'undead', variant = 0, named, def = CONFIG.enemies[kind], level = 1 } = traits;
     this.family = family;
     this.body = FAMILIES[family].body;
+    this.fighter = `${family}:${kind}:${named ?? variant}`;
     this.def = def;
     this.level = level;
     this.hp = this.maxHp = this.def.hp;
     this.material = createModelMaterial();
-    const model = buildCharacter(kind, { material: this.material, family, variant });
+    const model = buildCharacter(kind, { material: this.material, family, variant, named });
     this.rig = model.rig;
     this.weapon = model.weapon;
     this.position = this.root.position;
@@ -672,7 +677,7 @@ export abstract class Enemy {
   }
 
   private calibrate(attack: AttackConfig): AimCalibration {
-    const key = `${this.family}:${this.kind}:${attack.pose}`;
+    const key = `${this.fighter}:${attack.pose}`;
     const hit = aimCache.get(key);
     if (hit) return hit;
     // Sample the arc at bind proportions, facing +Z from the origin, and find
@@ -731,7 +736,7 @@ export abstract class Enemy {
 
   private calibrateDraw(): DrawCalibration {
     const pose = this.attack!.pose;
-    const key = `${this.family}:${this.kind}:${pose}`;
+    const key = `${this.fighter}:${pose}`;
     const hit = drawCache.get(key);
     if (hit) return hit;
     const cal = this.atOrigin(() => {

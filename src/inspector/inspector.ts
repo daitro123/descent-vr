@@ -16,7 +16,7 @@ import {
   Vector3,
   type WebGLRenderer,
 } from 'three';
-import { buildCharacter, type EnemyKind, FAMILIES, type Family, type Fighter, type WeaponSpec } from '../models/characters';
+import { buildCharacter, type EnemyKind, FAMILIES, type Family, type FamilyDef, type Fighter, type WeaponSpec } from '../models/characters';
 import { createModelMaterial, type ModelMaterial } from '../models/materials';
 import { buildPerson, PEOPLE, type PersonId } from '../models/people';
 import type { Rig } from '../models/rig';
@@ -31,19 +31,20 @@ import { castClips, type Clip, clipsFor, type MutablePose, personClips } from '.
 // Works in the headset and on the desktop page.
 
 export type InspectorEntry =
-  /** An enemy: its behaviour, its family's body, and which of its looks. */
-  | { kind: EnemyKind; family: Family; variant: number; label: string }
+  /** An enemy: its behaviour, its family's body, and which of its looks (or which of its named fighters). */
+  | { kind: EnemyKind; family: Family; variant: number; named?: string; label: string }
   /** A friendly character: Hale or one of Oakvale's villagers. */
   | { person: PersonId; label: string }
   /** One of the cast a zone places as a villager, beyond Oakvale's (people/cast.ts). */
   | { cast: CastId; label: string };
 
-/** Each look of every enemy family's fighters: "Grunt v0" to "v5", "Archer". */
-const enemies = (Object.keys(FAMILIES) as Family[]).flatMap((family) =>
-  (Object.entries(FAMILIES[family].fights) as [EnemyKind, Fighter][]).flatMap(([kind, f]) =>
+/** Each look of every enemy family's fighters ("Grunt v0" to "v5", "Archer"), then its named fighters ("Captain Silas Crake"). */
+const enemies = (Object.keys(FAMILIES) as Family[]).flatMap((family) => [
+  ...(Object.entries(FAMILIES[family].fights) as [EnemyKind, Fighter][]).flatMap(([kind, f]) =>
     Array.from({ length: f.looks }, (_, variant) => ({ kind, family, variant, label: f.looks > 1 ? `${f.label} v${variant}` : f.label })),
   ),
-);
+  ...Object.entries((FAMILIES[family] as FamilyDef).named ?? {}).map(([named, f]) => ({ kind: f.kind, family, variant: 0, named, label: f.label })),
+]);
 
 /**
  * Every model the game builds: each enemy family's (the undead's grunts in
@@ -152,8 +153,8 @@ export class Inspector {
       if ('person' in e) b = { rig: buildPerson(e.person, material), weapon: null, material, clips: personClips(e.person) };
       else if ('cast' in e) b = { rig: new Wardrobe().dress(e.cast, material), weapon: null, material, clips: castClips(e.cast) };
       else {
-        const { rig, weapon } = buildCharacter(e.kind, { material, family: e.family, variant: e.variant });
-        b = { rig, weapon, material, clips: clipsFor(e.kind, e.family) };
+        const { rig, weapon } = buildCharacter(e.kind, { material, family: e.family, variant: e.variant, named: e.named });
+        b = { rig, weapon, material, clips: clipsFor(e.kind, e.family, e.named) };
       }
       this.built.set(index, b);
     }
