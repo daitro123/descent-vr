@@ -47,8 +47,8 @@ export function currentZone<Z extends Pick<Zone, 'land' | 'walkable'>>(
   return zoneUnder(zones, x, z) ?? current;
 }
 
-/** Where two loaded zones meet: along z = `z` from `minX` to `maxX`, `north` on the −z side and `south` on the +z side. */
-export interface Crossing<Z = Zone> {
+/** Where two loaded zones meet across a line along x: along z = `z` from `minX` to `maxX`, `north` on the −z side and `south` on the +z side. */
+export interface NorthSouth<Z = Zone> {
   readonly z: number;
   readonly minX: number;
   readonly maxX: number;
@@ -56,11 +56,23 @@ export interface Crossing<Z = Zone> {
   readonly south: Z;
 }
 
+/** Where two loaded zones meet across a line along z: along x = `x` from `minZ` to `maxZ`, `west` on the −x side and `east` on the +x side. */
+export interface WestEast<Z = Zone> {
+  readonly x: number;
+  readonly minZ: number;
+  readonly maxZ: number;
+  readonly west: Z;
+  readonly east: Z;
+}
+
+/** Where two loaded zones meet. */
+export type Crossing<Z = Zone> = NorthSouth<Z> | WestEast<Z>;
+
 /**
  * Every place two of `zones` meet: each seam a zone lists, with the zone
  * whose land lies on its other side, once each.
  */
-export function crossings<Z extends Pick<Zone, 'land' | 'seams'>>(zones: readonly Z[]): Crossing<Z>[] {
+export function crossings<Z extends Pick<Zone, 'land' | 'seams' | 'sideSeams'>>(zones: readonly Z[]): Crossing<Z>[] {
   const out: Crossing<Z>[] = [];
   for (const a of zones) {
     for (const s of a.seams) {
@@ -68,8 +80,16 @@ export function crossings<Z extends Pick<Zone, 'land' | 'seams'>>(zones: readonl
       const b = zones.find((o) => o !== a && (aNorth ? o.land.minZ === s.z : o.land.maxZ === s.z));
       if (!b) continue;
       const [north, south] = aNorth ? [a, b] : [b, a];
-      if (out.some((c) => c.z === s.z && c.north === north && c.south === south)) continue;
+      if (out.some((c) => 'z' in c && c.z === s.z && c.north === north && c.south === south)) continue;
       out.push({ z: s.z, minX: s.minX, maxX: s.maxX, north, south });
+    }
+    for (const s of a.sideSeams ?? []) {
+      const aWest = a.land.maxX === s.x;
+      const b = zones.find((o) => o !== a && (aWest ? o.land.minX === s.x : o.land.maxX === s.x));
+      if (!b) continue;
+      const [west, east] = aWest ? [a, b] : [b, a];
+      if (out.some((c) => 'x' in c && c.x === s.x && c.west === west && c.east === east)) continue;
+      out.push({ x: s.x, minZ: s.minZ, maxZ: s.maxZ, west, east });
     }
   }
   return out;
@@ -84,8 +104,9 @@ export interface Air<Z = Zone> {
 
 /**
  * The air at (x, z): within `band` m either side of a crossing's line, its
- * north zone's blended towards its south's by how far across the band you
- * are, eased at both edges (halfway on the line); elsewhere the zone
+ * north (or west) zone's blended towards its south's (or east's) by how far
+ * across the band you are, eased at both edges (halfway on the line);
+ * elsewhere the zone
  * underfoot's own. Written into `into` if given (reused each frame), else a
  * new one; null with no zones.
  */
@@ -105,9 +126,10 @@ export function airAt<Z extends Pick<Zone, 'land' | 'walkable'>>(
     return into;
   };
   for (const c of crossings) {
-    if (x < c.minX || x > c.maxX || Math.abs(z - c.z) >= band) continue;
-    const u = (z - c.z + band) / (2 * band);
-    return set(c.north, c.south, u * u * (3 - 2 * u));
+    const [along, lo, hi, across, from, to] = 'z' in c ? [x, c.minX, c.maxX, z - c.z, c.north, c.south] : [z, c.minZ, c.maxZ, x - c.x, c.west, c.east];
+    if (along < lo || along > hi || Math.abs(across) >= band) continue;
+    const u = (across + band) / (2 * band);
+    return set(from, to, u * u * (3 - 2 * u));
   }
   const under = zoneUnder(zones, x, z);
   return under ? set(under, under, 0) : null;

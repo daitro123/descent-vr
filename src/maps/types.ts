@@ -186,6 +186,22 @@ export interface Seam {
   readonly roads: readonly { readonly x: number; readonly width: number; readonly dir: readonly [number, number] }[];
 }
 
+/**
+ * A zone's edge where a neighbour to its east or west takes over, along x =
+ * `x` from z = `minZ` to `maxZ`: its heights there, every `step` m from
+ * `minZ`, which the neighbour's land meets exactly, and the roads that run on
+ * over it (Brackenmoor's Fen road into the Sallows).
+ */
+export interface SideSeam {
+  readonly x: number;
+  readonly minZ: number;
+  readonly maxZ: number;
+  readonly step: number;
+  readonly heights: readonly number[];
+  /** Where each road crosses the line, how wide it is, and which way it runs on (a unit vector over the floor plane). */
+  readonly roads: readonly { readonly z: number; readonly width: number; readonly dir: readonly [number, number] }[];
+}
+
 /** An outdoor region of the world, loaded into the World. */
 export interface Zone extends MapBase {
   readonly kind: 'zone';
@@ -205,8 +221,10 @@ export interface Zone extends MapBase {
   readonly land: { readonly minX: number; readonly maxX: number; readonly minZ: number; readonly maxZ: number };
   /** Push a point on the floor plane out of its trunks, rocks, walls and props, but not back inside where you can walk (the World does that, across zones). True if it moved. */
   collide(p: Vector3, radius: number): boolean;
-  /** Its heights along each seam with a neighbour. */
+  /** Its heights along each seam with a neighbour north or south of it. */
   readonly seams: readonly Seam[];
+  /** Its heights along each seam with a neighbour east or west of it, if it has any. */
+  readonly sideSeams?: readonly SideSeam[];
   /** Its fog, sky colours and light, which the World applies. */
   readonly atmosphere: Atmosphere;
   /** Its enemies, camp by camp. */
