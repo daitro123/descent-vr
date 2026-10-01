@@ -1,6 +1,6 @@
 import { type AttackConfig, CONFIG, type EnemyConfig } from '../config';
 import { SUMMON_ATTACK } from '../enemies/kinds';
-import { ATTACK_POSES, GUARD, type GuardSide, IDLE, KNEEL, KNEEL_DROP, RISE, STAGGER, walkOffsets } from '../enemies/poses';
+import { ATTACK_POSES, GUARD, type GuardSide, IDLE, KNEEL, KNEEL_DROP, MOUND, MOUND_DROP, RISE, STAGGER, SURFACE, walkOffsets } from '../enemies/poses';
 import { type EnemyKind, type Family, proportionsOf } from '../models/characters';
 import { BUILDS, type BuildName } from '../models/human';
 import { PEOPLE, type PersonId } from '../models/people';
@@ -157,7 +157,9 @@ export function clipsFor(kind: EnemyKind, family: Family = 'undead'): Clip[] {
   clips.push(holdClip(kind, 'stagger', STAGGER, def.staggerTime * 0.6));
   if (kind === 'warden') clips.push(holdClip(kind, 'kneel', KNEEL, CONFIG.warden.kneelTime, KNEEL_DROP * p.hipY));
   // Only the dead claw up out of the ground.
-  if (family === 'undead') clips.push(holdClip(kind, 'rise', RISE, 0.8));
+  if (family === 'undead' || family === 'drowned') clips.push(holdClip(kind, 'rise', RISE, 0.8));
+  if (family === 'drowned') clips.push(holdClip(kind, 'surface', SURFACE, 0.8));
+  if (family === 'bog') clips.push(holdClip(kind, 'mound', MOUND, 1.2, MOUND_DROP * p.hipY));
   return clips;
 }
 

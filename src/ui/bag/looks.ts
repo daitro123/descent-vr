@@ -79,6 +79,11 @@ const MODELS: Readonly<Record<string, ItemLook>> = {
   cloth: { look: 'cloth', tint: 0x8a6a5a },
   charm: { look: 'charm', tint: PAL.bone },
   dust: { look: 'dust', tint: 0x9a9488 },
+  // The drowned's junk and the bog beasts'.
+  'deep-coin': { look: 'trinket', tint: 0x5a8670 },
+  'silted-bone': { look: 'charm', tint: 0x9a8762 },
+  'gas-bladder': { look: 'pouch', tint: 0x8a9a5a },
+  peat: { look: 'dust', tint: 0x3e3828 },
   // Professions' materials and what they make (the pouch stands in for ore, stone, bars and herbs).
   'ore-copper': { look: 'pouch', tint: 0xb8733a },
   'stone-rough': { look: 'pouch', tint: 0x8a8680 },

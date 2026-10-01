@@ -1,6 +1,8 @@
 import type { Material } from 'three';
 import { BANDIT_BUILDS, type BanditKind, dressBandit } from './bandits';
+import { BOG_FIGHTERS, BOG_NAMED } from './bog';
 import { bow } from './bow';
+import { DROWNED_FIGHTERS, DROWNED_NAMED } from './drowned';
 import { BUILDS } from './human';
 import type { Vec3 } from './kit';
 import { PAL } from './palette';
@@ -16,7 +18,7 @@ import { type BoneName, type DressContext, type Proportions, Rig } from './rig';
 export type EnemyKind = 'grunt' | 'archer' | 'brute' | 'warden';
 
 /** Who an enemy is, whatever its behaviour. The Warden is only ever undead. */
-export type Family = 'undead' | 'bandit';
+export type Family = 'undead' | 'bandit' | 'drowned' | 'bog';
 
 /** The business end of a weapon, in its bone's space. Enemy strikes sweep this segment. */
 export interface WeaponSpec {
@@ -36,41 +38,45 @@ const DOWN: Vec3 = [PI, 0, 0]; // taper parts grow along +Y; this flips them dow
 
 // ---------------------------------------------------------------- skeleton parts
 
-interface SkeletonLook {
+/** A skeleton's bones: `s` scales their thickness, `eye` glows in the sockets; `bone` and `shade` stain them (the drowned's peat). */
+export interface SkeletonLook {
   s: number;
   eye: number;
   bone?: number;
+  shade?: number;
 }
 
 function skull(ctx: DressContext, l: SkeletonLook): void {
   const { s, eye } = l;
   const B = l.bone ?? PAL.bone;
+  const S = l.shade ?? PAL.boneShade;
   const neckLen = ctx.p.neck - ctx.p.spine;
   ctx
     .on('head')
-    .box(0.045 * s, neckLen + 0.05 * s, 0.045 * s, { at: [0, (0.05 * s - neckLen) / 2, -0.01 * s], color: PAL.boneShade })
+    .box(0.045 * s, neckLen + 0.05 * s, 0.045 * s, { at: [0, (0.05 * s - neckLen) / 2, -0.01 * s], color: S })
     .box(0.19 * s, 0.16 * s, 0.2 * s, { at: [0, 0.145 * s, 0], color: B })
     .taper(0.19 * s, 0.2 * s, 0.13 * s, 0.15 * s, 0.05 * s, { at: [0, 0.225 * s, 0], color: B })
-    .box(0.2 * s, 0.03 * s, 0.04 * s, { at: [0, 0.168 * s, 0.09 * s], color: PAL.boneShade })
+    .box(0.2 * s, 0.03 * s, 0.04 * s, { at: [0, 0.168 * s, 0.09 * s], color: S })
     .box(0.16 * s, 0.07 * s, 0.05 * s, { at: [0, 0.088 * s, 0.08 * s], color: B })
     .box(0.056 * s, 0.046 * s, 0.03 * s, { at: [-0.046 * s, 0.13 * s, 0.093 * s], color: PAL.socket, jitter: 0 })
     .box(0.056 * s, 0.046 * s, 0.03 * s, { at: [0.046 * s, 0.13 * s, 0.093 * s], color: PAL.socket, jitter: 0 })
     .box(0.024 * s, 0.024 * s, 0.02 * s, { at: [-0.046 * s, 0.13 * s, 0.1 * s], color: eye, glow: 1, jitter: 0 })
     .box(0.024 * s, 0.024 * s, 0.02 * s, { at: [0.046 * s, 0.13 * s, 0.1 * s], color: eye, glow: 1, jitter: 0 })
     .box(0.026 * s, 0.03 * s, 0.02 * s, { at: [0, 0.09 * s, 0.106 * s], color: PAL.socket, jitter: 0 })
-    .box(0.12 * s, 0.022 * s, 0.03 * s, { at: [0, 0.052 * s, 0.09 * s], color: PAL.bone });
+    .box(0.12 * s, 0.022 * s, 0.03 * s, { at: [0, 0.052 * s, 0.09 * s], color: B });
   ctx
     .on('jaw')
     .box(0.14 * s, 0.04 * s, 0.1 * s, { at: [0, 0.01 * s, 0.015 * s], color: B })
-    .box(0.11 * s, 0.018 * s, 0.025 * s, { at: [0, 0.035 * s, 0.045 * s], color: PAL.bone });
+    .box(0.11 * s, 0.018 * s, 0.025 * s, { at: [0, 0.035 * s, 0.045 * s], color: B });
 }
 
 function ribcage(ctx: DressContext, l: SkeletonLook): void {
   const { s } = l;
   const B = l.bone ?? PAL.bone;
+  const S = l.shade ?? PAL.boneShade;
   const L = ctx.p.spine;
   const b = ctx.on('spine');
-  b.box(0.045 * s, L + 0.03 * s, 0.045 * s, { at: [0, L / 2 - 0.015 * s, -0.075 * s], color: PAL.boneShade });
+  b.box(0.045 * s, L + 0.03 * s, 0.045 * s, { at: [0, L / 2 - 0.015 * s, -0.075 * s], color: S });
   const ribs: [number, number, number][] = [
     [L - 0.07 * s, 0.26, 0.17],
     [L - 0.13 * s, 0.28, 0.18],
@@ -85,12 +91,12 @@ function ribcage(ctx: DressContext, l: SkeletonLook): void {
       .box(t, t, d, { at: [w / 2, y, 0], color: B })
       .box(w / 2 - 0.03 * s, t, t, { at: [-(w / 4 + 0.015 * s), y - 0.012 * s, d / 2], color: B })
       .box(w / 2 - 0.03 * s, t, t, { at: [w / 4 + 0.015 * s, y - 0.012 * s, d / 2], color: B })
-      .box(w, t, t, { at: [0, y, -d / 2], color: PAL.boneShade });
+      .box(w, t, t, { at: [0, y, -d / 2], color: S });
   }
   b.box(0.035 * s, 0.2 * s, 0.025 * s, { at: [0, L - 0.16 * s, 0.09 * s], color: B })
     .box(ctx.p.shoulderW * 2, 0.03 * s, 0.035 * s, { at: [0, L - 0.01 * s, 0.03 * s], color: B })
-    .box(0.1 * s, 0.12 * s, 0.02 * s, { at: [-0.09 * s, L - 0.09 * s, -0.1 * s], color: PAL.boneShade })
-    .box(0.1 * s, 0.12 * s, 0.02 * s, { at: [0.09 * s, L - 0.09 * s, -0.1 * s], color: PAL.boneShade });
+    .box(0.1 * s, 0.12 * s, 0.02 * s, { at: [-0.09 * s, L - 0.09 * s, -0.1 * s], color: S })
+    .box(0.1 * s, 0.12 * s, 0.02 * s, { at: [0.09 * s, L - 0.09 * s, -0.1 * s], color: S });
   ctx
     .on('hips')
     .taper(0.16 * s, 0.1 * s, 0.26 * s, 0.14 * s, 0.12 * s, { at: [0, -0.09 * s, 0], color: B })
@@ -100,41 +106,42 @@ function ribcage(ctx: DressContext, l: SkeletonLook): void {
 function skeletonLimbs(ctx: DressContext, l: SkeletonLook): void {
   const { s } = l;
   const B = l.bone ?? PAL.bone;
+  const S = l.shade ?? PAL.boneShade;
   const { upperArm: UA, forearm: FA, thigh: TH, shin: SH } = ctx.p;
   for (const side of ['L', 'R'] as const) {
     ctx
       .on(`upperArm${side}`)
       .ball(0.04 * s, { color: B })
       .box(0.04 * s, UA - 0.05 * s, 0.04 * s, { at: [0, -UA / 2, 0], color: B })
-      .ball(0.034 * s, { at: [0, -UA, 0], color: PAL.boneShade });
+      .ball(0.034 * s, { at: [0, -UA, 0], color: S });
     ctx
       .on(`forearm${side}`)
       .box(0.024 * s, FA - 0.03 * s, 0.024 * s, { at: [-0.012 * s, -FA / 2, 0], color: B })
-      .box(0.024 * s, FA - 0.03 * s, 0.024 * s, { at: [0.012 * s, -FA / 2, 0], color: PAL.boneShade });
+      .box(0.024 * s, FA - 0.03 * s, 0.024 * s, { at: [0.012 * s, -FA / 2, 0], color: S });
     ctx
       .on(`hand${side}`)
       .box(0.05 * s, 0.055 * s, 0.028 * s, { at: [0, -0.035 * s, 0], color: B })
-      .box(0.05 * s, 0.045 * s, 0.045 * s, { at: [0, -0.075 * s, 0.006 * s], color: PAL.boneShade });
+      .box(0.05 * s, 0.045 * s, 0.045 * s, { at: [0, -0.075 * s, 0.006 * s], color: S });
     ctx
       .on(`thigh${side}`)
       .ball(0.045 * s, { color: B })
       .box(0.048 * s, TH - 0.06 * s, 0.048 * s, { at: [0, -TH / 2, 0], color: B })
-      .ball(0.042 * s, { at: [0, -TH, 0.01 * s], color: PAL.boneShade });
+      .ball(0.042 * s, { at: [0, -TH, 0.01 * s], color: S });
     ctx
       .on(`shin${side}`)
       .box(0.042 * s, SH - 0.04 * s, 0.042 * s, { at: [0, -SH / 2, 0], color: B })
-      .box(0.08 * s, 0.045 * s, 0.2 * s, { at: [0, -SH - 0.012 * s, 0.05 * s], color: PAL.boneShade });
+      .box(0.08 * s, 0.045 * s, 0.2 * s, { at: [0, -SH - 0.012 * s, 0.05 * s], color: S });
   }
 }
 
-function skeleton(ctx: DressContext, l: SkeletonLook): void {
+export function skeleton(ctx: DressContext, l: SkeletonLook): void {
   skull(ctx, l);
   ribcage(ctx, l);
   skeletonLimbs(ctx, l);
 }
 
 /** Tattered cloth hanging from the hips, front and back. */
-function loincloth(ctx: DressContext, s: number, color: number, len: number): void {
+export function loincloth(ctx: DressContext, s: number, color: number, len: number): void {
   ctx
     .on('hips')
     .box(0.3 * s, 0.05 * s, 0.18 * s, { at: [0, -0.02 * s, 0], color: PAL.leather })
@@ -382,6 +389,8 @@ export interface BuildOptions {
 /** The bone lengths of an enemy with this behaviour and family. */
 export function proportionsOf(kind: EnemyKind, family: Family = 'undead'): Proportions {
   if (family === 'undead') return PROPORTIONS[kind];
+  if (family === 'drowned') return DROWNED_FIGHTERS[kind].proportions;
+  if (family === 'bog') return BOG_FIGHTERS[kind]!.proportions;
   return BUILDS[BANDIT_BUILDS[banditOnly(kind)]].proportions;
 }
 
@@ -391,10 +400,16 @@ function banditOnly(kind: EnemyKind): BanditKind {
   return kind;
 }
 
-export function buildCharacter(kind: EnemyKind, opts: BuildOptions = {}): CharacterModel {
+const NAMED: Partial<Record<Family, Record<string, { proportions: Proportions; dress(ctx: DressContext, v: number): WeaponSpec }>>> = { drowned: DROWNED_NAMED, bog: BOG_NAMED };
+export function buildCharacter(kind: EnemyKind, opts: BuildOptions & { named?: string } = {}): CharacterModel {
   let weapon: WeaponSpec | undefined;
   const variant = opts.variant ?? 0;
   const family = opts.family ?? 'undead';
+  const other = opts.named ? NAMED[family]![opts.named] : family === 'drowned' ? DROWNED_FIGHTERS[kind] : family === 'bog' ? BOG_FIGHTERS[kind] : undefined;
+  if (other) {
+    const rig = new Rig(other.proportions, (ctx) => (weapon = other.dress(ctx, variant)), opts.material, 31 + variant * 7);
+    return { rig, weapon: weapon! };
+  }
   const dress = (ctx: DressContext) => {
     if (family === 'bandit') {
       weapon = dressBandit(ctx, banditOnly(kind), variant);
