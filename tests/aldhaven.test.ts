@@ -176,9 +176,11 @@ describe("Aldhaven's chunks", () => {
     }
   }, 60000);
 
-  it('makes stand-ins cheaper than full detail', () => {
+  it("makes stand-ins cheaper than full detail, and keeps every full chunk within the chunk budget's triangles", () => {
     for (const key of aldhavenChunks()) {
-      expect(buildAldhavenChunk(plan, key, 'standIn').position.length, key).toBeLessThan(buildAldhavenChunk(plan, key, 'full').position.length);
+      const full = buildAldhavenChunk(plan, key, 'full').position.length;
+      expect(buildAldhavenChunk(plan, key, 'standIn').position.length, key).toBeLessThan(full);
+      expect(full / 9, key).toBeLessThan(CONFIG.streaming.budget.chunk);
     }
   }, 30000);
 
