@@ -162,7 +162,7 @@ await look(175, 280);
 await shot('07-enclosure-among');
 
 // 3. The horses and the town dog.
-await standLooking(95.5, 361.5, 92.6, 354.8, 1);
+await standLooking(94.6, 359.6, 92.6, 354.8, 1);
 let cart = await herd('brackenmoor-cart-horse');
 check(cart && Math.hypot(cart.animals[0].x - 92.6, cart.animals[0].z - 354.8) < 0.01, 'the cart horse at its tether');
 check(cart.animals[0].looking, 'turning its head to you');
