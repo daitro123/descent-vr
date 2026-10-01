@@ -1,5 +1,5 @@
 import type { HeightGrid } from '../heightGrid';
-import { type Path, type Plant, type PlantKind, type Structure, type StructureKind, localToWorld, worldToLocal } from './layout';
+import { type Path, type Plant, type PlantKind, type Structure, type StructureKind, localToWorld, standingStones, worldToLocal } from './layout';
 import { fbm, lerp, mulberry32, nearestOnPolyline, type P2, sampleCurve, smoothstep, valueNoise } from './noise';
 
 // Oakvale's finishing touches, planned after the zone itself so nothing laid
@@ -194,6 +194,15 @@ export interface Growing {
   open(x: number, z: number): boolean;
   /** Whether (x, z) is in the Old North Pass's cut or on its cart road, which are kept bare. */
   northPass(x: number, z: number): boolean;
+  /** How far (x, z) is from the nearest road's or footpath's edge (m); 0 on one, infinite well away from them all. */
+  verge(x: number, z: number): number;
+  /** Whether nothing grows at (x, z): a road or footpath, the water, a field's bed, the Old North Pass, by a vein, herb, post or spot. */
+  bare(x: number, z: number): boolean;
+  /** How closely (x, z) is grazed and mown, 0 to 1: the farm's ground, kept short for its beasts and its hay. */
+  grazed(x: number, z: number): number;
+  /** The structures grass grows up against (the zone's own, not its clutter), and the fences. */
+  standing: readonly Structure[];
+  fences: readonly (readonly P2[])[];
 }
 
 /**
@@ -203,13 +212,27 @@ export interface Growing {
  * grows, so nothing planted before them moves.
  */
 export const DRESSING = {
-  ferns: { spacing: 2.2, from: 0.3, full: 0.75, chance: 0.7, trunk: 0.75, grade: 0.55 },
+  ferns: { spacing: 2.2, from: 0.3, full: 0.75, chance: 0.55, trunk: 0.75, grade: 0.55 },
   ridge: { minX: -58, maxX: 30, minZ: -114, maxZ: -70, spacing: 3, grade: 0.75, chance: 0.4, mouth: { half: 8, below: -88 } },
   pass: { minX: -70, maxX: 70, minZ: 86, maxZ: 139, spacing: 4, road: 4, crag: 0.16, pine: 0.3, tufts: 2.4 },
+  /**
+   * Long meadow grass: in drifts over the open ground (patch, from a noise field, never thinner than floor of it), thick along the roads' verges
+   * (verge m out from their edges), round the yards' rims and over the standing stones' meadow (wild), and up
+   * against walls, posts and fences; the drifts thinner by grazed where the farm's ground is kept short.
+   */
+  /** Wild flowers, in drifts where a noise field is over from (full at full), at chance of each spacing m cell. */
+  blooms: { spacing: 2, from: 0.55, full: 0.75, chance: 0.6 },
+  meadow: { spacing: 1.35, patch: 0.5, floor: 0.14, verge: 1.8, vergeChance: 0.6, rim: [0.85, 1.15], wall: 0.85, wallChance: 0.55, fence: 1.1, fenceChance: 0.45, posts: 3, wild: { r: 11, chance: 0.45 }, grazed: 0.7 },
 } as const;
 
+/** What grass grows round the foot of: its walls, or for a post its base. */
+const WALLED: ReadonlySet<StructureKind> = new Set(['inn', 'house', 'smithy', 'farmhouse', 'barn']);
+const ROUND: ReadonlySet<StructureKind> = new Set(['windmill', 'tower']);
+const POSTS: ReadonlySet<StructureKind> = new Set(['signpost', 'lamp', 'mapboard', 'scarecrow', 'well', 'trough', 'cart']);
+
 export function dressPlants(ground: HeightGrid, grown: readonly Plant[], g: Growing, play: number, water: number, mine: Structure, passRoad: readonly P2[], passHalf: number): Plant[] {
-  const rand = mulberry32(5150);
+  // Each pass draws from its own random stream, so thinning one leaves where the others put things.
+  let rand = mulberry32(5150);
   const out: Plant[] = [];
   const add = (kind: PlantKind, x: number, z: number, scale: number, sink = 0) =>
     out.push({ kind, x, y: ground.at(x, z) - sink, z, yaw: rand() * Math.PI * 2, scale, seed: Math.floor(rand() * 1e6) });
@@ -230,7 +253,7 @@ export function dressPlants(ground: HeightGrid, grown: readonly Plant[], g: Grow
       const x = gx + (rand() - 0.5) * F.spacing;
       const z = gz + (rand() - 0.5) * F.spacing;
       const roll = rand();
-      const size = 0.9 + rand() * 0.6;
+      const size = 0.8 + rand() * 0.5;
       if (roll > F.chance * smoothstep(F.from, F.full, g.woods(x, z))) continue;
       if (ground.at(x, z) < water + 0.35 || grade(x, z) > F.grade || g.open(x, z) || g.northPass(x, z)) continue;
       if (!g.clear(x, z, 0.5) || crowded(x, z, F.trunk)) continue;
@@ -238,6 +261,7 @@ export function dressPlants(ground: HeightGrid, grown: readonly Plant[], g: Grow
     }
   }
 
+  rand = mulberry32(5151);
   // Crags out of the mine's ridge, where it's steep, but not round its mouth or in the Old North Pass.
   const R = DRESSING.ridge;
   for (let gz = R.minZ; gz <= R.maxZ; gz += R.spacing) {
@@ -254,6 +278,7 @@ export function dressPlants(ground: HeightGrid, grown: readonly Plant[], g: Grow
     }
   }
 
+  rand = mulberry32(5152);
   // Up the southern pass's walls: crags where they're steep, pines where they aren't, clear of the road and its edge.
   const P = DRESSING.pass;
   for (let gz = P.minZ; gz <= P.maxZ; gz += P.spacing) {
@@ -277,6 +302,105 @@ export function dressPlants(ground: HeightGrid, grown: readonly Plant[], g: Grow
       const size = 0.7 + rand() * 0.6;
       if (roll > 0.5 * smoothstep(P.maxZ, P.maxZ - 30, z) + 0.12 || !g.clear(x, z, 0.3)) continue;
       add(roll < 0.08 ? 'bush' : 'grass', x, z, size);
+    }
+  }
+
+  rand = mulberry32(5153);
+  // Long grass in drifts over the open ground, thick along the verges and round the yards' rims;
+  // the woods have their ferns instead, and the yards' middles are worn bare.
+  const M = DRESSING.meadow;
+  const yardAt = (x: number, z: number) => Math.min(...YARDS.map((y) => Math.hypot(x - y.x, z - y.z) / y.r));
+  // The meadow round the standing stones, left to grow long.
+  const stones = g.standing.find((st) => st.kind === 'stones');
+  const wild = (x: number, z: number) => (stones ? M.wild.chance * smoothstep(M.wild.r, M.wild.r - 3, Math.hypot(x - stones.x, z - stones.z)) : 0);
+  for (let gz = -play; gz <= play; gz += M.spacing) {
+    for (let gx = -play; gx <= play; gx += M.spacing) {
+      const x = gx + (rand() - 0.5) * M.spacing;
+      const z = gz + (rand() - 0.5) * M.spacing;
+      const roll = rand();
+      const size = 0.75 + rand() * 0.6;
+      const yard = yardAt(x, z);
+      if (yard < M.rim[0]) continue;
+      const verge = g.verge(x, z);
+      const open = 1 - smoothstep(0.35, 0.65, g.woods(x, z));
+      const drift = M.patch * (M.floor + (1 - M.floor) * smoothstep(0.32, 0.68, valueNoise(x * 0.06, z * 0.06, 171))) * open * (1 - M.grazed * g.grazed(x, z));
+      const edge = verge < M.verge ? M.vergeChance * smoothstep(M.verge, 0.5, verge) * (0.5 + open * 0.5) : 0;
+      const rim = yard < M.rim[1] ? 0.5 : 0;
+      if (roll > Math.max(drift, edge, rim, wild(x, z))) continue;
+      if (ground.at(x, z) < water + 0.3 || grade(x, z) > 0.9 || g.northPass(x, z) || !g.clear(x, z, 0.15) || crowded(x, z, 0.55)) continue;
+      add('meadow', x, z, size * (edge > drift ? 1.1 : 1));
+    }
+  }
+  rand = mulberry32(5154);
+  // Wild flowers in drifts through the long grass, each drift mostly of one colour.
+  const B = DRESSING.blooms;
+  for (let gz = -play; gz <= play; gz += B.spacing) {
+    for (let gx = -play; gx <= play; gx += B.spacing) {
+      const x = gx + (rand() - 0.5) * B.spacing;
+      const z = gz + (rand() - 0.5) * B.spacing;
+      const roll = rand();
+      const scale = 0.8 + rand() * 0.4;
+      const yaw = rand() * Math.PI * 2;
+      const pick = rand();
+      const open = 1 - smoothstep(0.3, 0.55, g.woods(x, z));
+      if (roll > B.chance * smoothstep(B.from, B.full, valueNoise(x * 0.11, z * 0.11, 181)) * open * (1 - g.grazed(x, z))) continue;
+      if (yardAt(x, z) < M.rim[1] || ground.at(x, z) < water + 0.35 || grade(x, z) > 0.7 || g.northPass(x, z) || !g.clear(x, z, 0.25) || crowded(x, z, 0.6)) continue;
+      // A drift's colour from a second noise field; one in five of another.
+      const hue = Math.floor(valueNoise(x * 0.05, z * 0.05, 183) * 6 * 0.999 + (pick < 0.2 ? 1 + pick * 20 : 0)) % 6;
+      out.push({ kind: 'bloom', x, y: ground.at(x, z), z, yaw, scale, seed: Math.floor(roll * 1e5) * 6 + hue });
+    }
+  }
+
+  rand = mulberry32(5155);
+  // Up against the foot of every wall, round the posts, and along the fences, where no one treads.
+  const foot = (x: number, z: number, chance: number, size: number) => {
+    if (rand() > chance || g.bare(x, z) || g.verge(x, z) < 0.25 || yardAt(x, z) < M.rim[0] || ground.at(x, z) < water + 0.3) return;
+    add('meadow', x, z, size);
+  };
+  for (const st of g.standing) {
+    if (ROUND.has(st.kind)) {
+      const r = st.hw + 0.15;
+      for (let a = 0; a < Math.PI * 2; a += M.wall / r) {
+        const off = r + rand() * 0.25;
+        foot(st.x + Math.cos(a) * off, st.z + Math.sin(a) * off, M.wallChance, 0.55 + rand() * 0.35);
+      }
+    } else if (WALLED.has(st.kind)) {
+      for (const [side, half, other] of [[1, st.hw, st.hd], [-1, st.hw, st.hd], [2, st.hd, st.hw], [-2, st.hd, st.hw]] as const) {
+        for (let t = -half + 0.3; t <= half - 0.3; t += M.wall) {
+          const off = other + 0.12 + rand() * 0.25;
+          const [lx, lz] = Math.abs(side) === 1 ? [t + (rand() - 0.5) * 0.3, Math.sign(side) * off] : [Math.sign(side) * off, t + (rand() - 0.5) * 0.3];
+          const [x, z] = localToWorld(st, lx, lz);
+          foot(x, z, M.wallChance, 0.55 + rand() * 0.35);
+        }
+      }
+    } else if (st.kind === 'stones') {
+      for (const [sx, sz] of standingStones(st)) {
+        for (let k = 0; k < M.posts; k++) {
+          const a = k * ((Math.PI * 2) / M.posts) + rand() * 1.2;
+          const r = 0.6 + rand() * 0.25;
+          foot(sx + Math.cos(a) * r, sz + Math.sin(a) * r, 0.75, 0.6 + rand() * 0.35);
+        }
+      }
+    } else if (POSTS.has(st.kind)) {
+      for (let k = 0; k < M.posts; k++) {
+        const a = st.yaw + k * ((Math.PI * 2) / M.posts) + rand() * 0.8;
+        const r = Math.max(st.hw, st.hd) * 0.7 + 0.2 + rand() * 0.2;
+        foot(st.x + Math.cos(a) * r, st.z + Math.sin(a) * r, 0.7, 0.55 + rand() * 0.3);
+      }
+    }
+  }
+  for (const fence of g.fences) {
+    for (let i = 1; i < fence.length; i++) {
+      const [ax, az] = fence[i - 1];
+      const [bx, bz] = fence[i];
+      const len = Math.hypot(bx - ax, bz - az);
+      for (let t = 0; t < len; t += M.fence) {
+        const side = rand() < 0.5 ? -1 : 1;
+        const off = side * (0.12 + rand() * 0.2);
+        const x = ax + ((bx - ax) * t) / len - ((bz - az) / len) * off;
+        const z = az + ((bz - az) * t) / len + ((bx - ax) / len) * off;
+        foot(x, z, M.fenceChance, 0.6 + rand() * 0.4);
+      }
     }
   }
   return out;

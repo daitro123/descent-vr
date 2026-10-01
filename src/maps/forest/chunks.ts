@@ -22,7 +22,7 @@ import { addBanks, addGround, addPaths, addYards, MeshBuffer, type Region } from
 const UP = new Vector3(0, 1, 0);
 
 /** Too small to see from a stand-in's distance. */
-const UNDERGROWTH: ReadonlySet<PlantKind> = new Set(['grass', 'flower', 'mushroom', 'log', 'stump', 'reed', 'lily', 'fern']);
+const UNDERGROWTH: ReadonlySet<PlantKind> = new Set(['grass', 'flower', 'mushroom', 'log', 'stump', 'reed', 'lily', 'fern', 'meadow', 'bloom']);
 
 /** Trees farther than this (m) from where you can walk are the mountains': the cheaper ones. */
 const FAR_TREES = 6;

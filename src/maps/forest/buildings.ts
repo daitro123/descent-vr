@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry, Color, CylinderGeometry, DodecahedronGeometry, Euler, IcosahedronGeometry, Matrix4, Vector3 } from 'three';
+import { BufferAttribute, BufferGeometry, Color, ConeGeometry, CylinderGeometry, DodecahedronGeometry, Euler, IcosahedronGeometry, Matrix4, Vector3 } from 'three';
 import { ModelBuilder, type PartOpts, type Vec3 } from '../../models/kit';
 import { PAL } from '../../models/palette';
 import type { Boulder, Deck, Field, ForestLayout, Structure } from './layout';
@@ -676,6 +676,34 @@ function soilBed(b: ModelBuilder, f: Field, heightAt: (x: number, z: number) => 
   }
 }
 
+/** Sheaves to each clump of wheat. */
+const WHEAT_SHEAVES = 3;
+
+/**
+ * A sheaf of wheat 1 m tall: a three-sided prism narrow at the foot and fanning
+ * out to a lid at its top (no floor: it stands in the soil).
+ */
+const SHEAF = (() => {
+  const ring = (r: number, y: number) => [0, 1, 2].map((k) => new Vector3(Math.cos((k * 2 * PI) / 3) * r, y, Math.sin((k * 2 * PI) / 3) * r));
+  const foot = ring(0.035, 0);
+  const top = ring(0.14, 1);
+  const pts: number[] = [];
+  const tri = (a: Vector3, b: Vector3, c: Vector3, out: Vector3) => {
+    const n = new Vector3().subVectors(b, a).cross(new Vector3().subVectors(c, a));
+    for (const v of n.dot(out) >= 0 ? [a, b, c] : [a, c, b]) pts.push(v.x, v.y, v.z);
+  };
+  for (let k = 0; k < 3; k++) {
+    const j = (k + 1) % 3;
+    const out = new Vector3().addVectors(top[k], top[j]).setY(0);
+    tri(foot[k], foot[j], top[k], out);
+    tri(foot[j], top[j], top[k], out);
+  }
+  tri(top[0], top[1], top[2], new Vector3(0, 1, 0));
+  const g = new BufferGeometry();
+  g.setAttribute('position', new BufferAttribute(new Float32Array(pts), 3));
+  return g;
+})();
+
 export function buildField(b: ModelBuilder, f: Field, heightAt: (x: number, z: number) => number): void {
   const rand = mulberry32(Math.floor(f.x * 31 + f.z * 17));
   soilBed(b, f, heightAt);
@@ -684,16 +712,34 @@ export function buildField(b: ModelBuilder, f: Field, heightAt: (x: number, z: n
     return [x, heightAt(x, z) + BED.lift, z];
   };
   if (f.crop === 'wheat') {
-    // Rows of standing wheat with furrows showing between them, each row in clumps of their own height,
-    // leaning a little this way and that, heavy ears along their tops.
+    // Rows of standing wheat with furrows showing between them, each row in clumps of their own height:
+    // sheaves of stalks narrow at the foot and fanning out to their tops, leaning this way and that,
+    // with the heavy ears standing up out of them.
+    const ear = new ConeGeometry(0.035, 0.2, 3, 1, true);
+    const shades = [CROP.wheat, CROP.wheatDark, 0xc9a548] as const;
     for (let lz = -f.hd + 0.4; lz <= f.hd - 0.3; lz += 0.75) {
-      for (let lx = -f.hw + 0.4; lx < f.hw; lx += 0.8) {
-        const [x, y, z] = place(lx, lz + (rand() - 0.5) * 0.08);
-        const h = 0.7 + rand() * 0.28;
-        const turn: Vec3 = [(rand() - 0.5) * 0.08, f.yaw + (rand() - 0.5) * 0.12, (rand() - 0.5) * 0.06];
-        // Each clump of stalks narrow at the foot and flaring to its ears, gaps between them along the row.
-        b.taper(0.4, 0.13, 0.64, 0.3, h, { at: [x, y, z], rot: turn, color: CROP.wheat, jitter: 0.12 })
-          .box(0.6, 0.14, 0.32, { at: [x, y + h + 0.03, z], rot: turn, color: CROP.wheatDark, jitter: 0.12 });
+      for (let lx = -f.hw + 0.4; lx < f.hw; lx += 1) {
+        const [, y] = place(lx, lz);
+        const h = 0.75 + rand() * 0.25;
+        for (let k = 0; k < WHEAT_SHEAVES; k++) {
+          const [x, z] = localToWorld(f, lx + (k - (WHEAT_SHEAVES - 1) / 2) * 0.3 + (rand() - 0.5) * 0.08, lz + (rand() - 0.5) * 0.12);
+          const sh = h * (0.86 + rand() * 0.16);
+          const lean: Vec3 = [(rand() - 0.5) * 0.22, rand() * PI, (rand() - 0.5) * 0.22];
+          const g = SHEAF.clone();
+          g.scale(0.85 + rand() * 0.3, sh, 0.85 + rand() * 0.3);
+          b.shape(g, { at: [x, y - 0.02, z], rot: lean, color: shades[Math.floor(rand() * 3)], jitter: 0.1 });
+          // Its top, as tilted, and two ears out of it.
+          const top = new Vector3(0, sh, 0).applyEuler(new Euler(...lean));
+          for (let e = 0; e < 2; e++) {
+            const a = rand() * PI * 2;
+            b.shape(ear.clone(), {
+              at: [x + top.x + Math.cos(a) * 0.06, y + top.y + 0.05, z + top.z + Math.sin(a) * 0.06],
+              rot: [lean[0] + (rand() - 0.5) * 0.3, 0, lean[2] + (rand() - 0.5) * 0.3],
+              color: rand() < 0.5 ? CROP.wheat : 0xe2c870,
+              jitter: 0.08,
+            });
+          }
+        }
       }
     }
   } else if (f.crop === 'pumpkin') {

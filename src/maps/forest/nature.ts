@@ -14,7 +14,7 @@ const PI = Math.PI;
 /** How many differently shaped and coloured copies of each kind to model. */
 const VARIANTS: Record<PlantKind, number> = {
   oak: 6, goldOak: 3, pine: 5, young: 3, bush: 4, rock: 5, grass: 3, flower: 6,
-  mushroom: 2, log: 2, stump: 1, reed: 3, lily: 2, fern: 3, crag: 4,
+  mushroom: 2, log: 2, stump: 1, reed: 3, lily: 2, fern: 3, crag: 4, meadow: 4, bloom: 6,
 };
 
 export type Prototypes = Record<PlantKind, BufferGeometry[]>;
@@ -84,6 +84,10 @@ function buildPlant(b: ModelBuilder, p: Plant, lite: boolean, variant: number): 
       return fern(b, p, rand);
     case 'crag':
       return crag(b, p, rand);
+    case 'meadow':
+      return meadow(b, p, rand, variant);
+    case 'bloom':
+      return bloom(b, p, rand, FLOWERS[variant % FLOWERS.length]);
   }
 }
 
@@ -190,6 +194,55 @@ function grass(b: ModelBuilder, p: Plant, rand: () => number): void {
   }
 }
 
+/**
+ * A clump of long meadow grass: blades in two rings leaning out, a few gone
+ * dry at the top, and on every other variant a couple of seed stalks.
+ */
+function meadow(b: ModelBuilder, p: Plant, rand: () => number, variant: number): void {
+  const { x, y, z, scale: s, yaw } = p;
+  const blades = 7;
+  for (let i = 0; i < blades; i++) {
+    const outer = i >= 3;
+    const a = yaw + (outer ? (i - 3) * 1.57 + 0.6 : i * 2.09) + (rand() - 0.5) * 0.5;
+    const h = (outer ? 0.32 + rand() * 0.2 : 0.48 + rand() * 0.26) * s;
+    const lean = (outer ? 0.4 : 0.18) + rand() * 0.15;
+    const r = (outer ? 0.16 : 0.05) * s;
+    const g = new ConeGeometry(0.045 * s, h, 3, 1, true);
+    const shade = rand();
+    b.shape(g, {
+      at: [x + Math.cos(a) * (r + Math.sin(lean) * h * 0.5), y + (h / 2) * Math.cos(lean) - 0.03, z + Math.sin(a) * (r + Math.sin(lean) * h * 0.5)],
+      rot: [Math.sin(a) * lean, 0, -Math.cos(a) * lean],
+      color: shade < 0.2 ? GREEN.grassDry : shade < 0.55 ? GREEN.grassLight : shade < 0.85 ? GREEN.grass : GREEN.grassDark,
+      jitter: 0.1,
+    });
+  }
+  if (variant % 2 === 1) {
+    for (let k = 0; k < 2; k++) {
+      const a = yaw + k * PI + 0.8;
+      const h = (0.75 + rand() * 0.2) * s;
+      const lean = 0.12 + rand() * 0.1;
+      const out = Math.sin(lean) * h;
+      const rot: Vec3 = [Math.sin(a) * lean, 0, -Math.cos(a) * lean];
+      b.shape(new ConeGeometry(0.022 * s, h, 3, 1, true), { at: [x + Math.cos(a) * out * 0.5, y + h * 0.5 * Math.cos(lean), z + Math.sin(a) * out * 0.5], rot, color: GREEN.grassDry, jitter: 0 });
+      b.shape(new ConeGeometry(0.035 * s, 0.16 * s, 3, 1, true), { at: [x + Math.cos(a) * out, y + h * Math.cos(lean), z + Math.sin(a) * out], rot, color: CROP.wheatDark, jitter: 0.08 });
+    }
+  }
+}
+
+/** Wild flowers in the long grass: a few slender stems, each with a low head of petals. */
+function bloom(b: ModelBuilder, p: Plant, rand: () => number, color: number): void {
+  const { x, y, z, scale: s } = p;
+  for (let i = 0; i < 5; i++) {
+    const a = rand() * PI * 2;
+    const r = (0.04 + rand() * 0.16) * s;
+    const h = (0.24 + rand() * 0.2) * s;
+    const lean = (rand() - 0.5) * 0.3;
+    const [fx, fz] = [x + Math.cos(a) * r, z + Math.sin(a) * r];
+    b.shape(new ConeGeometry(0.012 * s, h, 3, 1, true), { at: [fx, y + h / 2, fz], rot: [lean, 0, 0], color: CROP.stem, jitter: 0.05 });
+    b.shape(new ConeGeometry(0.065 * s, 0.045 * s, 3, 1, true), { at: [fx, y + h * Math.cos(lean), fz + Math.sin(lean) * h * 0.5], rot: [lean, rand() * PI, 0], color, jitter: 0.08 });
+  }
+}
+
 function flowers(b: ModelBuilder, p: Plant, rand: () => number, color: number): void {
   const { x, y, z, scale: s } = p;
   for (let i = 0; i < 3; i++) {
@@ -252,10 +305,10 @@ function lily(b: ModelBuilder, p: Plant, rand: () => number): void {
 /** A fern: a ring of fronds rising from its middle and arching over, each leaf-shaped and folded along its rib. */
 function fern(b: ModelBuilder, p: Plant, rand: () => number): void {
   const { x, y, z, scale: s, yaw } = p;
-  const n = 7 + Math.floor(rand() * 2);
+  const n = 5 + Math.floor(rand() * 2);
   for (let i = 0; i < n; i++) {
     const len = (0.6 + rand() * 0.35) * s;
-    const w = (0.12 + rand() * 0.04) * s;
+    const w = (0.14 + rand() * 0.04) * s;
     // Up from the middle at `rise`, bending over to droop at its tip.
     const rise = 0.75 + rand() * 0.35;
     const [mz, my] = [len * 0.45 * Math.cos(rise), len * 0.45 * Math.sin(rise)];

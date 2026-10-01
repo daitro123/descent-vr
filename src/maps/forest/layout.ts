@@ -11,7 +11,7 @@ import { Walkable } from '../walkable';
 import { Colliders } from './colliders';
 import { HOUSE, planHouse } from './house';
 import { INN, planInn } from './inn';
-import { breakUpRidge, type ClutterKind, DOORSTEP, dressPlants, easeRailBank, placeClutter, planFootpaths, roundTowerHill } from './dressing';
+import { breakUpRidge, type ClutterKind, DOORSTEP, dressPlants, easeRailBank, placeClutter, planFootpaths, roundTowerHill, YARDS } from './dressing';
 import { mineCamp, mineChest, mineClumps, mineRespawn, mineVeins, mouthColliders, mouthOf, planMine } from './mine';
 import { SMITHY, smithyColliders } from './smithy';
 import { fbm, lerp, mulberry32, nearestOnPolyline, type P2, sampleCurve, smoothstep, valueNoise } from './noise';
@@ -485,7 +485,7 @@ const FIELDS: Field[] = [
 
 export type PlantKind =
   | 'oak' | 'goldOak' | 'pine' | 'young' | 'bush' | 'rock' | 'grass' | 'flower' | 'mushroom'
-  | 'log' | 'stump' | 'reed' | 'lily' | 'fern' | 'crag';
+  | 'log' | 'stump' | 'reed' | 'lily' | 'fern' | 'crag' | 'meadow' | 'bloom';
 
 export interface Plant {
   kind: PlantKind;
@@ -887,6 +887,8 @@ export function buildLayout(): ForestLayout {
       .filter((p) => !inNorthPass(p.x, p.z, 2.5) && nearestOnPolyline(cartRoad.line, p.x, p.z).d > cartRoad.width / 2 + (TREE_HEIGHT[p.kind] ? 1.6 : 0.4) && Math.hypot(p.x - cairn.x, p.z - cairn.z) > 1.4)
       // Nor on the footpaths: trees and rocks keep back from their edges, the grass from their middles.
       .filter((p) => footpaths.every((f) => nearestOnPolyline(f.line, p.x, p.z).d > (TREE_HEIGHT[p.kind] ? f.width / 2 + 1.2 : p.kind === 'grass' || p.kind === 'flower' ? f.width / 2 - 0.1 : f.width / 2 + 0.5)))
+      // Nor in the trodden middles of the yards.
+      .filter((p) => !['grass', 'flower', 'mushroom'].includes(p.kind) || YARDS.every((y) => Math.hypot(p.x - y.x, p.z - y.z) > y.r * 0.8))
       .map((p) => ({ ...p, y: p.y + ground.at(p.x, p.z) - natural.at(p.x, p.z) })),
   );
   plants.push(...passEdges(ground, main.line));
@@ -903,9 +905,10 @@ export function buildLayout(): ForestLayout {
           Math.hypot(x - POND.x, z - POND.z) - pondRadius(x, z) > 0.8 + margin &&
           !colliders.blocked(x, z, margin) &&
           keepOff.every((k) => Math.hypot(x - k.x, z - k.z) > 1.5 + margin) &&
+          // The standing stones' ground is meadow, but for the stones themselves (colliders) and its worn middle (a yard).
           !structures.some((st) => {
             const [lx, lz] = worldToLocal(st, x, z);
-            return Math.abs(lx) < st.hw + margin && Math.abs(lz) < st.hd + margin;
+            return st.kind !== 'stones' && Math.abs(lx) < st.hw + margin && Math.abs(lz) < st.hd + margin;
           }) &&
           !FIELDS.some((f) => {
             const [lx, lz] = worldToLocal(f, x, z);
@@ -914,6 +917,23 @@ export function buildLayout(): ForestLayout {
         woods: woodsAt,
         open: (x, z) => CLEARINGS.some((c) => Math.hypot(x - c.x, z - c.z) < c.treeFree * 0.8),
         northPass: (x, z) => inNorthPass(x, z, 3) || nearestOnPolyline(cartRoad.line, x, z).d < cartRoad.width / 2 + 2,
+        verge: (x, z) => roadDistance.at(x, z),
+        bare: (x, z) =>
+          roadDistance.at(x, z) < 0.15 ||
+          streamField.at(x, z) < STREAM_HALF + 0.8 ||
+          Math.hypot(x - POND.x, z - POND.z) - pondRadius(x, z) < 1 ||
+          inNorthPass(x, z, 2) ||
+          keepOff.some((k) => Math.hypot(x - k.x, z - k.z) < 1.7) ||
+          FIELDS.some((f) => {
+            const [lx, lz] = worldToLocal(f, x, z);
+            return Math.abs(lx) < f.hw + 0.4 && Math.abs(lz) < f.hd + 0.4;
+          }),
+        grazed: (x, z) => {
+          const farm = CLEARINGS.find((c) => c.id === 'farm')!;
+          return smoothstep(farm.treeFree, farm.treeFree * 0.6, Math.hypot(x - farm.x, z - farm.z));
+        },
+        standing: [...structures],
+        fences,
       },
       play,
       FOREST.water,
