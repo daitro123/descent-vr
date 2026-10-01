@@ -3,7 +3,7 @@ import { closestSegmentSegment, type SegmentHit } from '../combat/geometry';
 import type { BladeTarget } from '../combat/strike';
 import type { AttackConfig, EnemyConfig } from '../config';
 import { CONFIG } from '../config';
-import { buildCharacter, type EnemyBody, type EnemyKind, FAMILIES, type Family, type WeaponSpec } from '../models/characters';
+import { buildCharacter, type EnemyBody, type EnemyKind, FAMILIES, type Family, type Fighter, fighterOf, type WeaponSpec } from '../models/characters';
 import { createModelMaterial, type ModelMaterial } from '../models/materials';
 import { BONES, type BoneName, blendPoses, type Pose, type Rig } from '../models/rig';
 import { HealthBar } from '../ui/healthBar';
@@ -157,6 +157,16 @@ interface Shard {
 }
 
 /**
+ * The level-1 numbers of `family`'s fighter with behaviour `kind`: its
+ * behaviour's (CONFIG.enemies), with whatever its own body changes laid over
+ * them (Fighter.numbers: a giant's reach, a skeleton brute's death).
+ */
+export function numbersOf(kind: EnemyKind, family: Family = 'undead'): EnemyConfig {
+  const own = fighterOf(kind, family).numbers;
+  return own ? { ...CONFIG.enemies[kind], ...own } : CONFIG.enemies[kind];
+}
+
+/**
  * Shared machinery for every enemy: rising from the grave, locomotion and
  * steering, the attack timeline (wind-up → swing → recover) driven by pose
  * keyframes, stagger and exposure, deaths, and the hurt volumes the sword
@@ -169,6 +179,10 @@ export abstract class Enemy {
   readonly family: Family;
   /** What its family is made of: how it comes and goes, and what flies when it's hit. */
   readonly body: EnemyBody;
+  /** What it's made of itself: its family's body's stuff (bone for the dead), or flesh or stone (Fighter.made). */
+  readonly made: 'flesh' | 'bone' | 'stone';
+  /** A boss's name and colour, for the long health bar; the rest have none. */
+  readonly boss: Fighter['boss'];
   readonly def: EnemyConfig;
   /** Its level, which `def`'s numbers were made at (createEnemy): what its kill pays for. */
   readonly level: number;
@@ -272,9 +286,12 @@ export abstract class Enemy {
     z: number,
     traits: EnemyTraits = {},
   ) {
-    const { family = 'undead', variant = 0, def = CONFIG.enemies[kind], level = 1 } = traits;
+    const { family = 'undead', variant = 0, def = numbersOf(kind, family), level = 1 } = traits;
     this.family = family;
     this.body = FAMILIES[family].body;
+    const fighter = fighterOf(kind, family);
+    this.made = fighter.made ?? (this.body === 'human' ? 'flesh' : 'bone');
+    this.boss = fighter.boss;
     this.def = def;
     this.level = level;
     this.hp = this.maxHp = this.def.hp;
@@ -286,7 +303,7 @@ export abstract class Enemy {
     this.root.position.set(x, 0, z);
     this.root.add(this.visual);
     this.visual.add(this.rig.mesh);
-    this.riseTime = kind === 'warden' ? 2.4 : 1.1;
+    this.riseTime = this.boss ? 2.4 : 1.1;
     if (this.body === 'skeleton') {
       // The dead claw their way up out of the ground.
       this.visual.position.y = -RISE_DEPTH * this.heightScale;
@@ -297,9 +314,9 @@ export abstract class Enemy {
       copyPose(IDLE[kind], this.pose);
     }
 
-    const big = kind === 'warden';
-    this.healthBar = big ? new HealthBar(1.4, 0.1, 0x6ad0ff, 'THE BONE WARDEN') : new HealthBar(0.5, 0.05, 0xc81e1e);
-    this.healthBar.root.position.y = this.headTopY() + (big ? 0.5 : 0.28);
+    const boss = this.boss;
+    this.healthBar = boss ? new HealthBar(1.4, 0.1, boss.colour, boss.name) : new HealthBar(0.5, 0.05, 0xc81e1e);
+    this.healthBar.root.position.y = this.headTopY() + (boss ? 0.5 : 0.28);
     this.root.add(this.healthBar.root);
   }
 
@@ -440,7 +457,7 @@ export abstract class Enemy {
 
   /** How far pushes move it: heavy enemies barely budge. */
   protected knockbackScale(): number {
-    return this.kind === 'brute' ? 0.35 : this.kind === 'warden' ? 0.15 : 1;
+    return this.def.knockback ?? (this.kind === 'brute' ? 0.35 : this.kind === 'warden' ? 0.15 : 1);
   }
 
   /** Hook: HP thresholds (the Warden's summons). */
@@ -1271,7 +1288,7 @@ export abstract class Enemy {
     }
 
     this.updateGlow();
-    this.healthBar.update(dt, this.hpFraction, ctx.playerHead, this.kind === 'warden' && !this.seated);
+    this.healthBar.update(dt, this.hpFraction, ctx.playerHead, this.boss !== undefined && !this.seated);
     return true;
   }
 

@@ -82,6 +82,12 @@ const MODELS: Readonly<Record<string, ItemLook>> = {
   // House Corvane's bailiffs' junk: a notched tally of the tithes owed, and the house's pewter badge.
   tally: { look: 'charm', tint: 0x9a7a4a },
   'key-badge': { look: 'trinket', tint: 0x4a4a52 },
+  // The barrow dead's: a scale off a grave shirt, gone green, and an amber bead from a grave's necklace.
+  'green-scale': { look: 'charm', tint: 0x5c8a6c },
+  'barrow-bead': { look: 'trinket', tint: 0xc08a3a },
+  // The vault dead's: a flake of basalt plate with a glyph still in it, and a bronze rivet out of their armour.
+  'glyph-shard': { look: 'charm', tint: 0x45424d },
+  'deep-rivet': { look: 'trinket', tint: 0x8c6a3c },
   // Professions' materials and what they make (the pouch stands in for ore, stone, bars and herbs).
   'ore-copper': { look: 'pouch', tint: 0xb8733a },
   'stone-rough': { look: 'pouch', tint: 0x8a8680 },

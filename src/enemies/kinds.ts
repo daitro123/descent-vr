@@ -2,7 +2,7 @@ import { Vector3 } from 'three';
 import { enemyNumbers } from '../adventureState';
 import { type AttackConfig, CONFIG, type EnemyConfig } from '../config';
 import type { EnemyKind, Family } from '../models/characters';
-import { Enemy, type EnemyContext } from './enemy';
+import { Enemy, type EnemyContext, numbersOf } from './enemy';
 
 // Each enemy type exists to test the player in a different way:
 //   grunt   directional melee: read the wind-up, block on the right side, or hit first
@@ -75,8 +75,10 @@ export class Grunt extends MeleeEnemy {}
 export class Brute extends MeleeEnemy {
   protected chooseAttack(dist: number): AttackConfig | null {
     const [heavy, slam] = this.def.attacks;
-    // The slam lands a maul-length away, so it's the answer to a player who keeps their distance.
-    if (dist > 1.2 && dist < 2.3 && Math.random() < 0.5) return slam;
+    // The slam lands a maul-length away, so it's the answer to a player who
+    // keeps their distance: that far for a brute's reach, further for a giant's.
+    const k = this.def.attackRange / CONFIG.enemies.brute.attackRange;
+    if (dist > 1.2 * k && dist < 2.3 * k && Math.random() < 0.5) return slam;
     return dist <= this.def.attackRange ? (Math.random() < 0.75 ? heavy : slam) : null;
   }
 }
@@ -207,7 +209,7 @@ export interface EnemyOptions {
  */
 export function createEnemy(kind: EnemyKind, x: number, z: number, options: EnemyOptions = {}): Enemy {
   const { level = 1, inCamp = false, family = 'undead', variant = 0 } = options;
-  const traits = { family, variant, level, def: enemyNumbers(options.def ?? CONFIG.enemies[kind], level, inCamp) };
+  const traits = { family, variant, level, def: enemyNumbers(options.def ?? numbersOf(kind, family), level, inCamp) };
   switch (kind) {
     case 'grunt':
       return new Grunt(kind, x, z, traits);

@@ -1,11 +1,14 @@
 import type { Material } from 'three';
+import type { EnemyConfig } from '../config';
 import { BANDITS } from './bandits';
 import { BAILIFFS } from './bailiffs';
+import { BARROW_LIGHT, dressBarrowArcher, dressBarrowBrute, dressBarrowGrunt, dressBarrowThane } from './barrow';
 import { bow } from './bow';
 import type { Vec3 } from './kit';
 import { PAL } from './palette';
 import { type BoneName, type DressContext, type Proportions, Rig } from './rig';
 import { loincloth, skeleton } from './skeleton';
+import { dressVaultArcher, dressVaultBrute, dressVaultGrunt } from './vault';
 
 // The bestiary's bodies. Each is a Rig (one draw call) dressed from simple
 // primitives. Sizes are in metres; `s` scales bone thickness, not length. An
@@ -43,6 +46,21 @@ export interface Fighter {
   readonly proportions: Proportions;
   /** Dress it in look `variant` (any whole number: it wraps), and say what it strikes with. */
   dress(ctx: DressContext, variant: number): WeaponSpec;
+  /** A boss: its name over the long health bar it shows instead of the plain one, in its colour. */
+  readonly boss?: { readonly name: string; readonly colour: number };
+  /**
+   * What it's made of, where that isn't its family's body (bone, for the
+   * dead): the undead brute's stitched flesh bleeds dark ichor, the
+   * Keyward's stone throws grit. It decides what flies when it's hit and
+   * when it falls.
+   */
+  readonly made?: 'flesh' | 'stone';
+  /**
+   * Its own level-1 numbers where its behaviour's (CONFIG.enemies) don't fit
+   * its body: a giant's reach and girth, a skeleton brute that shatters.
+   * Laid over its behaviour's; numbersOf (enemies/enemy.ts) gives the whole.
+   */
+  readonly numbers?: Partial<EnemyConfig>;
 }
 
 /**
@@ -302,8 +320,39 @@ const UNDEAD: FamilyDef = {
   fights: {
     grunt: { label: 'Grunt', looks: 6, proportions: PROPORTIONS.grunt, dress: dressGrunt },
     archer: { label: 'Archer', looks: 1, proportions: PROPORTIONS.archer, dress: dressArcher },
-    brute: { label: 'Brute', looks: 1, proportions: PROPORTIONS.brute, dress: dressBrute },
-    warden: { label: 'Bone Warden', looks: 1, proportions: PROPORTIONS.warden, dress: dressWarden },
+    brute: { label: 'Brute', looks: 1, proportions: PROPORTIONS.brute, dress: dressBrute, made: 'flesh' },
+    warden: { label: 'Bone Warden', looks: 1, proportions: PROPORTIONS.warden, dress: dressWarden, boss: { name: 'THE BONE WARDEN', colour: PAL.blueEye } },
+  },
+};
+
+/**
+ * The barrow dead of Brackenmoor's High Fells (barrow.ts): skeletons in green
+ * bronze on the undead's bones, their champion as the brute (it shatters, as
+ * bone does), and the Barrow Thane under Hollowhill as their Warden.
+ */
+const BARROW: FamilyDef = {
+  body: 'skeleton',
+  seed: 41,
+  fights: {
+    grunt: { label: 'Barrow dead', looks: 4, proportions: PROPORTIONS.grunt, dress: dressBarrowGrunt },
+    archer: { label: 'Barrow archer', looks: 1, proportions: PROPORTIONS.archer, dress: dressBarrowArcher },
+    brute: { label: 'Barrow champion', looks: 1, proportions: PROPORTIONS.brute, dress: dressBarrowBrute, numbers: { death: 'shatter' } },
+    warden: { label: 'Barrow Thane', looks: 1, proportions: PROPORTIONS.warden, dress: dressBarrowThane, boss: { name: 'THE BARROW THANE', colour: BARROW_LIGHT } },
+  },
+};
+
+/**
+ * The vault dead of Aldhaven's Undercroft (vault.ts): the Deepkings' own
+ * dead, skeletons in black basalt plate with faint blue glyphs for eyes. Their
+ * brute is one of them grown huge, and breaks apart like the rest.
+ */
+const VAULT: FamilyDef = {
+  body: 'skeleton',
+  seed: 51,
+  fights: {
+    grunt: { label: 'Vault dead', looks: 3, proportions: PROPORTIONS.grunt, dress: dressVaultGrunt },
+    archer: { label: 'Vault archer', looks: 1, proportions: PROPORTIONS.archer, dress: dressVaultArcher },
+    brute: { label: 'Vault brute', looks: 1, proportions: PROPORTIONS.brute, dress: dressVaultBrute, numbers: { death: 'shatter' } },
   },
 };
 
@@ -316,6 +365,8 @@ export const FAMILIES = {
   undead: UNDEAD,
   bandit: BANDITS,
   corvane: BAILIFFS,
+  barrow: BARROW,
+  vault: VAULT,
 } satisfies Record<string, FamilyDef>;
 
 /** Who an enemy is, whatever its behaviour: one of FAMILIES. */

@@ -72,6 +72,8 @@ const FIRE = CONFIG.talents.trees.mage.fire;
 const FROST = CONFIG.talents.trees.mage.frost;
 /** What flies from a bandit when a blow lands. */
 const HUMAN_BLOOD = 0x7a1812;
+/** What flies off a body of stone when it's struck: the Keyward's black basalt. */
+const STONE_CHIPS = 0x4a4752;
 const _to = new Vector3();
 const _p = new Vector3();
 const _a = new Vector3();
@@ -839,11 +841,12 @@ export class Combat implements ArrowResolver {
     this.fx.text.spawn('Evade', at.clone().setY(at.y + 0.2), { color: '#c0c0c0', scale: 0.16 });
   }
 
-  /** Red from the living, dark ichor from the undead brute, bone chips from skeletons; sparks on crits. */
+  /** Red from the living, dark ichor from the undead brute, bone chips from skeletons, grit from stone; sparks on crits. */
   private impactFx(enemy: Enemy, at: Vector3, dir: Vector3, bright: boolean): void {
     _vel.copy(dir).normalize();
     if (enemy.body === 'human') this.fx.particles.burst('blood', at, 8, _vel, HUMAN_BLOOD);
-    else if (enemy.kind === 'brute') this.fx.particles.burst('blood', at, 10, _vel);
+    else if (enemy.made === 'flesh') this.fx.particles.burst('blood', at, 10, _vel);
+    else if (enemy.made === 'stone') this.fx.particles.burst('bone', at, 8, _vel, STONE_CHIPS);
     else this.fx.particles.burst('bone', at, 6, _vel);
     if (bright) this.fx.particles.burst('sparks', at, 14, _vel);
   }
@@ -860,13 +863,14 @@ export class Combat implements ArrowResolver {
     enemy.capsule(_a, _b);
     _a.lerp(_b, 0.5);
     const living = enemy.body === 'human';
-    sfx.death(_a, { big: enemy.kind === 'warden' || enemy.kind === 'brute', bones: !living });
+    sfx.death(_a, { big: enemy.boss !== undefined || enemy.kind === 'brute', bones: !living });
     if (living) this.fx.particles.burst('blood', _a, 12, undefined, HUMAN_BLOOD);
-    else if (enemy.kind === 'brute') this.fx.particles.burst('blood', _a, 24);
-    else this.fx.particles.burst('bone', _a, enemy.kind === 'warden' ? 40 : 14);
-    if (enemy.kind === 'warden') {
-      this.fx.particles.burst('magic', _a, 60);
-      this.fx.shockwaves.trigger(enemy.position, 5, 0x6ad0ff, 0.9);
+    else if (enemy.made === 'flesh') this.fx.particles.burst('blood', _a, 24);
+    else if (enemy.made === 'stone') this.fx.particles.burst('bone', _a, 40, undefined, STONE_CHIPS);
+    else this.fx.particles.burst('bone', _a, enemy.boss ? 40 : 14);
+    if (enemy.boss) {
+      this.fx.particles.burst('magic', _a, 60, undefined, enemy.boss.colour);
+      this.fx.shockwaves.trigger(enemy.position, 5, enemy.boss.colour, 0.9);
     }
     this.fx.particles.burst('dust', enemy.position, 8);
   }
