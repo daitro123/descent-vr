@@ -2,8 +2,8 @@ import { type Camera, Group, type Object3D, type Scene, Vector3, type WebGLRende
 import type { AdventureState } from '../adventureState';
 import { CONFIG } from '../config';
 import { type FileSpot, PatrolWalk } from '../enemies/patrol';
-import { walkOffsets } from '../enemies/poses';
 import type { VillagerSpot } from '../maps/types';
+import { BUILDS, type Build } from '../models/human';
 import { createModelMaterial } from '../models/materials';
 import { buildPerson, PEOPLE } from '../models/people';
 import { blendPoses, type Pose, type Rig } from '../models/rig';
@@ -13,6 +13,7 @@ import { QuestMarker } from '../ui/questMarker';
 import type { Ground } from '../world/ground';
 import { BarkRule } from './barks';
 import { friendlyPose } from './poses';
+import { cyclesOver, type MutablePose, type WalkFrame, walkFrame, walkOver } from './walk';
 import { strikesBetween, type WorkLoop, workLoop } from './work';
 
 // The village's people at work: the innkeeper behind the inn's bar, the smith
@@ -28,7 +29,8 @@ import { strikesBetween, type WorkLoop, workLoop } from './work';
 const _hand = new Vector3();
 const _at = new Vector3();
 const _file: FileSpot = { x: 0, z: 0, yaw: 0 };
-const _walk: Record<string, [number, number, number]> = {};
+const _walk: WalkFrame = { pose: {}, hip: [0, 0, 0] };
+const _hip: [number, number, number] = [0, 0, 0];
 
 /** Is `o` drawn: it and everything it hangs from visible? */
 function drawn(o: Object3D): boolean {
@@ -58,6 +60,8 @@ export type VillagerPlace<Id extends string> = Omit<VillagerSpot, 'id'> & { read
 /** Who a villager is: their body, their name over a bark, the pose they stand easy in, and their work. */
 export interface Who {
   readonly rig: Rig;
+  /** The build they're in: how they walk (people/walk.ts). */
+  readonly build: Build;
   readonly label: string;
   readonly stand: Pose;
   readonly work: WorkLoop;
@@ -72,6 +76,7 @@ function oakvaler(spot: VillagerSpot): Who {
   const p = PEOPLE[spot.id];
   return {
     rig: buildPerson(spot.id, createModelMaterial()),
+    build: BUILDS[p.look.build],
     label: p.label,
     stand: p.stand,
     work: workLoop(spot.id, spot.turn),
@@ -110,7 +115,7 @@ export class Villager<Id extends string = VillagerId> {
   /** How far round they look (rad, + to their left), eased. */
   look = 0;
   private breath = 0;
-  /** 0 standing to 1 walking at a stroll, eased, and how far round the walk cycle their legs are (rad). */
+  /** 0 standing to 1 walking, eased, and how many cycles of the walk (two steps each) their legs have been round. */
   private walking = 0;
   private stride = 0;
 
@@ -197,11 +202,10 @@ export class Villager<Id extends string = VillagerId> {
     walk.step(dt * (1 - this.attend));
     walk.spot(0, _file);
     const moved = Math.hypot(_file.x - this.at.x, _file.z - this.at.z);
-    const W = CONFIG.population.walk;
     // Easing into the walk as they set off, and out of it as they stop.
     const going = !walk.pausing && this.attend < 0.5 && dt > 0 ? 1 : 0;
     this.walking += (going - this.walking) * Math.min(1, dt * 5);
-    this.stride += moved * W.stride;
+    this.stride += cyclesOver(moved, this.who.build);
     this.at.x = this.solid.x = _file.x;
     this.at.z = this.solid.z = _file.z;
     this.at.yaw = dt > 0 ? this.at.yaw + towards(this.at.yaw, _file.yaw) * Math.min(1, dt * 6) : _file.yaw;
@@ -216,12 +220,15 @@ export class Villager<Id extends string = VillagerId> {
     const dx = to.x - this.at.x;
     const dz = to.z - this.at.z;
     const d = Math.hypot(dx, dz);
-    if (d === 0 && this.at.yaw === to.yaw) return;
+    // Walking there, a step at a time, and easing back to standing once there.
     const step = CONFIG.villagers.smith.aside.speed * dt;
+    this.walking += ((d > step ? 1 : 0) - this.walking) * Math.min(1, dt * 5);
+    if (d === 0 && this.at.yaw === to.yaw) return;
     let yaw = to.yaw;
     if (d > step) {
       this.at.x += (dx / d) * step;
       this.at.z += (dz / d) * step;
+      this.stride += cyclesOver(step, this.who.build);
       yaw = Math.atan2(dx, dz);
     } else {
       this.at.x = to.x;
@@ -273,18 +280,13 @@ export class Villager<Id extends string = VillagerId> {
   private pose(far: number, up = 0): void {
     const V = CONFIG.villagers;
     const working = this.work.at(this.clock);
-    // Walking, they stand easy over the walk's swing of arms and legs.
+    // Walking, they stand easy (holding what they hold) on the walk's legs, with its swing.
     const w = this.walking;
     const a = Math.max(this.attend, w);
     // Breathing, at work or standing easy.
-    const pose = friendlyPose(blendPoses(working.pose, this.who.stand, a, {}), this.breath) as Record<string, [number, number, number]>;
-    if (w > 0.01) {
-      walkOffsets(this.stride, w * 0.8, _walk);
-      for (const [bone, r] of Object.entries(_walk)) {
-        const o = (pose[bone] ??= [0, 0, 0]);
-        for (let i = 0; i < 3; i++) o[i] += r[i];
-      }
-    }
+    const pose = friendlyPose(blendPoses(working.pose, this.who.stand, a, {}), this.breath) as MutablePose;
+    _hip.fill(0);
+    if (w > 0.01) walkOver(pose, walkFrame(this.stride, this.who.build, _walk), w, _hip);
     const head = V.look.head;
     const turned = clamp(this.look, -head, head);
     const chest = this.look - turned;
@@ -295,8 +297,7 @@ export class Villager<Id extends string = VillagerId> {
     // And a little up or down to your eyes, while they look at you.
     if (Number.isFinite(far) && far > 0.1) h[0] = h[0] * (1 - a) + a * clamp(-Math.atan2(up, far), -0.3, 0.3);
     this.rig.apply(pose as Pose);
-    const bob = -Math.abs(Math.sin(this.stride)) * 0.03 * w;
-    this.rig.setHipOffset(working.hip[0] * (1 - a), working.hip[1] * (1 - a) + bob, working.hip[2] * (1 - a));
+    this.rig.setHipOffset(working.hip[0] * (1 - a) + _hip[0], working.hip[1] * (1 - a) + _hip[1], working.hip[2] * (1 - a) + _hip[2]);
     this.root.rotation.y = this.at.yaw + working.turn * (1 - a);
   }
 
@@ -337,9 +338,14 @@ export class Villager<Id extends string = VillagerId> {
   }
 }
 
-/** A villager's stroll along `route` from where they start, at a walk. */
-export function strollFrom(x: number, z: number, route: readonly { readonly x: number; readonly z: number }[]): PatrolWalk {
-  const { speed, pause } = CONFIG.population.walk;
+/** A villager's stroll along `route` from where they start, at `speed` (m/s: their build's pace, human.ts `Gait`). */
+export function strollFrom(
+  x: number,
+  z: number,
+  route: readonly { readonly x: number; readonly z: number }[],
+  speed: number = CONFIG.population.walk.speed,
+): PatrolWalk {
+  const { pause } = CONFIG.population.walk;
   return new PatrolWalk([{ x, z }, ...route], 1, { speed, pause, gap: 0 });
 }
 

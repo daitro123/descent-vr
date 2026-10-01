@@ -93,8 +93,12 @@ The one body every person wears, bandits and friendly characters alike, dressed 
 _Avoid_: human model, NPC mesh
 
 **Build**:
-A human body's size and shape: average, stout, broad or big.
+A human body's size and shape, and the walk that goes with it (its gait): average, stout, broad or big for grown men; woman; elder and elder woman, stooped; child.
 _Avoid_: body type, size
+
+**Gait**:
+How a build walks: the length of its step, its pace, how its arms swing and how far its feet roll heel to toe. A child takes quick short steps; an elder shuffles, slow and flat-footed.
+_Avoid_: walk style, locomotion
 
 **Camp**:
 A group of enemies that lives at one place and refills some time after it is cleared: the bandits at the farm, at the lumber camp and at the watchtower, and the undead in the mine. A boss is never part of a camp. (The lumber camp is a place; the bandits there are its camp.) A camp can be neutral until a quest turns it, leaving you be unless you hurt one of it, and can come or go with a quest.
