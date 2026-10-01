@@ -3,9 +3,10 @@ import type { Vec3, Weights } from './kit';
 import { PAL } from './palette';
 import type { DressContext, Proportions } from './rig';
 
-// The human body: one body on the skeletons' 14-bone rig, rigidly skinned, in
-// one draw call with the shared material and grain, dressed per character
-// (people.ts). It stands about 1.78 m (a skeleton grunt is about 1.74 m) and
+// The human body: one body on the skeletons' humanoid rig, rigidly skinned,
+// in one draw call with the shared material and grain, dressed per character
+// (people.ts). Its soles hang from the feet (ankle) bones, so a walk can roll
+// them. It stands about 1.78 m (a skeleton grunt is about 1.74 m) and
 // comes in eight builds: four men's, a woman's, an elder's and an elder
 // woman's (stooped), and a child's. The face looks along +Z: eyes with
 // whites, brows, a nose, a mouth and ears, with the chin on the jaw bone.

@@ -92,8 +92,8 @@ export class SkeletonRig<B extends string, P> {
     this.proportions = p;
     const { bones: names, parent } = skeleton;
     const offsets = skeleton.offsets(p);
-    const turns = skeleton.turns?.(p) ?? {};
-    const scales = skeleton.scales?.(p) ?? {};
+    const turns: PoseOf<B> = skeleton.turns?.(p) ?? {};
+    const scales: Partial<Record<B, number>> = skeleton.scales?.(p) ?? {};
     const bones = {} as Record<B, Bone>;
     const bind = {} as Record<B, Vector3>;
     for (const name of names) {
