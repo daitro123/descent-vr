@@ -3,7 +3,7 @@ import { closestSegmentSegment, type SegmentHit } from '../combat/geometry';
 import type { BladeTarget } from '../combat/strike';
 import type { AttackConfig, EnemyConfig } from '../config';
 import { CONFIG } from '../config';
-import { bodyOf, buildCharacter, type EnemyBody, type EnemyFamily, type EnemyKind, fighterOf, isFamily, type WeaponSpec } from '../models/characters';
+import { bodyOf, buildCharacter, type EnemyBody, type EnemyFamily, type EnemyKind, type Fighter, fighterOf, isFamily, type WeaponSpec } from '../models/characters';
 import { createModelMaterial, type ModelMaterial } from '../models/materials';
 import { BONES, type BoneName, blendPoses, type PoseOf, type Rig, type SkeletonRig } from '../models/rig';
 import { HealthBar } from '../ui/healthBar';
@@ -160,6 +160,9 @@ function rand(lo: number, hi: number): number {
   return lo + Math.random() * (hi - lo);
 }
 
+/** A Warden's long health bar, unless its fighter gives its own colour (Fighter.boss): the Bone Warden's eyes. */
+const WARDEN_BLUE = 0x6ad0ff;
+
 /** Where a slash crosses the enemy's front, measured once per body (family, behaviour and look: each carries its own weapon) at its bind proportions. */
 interface AimCalibration {
   angle: number; // elevation of that crossing seen from the right shoulder
@@ -187,6 +190,16 @@ interface Shard {
 }
 
 /**
+ * The level-1 numbers of `family`'s fighter with behaviour `kind`: its
+ * behaviour's (CONFIG.enemies), with whatever its own body changes laid over
+ * them (Fighter.numbers: a giant's reach, a skeleton brute's death).
+ */
+export function numbersOf(kind: EnemyKind, family: EnemyFamily = 'undead', named?: string): EnemyConfig {
+  const own = kind !== 'biter' && isFamily(family) ? fighterOf(kind, family, named).numbers : undefined;
+  return own ? { ...CONFIG.enemies[kind], ...own } : CONFIG.enemies[kind];
+}
+
+/**
  * Shared machinery for every enemy: rising from the grave, locomotion and
  * steering, the attack timeline (wind-up → swing → recover) driven by pose
  * keyframes, stagger and exposure, deaths, and the hurt volumes the sword
@@ -199,6 +212,10 @@ export abstract class Enemy {
   readonly family: EnemyFamily;
   /** What its family is made of: how it comes and goes, and what flies when it's hit. */
   readonly body: EnemyBody;
+  /** What it's made of itself: its family's body's stuff (bone for the dead), or flesh or stone (Fighter.made). */
+  readonly made: 'flesh' | 'bone' | 'stone';
+  /** A boss's colour, for the long health bar (every Warden, and the Keyward); the rest have none. */
+  readonly boss: Fighter['boss'];
   /** Which of its family's named fighters it is (FamilyDef.named), or null for an ordinary fighter. */
   readonly named: string | null;
   /** Lying hidden where it was raised, still to rise: until you come near or its camp fights. */
@@ -316,13 +333,16 @@ export abstract class Enemy {
     z: number,
     traits: EnemyTraits = {},
   ) {
-    const { family = 'undead', variant = 0, named, def = CONFIG.enemies[kind], level = 1, lurks = false } = traits;
+    const { family = 'undead', variant = 0, named, def = numbersOf(kind, family, named), level = 1, lurks = false } = traits;
     this.family = family;
     this.variant = variant;
     this.body = bodyOf(family);
     this.fighter = `${family}:${kind}:${named ?? variant}`;
     this.named = named ?? null;
     this.lurking = lurks;
+    const fighter = kind !== 'biter' && isFamily(family) ? fighterOf(kind, family, named) : undefined;
+    this.made = fighter?.made ?? (this.body === 'skeleton' ? 'bone' : 'flesh');
+    this.boss = fighter?.boss ?? (kind === 'warden' ? { colour: WARDEN_BLUE } : undefined);
     this.def = def;
     this.level = level;
     this.hp = this.maxHp = this.def.hp;
@@ -342,7 +362,7 @@ export abstract class Enemy {
     this.root.position.set(x, 0, z);
     this.root.add(this.visual);
     this.visual.add(this.rig.mesh);
-    this.riseTime = kind === 'warden' ? 2.4 : 1.1;
+    this.riseTime = this.boss ? 2.4 : 1.1;
     if (this.body === 'skeleton' || this.body === 'corpse' || this.body === 'mud') {
       // The dead claw their way up out of the ground (or the water they lie in; the bog's dead out of the peat), the bog's beasts heave up out of the mud: out of sight till then.
       this.visual.position.y = -RISE_DEPTH * this.heightScale;
@@ -354,11 +374,11 @@ export abstract class Enemy {
       copyPose(this.idlePose(), this.pose);
     }
 
-    // A boss (the Warden, the Reeve) has its name over a long bar; a named fighter with a title (the Mire King) over a red one a little longer than the rest.
-    const big = kind === 'warden';
-    const title = kind !== 'biter' && isFamily(family) ? fighterOf(kind, family, named).title?.toUpperCase() : undefined;
-    this.healthBar = big ? new HealthBar(1.4, 0.1, 0x6ad0ff, title) : title ? new HealthBar(0.7, 0.06, 0xc81e1e, title) : new HealthBar(0.5, 0.05, 0xc81e1e);
-    this.healthBar.root.position.y = this.barHeight() + (title && !big ? 0.06 : 0);
+    // A boss (the Warden, the Reeve, the Keyward) has its name over a long bar in its colour; a named fighter with a title (the Mire King) over a red one a little longer than the rest.
+    const boss = this.boss;
+    const title = fighter?.title?.toUpperCase();
+    this.healthBar = boss ? new HealthBar(1.4, 0.1, boss.colour, title) : title ? new HealthBar(0.7, 0.06, 0xc81e1e, title) : new HealthBar(0.5, 0.05, 0xc81e1e);
+    this.healthBar.root.position.y = this.barHeight() + (title && !boss ? 0.06 : 0);
     this.root.add(this.healthBar.root);
   }
 
@@ -421,7 +441,7 @@ export abstract class Enemy {
 
   /** How high over its feet its health bar floats. */
   protected barHeight(): number {
-    return this.headTopY() + (this.kind === 'warden' ? 0.5 : 0.28);
+    return this.headTopY() + (this.boss ? 0.5 : 0.28);
   }
 
   /** Standing ready to fight: the pose it eases back to. */
@@ -573,7 +593,7 @@ export abstract class Enemy {
 
   /** How far pushes move it: heavy enemies barely budge. */
   protected knockbackScale(): number {
-    return this.kind === 'brute' ? 0.35 : this.kind === 'warden' ? 0.15 : 1;
+    return this.def.knockback ?? (this.kind === 'brute' ? 0.35 : this.kind === 'warden' ? 0.15 : 1);
   }
 
   /** Hook: HP thresholds (the Warden's summons). */
@@ -1442,7 +1462,7 @@ export abstract class Enemy {
     }
 
     this.updateGlow();
-    this.healthBar.update(dt, this.hpFraction, ctx.playerHead, this.kind === 'warden' && !this.seated);
+    this.healthBar.update(dt, this.hpFraction, ctx.playerHead, this.boss !== undefined && !this.seated);
     return true;
   }
 

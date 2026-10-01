@@ -133,6 +133,14 @@ export const JUNK = {
     ['tithe-tally', 'Tithe Tally', 'tally'],
     ['key-badge', 'Black Key Badge', 'key-badge'],
   ],
+  barrow: [
+    ['green-scale', 'Green Bronze Scale', 'green-scale'],
+    ['barrow-bead', 'Barrow Bead', 'grave-bead'],
+  ],
+  vault: [
+    ['glyph-shard', 'Glyph Shard', 'glyph-chip'],
+    ['deep-rivet', 'Deepking Rivet', 'deep-rivet'],
+  ],
   smuggler: [
     ['tarred-twine', 'Tarred Twine', 'twine'],
     ['lantern-shutter', 'Bent Lantern Shutter', 'shutter'],

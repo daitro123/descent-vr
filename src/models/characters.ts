@@ -1,6 +1,8 @@
 import type { Material } from 'three';
+import type { EnemyConfig } from '../config';
 import { BANDITS } from './bandits';
 import { BAILIFFS } from './bailiffs';
+import { BARROW_LIGHT, dressBarrowArcher, dressBarrowBrute, dressBarrowGrunt, dressBarrowThane } from './barrow';
 import { BOG } from './bog';
 import { BOG_DEAD } from './bogDead';
 import { LAMP_CREWS } from './diggers';
@@ -9,9 +11,13 @@ import { RAIDERS } from './raiders';
 import { LANTERN_MEN, UNDERGATE } from './smugglers';
 import { bow } from './bow';
 import { DROWNED } from './drowned';
+import { GIANT } from './giant';
+import { dressKeyward, KEYWARD_NUMBERS } from './keyward';
 import type { Vec3 } from './kit';
 import { PAL } from './palette';
 import { type BoneName, type DressContext, type Proportions, Rig } from './rig';
+import { loincloth, skeleton } from './skeleton';
+import { dressVaultArcher, dressVaultBrute, dressVaultGrunt, GLYPH } from './vault';
 
 // The bestiary's bodies. Each is a Rig (one draw call) dressed from simple
 // primitives. Sizes are in metres; `s` scales bone thickness, not length. An
@@ -61,6 +67,26 @@ export interface Fighter {
   dress(ctx: DressContext, variant: number): WeaponSpec;
   /** Its name over its health bar, if it goes by one: the bosses, and named fighters the fen tales name (the Mire King). */
   readonly title?: string;
+  /**
+   * A boss: the long health bar in this colour, with its title over it, and
+   * a boss's rising and fall. Every Warden is one (in the Bone Warden's blue,
+   * unless it says otherwise); a boss of another behaviour says so here (the
+   * Keyward).
+   */
+  readonly boss?: { readonly colour: number };
+  /**
+   * What it's made of, where that isn't its family's body (bone, for the
+   * dead): the undead brute's stitched flesh bleeds dark ichor, the
+   * Keyward's stone throws grit. It decides what flies when it's hit and
+   * when it falls.
+   */
+  readonly made?: 'flesh' | 'stone';
+  /**
+   * Its own level-1 numbers where its behaviour's (CONFIG.enemies) don't fit
+   * its body: a giant's reach and girth, a skeleton brute that shatters.
+   * Laid over its behaviour's; numbersOf (enemies/enemy.ts) gives the whole.
+   */
+  readonly numbers?: Partial<EnemyConfig>;
 }
 
 /**
@@ -98,118 +124,9 @@ const PI = Math.PI;
 const DOWN: Vec3 = [PI, 0, 0]; // taper parts grow along +Y; this flips them down a limb
 
 // ---------------------------------------------------------------- skeleton parts
+// In skeleton.ts, shared with every skeleton-bodied family, and still to be had here.
 
-/** A skeleton's bones: `s` scales their thickness, `eye` glows in the sockets; `bone` and `shade` stain them (the drowned's peat). */
-export interface SkeletonLook {
-  s: number;
-  eye: number;
-  bone?: number;
-  shade?: number;
-}
-
-function skull(ctx: DressContext, l: SkeletonLook): void {
-  const { s, eye } = l;
-  const B = l.bone ?? PAL.bone;
-  const S = l.shade ?? PAL.boneShade;
-  const neckLen = ctx.p.neck - ctx.p.spine;
-  ctx
-    .on('head')
-    .box(0.045 * s, neckLen + 0.05 * s, 0.045 * s, { at: [0, (0.05 * s - neckLen) / 2, -0.01 * s], color: S })
-    .box(0.19 * s, 0.16 * s, 0.2 * s, { at: [0, 0.145 * s, 0], color: B })
-    .taper(0.19 * s, 0.2 * s, 0.13 * s, 0.15 * s, 0.05 * s, { at: [0, 0.225 * s, 0], color: B })
-    .box(0.2 * s, 0.03 * s, 0.04 * s, { at: [0, 0.168 * s, 0.09 * s], color: S })
-    .box(0.16 * s, 0.07 * s, 0.05 * s, { at: [0, 0.088 * s, 0.08 * s], color: B })
-    .box(0.056 * s, 0.046 * s, 0.03 * s, { at: [-0.046 * s, 0.13 * s, 0.093 * s], color: PAL.socket, jitter: 0 })
-    .box(0.056 * s, 0.046 * s, 0.03 * s, { at: [0.046 * s, 0.13 * s, 0.093 * s], color: PAL.socket, jitter: 0 })
-    .box(0.024 * s, 0.024 * s, 0.02 * s, { at: [-0.046 * s, 0.13 * s, 0.1 * s], color: eye, glow: 1, jitter: 0 })
-    .box(0.024 * s, 0.024 * s, 0.02 * s, { at: [0.046 * s, 0.13 * s, 0.1 * s], color: eye, glow: 1, jitter: 0 })
-    .box(0.026 * s, 0.03 * s, 0.02 * s, { at: [0, 0.09 * s, 0.106 * s], color: PAL.socket, jitter: 0 })
-    .box(0.12 * s, 0.022 * s, 0.03 * s, { at: [0, 0.052 * s, 0.09 * s], color: B });
-  ctx
-    .on('jaw')
-    .box(0.14 * s, 0.04 * s, 0.1 * s, { at: [0, 0.01 * s, 0.015 * s], color: B })
-    .box(0.11 * s, 0.018 * s, 0.025 * s, { at: [0, 0.035 * s, 0.045 * s], color: B });
-}
-
-function ribcage(ctx: DressContext, l: SkeletonLook): void {
-  const { s } = l;
-  const B = l.bone ?? PAL.bone;
-  const S = l.shade ?? PAL.boneShade;
-  const L = ctx.p.spine;
-  const b = ctx.on('spine');
-  b.box(0.045 * s, L + 0.03 * s, 0.045 * s, { at: [0, L / 2 - 0.015 * s, -0.075 * s], color: S });
-  const ribs: [number, number, number][] = [
-    [L - 0.07 * s, 0.26, 0.17],
-    [L - 0.13 * s, 0.28, 0.18],
-    [L - 0.19 * s, 0.26, 0.17],
-    [L - 0.25 * s, 0.21, 0.15],
-  ];
-  const t = 0.026 * s;
-  for (const [y, w0, d0] of ribs) {
-    const w = w0 * s;
-    const d = d0 * s;
-    b.box(t, t, d, { at: [-w / 2, y, 0], color: B })
-      .box(t, t, d, { at: [w / 2, y, 0], color: B })
-      .box(w / 2 - 0.03 * s, t, t, { at: [-(w / 4 + 0.015 * s), y - 0.012 * s, d / 2], color: B })
-      .box(w / 2 - 0.03 * s, t, t, { at: [w / 4 + 0.015 * s, y - 0.012 * s, d / 2], color: B })
-      .box(w, t, t, { at: [0, y, -d / 2], color: S });
-  }
-  b.box(0.035 * s, 0.2 * s, 0.025 * s, { at: [0, L - 0.16 * s, 0.09 * s], color: B })
-    .box(ctx.p.shoulderW * 2, 0.03 * s, 0.035 * s, { at: [0, L - 0.01 * s, 0.03 * s], color: B })
-    .box(0.1 * s, 0.12 * s, 0.02 * s, { at: [-0.09 * s, L - 0.09 * s, -0.1 * s], color: S })
-    .box(0.1 * s, 0.12 * s, 0.02 * s, { at: [0.09 * s, L - 0.09 * s, -0.1 * s], color: S });
-  ctx
-    .on('hips')
-    .taper(0.16 * s, 0.1 * s, 0.26 * s, 0.14 * s, 0.12 * s, { at: [0, -0.09 * s, 0], color: B })
-    .box(0.07 * s, 0.05 * s, 0.03 * s, { at: [0, -0.02 * s, 0.075 * s], color: PAL.socket, jitter: 0 });
-}
-
-function skeletonLimbs(ctx: DressContext, l: SkeletonLook): void {
-  const { s } = l;
-  const B = l.bone ?? PAL.bone;
-  const S = l.shade ?? PAL.boneShade;
-  const { upperArm: UA, forearm: FA, thigh: TH, shin: SH } = ctx.p;
-  for (const side of ['L', 'R'] as const) {
-    ctx
-      .on(`upperArm${side}`)
-      .ball(0.04 * s, { color: B })
-      .box(0.04 * s, UA - 0.05 * s, 0.04 * s, { at: [0, -UA / 2, 0], color: B })
-      .ball(0.034 * s, { at: [0, -UA, 0], color: S });
-    ctx
-      .on(`forearm${side}`)
-      .box(0.024 * s, FA - 0.03 * s, 0.024 * s, { at: [-0.012 * s, -FA / 2, 0], color: B })
-      .box(0.024 * s, FA - 0.03 * s, 0.024 * s, { at: [0.012 * s, -FA / 2, 0], color: S });
-    ctx
-      .on(`hand${side}`)
-      .box(0.05 * s, 0.055 * s, 0.028 * s, { at: [0, -0.035 * s, 0], color: B })
-      .box(0.05 * s, 0.045 * s, 0.045 * s, { at: [0, -0.075 * s, 0.006 * s], color: S });
-    ctx
-      .on(`thigh${side}`)
-      .ball(0.045 * s, { color: B })
-      .box(0.048 * s, TH - 0.06 * s, 0.048 * s, { at: [0, -TH / 2, 0], color: B })
-      .ball(0.042 * s, { at: [0, -TH, 0.01 * s], color: S });
-    ctx
-      .on(`shin${side}`)
-      .box(0.042 * s, SH - 0.04 * s, 0.042 * s, { at: [0, -SH / 2, 0], color: B })
-      .box(0.08 * s, 0.045 * s, 0.2 * s, { at: [0, -SH - 0.012 * s, 0.05 * s], color: S });
-  }
-}
-
-export function skeleton(ctx: DressContext, l: SkeletonLook): void {
-  skull(ctx, l);
-  ribcage(ctx, l);
-  skeletonLimbs(ctx, l);
-}
-
-/** Tattered cloth hanging from the hips, front and back. */
-export function loincloth(ctx: DressContext, s: number, color: number, len: number): void {
-  ctx
-    .on('hips')
-    .box(0.3 * s, 0.05 * s, 0.18 * s, { at: [0, -0.02 * s, 0], color: PAL.leather })
-    .box(0.16 * s, len, 0.02 * s, { at: [0, -len / 2 - 0.02 * s, 0.09 * s], color })
-    .box(0.1 * s, len * 0.7, 0.02 * s, { at: [0.03 * s, -len * 0.35 - 0.02 * s, -0.09 * s], color })
-    .box(0.06 * s, len * 0.5, 0.02 * s, { at: [-0.07 * s, -len * 0.25 - 0.02 * s, -0.09 * s], color });
-}
+export { loincloth, ribcage, skeleton, type SkeletonLook, skeletonLimbs, skull } from './skeleton';
 
 // ---------------------------------------------------------------- weapons (hand space, along -Y)
 
@@ -446,8 +363,54 @@ const UNDEAD: FamilyDef = {
   fights: {
     grunt: { label: 'Grunt', looks: 6, proportions: PROPORTIONS.grunt, dress: dressGrunt },
     archer: { label: 'Archer', looks: 1, proportions: PROPORTIONS.archer, dress: dressArcher },
-    brute: { label: 'Brute', looks: 1, proportions: PROPORTIONS.brute, dress: dressBrute },
+    brute: { label: 'Brute', looks: 1, proportions: PROPORTIONS.brute, dress: dressBrute, made: 'flesh' },
     warden: { label: 'Bone Warden', looks: 1, proportions: PROPORTIONS.warden, dress: dressWarden, title: 'The Bone Warden' },
+  },
+};
+
+/**
+ * The barrow dead of Brackenmoor's High Fells (barrow.ts): skeletons in green
+ * bronze on the undead's bones, their champion as the brute (it shatters, as
+ * bone does), and the Barrow Thane under Hollowhill as their Warden.
+ */
+const BARROW: FamilyDef = {
+  body: 'skeleton',
+  seed: 41,
+  fights: {
+    grunt: { label: 'Barrow dead', looks: 4, proportions: PROPORTIONS.grunt, dress: dressBarrowGrunt },
+    archer: { label: 'Barrow archer', looks: 1, proportions: PROPORTIONS.archer, dress: dressBarrowArcher },
+    brute: { label: 'Barrow champion', looks: 1, proportions: PROPORTIONS.brute, dress: dressBarrowBrute, numbers: { death: 'shatter' } },
+    warden: { label: 'Barrow Thane', looks: 1, proportions: PROPORTIONS.warden, dress: dressBarrowThane, title: 'The Barrow Thane', boss: { colour: BARROW_LIGHT } },
+  },
+};
+
+/**
+ * The vault dead of Aldhaven's Undercroft (vault.ts): the Deepkings' own
+ * dead, skeletons in black basalt plate with faint blue glyphs for eyes. Their
+ * brute is one of them grown huge, and breaks apart like the rest. The
+ * Keyward (keyward.ts) stands among them in the Sealed Vault: a 5 m giant of
+ * stone and bronze, the brute's fight scaled up, and the vault's boss.
+ */
+const VAULT: FamilyDef = {
+  body: 'skeleton',
+  seed: 51,
+  fights: {
+    grunt: { label: 'Vault dead', looks: 3, proportions: PROPORTIONS.grunt, dress: dressVaultGrunt },
+    archer: { label: 'Vault archer', looks: 1, proportions: PROPORTIONS.archer, dress: dressVaultArcher },
+    brute: { label: 'Vault brute', looks: 1, proportions: PROPORTIONS.brute, dress: dressVaultBrute, numbers: { death: 'shatter' } },
+  },
+  named: {
+    keyward: {
+      kind: 'brute',
+      label: 'The Keyward',
+      looks: 1,
+      proportions: GIANT,
+      dress: dressKeyward,
+      made: 'stone',
+      numbers: KEYWARD_NUMBERS,
+      title: 'The Keyward',
+      boss: { colour: GLYPH },
+    },
   },
 };
 
@@ -460,6 +423,8 @@ export const FAMILIES = {
   undead: UNDEAD,
   bandit: BANDITS,
   corvane: BAILIFFS,
+  barrow: BARROW,
+  vault: VAULT,
   smuggler: LANTERN_MEN,
   undergate: UNDERGATE,
   raider: RAIDERS,

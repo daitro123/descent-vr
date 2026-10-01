@@ -1,6 +1,7 @@
 import { Group, Vector3 } from 'three';
 import type { Role } from '../adventureState';
 import { CONFIG } from '../config';
+import { fighterOf, isFamily } from '../models/characters';
 import type { ThronePlan } from '../world/mine';
 import type { Ground } from '../world/ground';
 import type { CampHooks, You } from './camps';
@@ -218,7 +219,9 @@ export class Throne {
       ctx.ground.resolve(p, r);
       this.plan.keepIn(p, r);
       p.y = ctx.ground.heightAt(p.x, p.z);
-      const e = createEnemy('grunt', p.x, p.z, { level: CONFIG.warden.hall.level, family: from.family, variant: Math.floor(Math.random() * 6) });
+      // Its own dead, in all their looks: the Bone Warden's skeletons, the Barrow Thane's barrow dead.
+      const looks = isFamily(from.family) ? fighterOf('grunt', from.family).looks : 1;
+      const e = createEnemy('grunt', p.x, p.z, { level: CONFIG.warden.hall.level, family: from.family, variant: Math.floor(Math.random() * looks) });
       e.position.y = p.y;
       e.root.rotation.y = Math.atan2(feet.x - p.x, feet.z - p.z);
       this.raised.add(e);

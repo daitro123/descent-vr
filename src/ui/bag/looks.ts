@@ -87,6 +87,10 @@ const MODELS: Readonly<Record<string, ItemLook>> = {
   // House Corvane's bailiffs' junk: a notched tally of the tithes owed, and the house's pewter badge.
   tally: { look: 'charm', tint: 0x9a7a4a },
   'key-badge': { look: 'trinket', tint: 0x4a4a52 },
+  // The barrow dead's: a scale off a grave shirt, gone green (their bead looks as the Kerchiefs' grave bead does).
+  'green-scale': { look: 'charm', tint: 0x5c8a6c },
+  // The vault dead's: a bronze rivet out of their armour (their glyph shard looks as the lamp crews' glyph-cut chip does).
+  'deep-rivet': { look: 'trinket', tint: 0x8c6a3c },
   // The smugglers' junk: the Lantern Men's tarred twine and a lantern's bent shutter, the Undergate's cellar key and dice.
   twine: { look: 'cloth', tint: 0x3a322a },
   shutter: { look: 'trinket', tint: 0x3a3b42 },

@@ -1,4 +1,5 @@
 import { type AttackConfig, CONFIG, type EnemyConfig } from '../config';
+import { numbersOf } from '../enemies/enemy';
 import { SUMMON_ATTACK } from '../enemies/kinds';
 import { GUARD, type GuardSide, humanoidAttack, IDLE, KNEEL, KNEEL_DROP, MOUND, MOUND_DROP, RISE, STAGGER, SURFACE, walkOffsets } from '../enemies/poses';
 import { FAMILIES, type Family, type HumanoidKind, proportionsOf } from '../models/characters';
@@ -62,10 +63,10 @@ function idleClip(kind: HumanoidKind): Clip {
   };
 }
 
-function walkClip(kind: HumanoidKind, p: Proportions): Clip {
+function walkClip(kind: HumanoidKind, p: Proportions, speed: number): Clip {
   const heightScale = p.hipY / 0.92;
   // Full-speed walk, phase rate as Enemy.update drives it.
-  const rate = 7 * (CONFIG.enemies[kind].speed / Math.max(0.8, heightScale));
+  const rate = 7 * (speed / Math.max(0.8, heightScale));
   const walk: MutablePose = {};
   return {
     name: 'walk',
@@ -141,11 +142,11 @@ function holdClip(kind: HumanoidKind, name: string, pose: Pose, hold: number, dr
   };
 }
 
-/** Every animation the game plays for this behaviour, in this family's body (or its named fighter's), in a stable order. */
+/** Every animation the game plays for this behaviour, in this family's body (or its named fighter's), with its own numbers, in a stable order. */
 export function clipsFor(kind: HumanoidKind, family: Family = 'undead', named?: string): Clip[] {
-  const def: EnemyConfig = CONFIG.enemies[kind];
+  const def: EnemyConfig = numbersOf(kind, family, named);
   const p = proportionsOf(kind, family, named);
-  const clips: Clip[] = [idleClip(kind), walkClip(kind, p)];
+  const clips: Clip[] = [idleClip(kind), walkClip(kind, p, def.speed)];
   // One clip per distinct attack pose; the first config entry supplies the timings.
   const seen = new Set<string>();
   for (const attack of def.attacks) {

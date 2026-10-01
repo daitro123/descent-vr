@@ -39,6 +39,9 @@ class TestBrute extends Brute implements Drivable {
   go(a: AttackConfig, ctx: EnemyContext) {
     this.startAttack(a, ctx);
   }
+  choose(dist: number) {
+    return this.chooseAttack(dist);
+  }
 }
 class TestWarden extends Warden implements Drivable {
   ready() {
@@ -177,7 +180,15 @@ describe.each([
   ['bog dead with a stake', () => new TestGrunt('grunt', 0, 0, { family: 'bogDead' })],
   ['bog dead with an old blade', () => new TestGrunt('grunt', 0, 0, { family: 'bogDead', variant: 1 })],
   ['bog dead brute', () => new TestBrute('brute', 0, 0, { family: 'bogDead' })],
+  ['barrow dead with a leaf blade', () => new TestGrunt('grunt', 0, 0, { family: 'barrow' })],
+  ['barrow dead with a bronze axe', () => new TestGrunt('grunt', 0, 0, { family: 'barrow', variant: 1 })],
+  ['barrow champion', () => new TestBrute('brute', 0, 0, { family: 'barrow' })],
+  ['vault dead with a glyph sword', () => new TestGrunt('grunt', 0, 0, { family: 'vault' })],
+  ['vault dead with a crescent axe', () => new TestGrunt('grunt', 0, 0, { family: 'vault', variant: 1 })],
+  ['vault brute', () => new TestBrute('brute', 0, 0, { family: 'vault' })],
+  ['the Keyward', () => new TestBrute('brute', 0, 0, { family: 'vault', named: 'keyward' })],
   ['warden', () => new TestWarden('warden', 0, 0)],
+  ['Barrow Thane', () => new TestWarden('warden', 0, 0, { family: 'barrow' })],
 ] as const)('%s melee', (_name, make) => {
   const probe = make();
   const dist = probe.def.attackRange - 0.05;
@@ -259,7 +270,7 @@ describe('slams and shots', () => {
     expect(r.slams[0].z).toBeGreaterThan(1.7);
   });
 
-  it.each(['undead', 'bandit', 'corvane', 'smuggler', 'undergate', 'raider', 'moorBandit', 'lampCrew'] as const)('an %s archer looses one arrow at full draw, from about head height', (family) => {
+  it.each(['undead', 'bandit', 'corvane', 'smuggler', 'undergate', 'raider', 'moorBandit', 'lampCrew', 'barrow', 'vault'] as const)('an %s archer looses one arrow at full draw, from about head height', (family) => {
     const a = new TestArcher('archer', 0, 0, { family });
     const r = run(a, a.def.attacks[0], player(6, 1.6), 6);
     expect(r.shots).toHaveLength(1);
@@ -291,6 +302,8 @@ describe.each([
   ['Red Annis', 'moorBandit', 0, 'annis'],
   ['lamp crew sledge', 'lampCrew'],
   ['bog dead brute', 'bogDead'],
+  ['barrow champion', 'barrow'],
+  ['vault brute', 'vault'],
 ] as const)("the %s's reach", (_name, family, variant = 0, named?: string) => {
   const make = () => new TestBrute('brute', 0, 0, { family, variant, named });
   const probe = make();
@@ -314,7 +327,43 @@ describe.each([
   });
 });
 
-describe.each(['undead', 'bandit', 'corvane', 'smuggler', 'undergate', 'raider', 'moorBandit', 'lampCrew'] as const)('%s archer aim', (family) => {
+// The Keyward (models/keyward.ts) fights as the brute does on the giant build,
+// with the brute's reach scaled up to its key's (its own numbers): its slash
+// reaches you from its body against yours out to its attack range, at any
+// height you stand, and its slam lands where you stand anywhere in the band
+// it slams at, a brute's scaled (kinds.ts).
+describe("the Keyward's reach", () => {
+  const make = () => new TestBrute('brute', 0, 0, { family: 'vault', named: 'keyward' });
+  const probe = make();
+  const touching = probe.def.radius + CONFIG.player.bodyRadius;
+  const k = probe.def.attackRange / CONFIG.enemies.brute.attackRange;
+
+  /** In closer than this its slash sweeps over you (kinds.ts). */
+  const under = (CONFIG.enemies.brute.radius + CONFIG.player.bodyRadius) * k;
+
+  it('reaches about twice as far as a brute', () => expect(k).toBeGreaterThan(1.8));
+
+  it('slams a player who comes in under its slash', () => {
+    for (const dist of [touching, under - 0.05]) for (let i = 0; i < 20; i++) expect(probe.choose(dist)?.pose).toBe('slam');
+  });
+
+  it.each([under, (under + probe.def.attackRange) / 2, probe.def.attackRange - 0.05])('its slash lands on a player %s m off', (dist) => {
+    for (const headY of [1.4, 1.6, 1.8]) {
+      const r = run(make(), attack(probe, 'slashR'), player(dist, headY), dist, headY);
+      expect(r.contacts[0], `head at ${headY} m`).toBe('body');
+    }
+  });
+
+  it.each([touching, probe.def.attackRange, 2.3 * k])('its slam catches a player %s m off', (dist) => {
+    const slam = attack(probe, 'slam');
+    const r = run(make(), slam, player(dist, 1.6), dist);
+    expect(r.slams).toHaveLength(1);
+    expect(r.slams[0].y).toBe(0);
+    expect(r.slams[0].distanceTo(new Vector3(0, 0, dist))).toBeLessThan(slam.radius!);
+  });
+});
+
+describe.each(['undead', 'bandit', 'corvane', 'smuggler', 'undergate', 'raider', 'moorBandit', 'lampCrew', 'barrow', 'vault'] as const)('%s archer aim', (family) => {
   /**
    * Draw one arrow at a player whose head starts at `head` (and moves by
    * `move` per second), from an archer at the origin facing `yaw`. Returns how
