@@ -65,7 +65,7 @@ function cheekFrom(p: Proportions): Vector3 {
  * along it, the prod across its front and the string spanned back to the nut.
  * A crossbow strikes nothing, so its spec is the bow's placeholder.
  */
-function crossbow(ctx: DressContext): WeaponSpec {
+export function crossbow(ctx: DressContext): WeaponSpec {
   const grip = new Vector3(0, -0.06, 0);
   const cheek = cheekFrom(ctx.p);
   const back = cheek.clone().sub(grip).normalize();

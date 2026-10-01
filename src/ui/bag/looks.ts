@@ -82,6 +82,15 @@ const MODELS: Readonly<Record<string, ItemLook>> = {
   // House Corvane's bailiffs' junk: a notched tally of the tithes owed, and the house's pewter badge.
   tally: { look: 'charm', tint: 0x9a7a4a },
   'key-badge': { look: 'trinket', tint: 0x4a4a52 },
+  // The moor's Kerchiefs: a hank of fleece off a sheep they took.
+  fleece: { look: 'cloth', tint: 0xcbbf9f },
+  // The Kerchiefs' diggers: a bead out of a barrow, and the tip of a pick broken on its stones.
+  'grave-bead': { look: 'trinket', tint: 0x6a8a5a },
+  'pick-tip': { look: 'charm', tint: 0x5a5c62 },
+  // Corvane's lamp crews: a chip of the Deepkings' black stone with part of a glyph on it.
+  'glyph-chip': { look: 'charm', tint: 0x2e2e36 },
+  // The bog dead: a length of the rope that hanged them.
+  rope: { look: 'cloth', tint: 0x7a6440 },
   // Professions' materials and what they make (the pouch stands in for ore, stone, bars and herbs).
   'ore-copper': { look: 'pouch', tint: 0xb8733a },
   'stone-rough': { look: 'pouch', tint: 0x8a8680 },

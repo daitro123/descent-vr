@@ -1,5 +1,7 @@
 import type { BufferGeometry, Material } from 'three';
+import { BOG_BODIES } from '../models/bogDead';
 import { COMMONERS } from '../models/commoners';
+import { FALLEN_DIGGERS } from '../models/diggers';
 import { GUARDS } from '../models/guards';
 import { BUILDS } from '../models/human';
 import { PEOPLE, type Person } from '../models/people';
@@ -19,6 +21,8 @@ export const CAST = {
   herbalist: PEOPLE.herbalist,
   ...COMMONERS,
   ...GUARDS,
+  ...FALLEN_DIGGERS,
+  ...BOG_BODIES,
 } satisfies Record<string, Person>;
 
 /** One of the cast, by name. */

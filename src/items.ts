@@ -133,6 +133,22 @@ export const JUNK = {
     ['tithe-tally', 'Tithe Tally', 'tally'],
     ['key-badge', 'Black Key Badge', 'key-badge'],
   ],
+  moorBandit: [
+    ['matted-fleece', 'Matted Fleece', 'fleece'],
+    ['tarnished-earring', 'Tarnished Earring', 'trinket'],
+  ],
+  digger: [
+    ['grave-bead', 'Grave Bead', 'grave-bead'],
+    ['broken-pick-tip', 'Broken Pick Tip', 'pick-tip'],
+  ],
+  lampCrew: [
+    ['lamp-wick', 'Spent Lamp Wick', 'cloth'],
+    ['glyph-chip', 'Glyph-cut Chip', 'glyph-chip'],
+  ],
+  bogDead: [
+    ['peat-clod', 'Clod of Peat', 'dust'],
+    ['frayed-rope', 'Frayed Rope', 'rope'],
+  ],
 } as const satisfies Record<Family, readonly (readonly [string, string, string])[]>;
 
 /** Junk at every loot level: sold only, and worth its item level × `CONFIG.items.sell.grey`. */

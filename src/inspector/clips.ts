@@ -157,7 +157,7 @@ export function clipsFor(kind: EnemyKind, family: Family = 'undead'): Clip[] {
   clips.push(holdClip(kind, 'stagger', STAGGER, def.staggerTime * 0.6));
   if (kind === 'warden') clips.push(holdClip(kind, 'kneel', KNEEL, CONFIG.warden.kneelTime, KNEEL_DROP * p.hipY));
   // Only the dead claw up out of the ground.
-  if (FAMILIES[family].body === 'skeleton') clips.push(holdClip(kind, 'rise', RISE, 0.8));
+  if (FAMILIES[family].body !== 'human') clips.push(holdClip(kind, 'rise', RISE, 0.8));
   return clips;
 }
 

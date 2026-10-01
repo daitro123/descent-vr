@@ -287,8 +287,8 @@ export abstract class Enemy {
     this.root.add(this.visual);
     this.visual.add(this.rig.mesh);
     this.riseTime = kind === 'warden' ? 2.4 : 1.1;
-    if (this.body === 'skeleton') {
-      // The dead claw their way up out of the ground.
+    if (this.body !== 'human') {
+      // The dead claw their way up out of the ground (the bog's out of the peat).
       this.visual.position.y = -RISE_DEPTH * this.heightScale;
       copyPose(RISE, this.pose); // copies: poses are shared constants, and this.pose is eased in place
     } else {

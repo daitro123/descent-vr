@@ -1,6 +1,9 @@
 import type { Material } from 'three';
 import { BANDITS } from './bandits';
 import { BAILIFFS } from './bailiffs';
+import { BOG_DEAD } from './bogDead';
+import { DIGGERS, LAMP_CREWS } from './diggers';
+import { MOOR_BANDITS } from './moorBandits';
 import { bow } from './bow';
 import type { Vec3 } from './kit';
 import { PAL } from './palette';
@@ -16,8 +19,8 @@ import { type BoneName, type DressContext, type Proportions, Rig } from './rig';
 /** An enemy's behaviour: how it fights. */
 export type EnemyKind = 'grunt' | 'archer' | 'brute' | 'warden';
 
-/** What an enemy family is made of: the dead are skeletons, the living wear the human body. */
-export type EnemyBody = 'skeleton' | 'human';
+/** What an enemy family is made of: the dead are skeletons, the living wear the human body, and the bog's dead are whole bodies kept by the peat. */
+export type EnemyBody = 'skeleton' | 'human' | 'corpse';
 
 /** The business end of a weapon, in its bone's space. Enemy strikes sweep this segment. */
 export interface WeaponSpec {
@@ -48,8 +51,9 @@ export interface Fighter {
  * An enemy family: who an enemy is, whatever its behaviour. Its body decides
  * how it comes and goes and what flies when it's hit: the dead claw up out of
  * the ground and fall to pieces, the living are simply standing there and
- * fall whole. A family fights only with the behaviours it dresses for: only
- * the undead have a Warden.
+ * fall whole, and corpses claw up as the dead do but fall whole, leaking dark
+ * ichor rather than bone chips. A family fights only with the behaviours it
+ * dresses for: only the undead have a Warden.
  */
 export interface FamilyDef {
   readonly body: EnemyBody;
@@ -419,6 +423,10 @@ export const FAMILIES = {
   undead: UNDEAD,
   bandit: BANDITS,
   corvane: BAILIFFS,
+  moorBandit: MOOR_BANDITS,
+  digger: DIGGERS,
+  lampCrew: LAMP_CREWS,
+  bogDead: BOG_DEAD,
 } satisfies Record<string, FamilyDef>;
 
 /** Who an enemy is, whatever its behaviour: one of FAMILIES. */

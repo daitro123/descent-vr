@@ -6,7 +6,9 @@ import { AttackTokens } from '../src/enemies/tokens';
 import { BANDIT_BUILDS } from '../src/models/bandits';
 import { BAILIFF_BUILDS } from '../src/models/bailiffs';
 import { type EnemyKind, FAMILIES, type Family } from '../src/models/characters';
+import { DIGGER_BUILDS, LAMP_CREW_BUILDS } from '../src/models/diggers';
 import { BUILDS } from '../src/models/human';
+import { MOOR_BANDIT_BUILDS } from '../src/models/moorBandits';
 import { Arena } from '../src/world/arena';
 import type { Ground } from '../src/world/ground';
 
@@ -39,7 +41,13 @@ function far(): EnemyContext {
 const hipsY = (e: ReturnType<typeof createEnemy>) => e.rig.bones.hips.getWorldPosition(new Vector3()).y;
 
 /** The build each family of the living makes each of its fighters in. */
-const BUILT: Partial<Record<Family, Partial<Record<EnemyKind, keyof typeof BUILDS>>>> = { bandit: BANDIT_BUILDS, corvane: BAILIFF_BUILDS };
+const BUILT: Partial<Record<Family, Partial<Record<EnemyKind, keyof typeof BUILDS>>>> = {
+  bandit: BANDIT_BUILDS,
+  corvane: BAILIFF_BUILDS,
+  moorBandit: MOOR_BANDIT_BUILDS,
+  digger: DIGGER_BUILDS,
+  lampCrew: LAMP_CREW_BUILDS,
+};
 
 /** Every fighter of every family of the living. */
 const LIVING: [Family, EnemyKind][] = (Object.keys(FAMILIES) as Family[])
@@ -94,6 +102,31 @@ it('a skeleton grunt falls to pieces when killed', () => {
   for (let t = 0; t < 1; t += DT) g.update(DT, far());
   const moved = gaps().map((d, i) => Math.abs(d - standing[i]));
   expect(Math.max(...moved)).toBeGreaterThan(0.1);
+});
+
+// The bog dead are bodies, not bones: they claw up out of the peat as the
+// dead do, but what falls when they're killed is a body, whole.
+describe.each(['grunt', 'brute'] as EnemyKind[])('a bog dead %s', (kind) => {
+  it('rises out of the ground, and can’t be hit until it has', () => {
+    const e = createEnemy(kind, 0, 0, { family: 'bogDead' });
+    e.update(DT, far());
+    expect(e.hittable).toBe(false);
+    expect(hipsY(e)).toBeLessThan(0);
+    for (let t = 0; t < 3; t += DT) e.update(DT, far());
+    expect(e.hittable).toBe(true);
+    expect(hipsY(e)).toBeCloseTo(e.rig.proportions.hipY, 1);
+  });
+
+  it('falls whole when killed', () => {
+    const e = createEnemy(kind, 0, 0, { family: 'bogDead' });
+    for (let t = 0; t < 3; t += DT) e.update(DT, far());
+    const gap = () => e.rig.bones.head.getWorldPosition(new Vector3()).distanceTo(e.rig.bones.hips.getWorldPosition(new Vector3()));
+    const standing = gap();
+    e.takeHit(10_000, new Vector3(0, 0, -1));
+    for (let t = 0; t < 1; t += DT) e.update(DT, far());
+    expect(e.alive).toBe(false);
+    expect(gap()).toBeCloseTo(standing, 2);
+  });
 });
 
 it('the Warden is only ever undead', () => {
