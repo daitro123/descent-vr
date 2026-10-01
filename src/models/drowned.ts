@@ -1,4 +1,4 @@
-import { type EnemyKind, loincloth, skeleton, type SkeletonLook, type WeaponSpec } from './characters';
+import { type EnemyKind, type FamilyDef, loincloth, skeleton, type SkeletonLook, type WeaponSpec } from './characters';
 import { bow } from './bow';
 import { type Look, skirt } from './human';
 import type { ModelBuilder, Vec3 } from './kit';
@@ -487,24 +487,21 @@ function dressLanternMan(ctx: DressContext): WeaponSpec {
   return gaff(ctx);
 }
 
-/** One of the drowned's fighters, by behaviour: how many looks it comes in, and its dresser. */
-export interface DrownedFighter {
-  readonly label: string;
-  readonly looks: number;
-  readonly proportions: Proportions;
-  dress(ctx: DressContext, variant: number): WeaponSpec;
-}
-
-/** The drowned's fighters, by behaviour. */
-export const DROWNED_FIGHTERS: Record<EnemyKind, DrownedFighter> = {
-  grunt: { label: 'Drowned', looks: 6, proportions: DROWNED_PROPORTIONS.grunt, dress: dressGrunt },
-  archer: { label: 'Drowned archer', looks: 1, proportions: DROWNED_PROPORTIONS.archer, dress: dressArcher },
-  brute: { label: 'Drowned lock-warden', looks: 1, proportions: DROWNED_PROPORTIONS.brute, dress: dressBrute },
-  warden: { label: 'Drowned Reeve', looks: 1, proportions: DROWNED_PROPORTIONS.warden, dress: dressReeve },
+/**
+ * The drowned: skeletons, so they rise and fall to pieces as the undead do,
+ * but up out of the water where they lie in it. The Reeve is their Warden.
+ */
+export const DROWNED: FamilyDef = {
+  body: 'skeleton',
+  seed: 31,
+  fights: {
+    grunt: { label: 'Drowned', looks: 6, proportions: DROWNED_PROPORTIONS.grunt, dress: dressGrunt },
+    archer: { label: 'Drowned archer', looks: 1, proportions: DROWNED_PROPORTIONS.archer, dress: dressArcher },
+    brute: { label: 'Drowned lock-warden', looks: 1, proportions: DROWNED_PROPORTIONS.brute, dress: dressBrute },
+    warden: { label: 'Drowned Reeve', looks: 1, proportions: DROWNED_PROPORTIONS.warden, dress: dressReeve, title: 'The Drowned Reeve' },
+  },
+  named: {
+    /** The rare the fen tale is about: a drowned grunt with a lantern. */
+    oldLanternMan: { kind: 'grunt', label: 'The Old Lantern Man', title: 'The Old Lantern Man', looks: 1, proportions: DROWNED_PROPORTIONS.grunt, dress: dressLanternMan },
+  },
 };
-
-/** The drowned's named ones: the rare the fen tale is about. */
-export const DROWNED_NAMED = {
-  oldLanternMan: { kind: 'grunt', label: 'The Old Lantern Man', looks: 1, proportions: DROWNED_PROPORTIONS.grunt, dress: dressLanternMan },
-} as const satisfies Record<string, DrownedFighter & { kind: EnemyKind }>;
-

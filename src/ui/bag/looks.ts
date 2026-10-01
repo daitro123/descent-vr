@@ -79,6 +79,9 @@ const MODELS: Readonly<Record<string, ItemLook>> = {
   cloth: { look: 'cloth', tint: 0x8a6a5a },
   charm: { look: 'charm', tint: PAL.bone },
   dust: { look: 'dust', tint: 0x9a9488 },
+  // House Corvane's bailiffs' junk: a notched tally of the tithes owed, and the house's pewter badge.
+  tally: { look: 'charm', tint: 0x9a7a4a },
+  'key-badge': { look: 'trinket', tint: 0x4a4a52 },
   // The drowned's junk and the bog beasts'.
   'deep-coin': { look: 'trinket', tint: 0x5a8670 },
   'silted-bone': { look: 'charm', tint: 0x9a8762 },

@@ -152,6 +152,9 @@ describe.each([
   ['bandit thug with a hatchet', () => new TestGrunt('grunt', 0, 0, { family: 'bandit', variant: 1 })],
   ['brute', () => new TestBrute('brute', 0, 0)],
   ['bandit leader', () => new TestBrute('brute', 0, 0, { family: 'bandit' })],
+  ['bailiff with a cudgel', () => new TestGrunt('grunt', 0, 0, { family: 'corvane' })],
+  ['bailiff with an iron-bound club', () => new TestGrunt('grunt', 0, 0, { family: 'corvane', variant: 1 })],
+  ['bailiff shieldman', () => new TestBrute('brute', 0, 0, { family: 'corvane' })],
   ['warden', () => new TestWarden('warden', 0, 0)],
 ] as const)('%s melee', (_name, make) => {
   const probe = make();
@@ -234,7 +237,7 @@ describe('slams and shots', () => {
     expect(r.slams[0].z).toBeGreaterThan(1.7);
   });
 
-  it.each(['undead', 'bandit'] as const)('an %s archer looses one arrow at full draw, from about head height', (family) => {
+  it.each(['undead', 'bandit', 'corvane'] as const)('an %s archer looses one arrow at full draw, from about head height', (family) => {
     const a = new TestArcher('archer', 0, 0, { family });
     const r = run(a, a.def.attacks[0], player(6, 1.6), 6);
     expect(r.shots).toHaveLength(1);
@@ -244,10 +247,14 @@ describe('slams and shots', () => {
 });
 
 // The brute's reach (its attack range and body radius) was set for the undead
-// brute's bigger body; the bandit leader fights with the same behaviour on the
-// human body's big build, swinging a felling axe.
-describe("the bandit leader's reach", () => {
-  const make = () => new TestBrute('brute', 0, 0, { family: 'bandit' });
+// brute's bigger body; the bandit leader and Corvane's shieldman fight with the
+// same behaviour on the human body's big build, swinging a felling axe and a
+// long mace.
+describe.each([
+  ['bandit leader', 'bandit'],
+  ['bailiff shieldman', 'corvane'],
+] as const)("the %s's reach", (_name, family) => {
+  const make = () => new TestBrute('brute', 0, 0, { family });
   const probe = make();
   /** As close as you can get: its body against yours. */
   const touching = probe.def.radius + CONFIG.player.bodyRadius;
@@ -269,7 +276,7 @@ describe("the bandit leader's reach", () => {
   });
 });
 
-describe.each(['undead', 'bandit'] as const)('%s archer aim', (family) => {
+describe.each(['undead', 'bandit', 'corvane'] as const)('%s archer aim', (family) => {
   /**
    * Draw one arrow at a player whose head starts at `head` (and moves by
    * `move` per second), from an archer at the origin facing `yaw`. Returns how

@@ -1,5 +1,5 @@
 import { IcosahedronGeometry } from 'three';
-import type { EnemyKind, WeaponSpec } from './characters';
+import type { FamilyDef, WeaponSpec } from './characters';
 import type { ModelBuilder, Vec3 } from './kit';
 import type { DressContext, Proportions } from './rig';
 
@@ -270,21 +270,20 @@ function dressSewerBeast(ctx: DressContext): WeaponSpec {
   return grateBar(ctx);
 }
 
-/** One of the bog beasts' fighters: its looks and its dresser. */
-export interface BogFighter {
-  readonly label: string;
-  readonly looks: number;
-  readonly proportions: Proportions;
-  dress(ctx: DressContext, variant: number): WeaponSpec;
-}
-
-/** The bog beasts' fighters, by behaviour: the lurker is a brute. (The mire toads are four-legged, the grunts.) */
-export const BOG_FIGHTERS: Partial<Record<EnemyKind, BogFighter>> = {
-  brute: { label: 'Bog lurker', looks: 2, proportions: LURKER, dress: dressLurker },
+/**
+ * The bog's beasts: mud, so they lie sunk in it as mounds until something
+ * comes near, and heave up. The lurker fights as a brute (the mire toads,
+ * four-legged, are another thread's grunts); the Mire King is the rare, the
+ * sewer beast a lurker that crawled into Aldhaven's drains.
+ */
+export const BOG: FamilyDef = {
+  body: 'mud',
+  seed: 41,
+  fights: {
+    brute: { label: 'Bog lurker', looks: 2, proportions: LURKER, dress: dressLurker },
+  },
+  named: {
+    mireKing: { kind: 'brute', label: 'The Mire King', title: 'The Mire King', looks: 1, proportions: MIRE_KING, dress: dressMireKing },
+    sewerBeast: { kind: 'brute', label: 'The sewer beast', title: 'The Sewer Beast', looks: 1, proportions: LURKER, dress: dressSewerBeast },
+  },
 };
-
-/** The bog beasts' named ones: the Mire King (a rare) and the sewer beast. */
-export const BOG_NAMED = {
-  mireKing: { kind: 'brute', label: 'The Mire King', looks: 1, proportions: MIRE_KING, dress: dressMireKing },
-  sewerBeast: { kind: 'brute', label: 'The sewer beast', looks: 1, proportions: LURKER, dress: dressSewerBeast },
-} as const satisfies Record<string, BogFighter & { kind: EnemyKind }>;

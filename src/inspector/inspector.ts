@@ -16,7 +16,7 @@ import {
   Vector3,
   type WebGLRenderer,
 } from 'three';
-import { buildCharacter, type EnemyKind, type Family, type WeaponSpec } from '../models/characters';
+import { buildCharacter, type EnemyKind, FAMILIES, type Family, type FamilyDef, type Fighter, type WeaponSpec } from '../models/characters';
 import { createModelMaterial, type ModelMaterial } from '../models/materials';
 import { buildPerson, PEOPLE, type PersonId } from '../models/people';
 import type { Rig } from '../models/rig';
@@ -31,37 +31,32 @@ import { castClips, type Clip, clipsFor, type MutablePose, personClips } from '.
 // Works in the headset and on the desktop page.
 
 export type InspectorEntry =
-  /** An enemy: its behaviour, its family's body, and which of its looks. */
+  /** An enemy: its behaviour, its family's body, and which of its looks (or which of its named ones). */
   | { kind: EnemyKind; family: Family; variant: number; label: string; named?: string }
   /** A friendly character: Hale or one of Oakvale's villagers. */
   | { person: PersonId; label: string }
   /** One of the cast a zone places as a villager, beyond Oakvale's (people/cast.ts). */
   | { cast: CastId; label: string };
 
-const VARIANTS = [0, 1, 2, 3, 4, 5];
+/** Each look of every enemy family's fighters: "Grunt v0" to "v5", "Archer"; then its named ones: "The Mire King". */
+const enemies = (Object.keys(FAMILIES) as Family[]).flatMap((family) => {
+  const def: FamilyDef = FAMILIES[family];
+  return [
+    ...(Object.entries(def.fights) as [EnemyKind, Fighter][]).flatMap(([kind, f]) =>
+      Array.from({ length: f.looks }, (_, variant) => ({ kind, family, variant, label: f.looks > 1 ? `${f.label} v${variant}` : f.label })),
+    ),
+    ...Object.entries(def.named ?? {}).map(([named, f]) => ({ kind: f.kind, family, variant: 0, label: f.label, named })),
+  ];
+});
 
 /**
- * Every model the game builds: the undead (grunts come in six helmet, cloth
- * and weapon combos), the bandits (thugs in six looks and weapons), then
- * Marshal Hale and the villagers, then the rest of the cast zones place.
+ * Every model the game builds: each enemy family's (the undead's grunts in
+ * six helmet, cloth and weapon combos, the bandits' thugs in six looks and
+ * weapons, and so on), then Marshal Hale and the villagers, then the rest of
+ * the cast zones place.
  */
 export const ENTRIES: InspectorEntry[] = [
-  ...VARIANTS.map((v) => ({ kind: 'grunt' as const, family: 'undead' as const, variant: v, label: `Grunt v${v}` })),
-  { kind: 'archer', family: 'undead', variant: 0, label: 'Archer' },
-  { kind: 'brute', family: 'undead', variant: 0, label: 'Brute' },
-  { kind: 'warden', family: 'undead', variant: 0, label: 'Bone Warden' },
-  ...VARIANTS.map((v) => ({ kind: 'grunt' as const, family: 'bandit' as const, variant: v, label: `Bandit thug v${v}` })),
-  { kind: 'archer', family: 'bandit', variant: 0, label: 'Bandit archer' },
-  { kind: 'brute', family: 'bandit', variant: 0, label: 'Bandit leader' },
-  ...VARIANTS.map((v) => ({ kind: 'grunt' as const, family: 'drowned' as const, variant: v, label: `Drowned v${v}` })),
-  { kind: 'archer', family: 'drowned', variant: 0, label: 'Drowned archer' },
-  { kind: 'brute', family: 'drowned', variant: 0, label: 'Drowned lock-warden' },
-  { kind: 'warden', family: 'drowned', variant: 0, label: 'Drowned Reeve' },
-  { kind: 'grunt', family: 'drowned', variant: 0, label: 'The Old Lantern Man', named: 'oldLanternMan' },
-  { kind: 'brute', family: 'bog', variant: 0, label: 'Bog lurker v0' },
-  { kind: 'brute', family: 'bog', variant: 1, label: 'Bog lurker v1' },
-  { kind: 'brute', family: 'bog', variant: 0, label: 'The Mire King', named: 'mireKing' },
-  { kind: 'brute', family: 'bog', variant: 0, label: 'The sewer beast', named: 'sewerBeast' },
+  ...enemies,
   ...(Object.keys(PEOPLE) as PersonId[]).map((id) => ({ person: id, label: PEOPLE[id].label })),
   ...(Object.keys(CAST) as CastId[]).filter((id) => !(id in PEOPLE)).map((id) => ({ cast: id, label: CAST[id].label })),
 ];
@@ -162,7 +157,7 @@ export class Inspector {
       else if ('cast' in e) b = { rig: new Wardrobe().dress(e.cast, material), weapon: null, material, clips: castClips(e.cast) };
       else {
         const { rig, weapon } = buildCharacter(e.kind, { material, family: e.family, variant: e.variant, named: e.named });
-        b = { rig, weapon, material, clips: clipsFor(e.kind, e.family) };
+        b = { rig, weapon, material, clips: clipsFor(e.kind, e.family, e.named) };
       }
       this.built.set(index, b);
     }

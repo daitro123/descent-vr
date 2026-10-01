@@ -129,6 +129,10 @@ export const JUNK = {
     ['bone-charm', 'Bone Charm', 'charm'],
     ['grave-dust', 'Grave Dust', 'dust'],
   ],
+  corvane: [
+    ['tithe-tally', 'Tithe Tally', 'tally'],
+    ['key-badge', 'Black Key Badge', 'key-badge'],
+  ],
   drowned: [
     ['corroded-deep-coin', 'Corroded Deepking Coin', 'deep-coin'],
     ['silted-knucklebone', 'Silted Knucklebone', 'silted-bone'],

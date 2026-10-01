@@ -81,7 +81,7 @@ How an enemy fights, and so what it tests in the player: the grunt (reading a sw
 _Avoid_: kind, type, class, AI
 
 **Family**:
-Who an enemy is, whatever its behaviour: the bandits or the undead. A bandit archer and an undead archer share a behaviour but not a family.
+Who an enemy is, whatever its behaviour: the bandits, House Corvane's bailiffs or the undead. A bandit archer and an undead archer share a behaviour but not a family. A family wears one body, the human body or the skeleton, and fields a look for each behaviour it fights with.
 _Avoid_: faction, race, type
 
 **Rooted**, **frozen**, **slowed**:
@@ -89,8 +89,12 @@ What an ability can hold an enemy in for a while. Rooted, it can't walk but stri
 _Avoid_: stun (a stagger is the game's stun), snare, debuff, crowd control
 
 **Human body**:
-The one body every person wears, bandits and friendly characters alike, dressed per character. The undead are skeletons instead.
+The one body every person wears, bandits, bailiffs and friendly characters alike, dressed per character. The undead are skeletons instead.
 _Avoid_: human model, NPC mesh
+
+**Livery**:
+The colours that say whose service someone is in: the crown's blue and gold (the City Watch, the royal guard, and faded on the toll men), House Corvane's deep crimson with a black key (its men-at-arms and bailiffs), House Harrowgate's grey with a white tower, a town watch's cream armband.
+_Avoid_: uniform, faction colours, team
 
 **Build**:
 A human body's size and shape, and the walk that goes with it (its gait): average, stout, broad or big for grown men; woman; elder and elder woman, stooped; child.
