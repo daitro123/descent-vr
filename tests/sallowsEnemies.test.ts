@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { Camps } from '../src/enemies/camps';
 import { createEnemy } from '../src/enemies/kinds';
 import type { CampPlan } from '../src/maps/types';
-import { buildCharacter, type EnemyKind, FAMILIES, type Family, type FamilyDef, fighterOf } from '../src/models/characters';
+import { buildCharacter, FAMILIES, type Family, type FamilyDef, fighterOf, type HumanoidKind } from '../src/models/characters';
 import { LIVERY } from '../src/models/guards';
 import { HUE } from '../src/models/human';
 import { LANTERN_LIGHT } from '../src/models/lantern';
@@ -24,7 +24,7 @@ const SALLOWS: Family[] = ['smuggler', 'undergate', 'raider'];
 const FIGHTERS: [string, Family, () => Rig][] = SALLOWS.flatMap((family) => {
   const def = FAMILIES[family] as FamilyDef;
   return [
-    ...(Object.entries(def.fights) as [EnemyKind, { label: string; looks: number }][]).flatMap(([kind, f]) =>
+    ...(Object.entries(def.fights) as [HumanoidKind, { label: string; looks: number }][]).flatMap(([kind, f]) =>
       Array.from({ length: f.looks }, (_, variant): [string, Family, () => Rig] => [`${f.label} ${variant}`, family, () => buildCharacter(kind, { family, variant }).rig]),
     ),
     ...Object.entries(def.named ?? {}).map(([named, f]): [string, Family, () => Rig] => [f.label, family, () => buildCharacter(f.kind, { family, named }).rig]),

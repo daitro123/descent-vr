@@ -1,8 +1,8 @@
 import { type AttackConfig, CONFIG, type EnemyConfig } from '../config';
 import { numbersOf } from '../enemies/enemy';
 import { SUMMON_ATTACK } from '../enemies/kinds';
-import { ATTACK_POSES, GUARD, type GuardSide, IDLE, KNEEL, KNEEL_DROP, RISE, STAGGER, walkOffsets } from '../enemies/poses';
-import { type EnemyKind, FAMILIES, type Family, proportionsOf } from '../models/characters';
+import { GUARD, type GuardSide, humanoidAttack, IDLE, KNEEL, KNEEL_DROP, MOUND, MOUND_DROP, RISE, STAGGER, SURFACE, walkOffsets } from '../enemies/poses';
+import { FAMILIES, type Family, type HumanoidKind, proportionsOf } from '../models/characters';
 import { BUILDS, type BuildName } from '../models/human';
 import { PEOPLE, type Person, type PersonId } from '../models/people';
 import { BONES, blendPoses, type Pose, type Proportions } from '../models/rig';
@@ -52,7 +52,7 @@ function copyInto(src: Pose, out: MutablePose): Pose {
   return out as Pose;
 }
 
-function idleClip(kind: EnemyKind): Clip {
+function idleClip(kind: HumanoidKind): Clip {
   return {
     name: 'idle',
     duration: 2,
@@ -60,7 +60,7 @@ function idleClip(kind: EnemyKind): Clip {
   };
 }
 
-function walkClip(kind: EnemyKind, p: Proportions, speed: number): Clip {
+function walkClip(kind: HumanoidKind, p: Proportions, speed: number): Clip {
   const heightScale = p.hipY / 0.92;
   // Full-speed walk, phase rate as Enemy.update drives it.
   const rate = 7 * (speed / Math.max(0.8, heightScale));
@@ -88,9 +88,9 @@ function walkClip(kind: EnemyKind, p: Proportions, speed: number): Clip {
 }
 
 /** Rest → windup (ease out) → strike (ease in) → back to idle (smooth) → rest. */
-export function attackClip(kind: EnemyKind, attack: AttackConfig, name: string = attack.pose): Clip {
+export function attackClip(kind: HumanoidKind, attack: AttackConfig, name: string = attack.pose): Clip {
   const idle = IDLE[kind];
-  const poses = ATTACK_POSES[attack.pose];
+  const poses = humanoidAttack(attack);
   const t1 = REST;
   const t2 = t1 + attack.windup;
   const t3 = t2 + attack.active;
@@ -120,7 +120,7 @@ export function attackClip(kind: EnemyKind, attack: AttackConfig, name: string =
 }
 
 /** Idle → pose → hold → idle, for the reaction poses the game eases into; `drop` lowers the hips (m). */
-function holdClip(kind: EnemyKind, name: string, pose: Pose, hold: number, drop = 0): Clip {
+function holdClip(kind: HumanoidKind, name: string, pose: Pose, hold: number, drop = 0): Clip {
   const idle = IDLE[kind];
   const IN = 0.3;
   const OUT = 0.5;
@@ -140,7 +140,7 @@ function holdClip(kind: EnemyKind, name: string, pose: Pose, hold: number, drop 
 }
 
 /** Every animation the game plays for this behaviour, in this family's body (or its named fighter's), with its own numbers, in a stable order. */
-export function clipsFor(kind: EnemyKind, family: Family = 'undead', named?: string): Clip[] {
+export function clipsFor(kind: HumanoidKind, family: Family = 'undead', named?: string): Clip[] {
   const def: EnemyConfig = numbersOf(kind, family, named);
   const p = proportionsOf(kind, family, named);
   const clips: Clip[] = [idleClip(kind), walkClip(kind, p, def.speed)];
@@ -157,8 +157,10 @@ export function clipsFor(kind: EnemyKind, family: Family = 'undead', named?: str
   }
   clips.push(holdClip(kind, 'stagger', STAGGER, def.staggerTime * 0.6));
   if (kind === 'warden') clips.push(holdClip(kind, 'kneel', KNEEL, CONFIG.warden.kneelTime, KNEEL_DROP * p.hipY));
-  // Only the dead claw up out of the ground.
-  if (FAMILIES[family].body === 'skeleton') clips.push(holdClip(kind, 'rise', RISE, 0.8));
+  // Only the dead claw up out of the ground, or come up out of the water they lie in; the bog's beasts heave up out of the mud.
+  const body = FAMILIES[family].body;
+  if (body === 'skeleton') clips.push(holdClip(kind, 'rise', RISE, 0.8), holdClip(kind, 'surface', SURFACE, 0.8));
+  if (body === 'mud') clips.push(holdClip(kind, 'mound', MOUND, 1.2, MOUND_DROP * p.hipY));
   return clips;
 }
 

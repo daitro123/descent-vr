@@ -544,7 +544,7 @@ export class RangerPrototype {
     if (this.variant !== 'knife' || !this.bow.tracked || !player.alive || !attack.blockable || attack.guardBreak) return null;
     const d = this.internals.defender;
     const bowDefender: Defender = { ...d, shieldInverse: null, swordBase: this.bow.topTip, swordTip: this.bow.bottomTip, swordRadius: P.radius };
-    const res = sweepStrike(pb, pt, b, t, enemy.weapon.radius, 6, bowDefender, true, _sweep);
+    const res = sweepStrike(pb, pt, b, t, enemy.weapon.radius, 6, bowDefender, true, attack.low, _sweep);
     if (!res || res.contact !== 'sword') return null;
     const at = res.point;
     const { internals } = this;

@@ -5,7 +5,7 @@ import { numbersOf } from '../src/enemies/enemy';
 import { createEnemy } from '../src/enemies/kinds';
 import { clipsFor } from '../src/inspector/clips';
 import { BARROW_LIGHT } from '../src/models/barrow';
-import { buildCharacter, type EnemyKind, FAMILIES, type Family, type FamilyDef, fighterOf } from '../src/models/characters';
+import { buildCharacter, FAMILIES, type Family, type FamilyDef, fighterOf, type HumanoidKind } from '../src/models/characters';
 import { GIANT, GIANT_TRIANGLES } from '../src/models/giant';
 import { BONES, type Rig } from '../src/models/rig';
 import { GLYPH } from '../src/models/vault';
@@ -20,13 +20,13 @@ import { GLYPH } from '../src/models/vault';
 const DEAD: Family[] = ['barrow', 'vault'];
 
 /** Every fighter of the two families: each look of each kind, then the named. */
-const FIGHTERS: [string, Family, EnemyKind, number, string?][] = DEAD.flatMap((family) => {
+const FIGHTERS: [string, Family, HumanoidKind, number, string?][] = DEAD.flatMap((family) => {
   const def = FAMILIES[family] as FamilyDef;
   return [
-    ...(Object.entries(def.fights) as [EnemyKind, { label: string; looks: number }][]).flatMap(([kind, f]) =>
-      Array.from({ length: f.looks }, (_, v): [string, Family, EnemyKind, number] => [f.looks > 1 ? `${f.label} v${v}` : f.label, family, kind, v]),
+    ...(Object.entries(def.fights) as [HumanoidKind, { label: string; looks: number }][]).flatMap(([kind, f]) =>
+      Array.from({ length: f.looks }, (_, v): [string, Family, HumanoidKind, number] => [f.looks > 1 ? `${f.label} v${v}` : f.label, family, kind, v]),
     ),
-    ...Object.entries(def.named ?? {}).map(([named, f]): [string, Family, EnemyKind, number, string] => [f.label, family, f.kind, 0, named]),
+    ...Object.entries(def.named ?? {}).map(([named, f]): [string, Family, HumanoidKind, number, string] => [f.label, family, f.kind, 0, named]),
   ];
 });
 
@@ -35,12 +35,12 @@ const FIGHTERS: [string, Family, EnemyKind, number, string?][] = DEAD.flatMap((f
  * the undead's dearest look, the Bone Warden's 1,300; a brute (one to a camp)
  * 1,500; a boss on the Warden's body 1,700; and a giant about twice a man.
  */
-function cap(kind: EnemyKind, named?: string): number {
+function cap(kind: HumanoidKind, named?: string): number {
   if (named === 'keyward') return GIANT_TRIANGLES;
   return { grunt: 1300, archer: 1300, brute: 1500, warden: 1700 }[kind];
 }
 
-const build = (kind: EnemyKind, family: Family, variant: number, named?: string): Rig => buildCharacter(kind, { family, variant, named }).rig;
+const build = (kind: HumanoidKind, family: Family, variant: number, named?: string): Rig => buildCharacter(kind, { family, variant, named }).rig;
 
 /** The legs, which stand it on the floor: in bind pose its weapon hangs straight down past them. */
 const LEGS = ['thighL', 'thighR', 'shinL', 'shinR', 'footL', 'footR'].map((b) => BONES.indexOf(b as (typeof BONES)[number]));
@@ -122,10 +122,13 @@ describe('the barrow dead', () => {
     expect(createEnemy('brute', 0, 0).def.death).toBe('topple');
   });
 
-  it('are led by the Barrow Thane, a boss with its name over its bar', () => {
+  it('are led by the Barrow Thane, a boss with its name over a bar in its own light', () => {
     const thane = createEnemy('warden', 0, 0, { family: 'barrow' });
-    expect(thane.boss).toEqual({ name: 'THE BARROW THANE', colour: BARROW_LIGHT });
-    expect(createEnemy('warden', 0, 0).boss?.name).toBe('THE BONE WARDEN');
+    expect(fighterOf('warden', 'barrow').title).toBe('The Barrow Thane');
+    expect(thane.boss).toEqual({ colour: BARROW_LIGHT });
+    // The other Wardens keep the Bone Warden's blue.
+    expect(createEnemy('warden', 0, 0).boss).toEqual({ colour: 0x6ad0ff });
+    expect(createEnemy('warden', 0, 0, { family: 'drowned' }).boss).toEqual({ colour: 0x6ad0ff });
     expect(createEnemy('brute', 0, 0, { family: 'barrow' }).boss).toBeUndefined();
   });
 
@@ -163,7 +166,8 @@ describe('the Keyward', () => {
     const k = keyward();
     expect(k.made).toBe('stone');
     expect(k.def.death).toBe('shatter');
-    expect(k.boss).toEqual({ name: 'THE KEYWARD', colour: GLYPH });
+    expect(fighterOf('brute', 'vault', 'keyward').title).toBe('The Keyward');
+    expect(k.boss).toEqual({ colour: GLYPH });
     expect(k.healthBar.root.position.y).toBeGreaterThan(4.6);
   });
 

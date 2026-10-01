@@ -83,6 +83,8 @@ function player(dist: number, headY: number, shield?: Shield, sword?: [Vector3, 
     torsoTop: new Vector3(),
     torsoBottom: new Vector3(),
     torsoRadius: B.torsoRadius,
+    legsBottom: new Vector3(),
+    legsRadius: B.legsRadius,
     shieldInverse: inverse,
     shieldHalf: new Vector3(S.width / 2 + S.blockMargin, S.height / 2 + S.blockMargin, S.depth / 2 + S.blockMargin),
     swordBase: sword ? sword[0] : null,
@@ -97,6 +99,7 @@ function setHead(d: Defender, dist: number, headY: number): void {
   d.head.set(0, headY - B.headDrop, dist);
   d.torsoTop.set(0, headY - B.torsoTop, dist);
   d.torsoBottom.set(0, Math.max(0.2, headY - B.torsoBottom), dist);
+  d.legsBottom.set(0, B.ankles, dist);
 }
 
 interface Run {

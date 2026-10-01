@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CONFIG, type EnemyConfig } from '../src/config';
 import { IDLE } from '../src/enemies/poses';
 import { castClips, clipsFor, type MutablePose, personClips } from '../src/inspector/clips';
-import { type EnemyKind, FAMILIES, type Family } from '../src/models/characters';
+import { type HumanoidKind as EnemyKind, FAMILIES, type Family } from '../src/models/characters';
 import { PEOPLE, type PersonId } from '../src/models/people';
 import { BONES } from '../src/models/rig';
 import { CAST, type CastId } from '../src/people/cast';
@@ -48,13 +48,13 @@ describe('inspector clips', () => {
     for (const f of phases) expect(f.telegraph > 0).toBe(f.phase === 'windup' || f.phase === 'active');
   });
 
-  it('play the same animations on every family of the living, bar rising from the ground', () => {
+  it('play the same animations on every family of the living, bar rising from the ground or the water', () => {
     const living = (Object.keys(FAMILIES) as Family[]).filter((f) => FAMILIES[f].body === 'human');
     expect(living).toEqual(expect.arrayContaining(['bandit', 'corvane']));
     for (const family of living) {
       for (const kind of Object.keys(FAMILIES[family].fights) as EnemyKind[]) {
         const undead = clipsFor(kind).map((c) => c.name);
-        expect(clipsFor(kind, family).map((c) => c.name), `${family} ${kind}`).toEqual(undead.filter((n) => n !== 'rise'));
+        expect(clipsFor(kind, family).map((c) => c.name), `${family} ${kind}`).toEqual(undead.filter((n) => n !== 'rise' && n !== 'surface'));
       }
     }
   });

@@ -2,7 +2,7 @@ import { Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
 import { attackClip, type MutablePose } from '../src/inspector/clips';
-import { buildCharacter, type EnemyKind, type Family } from '../src/models/characters';
+import { buildCharacter, type HumanoidKind as EnemyKind, type Family } from '../src/models/characters';
 import { buildLongsword } from '../src/models/gear';
 
 // Blades should land edge first. These play each melee swing with the game's
@@ -33,6 +33,12 @@ const WIELDERS: [string, EnemyKind, number, Family, string?][] = [
   ['fen raider (eel spear, three tines)', 'grunt', 1, 'raider'],
   ['fen raider peat cutter (peat spade)', 'brute', 0, 'raider'],
   ['Abel Thatch (slasher)', 'brute', 0, 'raider', 'headman'],
+  ['drowned (Deepking blade)', 'grunt', 0, 'drowned'],
+  ['drowned (eel gaff)', 'grunt', 1, 'drowned'],
+  ['drowned (cleaver)', 'grunt', 2, 'drowned'],
+  ['drowned lock-warden (anchor)', 'brute', 0, 'drowned'],
+  ['Drowned Reeve (rod of office)', 'warden', 0, 'drowned'],
+  ['bog lurker (bog-oak limb)', 'brute', 0, 'bog'],
 ];
 
 /** Angles (degrees) between the cutting side and the blade's travel, across the swing. */

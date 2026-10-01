@@ -468,6 +468,30 @@ describe("Brackenmoor's land", () => {
     for (const l of brackenmoor.landmarks) expect(brackenmoor.walkable.contains(l.x, l.z), l.label).toBe(true);
   });
 
+  it("says where water stands over the ground, as the World tells what swims and what keeps dry: the beck, the Blackmire's pools, not the moor or the bridge", () => {
+    const i = Math.floor(moor.beck.line.length / 3);
+    const [x, z] = moor.beck.line[i];
+    expect(world.waterAt(x, z)).toBeCloseTo(moor.beck.levels[i], 2);
+    expect(world.waterAt(x, z)!).toBeGreaterThan(world.heightAt(x, z));
+    const [bridge] = of('bridge');
+    expect(world.waterAt(bridge.x, bridge.z)).toBeNull();
+    expect(world.waterAt(MOOR.square.x, MOOR.square.z)).toBeNull();
+    // Oakvale over the crest has none to tell.
+    expect(world.waterAt(oakvale.spawn.x, oakvale.spawn.z)).toBeNull();
+  });
+
+  it('places its hares on open grass: where you can walk, dry, clear of anything solid and off the roads', () => {
+    const hares = brackenmoor.critters ?? [];
+    expect(hares.map((c) => c.look)).toEqual(['hare', 'hare', 'hare']);
+    for (const c of hares) {
+      const at = `(${c.x}, ${c.z})`;
+      expect(brackenmoor.walkable.contains(c.x, c.z), at).toBe(true);
+      for (const [dx, dz] of [[0, 0], [4, 0], [-4, 0], [0, 4], [0, -4]]) expect(world.waterAt(c.x + dx, c.z + dz), at).toBeNull();
+      expect(brackenmoor.resolve(new Vector3(c.x, 0, c.z), 0.15), at).toBe(false);
+      for (const road of moor.roads) expect(nearestOnPolyline(road.line, c.x, c.z).d, `${at} by the ${road.id} road`).toBeGreaterThan(road.width / 2 + 2);
+    }
+  });
+
   it("smokes from the chimneys of the houses people live in, and sounds of the beck under Cairnford's bridge", () => {
     const smoke = plumes(moor.structures);
     expect(smoke.length).toBeGreaterThan(8);
