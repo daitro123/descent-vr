@@ -62,6 +62,8 @@ export const SPEEDS = [1, 0.5, 0.25, 0.1];
 const STAGE_Z = -1.8;
 const MIN_SCALE = 0.2;
 const MAX_SCALE = 3;
+/** A model taller than this (m) is stood smaller to fit, as the giant build is: scale it up for its true size. */
+const FIT_HEIGHT = 2.8;
 const FLICK_ON = 0.6;
 const FLICK_OFF = 0.3;
 
@@ -82,6 +84,8 @@ export class Inspector {
   readonly root = new Group();
   /** Scaled with the model, so the ruler always reads the model's own metres. */
   private readonly scaled = new Group();
+  /** The pole beside the plinth, as tall as the model needs. */
+  private ruler = buildRuler(3);
   private readonly turntable = new Group();
   private readonly guides = new Group();
   private readonly weaponLine = segmentLine(0x40e0ff);
@@ -113,7 +117,7 @@ export class Inspector {
     const stage = new Group();
     stage.position.z = STAGE_Z;
     stage.add(this.scaled);
-    this.scaled.add(this.turntable, buildPlinth(), buildRuler());
+    this.scaled.add(this.turntable, buildPlinth(), this.ruler);
     this.guides.add(this.weaponLine, this.arrowLine);
     this.root.add(stage, this.guides);
 
@@ -165,12 +169,25 @@ export class Inspector {
   show(index: number): void {
     const n = ENTRIES.length;
     const name = this.built.size ? this.current.clips[this.clip]?.name : undefined;
+    const before = this.built.size ? fitOf(this.current) : 1;
     this.turntable.remove(this.current.rig.mesh);
     this.entry = ((index % n) + n) % n;
     const found = this.current.clips.findIndex((c) => c.name === name);
     this.clip = Math.max(0, found);
     this.time = 0;
     this.turntable.add(this.current.rig.mesh);
+    // A giant stands smaller to fit, and back up after it; the zoom you'd chosen carries over.
+    const fit = fitOf(this.current);
+    if (fit !== before) this.scaled.scale.setScalar(Math.min(MAX_SCALE, Math.max(MIN_SCALE, (this.scaled.scale.x * fit) / before)));
+    const metres = Math.max(3, Math.ceil(heightOf(this.current) + 0.5));
+    if (metres !== this.ruler.userData.metres) {
+      this.scaled.remove(this.ruler);
+      this.ruler.traverse((o) => (o as Mesh).geometry?.dispose());
+      this.ruler = buildRuler(metres);
+      this.scaled.add(this.ruler);
+    }
+    // Clear of its shoulders.
+    this.ruler.position.x = Math.max(1.0, this.current.rig.mesh.geometry.boundingBox!.max.x + 0.3);
   }
 
   playClip(index: number): void {
@@ -179,9 +196,10 @@ export class Inspector {
     this.time = 0;
   }
 
+  /** Face it front on, at true size, or stood smaller to fit if it's a giant. */
   reset(): void {
     this.turntable.rotation.y = 0;
-    this.scaled.scale.setScalar(1);
+    this.scaled.scale.setScalar(fitOf(this.current));
   }
 
   private rotate(radians: number): void {
@@ -324,7 +342,7 @@ export class Inspector {
     const height = b.rig.proportions.hipY / 0.92;
     const tris = b.rig.triangles;
     return [
-      `${e.label.toUpperCase()}   ${this.entry + 1}/${ENTRIES.length}   ×${height.toFixed(2)} height   ${tris} tris`,
+      `${e.label.toUpperCase()}   ${this.entry + 1}/${ENTRIES.length}   ×${height.toFixed(2)} height (${heightOf(b).toFixed(1)} m)   ${tris} tris`,
       `${clip.name}   ${this.clip + 1}/${b.clips.length}   ${this.phase}`,
       `${this.time.toFixed(2)} / ${clip.duration.toFixed(2)} s   ${timing}`,
       `${this.playing ? 'playing' : 'PAUSED'}  ${SPEEDS[this.speed]}x   scale ${this.scaled.scale.x.toFixed(2)}   guides ${this.showGuides ? 'on' : 'off'}`,
@@ -370,15 +388,28 @@ function buildPlinth(): Group {
   return g;
 }
 
-/** A 3 m pole beside the plinth: a tick every 25 cm, a long one every metre. */
-function buildRuler(): Group {
+/** How tall a model stands (m), crown to sole, at bind. */
+function heightOf(b: Built): number {
+  const g = b.rig.mesh.geometry;
+  if (!g.boundingBox) g.computeBoundingBox();
+  return g.boundingBox!.max.y;
+}
+
+/** The scale that stands a model within FIT_HEIGHT: 1 for all but giants. */
+function fitOf(b: Built): number {
+  return Math.min(1, FIT_HEIGHT / heightOf(b));
+}
+
+/** A pole `metres` tall beside the plinth (3 m, or a metre over a giant): a tick every 25 cm, a long one every metre. */
+function buildRuler(metres: number): Group {
   const g = new Group();
+  g.userData.metres = metres;
   g.position.set(1.0, 0, -0.3);
   const mat = new MeshBasicMaterial({ color: 0xd9cfb0 });
-  const pole = new Mesh(new PlaneGeometry(0.012, 3), mat);
-  pole.position.y = 1.5;
+  const pole = new Mesh(new PlaneGeometry(0.012, metres), mat);
+  pole.position.y = metres / 2;
   g.add(pole);
-  for (let i = 0; i <= 12; i++) {
+  for (let i = 0; i <= metres * 4; i++) {
     const big = i % 4 === 0;
     const tick = new Mesh(new PlaneGeometry(big ? 0.14 : 0.06, big ? 0.012 : 0.006), mat);
     tick.position.set(big ? -0.07 : -0.03, i * 0.25, 0);

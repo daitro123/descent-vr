@@ -78,6 +78,8 @@ export class Brute extends MeleeEnemy {
     // The slam lands a maul-length away, so it's the answer to a player who
     // keeps their distance: that far for a brute's reach, further for a giant's.
     const k = this.def.attackRange / CONFIG.enemies.brute.attackRange;
+    // A giant's slash sweeps over anyone in closer than a brute's reach from it, scaled: it slams them instead.
+    if (k > 1 && dist < (CONFIG.enemies.brute.radius + CONFIG.player.bodyRadius) * k) return slam;
     if (dist > 1.2 * k && dist < 2.3 * k && Math.random() < 0.5) return slam;
     return dist <= this.def.attackRange ? (Math.random() < 0.75 ? heavy : slam) : null;
   }

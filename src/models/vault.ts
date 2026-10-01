@@ -98,8 +98,7 @@ function stonePlate(ctx: DressContext, s: number): void {
     const x = side === 'L' ? 1 : -1;
     ctx
       .on(`upperArm${side}`)
-      .box(0.15 * s, 0.05 * s, 0.17 * s, { at: [0.03 * x * s, 0.0, 0], rot: [0, 0, -0.25 * x], color: BASALT.light })
-      .box(0.13 * s, 0.035 * s, 0.15 * s, { at: [0.045 * x * s, -0.06 * s, 0], rot: [0, 0, -0.3 * x], color: BASALT.base });
+      .box(0.15 * s, 0.06 * s, 0.17 * s, { at: [0.035 * x * s, -0.01 * s, 0], rot: [0, 0, -0.28 * x], color: BASALT.light });
     ctx.on(`forearm${side}`).taper(0.06 * s, 0.06 * s, 0.07 * s, 0.068 * s, 0.13 * s, { at: [0, -ctx.p.forearm + 0.02 * s, 0], color: BASALT.base });
     ctx
       .on(`shin${side}`)
@@ -133,8 +132,7 @@ function slabShield(ctx: DressContext, s: number): void {
     .on('forearmL')
     .box(0.34 * s, 0.03 * s, 0.44 * s, { at: at(0), rot, color: BASALT.base })
     .box(0.36 * s, 0.02 * s, 0.03 * s, { at: at(0.005 * s), rot, color: BASALT.edge })
-    .box(0.04 * s, 0.012 * s, 0.26 * s, { at: at(0.02 * s), rot, color: CUT, glow: FAINT, jitter: 0 })
-    .box(0.16 * s, 0.012 * s, 0.04 * s, { at: at(0.02 * s), rot, color: CUT, glow: FAINT, jitter: 0 });
+    .box(0.04 * s, 0.012 * s, 0.26 * s, { at: at(0.02 * s), rot, color: CUT, glow: FAINT, jitter: 0 });
 }
 
 // ---------------------------------------------------------------- weapons (hand space, along -Y)

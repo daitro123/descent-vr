@@ -6,11 +6,13 @@ import { BARROW_LIGHT, dressBarrowArcher, dressBarrowBrute, dressBarrowGrunt, dr
 import { RAIDERS } from './raiders';
 import { LANTERN_MEN, UNDERGATE } from './smugglers';
 import { bow } from './bow';
+import { GIANT } from './giant';
+import { dressKeyward, KEYWARD_NUMBERS } from './keyward';
 import type { Vec3 } from './kit';
 import { PAL } from './palette';
 import { type BoneName, type DressContext, type Proportions, Rig } from './rig';
 import { loincloth, skeleton } from './skeleton';
-import { dressVaultArcher, dressVaultBrute, dressVaultGrunt } from './vault';
+import { dressVaultArcher, dressVaultBrute, dressVaultGrunt, GLYPH } from './vault';
 
 // The bestiary's bodies. Each is a Rig (one draw call) dressed from simple
 // primitives. Sizes are in metres; `s` scales bone thickness, not length. An
@@ -360,7 +362,9 @@ const BARROW: FamilyDef = {
 /**
  * The vault dead of Aldhaven's Undercroft (vault.ts): the Deepkings' own
  * dead, skeletons in black basalt plate with faint blue glyphs for eyes. Their
- * brute is one of them grown huge, and breaks apart like the rest.
+ * brute is one of them grown huge, and breaks apart like the rest. The
+ * Keyward (keyward.ts) stands among them in the Sealed Vault: a 5 m giant of
+ * stone and bronze, the brute's fight scaled up, and the vault's boss.
  */
 const VAULT: FamilyDef = {
   body: 'skeleton',
@@ -369,6 +373,18 @@ const VAULT: FamilyDef = {
     grunt: { label: 'Vault dead', looks: 3, proportions: PROPORTIONS.grunt, dress: dressVaultGrunt },
     archer: { label: 'Vault archer', looks: 1, proportions: PROPORTIONS.archer, dress: dressVaultArcher },
     brute: { label: 'Vault brute', looks: 1, proportions: PROPORTIONS.brute, dress: dressVaultBrute, numbers: { death: 'shatter' } },
+  },
+  named: {
+    keyward: {
+      kind: 'brute',
+      label: 'The Keyward',
+      looks: 1,
+      proportions: GIANT,
+      dress: dressKeyward,
+      made: 'stone',
+      numbers: KEYWARD_NUMBERS,
+      boss: { name: 'THE KEYWARD', colour: GLYPH },
+    },
   },
 };
 
