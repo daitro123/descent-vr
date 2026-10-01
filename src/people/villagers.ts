@@ -78,6 +78,8 @@ export interface Who {
   readonly build: Build;
   readonly label: string;
   readonly stand: Pose;
+  /** How they hold what they carry as they walk, if they don't let it swing (people/walk.ts `walkOver`): a guard's polearm. */
+  readonly carry?: Pose;
   readonly work: WorkLoop;
   /** How far round their work they start, 0 to 1: villagers each start at their own point, so a village doesn't move in step. */
   readonly start: number;
@@ -309,9 +311,11 @@ export class Villager<Id extends string = VillagerId> {
 
   /**
    * One frame: at work, or stopped and looking at you while you're within
-   * `notice` m. Returns how many of the smith's blows landed this frame.
+   * `notice` m. A work everyone keeps time at together (the drill) runs on
+   * `together`, the seconds everyone placed has been at it, when it's given.
+   * Returns how many of the smith's blows landed this frame.
    */
-  update(dt: number, you: Vector3): number {
+  update(dt: number, you: Vector3, together?: number): number {
     const V = CONFIG.villagers;
     this.walk(dt);
     const far = this.shown ? this.far(you) : Infinity;
@@ -319,7 +323,8 @@ export class Villager<Id extends string = VillagerId> {
     const near = far < V.notice || this.away;
     this.attend = clamp(this.attend + (near ? 1 : -1) * V.attend * dt, 0, 1);
     const was = this.clock;
-    this.clock += dt * (1 - this.attend);
+    if (this.work.together && together !== undefined) this.clock = together;
+    else this.clock += dt * (1 - this.attend);
     // A blow half-stopped by your coming doesn't ring, nor a cry called.
     const blows = this.attend < 0.3 ? strikesBetween(this.work, was, this.clock) : 0;
     this.cried = this.attend < 0.3 && this.work.cries ? eventsBetween(this.work.cries, this.work.duration, was, this.clock) : 0;
@@ -354,7 +359,7 @@ export class Villager<Id extends string = VillagerId> {
     // Breathing, at work or standing easy.
     const pose = friendlyPose(blendPoses(working.pose, stand, a, {}), this.breath) as MutablePose;
     _hip.fill(0);
-    if (w > 0.01) walkOver(pose, walkFrame(this.stride, this.who.build, _walk), w, _hip);
+    if (w > 0.01) walkOver(pose, walkFrame(this.stride, this.who.build, _walk), w, _hip, this.who.carry);
     // The load held steady, not swung.
     if (this.laden && burden) for (const b of this.held) pose[b] = [...(burden.carry[b] ?? [0, 0, 0])] as [number, number, number];
     if (this.bend > 0) this.bent(pose, this.bend);

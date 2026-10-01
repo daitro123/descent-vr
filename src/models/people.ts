@@ -26,10 +26,16 @@ export interface Person {
   works?: readonly WorkName[];
   /** What a stallholder cries to anyone near at their work, one line after the next, unless where they're placed says otherwise. */
   cries?: readonly string[];
-  /** What they carry when they carry (a sack on the shoulder, a crate in their arms), dressed onto them only while they hold it. */
-  load?(ctx: DressContext, look: Look): void;
-  /** The pose they stand in, and walk in, while they hold their load. */
+  /** What they carry when they carry (a sack on the shoulder, a crate in their arms), and how they hold it. */
+  load?: Load;
+  /** How they hold what they carry as they walk, instead of letting those bones swing: a guard's polearm, upright and off the ground. */
   carry?: Pose;
+}
+
+/** A load a villager takes up and sets down (people/villagers.ts): dressed onto them only while they hold it, and the pose they stand and walk in meanwhile. */
+export interface Load {
+  dress(ctx: DressContext, look: Look): void;
+  readonly pose: Pose;
 }
 
 const STAND: Pose = {
@@ -42,8 +48,8 @@ const STAND: Pose = {
   thighR: [0.03, 0, -0.03],
 };
 
-/** Hale: the left hand on the sword's pommel, the right hanging easy. */
-const HALE_STAND: Pose = {
+/** Hale: the left hand on the sword's pommel, the right hanging easy. (And any average build with a sword at the hip.) */
+export const HALE_STAND: Pose = {
   head: [-0.03, 0, 0],
   upperArmL: [0.25, 0, 0.2],
   forearmL: [-1.9, -0.2, 0],

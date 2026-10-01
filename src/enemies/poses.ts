@@ -1,5 +1,5 @@
-import type { AttackPoseName } from '../config';
-import type { EnemyKind } from '../models/characters';
+import type { AttackConfig, HumanoidAttack } from '../config';
+import type { HumanoidKind } from '../models/characters';
 import type { Pose } from '../models/rig';
 
 // Keyframe poses (see rig.ts for the rotation conventions). Attack poses are
@@ -10,7 +10,7 @@ import type { Pose } from '../models/rig';
 
 const HALF_PI = Math.PI / 2;
 
-export const IDLE: Record<EnemyKind, Pose> = {
+export const IDLE: Record<HumanoidKind, Pose> = {
   grunt: {
     spine: [0.08, 0, 0],
     head: [-0.06, 0, 0],
@@ -370,7 +370,7 @@ export function walkOffsets(phase: number, amount: number, out: Record<string, [
   out.spine = [0.06 * amount, 0.1 * amount * s, 0];
 }
 
-export const ATTACK_POSES: Record<AttackPoseName, AttackPoses> = {
+export const ATTACK_POSES: Record<HumanoidAttack, AttackPoses> = {
   chop: CHOP,
   slashR: SLASH_R,
   slashL: SLASH_L,
@@ -378,3 +378,9 @@ export const ATTACK_POSES: Record<AttackPoseName, AttackPoses> = {
   draw: DRAW,
   summon: SUMMON,
 };
+
+/** The keyframes `attack` swings with on the human body or a skeleton; a lunge is only a crawler's (crawler.ts). */
+export function humanoidAttack(attack: AttackConfig): AttackPoses {
+  if (attack.pose === 'lunge') throw new Error('A lunge is a crawler’s attack');
+  return ATTACK_POSES[attack.pose];
+}

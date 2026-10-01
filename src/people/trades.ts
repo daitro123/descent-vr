@@ -69,7 +69,7 @@ function round(beats: readonly Beat[], strikes: readonly number[] = []): WorkLoo
       t += b.hold;
     }
   });
-  const work = loop(segments, strikes, cries.length ? cries : undefined);
+  const work = loop(segments, strikes, { cries: cries.length ? cries : undefined });
   if (!loads.length) return work;
   const { duration } = work;
   return {
@@ -345,12 +345,12 @@ function signal(stand: Pose): WorkLoop {
 /**
  * Taking on a load and setting it down: from a cart's tail (reaching up to
  * it) or from someone before them (arms out to take it), on the shoulder or
- * in the arms as they carry it (`who.carry`), turned `turn` rad to their
+ * in the arms as they carry it (`who.load`), turned `turn` rad to their
  * left to bend and set it down, and back.
  */
 function shift(stand: Pose, turn: number, who: Worker, from: 'cart' | 'hands'): WorkLoop {
   const side = turn || (from === 'cart' ? -1.3 : 1.3);
-  const carry = who.carry ?? stand;
+  const carry = who.load ?? stand;
   const take =
     from === 'cart'
       ? still(over(stand, { spine: [0.12, 0, 0], head: [-0.15, 0, 0], upperArmL: [-1.7, -0.1, 0.1], forearmL: [-0.4, 0, 0], upperArmR: [-1.7, 0.1, -0.1], forearmR: [-0.4, 0, 0] }))

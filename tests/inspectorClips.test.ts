@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { CONFIG, type EnemyConfig } from '../src/config';
 import { IDLE } from '../src/enemies/poses';
 import { castClips, clipsFor, type MutablePose, personClips } from '../src/inspector/clips';
-import type { EnemyKind } from '../src/models/characters';
-import { PEOPLE, type Person, type PersonId } from '../src/models/people';
+import { type HumanoidKind as EnemyKind, FAMILIES, type Family } from '../src/models/characters';
+import { PEOPLE, type PersonId } from '../src/models/people';
 import { BONES } from '../src/models/rig';
 import { CAST, type CastId } from '../src/people/cast';
 import { SAT_AT } from '../src/people/trades';
@@ -49,10 +49,14 @@ describe('inspector clips', () => {
     for (const f of phases) expect(f.telegraph > 0).toBe(f.phase === 'windup' || f.phase === 'active');
   });
 
-  it('play the same animations on bandits, bar rising from the ground', () => {
-    for (const kind of ['grunt', 'archer', 'brute'] as const) {
-      const undead = clipsFor(kind).map((c) => c.name);
-      expect(clipsFor(kind, 'bandit').map((c) => c.name)).toEqual(undead.filter((n) => n !== 'rise'));
+  it('play the same animations on every family of the living, bar rising from the ground', () => {
+    const living = (Object.keys(FAMILIES) as Family[]).filter((f) => FAMILIES[f].body === 'human');
+    expect(living).toEqual(expect.arrayContaining(['bandit', 'corvane']));
+    for (const family of living) {
+      for (const kind of Object.keys(FAMILIES[family].fights) as EnemyKind[]) {
+        const undead = clipsFor(kind).map((c) => c.name);
+        expect(clipsFor(kind, family).map((c) => c.name), `${family} ${kind}`).toEqual(undead.filter((n) => n !== 'rise'));
+      }
     }
   });
 
@@ -76,7 +80,7 @@ describe('inspector clips', () => {
   it("show the cast zones place standing at ease, standing about, at their works, sitting and walking, each looping round without a jump", () => {
     for (const id of Object.keys(CAST) as CastId[]) {
       const clips = castClips(id);
-      const person: Person = CAST[id];
+      const person = CAST[id];
       const works = (person.works ?? []).map((w) => (w in SAT_AT ? `${w} (sitting)` : w));
       expect(clips.map((c) => c.name)).toEqual(['stand', 'stand about', ...works, 'sit', ...(person.load ? ['carry'] : []), 'walk']);
       const out: MutablePose = {};
@@ -88,5 +92,11 @@ describe('inspector clips', () => {
         start.forEach((v, i) => expect(Math.abs(v - end[i]), `${id} ${clip.name}`).toBeLessThan(0.05));
       }
     }
+  });
+
+  it('show each guard at the works they’re made for', () => {
+    expect(castClips('recruit').map((c) => c.name)).toContain('drill');
+    expect(castClips('royalGuard').map((c) => c.name)).toContain('attention');
+    expect(castClips('tollSergeant').map((c) => c.name)).toContain('lean');
   });
 });

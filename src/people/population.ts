@@ -4,7 +4,6 @@ import type { FileSpot, PatrolWalk } from '../enemies/patrol';
 import type { Crowd, PersonPlan } from '../maps/types';
 import { BUILDS } from '../models/human';
 import { sharedModelMaterial } from '../models/materials';
-import type { Person } from '../models/people';
 import { NO_STORY, type Story, there } from '../story';
 import type { Ground } from '../world/ground';
 import { BarkRule } from './barks';
@@ -38,8 +37,8 @@ export type Inhabitant = Villager<string> | Fallen;
 export interface Placed {
   /** Are they drawn (not hidden with the outdoors)? */
   readonly shown: boolean;
-  /** One frame with your head at `you`. */
-  update(dt: number, you: Vector3): unknown;
+  /** One frame with your head at `you`, `time` s since the population began (for a work everyone keeps time at). */
+  update(dt: number, you: Vector3, time: number): unknown;
   /** How far your head is from them, on the floor plane. */
   far(you: Vector3): number;
   /** Show `line` over their head, or hide it (null). */
@@ -83,6 +82,8 @@ export class Population<P extends Placed = Inhabitant> {
   /** The slots by how near they are, sorted afresh each frame (kept to spare the garbage collector). */
   private readonly order: Slot<P>[] = [];
   private readonly fars: number[] = [];
+  /** Seconds it's been running: the clock a drill keeps, so everyone at it strikes together. */
+  private time = 0;
 
   constructor(
     private readonly builder: Builder<P>,
@@ -134,11 +135,12 @@ export class Population<P extends Placed = Inhabitant> {
   update(dt: number, you: Vector3, crowd: Crowd = CONFIG.population): void {
     this.reckon(dt, you);
     this.rebuild(CONFIG.population.perFrame, crowd);
+    this.time += dt;
     const { slots, fars } = this;
     for (let i = 0; i < slots.length; i++) {
       const s = slots[i];
       if (s.person) {
-        s.person.update(dt, you);
+        s.person.update(dt, you, this.time);
         s.far = s.person.far(you);
       }
       fars[i] = s.person?.shown && s.plan.barks?.length ? s.far : Infinity;
@@ -153,7 +155,7 @@ export class Population<P extends Placed = Inhabitant> {
     for (let i = 0; i < slots.length; i++) {
       const s = slots[i];
       if (!s.person?.cried || !s.person.shown || s.far > C.within || this.rule.showing(i)) continue;
-      const cast: Person = CAST[s.plan.cast];
+      const cast = CAST[s.plan.cast];
       const cries = s.plan.cries ?? cast.cries;
       if (cries?.length && this.rule.call(i, C.time)) s.person.say(cries[s.cry++ % cries.length]);
     }
@@ -227,7 +229,7 @@ export function villagersOn(
 ): Builder<Inhabitant> {
   return {
     make(plan, stroll) {
-      const person: Person = CAST[plan.cast];
+      const person = CAST[plan.cast];
       const rig = wardrobe.dress(plan.cast, material);
       rig.cullOutside(CONFIG.population.pad);
       if (plan.fallen) {
@@ -237,7 +239,7 @@ export function villagersOn(
       }
       const turn = plan.turn ?? 0;
       const build = BUILDS[person.look.build];
-      const work = WORKS[plan.work ?? 'stand'](person.stand, turn, { build, carry: person.carry });
+      const work = WORKS[plan.work ?? 'stand'](person.stand, turn, { build, load: person.load?.pose });
       // A load carried on their walk, or taken up and set down at their work.
       const carries = person.load && (stroll || work.laden);
       const villager = new Villager(
@@ -247,11 +249,12 @@ export function villagersOn(
           build,
           label: plan.label ?? person.label,
           stand: person.stand,
+          carry: person.carry,
           work,
           start: plan.start ?? startOf(plan.id),
           gives: false,
           sit: plan.seat !== undefined || plan.hang ? sitting(build, { height: plan.seat ?? 0, hang: plan.hang }) : undefined,
-          burden: carries ? { geometry: wardrobe.burden(plan.cast)!, carry: person.carry ?? person.stand } : undefined,
+          burden: carries ? { geometry: wardrobe.burden(plan.cast)!, carry: person.load!.pose } : undefined,
         },
         streets,
         stroll,

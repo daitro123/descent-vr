@@ -7,7 +7,10 @@ import type { GearSlot, Rarity } from './items';
 import type { Grade, RecipeRow, SpotKindRow } from './professions/professions';
 
 /** Which keyframe pair (enemies/poses.ts) an attack animates between. */
-export type AttackPoseName = 'chop' | 'slashR' | 'slashL' | 'slam' | 'draw' | 'summon';
+/** The attacks a human body or a skeleton swings (poses.ts). */
+export type HumanoidAttack = 'chop' | 'slashR' | 'slashL' | 'slam' | 'draw' | 'summon';
+/** Which keyframes an attack plays: a humanoid's swing, or a crawler's lunge at your legs (crawler.ts). */
+export type AttackPoseName = HumanoidAttack | 'lunge';
 
 export interface AttackConfig {
   pose: AttackPoseName;
@@ -30,6 +33,11 @@ export interface AttackConfig {
   weight: number; // how often it's picked
   /** Combo: attack index that follows immediately (the Warden). */
   next?: number;
+  /**
+   * Strikes low, at your legs as well as your body (a biter's lunge): hold the
+   * shield or the blade down to block it, or step back out of its reach.
+   */
+  low?: boolean;
   /** Weapon stuck in the floor after the blow: a window of bonus damage. */
   exposeOnRecover?: boolean;
 }
@@ -49,6 +57,8 @@ export interface GuardConfig {
 export interface EnemyConfig {
   hp: number;
   radius: number; // body collision and hurt capsule
+  /** m round it that keeps you and the others off it, if not its radius: a biter, low on the ground, comes in to your feet. */
+  crowd?: number;
   speed: number; // m/s
   turnSpeed: number; // rad/s
   /** Hits dealing less than this don't interrupt its attacks (super armour). */
@@ -179,6 +189,9 @@ export const CONFIG = {
       torsoTop: 0.28,
       torsoBottom: 0.85,
       torsoRadius: 0.2,
+      // Below the torso, legs only a low blow (a biter's lunge) can strike: down to the ankles, both legs in one capsule.
+      ankles: 0.06,
+      legsRadius: 0.13,
     },
   },
 
@@ -964,6 +977,31 @@ export const CONFIG = {
     walk: { speed: 1.1, pause: 4 }, // m/s strolling a route (each build has its own pace: human.ts `Gait`), s standing at each end
   },
 
+  // Critters (world/critters.ts): hares and rabbits, frogs, rats, each a
+  // few still frames drawn instanced. They live round their spot and always
+  // run away from you, never towards you.
+  critters: {
+    near: 40, // m: critters this near you move and are drawn; farther ones wait unseen where they are
+    most: 24, // critters drawn at once in all, the nearest first
+    // Hares and rabbits sit, graze, sit up and hop about their spot, sit up to watch you within `notice` m, and bolt
+    // within `flee`, zig-zagging (each hop up to `zig` rad off straight away) until you're `safe` m off.
+    rabbit: {
+      notice: 12,
+      flee: 7,
+      safe: 22,
+      wander: 5, // m from its spot it hops about in
+      hop: { near: [0.3, 0.7], speed: 2.4, height: 0.12 }, // a hop about: m, m/s, m high
+      bolt: { near: [1.2, 1.8], speed: 7, height: 0.22, zig: 0.7 }, // a hop fleeing
+      rest: [1.5, 5], // s between hops about
+    },
+    // A frog leaps `leap` m the way it faces (into the water) once you're within `flee` m, and is back on its stone
+    // once you've been `away` m off for `after` s.
+    frog: { flee: 3.5, leap: 1.3, time: 0.38, height: 0.22, away: 10, after: 8 },
+    // A rat runs `run` m along its wall at `speed` m/s, away from you, once you're within `flee` m, and is gone into
+    // a gap; back once you've been `away` m off for `after` s.
+    rat: { flee: 5, run: 2.6, speed: 3.2, away: 15, after: 10, shuffle: 0.5 },
+  },
+
   // The village's people at work (people/villagers.ts, people/work.ts): the
   // innkeeper behind the bar, the smith at the anvil, the farmer by the well.
   villagers: {
@@ -1005,6 +1043,21 @@ export const CONFIG = {
     carry: { bend: 0.9 },
     // Sitting (people/sit.ts): the hips' joint this far over the seat, m at thickness 1.
     sit: { over: 0.09 },
+    // The guards' loops (models/guards.ts), each in s unless it says otherwise.
+    guard: {
+      // At a gate or a door: weight from foot to foot, a long look up the road, and the polearm lifted and grounded now and then.
+      sentry: { rest: 6, shift: 1.6, turn: 1.1, watch: 3.5, look: 1.0, lift: 0.5, ground: 0.25 }, // look: rad the head and chest turn up the road
+      // The royal guard at attention: nearly still, the eyes going to one side now and then and back.
+      attention: { still: 9, eyes: 0.6, glance: 1.8, look: 0.3 }, // look: rad
+      // The recruits at the dummies: a chop and a slash with the grunt's own strikes, `rounds` times, then a rest; everyone at it keeps time together.
+      drill: { ready: 0.8, windup: 0.6, strike: 0.22, recover: 0.6, rounds: 2, rest: 3.5 },
+      // The quartermaster: a blade raised to sight along its edge and turned, lowered, and hung on the rack (round to their left).
+      blades: { raise: 1.0, sight: 2.6, lower: 0.9, turn: 1.0, hang: 1.1, hold: 0.6, rest: 1.5 },
+      // Leaning on a polearm: a sigh now and then, and a look off to one side.
+      lean: { rest: 5, sigh: 2.2, turn: 1.2, look: 3, away: 0.9 }, // away: rad
+      // At a fence round a hole: leaning in to peer down, looking along it, straightening to look round.
+      peer: { stand: 4, down: 1.4, scan: 4, up: 1.2, turn: 0.8, look: 2 },
+    },
   },
 
   // Talking to Hale on a board that unfolds beside them: the talk prototype's
@@ -1235,6 +1288,29 @@ export const CONFIG = {
         { pose: 'slam', kind: 'slam', windup: 1.3, active: 0.3, recover: 1.0, damage: 34, blockable: false, radius: 2.2, exposeOnRecover: true, weight: 1 },
       ],
       guard: { chance: 0.25, hold: [0.6, 1.1], cooldown: 2.5, reaction: 0.22 },
+    },
+    // A small fighter on the ground: a leech or an adder (crawler.ts). It lunges
+    // at your legs, so you look down and block low, or step back out of reach.
+    biter: {
+      hp: 26,
+      // Wider than it is, so a blade swung low finds it, and as wide as the narrowest of the others: no gap in a wall
+      // or a mine lets it into a pocket they couldn't follow it into.
+      radius: 0.3,
+      crowd: 0.12,
+      speed: 1.1,
+      turnSpeed: 5,
+      poise: 0,
+      attackRange: 0.85, // its middle to your feet; each look's own is as far as its lunge reaches your ankles (createEnemy)
+      holdDistance: 1.6,
+      attackCooldown: [0.9, 1.9],
+      staggerTime: 0.5,
+      blockStagger: 0.8,
+      parryStagger: 1.6,
+      exposedTime: 1.5,
+      critMultiplier: 1.6, // its head
+      orbChance: 0.25,
+      death: 'topple', // it curls up (Biter)
+      attacks: [{ pose: 'lunge', kind: 'melee', windup: 0.7, active: 0.16, recover: 0.75, damage: 9, blockable: true, low: true, weight: 1 }],
     },
   } satisfies Record<EnemyKind, EnemyConfig>,
 

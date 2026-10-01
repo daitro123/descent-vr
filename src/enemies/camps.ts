@@ -462,7 +462,13 @@ export class Camps {
 
   /** A member's body at its post, in its family's looks, at its level (its camp's, unless its own) and with a camp's strength, running to keep up once it fights. */
   private raise(level: number, plan: PostPlan, post: EnemyPost, floor: Floor): Enemy {
-    const enemy = createEnemy(plan.behaviour, post.x, post.z, { level: plan.level ?? level, inCamp: true, family: plan.family, variant: Math.floor(Math.random() * 6) });
+    const enemy = createEnemy(plan.behaviour, post.x, post.z, {
+      level: plan.level ?? level,
+      inCamp: true,
+      family: plan.family,
+      variant: plan.variant ?? (plan.behaviour === 'biter' ? 0 : Math.floor(Math.random() * 6)),
+      named: plan.named,
+    });
     enemy.post = post;
     enemy.chaseSpeed = CONFIG.camps.chaseSpeed;
     enemy.position.y = floor.ctx.ground.heightAt(post.x, post.z);

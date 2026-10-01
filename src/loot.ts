@@ -1,7 +1,7 @@
 import type { Role } from './adventureState';
 import { CONFIG } from './config';
 import { CATALOGUE, CLASS_MAIN, type ClassId, type GearItem, type ItemId, JUNK, levelled, type Rarity } from './items';
-import type { Family } from './models/characters';
+import type { EnemyFamily } from './models/characters';
 
 // What a kill drops, rolled from a seed, with no three.js in it: coins, maybe
 // junk of the enemy's family, and maybe a piece of gear for your class, all at
@@ -14,8 +14,8 @@ export interface Fallen {
   readonly role: Role;
   /** The enemy's own level: its loot's item level. */
   readonly level: number;
-  /** Bandits drop bandits' junk, the undead the undead's. */
-  readonly family: Family;
+  /** Each family drops its own junk: bandits bandits', the undead the undead's, leeches leeches'. */
+  readonly family: EnemyFamily;
 }
 
 /** What a kill dropped: coins for the pouch, and each item beside it. */

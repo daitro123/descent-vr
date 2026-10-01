@@ -1,29 +1,36 @@
 import type { BufferGeometry, Material } from 'three';
 import { CITY_CAST } from '../models/cityCast';
 import { COMMONERS } from '../models/commoners';
+import { GUARDS } from '../models/guards';
 import { BUILDS } from '../models/human';
 import { PEOPLE, type Person } from '../models/people';
 import { Rig } from '../models/rig';
+import { SMUGGLERS } from '../models/smugglers';
 
-/**
- * Every friendly character a zone can place as a villager (maps/types.ts
- * `PersonPlan`), by name: Oakvale's four at their trades, the plain
- * villagers, and the city's people (models/cityCast.ts). Each is a body, its
- * clothes, the pose it stands in and its name over a bark; one of the cast
- * can stand in many places at once (two goodwives at a market). A model
- * family adds its looks here.
- */
-export const CAST = {
+const MEMBERS = {
   innkeeper: PEOPLE.innkeeper,
   smith: PEOPLE.smith,
   farmer: PEOPLE.farmer,
   herbalist: PEOPLE.herbalist,
   ...COMMONERS,
   ...CITY_CAST,
+  ...GUARDS,
+  ...SMUGGLERS,
 } satisfies Record<string, Person>;
 
 /** One of the cast, by name. */
-export type CastId = keyof typeof CAST;
+export type CastId = keyof typeof MEMBERS;
+
+/**
+ * Every friendly character a zone can place as a villager (maps/types.ts
+ * `PersonPlan`), by name: Oakvale's four at their trades, the plain
+ * villagers, the city's people (models/cityCast.ts), the guards
+ * (models/guards.ts) and the smugglers at ease (models/smugglers.ts). Each
+ * is a body, its clothes, the pose it stands in and its name over a bark;
+ * one of the cast can stand in many places at once (two goodwives at a
+ * market). A model family adds its looks here.
+ */
+export const CAST: Readonly<Record<CastId, Person>> = MEMBERS;
 
 /**
  * The cast's bodies, each built once and shared by everyone wearing it while
@@ -78,7 +85,7 @@ export class Wardrobe {
       proportions,
       (ctx) => {
         person.dress(ctx, person.look);
-        load(ctx, person.look);
+        load.dress(ctx, person.look);
       },
       undefined,
       person.seed,

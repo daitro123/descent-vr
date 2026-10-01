@@ -1,6 +1,6 @@
 import { Group, type PerspectiveCamera } from 'three';
 import { IDLE } from './enemies/poses';
-import { buildCharacter, type EnemyKind } from './models/characters';
+import { buildCharacter, type HumanoidKind } from './models/characters';
 import { createModelMaterial } from './models/materials';
 import type { Rig } from './models/rig';
 
@@ -10,13 +10,13 @@ import type { Rig } from './models/rig';
 
 export interface Showcase {
   root: Group;
-  rigs: Partial<Record<EnemyKind, Rig>>;
+  rigs: Partial<Record<HumanoidKind, Rig>>;
 }
 
 export function buildShowcase(): Showcase {
   const root = new Group();
   const rigs: Showcase['rigs'] = {};
-  const lineup: [EnemyKind, number, number][] = [
+  const lineup: [HumanoidKind, number, number][] = [
     ['archer', -2.1, -3.2],
     ['grunt', -0.9, -3.0],
     ['warden', 0.5, -3.8],

@@ -1,4 +1,5 @@
 import type { Build } from '../models/human';
+import type { BoneName, Pose } from '../models/rig';
 
 // A friendly walk on the human body, on any build: each foot lands on its
 // heel, rolls flat, peels off from the toe, and stands still on the ground
@@ -274,13 +275,22 @@ export function walkFrame(u: number, build: Build, out: WalkFrame = { pose: {}, 
  * Lay a walk over `pose` (standing, at work: written in place), `w` of the
  * way in (0 standing to 1 walking): the legs and hips go over to the walk's,
  * and its swing is added to the arms, chest and head, so what's held stays
- * held. Returns the hips' offset, eased the same way, to add to the pose's own.
+ * held. The bones in `carry` go over to it instead and don't swing: a
+ * polearm carried upright, off the ground. Returns the hips' offset, eased
+ * the same way, to add to the pose's own.
  */
-export function walkOver(pose: MutablePose, frame: WalkFrame, w: number, hip: [number, number, number] = [0, 0, 0]): [number, number, number] {
+export function walkOver(pose: MutablePose, frame: WalkFrame, w: number, hip: [number, number, number] = [0, 0, 0], carry?: Pose): [number, number, number] {
   for (const [bone, r] of Object.entries(frame.pose)) {
+    if (carry?.[bone as BoneName]) continue;
     const o = (pose[bone] ??= [0, 0, 0]);
     const set = (LEGS as readonly string[]).includes(bone);
     for (let i = 0; i < 3; i++) o[i] = set ? o[i] + (r[i] - o[i]) * w : o[i] + r[i] * w;
+  }
+  if (carry) {
+    for (const [bone, r] of Object.entries(carry)) {
+      const o = (pose[bone] ??= [0, 0, 0]);
+      for (let i = 0; i < 3; i++) o[i] += (r[i] - o[i]) * w;
+    }
   }
   for (let i = 0; i < 3; i++) hip[i] = frame.hip[i] * w;
   return hip;

@@ -79,6 +79,21 @@ const MODELS: Readonly<Record<string, ItemLook>> = {
   cloth: { look: 'cloth', tint: 0x8a6a5a },
   charm: { look: 'charm', tint: PAL.bone },
   dust: { look: 'dust', tint: 0x9a9488 },
+  slime: { look: 'dust', tint: 0x4a5a34 },
+  teeth: { look: 'charm', tint: 0xd8cfb0 },
+  snakeskin: { look: 'cloth', tint: 0x8a7e66 },
+  fang: { look: 'charm', tint: 0xe8e0c8 },
+  // House Corvane's bailiffs' junk: a notched tally of the tithes owed, and the house's pewter badge.
+  tally: { look: 'charm', tint: 0x9a7a4a },
+  'key-badge': { look: 'trinket', tint: 0x4a4a52 },
+  // The smugglers' junk: the Lantern Men's tarred twine and a lantern's bent shutter, the Undergate's cellar key and dice.
+  twine: { look: 'cloth', tint: 0x3a322a },
+  shutter: { look: 'trinket', tint: 0x3a3b42 },
+  'cellar-key': { look: 'trinket', tint: 0x8a5436 },
+  dice: { look: 'charm', tint: 0xd8cfb0 },
+  // The fen raiders' junk: a rusty eel hook, and a charm of plaited reed.
+  'eel-hook': { look: 'trinket', tint: 0x8a4e2a },
+  'reed-charm': { look: 'charm', tint: 0xa89d62 },
   // Professions' materials and what they make (the pouch stands in for ore, stone, bars and herbs).
   'ore-copper': { look: 'pouch', tint: 0xb8733a },
   'stone-rough': { look: 'pouch', tint: 0x8a8680 },

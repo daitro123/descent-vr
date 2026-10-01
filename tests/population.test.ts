@@ -4,7 +4,6 @@ import { CONFIG } from '../src/config';
 import { MAPS } from '../src/maps/registry';
 import type { PersonPlan, Zone } from '../src/maps/types';
 import { BUILDS } from '../src/models/human';
-import type { Person } from '../src/models/people';
 import { CAST, type CastId, Wardrobe } from '../src/people/cast';
 import { Fallen } from '../src/people/fallen';
 import { type Builder, type Placed, Population, type Streets, villagersOn } from '../src/people/population';
@@ -310,8 +309,8 @@ describe('the wardrobe', () => {
   it('gives every work loop to anyone of the cast', () => {
     for (const id of Object.keys(CAST) as CastId[]) {
       for (const [name, make] of Object.entries(WORKS)) {
-        const p: Person = CAST[id];
-        const loop = make(p.stand, -1, { build: BUILDS[p.look.build], carry: p.carry });
+        const p = CAST[id];
+        const loop = make(p.stand, -1, { build: BUILDS[p.look.build], load: p.load?.pose });
         expect(loop.duration, `${id} ${name}`).toBeGreaterThan(0);
       }
     }
@@ -359,6 +358,15 @@ describe("every zone's people and camps", () => {
     }
   });
 
+  it('keeps those on a prop or a seat where they are, and gives a stroller a start along their way', () => {
+    for (const plan of zones.flatMap((z) => z.people)) {
+      if (plan.deck !== undefined || plan.seat !== undefined || plan.hang) expect(plan.route, plan.id).toBeUndefined();
+      if (plan.hang) expect(plan.seat, plan.id).toBeDefined();
+      if (plan.start !== undefined) expect(plan.start >= 0 && plan.start < 1, plan.id).toBe(true);
+      if (plan.cries) expect(plan.work && WORKS[plan.work](CAST[plan.cast].stand, 0, { build: BUILDS[CAST[plan.cast].look.build] }).cries?.length, plan.id).toBeTruthy();
+    }
+  });
+
   it('places each villager under an id nobody else has, one of the cast at a work there is', () => {
     const ids = zones.flatMap((z) => z.people.map((p) => p.id));
     expect(new Set(ids).size).toBe(ids.length);
@@ -373,11 +381,13 @@ describe("every zone's people and camps", () => {
     const r = CONFIG.villagers.radius;
     for (const zone of zones) {
       for (const plan of zone.people) {
+        // On a prop's floor (a deck, the treadwheel) or sitting on an edge, they're off the ground you walk.
+        const off = plan.deck !== undefined || plan.hang;
         for (const at of along(plan)) {
           const where = `${plan.id} at (${at.x.toFixed(1)}, ${at.z.toFixed(1)})`;
-          expect(zone.walkable.contains(at.x, at.z), where).toBe(true);
+          if (!off) expect(zone.walkable.contains(at.x, at.z), where).toBe(true);
           const p = new Vector3(at.x, 0, at.z);
-          expect(zone.collide(p, r), where).toBe(false);
+          if (!off) expect(zone.collide(p, r), where).toBe(false);
           const { land } = zone;
           expect(at.x >= land.minX && at.x <= land.maxX && at.z >= land.minZ && at.z <= land.maxZ, where).toBe(true);
         }

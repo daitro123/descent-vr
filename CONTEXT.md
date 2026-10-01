@@ -77,20 +77,28 @@ One thing a quest asks before it can be handed in: defeat enemies at a place, fi
 _Avoid_: task, goal, requirement
 
 **Behaviour**:
-How an enemy fights, and so what it tests in the player: the grunt (reading a swing), the archer (ranged pressure), the brute (an unblockable slam) or the Warden (a boss fight). One behaviour can wear many looks.
+How an enemy fights, and so what it tests in the player: the grunt (reading a swing), the archer (ranged pressure), the brute (an unblockable slam), the biter (a small fighter's lunge at your legs, blocked low: leeches and adders) or the Warden (a boss fight). One behaviour can wear many looks.
 _Avoid_: kind, type, class, AI
 
 **Family**:
-Who an enemy is, whatever its behaviour: the bandits or the undead. A bandit archer and an undead archer share a behaviour but not a family.
+Who an enemy is, whatever its behaviour: the bandits, House Corvane's bailiffs, the Lantern Men, the undead, leeches or adders. A bandit archer and an undead archer share a behaviour but not a family. A family wears one body, the human body, the skeleton or the crawler, and fields a look for each behaviour it fights with (leeches and adders only bite).
 _Avoid_: faction, race, type
+
+**Named fighter**:
+One of a family's fighters dressed for one place, and never one of its everyday looks: a camp's leader (the Lantern Men's bosun in his woad sash, Abel Thatch at Cockle End) or a named enemy such as Captain Silas Crake. It fights with an ordinary behaviour, at the post in its camp that names it; a boss fight of its own, as the Warden's, is something else.
+_Avoid_: unique, elite, rare, champion
 
 **Rooted**, **frozen**, **slowed**:
 What an ability can hold an enemy in for a while. Rooted, it can't walk but strikes what's in reach; frozen, it does nothing until the time runs out or a hit breaks it; slowed, it walks and winds up slower by a fraction. Brutes take half; the Warden ignores roots and freezes.
 _Avoid_: stun (a stagger is the game's stun), snare, debuff, crowd control
 
 **Human body**:
-The one body every person wears, bandits and friendly characters alike, dressed per character. The undead are skeletons instead.
+The one body every person wears, bandits, bailiffs and friendly characters alike, dressed per character. The undead are skeletons instead.
 _Avoid_: human model, NPC mesh
+
+**Livery**:
+The colours that say whose service someone is in: the crown's blue and gold (the City Watch, the royal guard, and faded on the toll men), House Corvane's deep crimson with a black key (its men-at-arms and bailiffs), House Harrowgate's grey with a white tower, a town watch's cream armband.
+_Avoid_: uniform, faction colours, team
 
 **Build**:
 A human body's size and shape, and the walk that goes with it (its gait): average, stout, broad or big for grown men; woman; elder and elder woman, stooped; child.
@@ -99,6 +107,14 @@ _Avoid_: body type, size
 **Gait**:
 How a build walks: the length of its step, its pace, how its arms swing and how far its feet roll heel to toe. A child takes quick short steps; an elder shuffles, slow and flat-footed.
 _Avoid_: walk style, locomotion
+
+**Crawler**:
+The long, low body leeches and adders wear: a chain of segments that ripples (a leech) or slithers (an adder) along the ground or on the water, rears and lunges.
+_Avoid_: worm model, snake rig
+
+**Critter**:
+A small creature that lives about its spot and never fights: a hare or rabbit that bolts zig-zagging, a frog that leaps into the water, a rat that scurries along its wall into a gap. Each comes back once you've been away a while. Not an enemy, and not a villager.
+_Avoid_: ambient animal, wildlife, mob
 
 **Camp**:
 A group of enemies that lives at one place and refills some time after it is cleared: the bandits at the farm, at the lumber camp and at the watchtower, and the undead in the mine. A boss is never part of a camp. (The lumber camp is a place; the bandits there are its camp.) A camp can be neutral until a quest turns it, leaving you be unless you hurt one of it, and can come or go with a quest.

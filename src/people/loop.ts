@@ -21,16 +21,22 @@ export interface WorkLoop {
   at(t: number): Working;
   /** The seconds into the loop at which the smith's hammer lands on the anvil: none for the others. */
   readonly strikes: readonly number[];
+  /**
+   * Does everyone at it keep time together (the recruits' drill)? Then it runs
+   * on the clock of everyone placed, not each from their own start, and
+   * doesn't stop while they look at you.
+   */
+  readonly together?: boolean;
   /** The seconds into the loop at which a stallholder cries their wares to anyone near (people/population.ts): none for most. */
   readonly cries?: readonly number[];
   /** Whether their load is in their hands `t` s in (a porter taking sacks off a cart): never, without one. */
   laden?(t: number): boolean;
 }
 
-/** Who is at a work, for the loops that need to know: their build (how long their legs are, how they walk), and how they hold a load, if they carry one. */
+/** Who is at a work, for the loops that need to know: their build (how long their legs are, how they walk), and how they hold a load, if they carry one (models/people.ts `Load`). */
 export interface Worker {
   readonly build: Build;
-  readonly carry?: Pose;
+  readonly load?: Pose;
 }
 
 /** One stretch of a loop: `u` goes 0 to 1 across its `time` seconds. */
@@ -77,15 +83,17 @@ export function scaled(pose: Pose, k: number): Pose {
 }
 
 /**
- * The segments strung into a loop, with the strikes (s into the loop) and,
- * for a stallholder, the moments they cry their wares.
+ * The segments strung into a loop, with the strikes (s into the loop); kept
+ * in time by everyone at it, or for a stallholder, the moments they cry their
+ * wares.
  */
-export function loop(segments: readonly Segment[], strikes: readonly number[] = [], cries?: readonly number[]): WorkLoop {
+export function loop(segments: readonly Segment[], strikes: readonly number[] = [], more: { readonly together?: boolean; readonly cries?: readonly number[] } = {}): WorkLoop {
   const duration = segments.reduce((s, g) => s + g.time, 0);
   return {
     duration,
     strikes,
-    cries,
+    together: more.together ?? false,
+    cries: more.cries,
     at(t: number): Working {
       let at = ((t % duration) + duration) % duration;
       for (const g of segments) {

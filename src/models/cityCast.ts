@@ -517,7 +517,7 @@ const docker = person(
     knitCap(ctx, C.seaBlueDark);
     yoke(ctx, l, PAL.leather);
   },
-  { works: ['unload', 'take'], load: (ctx, l) => shoulderSack(ctx, l), carry: CARRY_SACK },
+  { works: ['unload', 'take'], load: { dress: (ctx, l) => shoulderSack(ctx, l), pose: CARRY_SACK } },
 );
 
 const porter = person(
@@ -529,7 +529,7 @@ const porter = person(
     rolledSleeves(ctx, l, C.weld);
     flatCap(ctx, C.russet);
   },
-  { works: ['unload', 'take'], load: (ctx, l) => armsCrate(ctx, l), carry: CARRY_CRATE },
+  { works: ['unload', 'take'], load: { dress: (ctx, l) => armsCrate(ctx, l), pose: CARRY_CRATE } },
 );
 
 const sailor = person(
@@ -541,7 +541,7 @@ const sailor = person(
     skirt(ctx, l, C.seaBlue, { hem: 0.6, flare: 0.05 });
     knitCap(ctx, C.cream);
   },
-  { works: ['haul', 'coil', 'talk', 'take'], load: (ctx, l) => armsCrate(ctx, l), carry: CARRY_CRATE },
+  { works: ['haul', 'coil', 'talk', 'take'], load: { dress: (ctx, l) => armsCrate(ctx, l), pose: CARRY_CRATE } },
 );
 
 const deckhand = person(
@@ -634,7 +634,7 @@ const bargeman = person(
     rolledSleeves(ctx, l, C.weldDark);
     brimHat(ctx, PAL.leather, PAL.leatherDark, 0.18);
   },
-  { works: ['take', 'coil'], load: (ctx, l) => shoulderSack(ctx, l), carry: CARRY_SACK },
+  { works: ['take', 'coil'], load: { dress: (ctx, l) => shoulderSack(ctx, l), pose: CARRY_SACK } },
 );
 
 const angler = person(
@@ -946,7 +946,7 @@ const miller = person(
     apron(ctx, l, C.white, false, 0.6);
     flatCap(ctx, C.flour);
   },
-  { works: ['unload', 'take'], load: (ctx, l) => shoulderSack(ctx, l, C.flour), carry: CARRY_SACK },
+  { works: ['unload', 'take'], load: { dress: (ctx, l) => shoulderSack(ctx, l, C.flour), pose: CARRY_SACK } },
 );
 
 const farmhand = person(
