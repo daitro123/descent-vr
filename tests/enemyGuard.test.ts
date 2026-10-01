@@ -6,8 +6,12 @@ import type { Enemy, EnemyContext, PlayerSword } from '../src/enemies/enemy';
 import { Archer, Brute, DUELIST, Grunt, Warden } from '../src/enemies/kinds';
 import type { GuardSide } from '../src/enemies/poses';
 import { AttackTokens } from '../src/enemies/tokens';
+import type { Rig } from '../src/models/rig';
 import { Arena } from '../src/world/arena';
 import type { Ground } from '../src/world/ground';
+
+/** Its hip height: every enemy here is on the human body or a skeleton. */
+const hipY = (e: Enemy) => (e.rig as Rig).proportions.hipY;
 
 // Enemies that guard raise their weapon on the side your blade comes from.
 // These drive real enemies (rig, guard poses, timings) against a simulated
@@ -262,21 +266,23 @@ describe.each([
   ['grunt', () => new TestGrunt('grunt', 0, 0)],
   ['bandit thug with a sword', () => new TestGrunt('grunt', 0, 0, { family: 'bandit' })],
   ['bandit thug with a hatchet', () => new TestGrunt('grunt', 0, 0, { family: 'bandit', variant: 1 })],
+  ['bailiff with a cudgel', () => new TestGrunt('grunt', 0, 0, { family: 'corvane' })],
+  ['bailiff with an iron-bound club', () => new TestGrunt('grunt', 0, 0, { family: 'corvane', variant: 1 })],
   ['warden', () => new TestWarden('warden', 0, 0)],
 ] as const)('%s guarding', (_name, make) => {
   /** Guard `side`, give the pose time to come up, and hold still. */
   function guarding(side: GuardSide): Enemy {
     alwaysGuard();
     const e = spawn(make());
-    const w = windup(side, e.rig.proportions.hipY / 0.92);
+    const w = windup(side, hipY(e) / 0.92);
     e.update(DT, context(w));
     run(e, context(w), 0.3);
     expect(e.guardSide).toBe(side);
     return e;
   }
-  const chest = (e: Enemy) => 1.25 * (e.rig.proportions.hipY / 0.92);
-  const legs = (e: Enemy) => 0.5 * (e.rig.proportions.hipY / 0.92);
-  const hips = (e: Enemy) => e.rig.proportions.hipY;
+  const chest = (e: Enemy) => 1.25 * (hipY(e) / 0.92);
+  const legs = (e: Enemy) => 0.5 * (hipY(e) / 0.92);
+  const hips = (e: Enemy) => hipY(e);
 
   it('an unguarded enemy takes the slash', () => {
     const e = spawn(make());
@@ -316,7 +322,7 @@ describe.each([
   it('leaves no gap at the belt: the side and low guards both reach the hips', () => {
     for (const side of ['left', 'low'] as GuardSide[]) {
       const e = guarding(side);
-      const s = e.rig.proportions.hipY / 0.92;
+      const s = hipY(e) / 0.92;
       for (const y of [hips(e) - 0.08 * s, hips(e), hips(e) + 0.08 * s]) {
         expect(swing(e, slash('left', y)), `${side} guard, slash at ${y.toFixed(2)} m`).toBe('guarded');
       }

@@ -13,6 +13,9 @@ export interface Defender {
   torsoTop: Vector3;
   torsoBottom: Vector3;
   torsoRadius: number;
+  /** The legs, from the torso's bottom down to the ankles: only low blows (a biter's lunge) are tested against them. */
+  legsBottom: Vector3;
+  legsRadius: number;
   /** World → shield-board local, or null when the shield can't block (untracked, numb). */
   shieldInverse: Matrix4 | null;
   /** Half extents of the block box, forgiveness margin included. */
@@ -42,7 +45,8 @@ const _hit: SegmentHit = { distance: 0, pointA: new Vector3(), pointB: new Vecto
 /**
  * Sweep a weapon segment from (prevBase, prevTip) to (base, tip) in `samples`
  * sub-steps and return the first contact, or null if it touched nothing.
- * `blockable: false` sweeps straight through shield and sword.
+ * `blockable: false` sweeps straight through shield and sword; `low` strikes
+ * the legs as well as the body.
  */
 export function sweepStrike(
   prevBase: Vector3,
@@ -53,6 +57,7 @@ export function sweepStrike(
   samples: number,
   d: Defender,
   blockable: boolean,
+  low = false,
   out: SweepResult = { contact: 'body', point: new Vector3() },
 ): SweepResult | null {
   _half.copy(d.shieldHalf).addScalar(weaponRadius);
@@ -86,6 +91,13 @@ export function sweepStrike(
     }
     closestSegmentSegment(_b, _t, d.torsoTop, d.torsoBottom, _hit);
     if (_hit.distance <= d.torsoRadius + weaponRadius) {
+      out.contact = 'body';
+      out.point.copy(_hit.pointA);
+      return out;
+    }
+    if (!low) continue;
+    closestSegmentSegment(_b, _t, d.torsoBottom, d.legsBottom, _hit);
+    if (_hit.distance <= d.legsRadius + weaponRadius) {
       out.contact = 'body';
       out.point.copy(_hit.pointA);
       return out;

@@ -24,6 +24,8 @@ export interface Person {
   seed: number;
   /** The work loops (people/work.ts) this look is made for, beyond standing about: shown in the model inspector. */
   works?: readonly WorkName[];
+  /** How they hold what they carry as they walk, instead of letting those bones swing: a guard's polearm, upright and off the ground. */
+  carry?: Pose;
 }
 
 const STAND: Pose = {
@@ -36,8 +38,8 @@ const STAND: Pose = {
   thighR: [0.03, 0, -0.03],
 };
 
-/** Hale: the left hand on the sword's pommel, the right hanging easy. */
-const HALE_STAND: Pose = {
+/** Hale: the left hand on the sword's pommel, the right hanging easy. (And any average build with a sword at the hip.) */
+export const HALE_STAND: Pose = {
   head: [-0.03, 0, 0],
   upperArmL: [0.25, 0, 0.2],
   forearmL: [-1.9, -0.2, 0],

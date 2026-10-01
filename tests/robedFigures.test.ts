@@ -1,5 +1,6 @@
 import { Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
+import { type MutablePose, strollClip } from '../src/inspector/clips';
 import { CLERGY } from '../src/models/clergy';
 import { GENTRY } from '../src/models/gentry';
 import { BUILDS, body, head, type Look, robed } from '../src/models/human';
@@ -91,6 +92,32 @@ describe('the robed and named figures', () => {
       expect(foot, id).toBeGreaterThan(-0.02);
       expect(foot, id).toBeLessThan(0.12);
     }
+  });
+
+  it('walk with nothing they carry through the floor', () => {
+    const feet = ['footL', 'footR'].map((b) => BONES.indexOf(b as BoneName));
+    const out: MutablePose = {};
+    const sunk: string[] = [];
+    for (const id of FIGURES) {
+      const person = CAST[id] as Person;
+      const rig = wardrobe.dress(id);
+      const clip = strollClip(person.stand, person.look.build, person.carry);
+      const skin = rig.mesh.geometry.getAttribute('skinIndex');
+      let low = Infinity;
+      for (let k = 0; k < 24; k++) {
+        const frame = clip.sample((clip.duration * k) / 24, out);
+        rig.apply(frame.pose);
+        rig.setHipOffset(...(frame.hip ?? [0, frame.hipY, 0]));
+        rig.mesh.updateMatrixWorld(true);
+        for (let i = 0; i < skin.count; i++) {
+          if (feet.includes(skin.getX(i))) continue;
+          rig.mesh.getVertexPosition(i, _v);
+          low = Math.min(low, _v.y);
+        }
+      }
+      if (low < -0.02) sunk.push(`${id} ${low.toFixed(2)} m`);
+    }
+    expect(sunk).toEqual([]);
   });
 
   it('keep hands behind the back behind it, folded arms and a book in front', () => {

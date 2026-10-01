@@ -1,7 +1,8 @@
+import { CRIMSON, SABLE } from './clergy';
+import { LIVERY } from './guards';
 import { BUILDS, body, cuffs, HUE, head, type Look, robe, robed, shade, shawl, sheathedSword, skirt } from './human';
 import { PAL } from './palette';
 import type { Person } from './people';
-import { CRIMSON, SABLE } from './clergy';
 import { badge, chain, closedBook, coin, coinBox, flatCap, keyPendant, ledger, openBook, sealRing, spectacles } from './props';
 import type { DressContext } from './rig';
 import { ARMS_FOLDED, BEHIND, COUNTING, EASY_ROBE, READING, WRITING } from './stands';
@@ -28,8 +29,9 @@ import { ARMS_FOLDED, BEHIND, COUNTING, EASY_ROBE, READING, WRITING } from './st
 // Corvane's crimson stays on coats, doublets and livery: never at the face or
 // the waist, which mark a bandit.
 
-/** House Harrowgate's grey and its white tower; House Ashby's sea green and silver ship (the guards' livery, models/guards.ts). */
-export const HARROWGATE = { field: 0x6a6c70, badge: 0xe2ddd0 } as const;
+/** House Harrowgate's grey and its white tower, from the guards' livery (models/guards.ts). */
+export const HARROWGATE = LIVERY.harrowgate;
+/** House Ashby's sea green and silver ship. */
 export const ASHBY = { field: 0x3a6a5e, badge: 0xc8ccd0 } as const;
 
 const thick = (l: Look) => BUILDS[l.build].thickness;

@@ -1,7 +1,7 @@
 import { type AttackConfig, CONFIG, type EnemyConfig } from '../config';
 import { SUMMON_ATTACK } from '../enemies/kinds';
-import { ATTACK_POSES, GUARD, type GuardSide, IDLE, KNEEL, KNEEL_DROP, RISE, STAGGER, walkOffsets } from '../enemies/poses';
-import { type EnemyKind, type Family, proportionsOf } from '../models/characters';
+import { GUARD, type GuardSide, humanoidAttack, IDLE, KNEEL, KNEEL_DROP, RISE, STAGGER, walkOffsets } from '../enemies/poses';
+import { FAMILIES, type Family, type HumanoidKind, proportionsOf } from '../models/characters';
 import { BUILDS, type BuildName } from '../models/human';
 import { PEOPLE, type Person, type PersonId } from '../models/people';
 import { BONES, blendPoses, type Pose, type Proportions } from '../models/rig';
@@ -51,7 +51,7 @@ function copyInto(src: Pose, out: MutablePose): Pose {
   return out as Pose;
 }
 
-function idleClip(kind: EnemyKind): Clip {
+function idleClip(kind: HumanoidKind): Clip {
   return {
     name: 'idle',
     duration: 2,
@@ -59,7 +59,7 @@ function idleClip(kind: EnemyKind): Clip {
   };
 }
 
-function walkClip(kind: EnemyKind, p: Proportions): Clip {
+function walkClip(kind: HumanoidKind, p: Proportions): Clip {
   const heightScale = p.hipY / 0.92;
   // Full-speed walk, phase rate as Enemy.update drives it.
   const rate = 7 * (CONFIG.enemies[kind].speed / Math.max(0.8, heightScale));
@@ -87,9 +87,9 @@ function walkClip(kind: EnemyKind, p: Proportions): Clip {
 }
 
 /** Rest → windup (ease out) → strike (ease in) → back to idle (smooth) → rest. */
-export function attackClip(kind: EnemyKind, attack: AttackConfig, name: string = attack.pose): Clip {
+export function attackClip(kind: HumanoidKind, attack: AttackConfig, name: string = attack.pose): Clip {
   const idle = IDLE[kind];
-  const poses = ATTACK_POSES[attack.pose];
+  const poses = humanoidAttack(attack);
   const t1 = REST;
   const t2 = t1 + attack.windup;
   const t3 = t2 + attack.active;
@@ -119,7 +119,7 @@ export function attackClip(kind: EnemyKind, attack: AttackConfig, name: string =
 }
 
 /** Idle → pose → hold → idle, for the reaction poses the game eases into; `drop` lowers the hips (m). */
-function holdClip(kind: EnemyKind, name: string, pose: Pose, hold: number, drop = 0): Clip {
+function holdClip(kind: HumanoidKind, name: string, pose: Pose, hold: number, drop = 0): Clip {
   const idle = IDLE[kind];
   const IN = 0.3;
   const OUT = 0.5;
@@ -138,10 +138,10 @@ function holdClip(kind: EnemyKind, name: string, pose: Pose, hold: number, drop 
   };
 }
 
-/** Every animation the game plays for this behaviour, in this family's body, in a stable order. */
-export function clipsFor(kind: EnemyKind, family: Family = 'undead'): Clip[] {
+/** Every animation the game plays for this behaviour, in this family's body (or its named fighter's), in a stable order. */
+export function clipsFor(kind: HumanoidKind, family: Family = 'undead', named?: string): Clip[] {
   const def: EnemyConfig = CONFIG.enemies[kind];
-  const p = proportionsOf(kind, family);
+  const p = proportionsOf(kind, family, named);
   const clips: Clip[] = [idleClip(kind), walkClip(kind, p)];
   // One clip per distinct attack pose; the first config entry supplies the timings.
   const seen = new Set<string>();
@@ -157,7 +157,7 @@ export function clipsFor(kind: EnemyKind, family: Family = 'undead'): Clip[] {
   clips.push(holdClip(kind, 'stagger', STAGGER, def.staggerTime * 0.6));
   if (kind === 'warden') clips.push(holdClip(kind, 'kneel', KNEEL, CONFIG.warden.kneelTime, KNEEL_DROP * p.hipY));
   // Only the dead claw up out of the ground.
-  if (family === 'undead') clips.push(holdClip(kind, 'rise', RISE, 0.8));
+  if (FAMILIES[family].body === 'skeleton') clips.push(holdClip(kind, 'rise', RISE, 0.8));
   return clips;
 }
 
@@ -166,7 +166,7 @@ export function clipsFor(kind: EnemyKind, family: Family = 'undead'): Clip[] {
  * hold): two steps a cycle at the build's pace, as a villager walks their
  * route (people/villagers.ts). In place: the plinth stays put.
  */
-export function strollClip(stand: Pose, build: BuildName): Clip {
+export function strollClip(stand: Pose, build: BuildName, carry?: Pose): Clip {
   const b = BUILDS[build];
   const cycle = (2 * b.gait.step) / b.gait.speed;
   const frame = { pose: {}, hip: [0, 0, 0] as [number, number, number] };
@@ -177,7 +177,7 @@ export function strollClip(stand: Pose, build: BuildName): Clip {
     duration: 2 * cycle,
     sample: (t, out) => {
       copyInto(friendlyPose(stand, t), out);
-      walkOver(out, walkFrame(t / cycle, b, frame), 1, hip);
+      walkOver(out, walkFrame(t / cycle, b, frame), 1, hip, carry);
       return { pose: out as Pose, hipY: hip[1], hip: [hip[0], hip[1], hip[2]], phase: 'walk', telegraph: 0 };
     },
   };
@@ -232,8 +232,8 @@ function workClip(name: string, work: WorkLoop): Clip {
  * One of the cast a zone places (people/cast.ts): standing at ease, standing
  * about (the work of anyone without one), strolling, as a villager walks
  * their route at their build's pace (people/villagers.ts), and the works
- * they're made for (a book read, a ledger written in), turning on the spot
- * aside.
+ * they're made for (a guard's sentry, a recruit's drill, a book read, a ledger
+ * written in), turning on the spot aside.
  */
 export function castClips(id: CastId): Clip[] {
   const person: Person = CAST[id];
@@ -242,7 +242,7 @@ export function castClips(id: CastId): Clip[] {
   return [
     { name: 'stand', duration: BREATH_PERIOD, sample: (t, out) => ({ pose: copyInto(friendlyPose(stand, t), out), hipY: 0, phase: 'stand', telegraph: 0 }) },
     workClip('stand about', about),
-    strollClip(stand, look.build),
+    strollClip(stand, look.build, person.carry),
     ...(person.works ?? []).map((name) => workClip(name, WORKS[name](stand, 0))),
   ];
 }

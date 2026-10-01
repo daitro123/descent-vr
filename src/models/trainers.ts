@@ -1,11 +1,12 @@
 import { bow } from './bow';
 import { COLLEGIUM } from './clergy';
+import { LIVERY } from './guards';
 import { body, cuffs, HUE, head, hood, type Look, mail, quiver, robe, robed, shade, tabard } from './human';
 import { PAL } from './palette';
 import type { Person } from './people';
 import { cloak, featheredCap, openBook, staff, swordInHand } from './props';
 import type { DressContext } from './rig';
-import { ARROW, BOW_EASY, ON_SWORD, READING, STAFF_AND_BOOK } from './stands';
+import { ARROW, BOW_EASY, ON_SWORD, READING, STAFF_AND_BOOK, STAFF_CARRY } from './stands';
 
 // The `class trainer` family on the human body (human.ts): whoever teaches a
 // class looks the part of it. A drill master with a drawn sword for the
@@ -19,8 +20,8 @@ import { ARROW, BOW_EASY, ON_SWORD, READING, STAFF_AND_BOOK } from './stands';
 // anvil, Ysolde Tarn the hunter, Brother Cuthwin the priest) is dressed by that
 // trade's family.
 
-/** The crown's blue and gold: Marshal Hale's, and the City Watch's (the guards' livery, models/guards.ts). */
-const CROWN = { field: HUE.tabard, badge: PAL.gold } as const;
+/** The crown's blue and gold: Marshal Hale's, and the City Watch's (the guards' livery). */
+const CROWN = LIVERY.crown;
 /** A ranger's forest-green cloak: lighter than the archers' hood, and never a hood. */
 const FOREST = 0x48582e;
 
@@ -186,7 +187,7 @@ function dressMageTrainer(ctx: DressContext, l: Look): void {
 export const TRAINERS = {
   sergeantRook: { label: 'Sergeant-at-arms Rook', look: ROOK_LOOK, stand: ON_SWORD, dress: dressRook, seed: 111, works: ['form'] },
   lodgemasterAshgrove: { label: 'Lodge-master Ashgrove', look: ASHGROVE_LOOK, stand: BOW_EASY, dress: dressAshgrove, seed: 112, works: ['loose'] },
-  magisterQuill: { label: 'Magister Quill', look: QUILL_LOOK, stand: STAFF_AND_BOOK, dress: dressQuill, seed: 113, works: ['read'] },
+  magisterQuill: { label: 'Magister Quill', look: QUILL_LOOK, stand: STAFF_AND_BOOK, dress: dressQuill, seed: 113, works: ['read'], carry: STAFF_CARRY },
   warriorTrainer: { label: 'Warrior trainer', look: WARRIOR_LOOK, stand: ON_SWORD, dress: dressWarriorTrainer, seed: 114, works: ['form'] },
   rangerTrainer: { label: 'Ranger trainer', look: RANGER_LOOK, stand: ARROW, dress: dressRangerTrainer, seed: 115, works: ['fletch'] },
   mageTrainer: { label: 'Mage trainer', look: MAGE_LOOK, stand: READING, dress: dressMageTrainer, seed: 116, works: ['read'] },

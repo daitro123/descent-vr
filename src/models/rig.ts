@@ -1,4 +1,4 @@
-import { Bone, type BufferGeometry, type Material, Skeleton, SkinnedMesh, Vector3 } from 'three';
+import { Bone, type BufferGeometry, type Material, type Matrix4, Skeleton, SkinnedMesh, Vector3 } from 'three';
 import { ModelBuilder, type Vec3 } from './kit';
 
 // Every character is a rig: a skeleton of bones, and one rigidly skinned mesh
@@ -298,6 +298,30 @@ export const HUMANOID: SkeletonDef<BoneName, Proportions> = {
 
 export type DressContext = DressContextOf<BoneName, Proportions>;
 export type Dresser = DresserOf<BoneName, Proportions>;
+
+/**
+ * Each bone's place in a humanoid of these proportions standing in `pose`,
+ * with nothing built: for a dresser that fits a part to a pose, as the
+ * crossbow's stock is laid from the fist to the cheek at full draw.
+ */
+export function posedBones(p: Proportions, pose: Pose): Record<BoneName, Matrix4> {
+  const offsets = HUMANOID.offsets(p);
+  const bones = {} as Record<BoneName, Bone>;
+  for (const name of BONES) {
+    const bone = new Bone();
+    bone.rotation.order = 'YXZ';
+    bone.position.set(...offsets[name]);
+    const r = pose[name];
+    if (r) bone.rotation.set(r[0], r[1], r[2]);
+    bones[name] = bone;
+    const up = PARENT[name];
+    if (up) bones[up].add(bone);
+  }
+  bones.hips.updateMatrixWorld(true);
+  const out = {} as Record<BoneName, Matrix4>;
+  for (const name of BONES) out[name] = bones[name].matrixWorld.clone();
+  return out;
+}
 
 /**
  * A rigidly skinned humanoid: one SkinnedMesh, one draw call. `dress` adds the

@@ -9,6 +9,13 @@ import { CONFIG } from '../config';
 export interface Ground {
   /** Ground height at (x, z), in metres. */
   heightAt(x: number, z: number): number;
+  /**
+   * The water's surface at (x, z), where water stands over the ground there
+   * (a pool, a beck, the fens' channels), or null where it's dry. What swims
+   * floats on it (a leech); what doesn't keeps out of it (a hare). Floors
+   * without water leave it out.
+   */
+  waterAt?(x: number, z: number): number | null;
   /** Push a point on the floor plane out of walls and props. True if it moved. */
   resolve(p: Vector3, radius: number): boolean;
   /** Is the straight line a→b clear? (Archers want a clear shot.) */

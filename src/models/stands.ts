@@ -102,6 +102,12 @@ export const STAFF_LEFT: Pose = {
   handL: [0.05, 0, -0.14],
 };
 
+/** How a staff is carried at a walk (`Person.carry`): that arm held still, the fist a hand's breadth higher, so the staff stays upright and clear of the ground. */
+export const STAFF_CARRY: Pose = { upperArmR: [-0.55, 0, -0.12], forearmR: [-1.26, 0, 0], handR: [0.31, 0, 0.14] };
+
+/** The same in the left fist. */
+export const STAFF_CARRY_LEFT: Pose = { upperArmL: [-0.55, 0, 0.12], forearmL: [-1.26, 0, 0], handL: [0.31, 0, -0.14] };
+
 /** A coin box on the left palm before the chest, a coin in the right fingers over it. */
 export const COUNTING: Pose = {
   ...WRITING,

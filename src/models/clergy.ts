@@ -1,9 +1,10 @@
+import { LIVERY } from './guards';
 import { body, coif, HUE, head, type Look, robe, robed, sash, shade } from './human';
 import { PAL } from './palette';
 import type { Person } from './people';
 import { chain, closedBook, hipLamp, ledger, openBook, saltBag, spade, sunburst } from './props';
 import type { DressContext } from './rig';
-import { EASY_ROBE, FOLDED, READING, STAFF_LEFT, WRITING } from './stands';
+import { EASY_ROBE, FOLDED, READING, STAFF_CARRY_LEFT, STAFF_LEFT, WRITING } from './stands';
 
 // The long-robed: two model families on the human body (human.ts) that share
 // the long robe and differ in who they serve.
@@ -25,10 +26,10 @@ import { EASY_ROBE, FOLDED, READING, STAFF_LEFT, WRITING } from './stands';
 export const DAWN = { robe: 0xe2dccb, gold: PAL.gold } as const;
 /** The Lamplit Collegium's grey, its magisters' pale facing, and the warm light of its lamps. */
 export const COLLEGIUM = { robe: 0x7c7f88, student: 0x8e9098, facing: 0xc4c6c8, lamp: 0xffcf7a } as const;
-/** House Corvane's deep crimson: darker than the bandits' red, and bluer (the guards' livery, models/guards.ts). */
-export const CRIMSON = 0x5a1426;
+/** House Corvane's deep crimson, from the guards' livery (models/guards.ts): darker than the bandits' red, and bluer. */
+export const CRIMSON = LIVERY.corvane.field;
 /** The black of Corvane's key. */
-export const SABLE = 0x1c181c;
+export const SABLE = LIVERY.corvane.badge;
 
 /** A country brother's brown habit, and an undyed one gone grey-brown. */
 const HABIT = 0x4e3a2a;
@@ -225,7 +226,7 @@ function dressStudentWoman(ctx: DressContext, l: Look): void {
 /** The `priest` and `scholar` families, by their cast name (people/cast.ts). */
 export const CLERGY = {
   brotherCuthwin: { label: 'Brother Cuthwin', look: CUTHWIN_LOOK, stand: READING, dress: dressCuthwin, seed: 81, works: ['read'] },
-  brotherAnsgar: { label: 'Brother Ansgar', look: ANSGAR_LOOK, stand: STAFF_LEFT, dress: dressAnsgar, seed: 82, works: ['salt'] },
+  brotherAnsgar: { label: 'Brother Ansgar', look: ANSGAR_LOOK, stand: STAFF_LEFT, dress: dressAnsgar, seed: 82, works: ['salt'], carry: STAFF_CARRY_LEFT },
   motherYsolde: { label: 'Mother Ysolde', look: YSOLDE_LOOK, stand: FOLDED, dress: dressYsolde, seed: 83, works: ['pray'] },
   sisterAgna: { label: 'Sister Agna', look: AGNA_LOOK, stand: EASY_ROBE, dress: dressAgna, seed: 84, works: ['alms'] },
   dawnPriest: { label: 'Priest of the Dawn', look: DAWN_PRIEST_LOOK, stand: READING, dress: dressDawnPriest, seed: 85, works: ['read'] },
