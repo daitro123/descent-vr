@@ -16,7 +16,7 @@ import {
   Vector3,
   type WebGLRenderer,
 } from 'three';
-import { buildCharacter, type EnemyKind, type Family, type WeaponSpec } from '../models/characters';
+import { buildCharacter, type EnemyKind, FAMILIES, type Family, type Fighter, type WeaponSpec } from '../models/characters';
 import { createModelMaterial, type ModelMaterial } from '../models/materials';
 import { buildPerson, PEOPLE, type PersonId } from '../models/people';
 import type { Rig } from '../models/rig';
@@ -38,21 +38,21 @@ export type InspectorEntry =
   /** One of the cast a zone places as a villager, beyond Oakvale's (people/cast.ts). */
   | { cast: CastId; label: string };
 
-const VARIANTS = [0, 1, 2, 3, 4, 5];
+/** Each look of every enemy family's fighters: "Grunt v0" to "v5", "Archer". */
+const enemies = (Object.keys(FAMILIES) as Family[]).flatMap((family) =>
+  (Object.entries(FAMILIES[family].fights) as [EnemyKind, Fighter][]).flatMap(([kind, f]) =>
+    Array.from({ length: f.looks }, (_, variant) => ({ kind, family, variant, label: f.looks > 1 ? `${f.label} v${variant}` : f.label })),
+  ),
+);
 
 /**
- * Every model the game builds: the undead (grunts come in six helmet, cloth
- * and weapon combos), the bandits (thugs in six looks and weapons), then
- * Marshal Hale and the villagers, then the rest of the cast zones place.
+ * Every model the game builds: each enemy family's (the undead's grunts in
+ * six helmet, cloth and weapon combos, the bandits' thugs in six looks and
+ * weapons, and so on), then Marshal Hale and the villagers, then the rest of
+ * the cast zones place.
  */
 export const ENTRIES: InspectorEntry[] = [
-  ...VARIANTS.map((v) => ({ kind: 'grunt' as const, family: 'undead' as const, variant: v, label: `Grunt v${v}` })),
-  { kind: 'archer', family: 'undead', variant: 0, label: 'Archer' },
-  { kind: 'brute', family: 'undead', variant: 0, label: 'Brute' },
-  { kind: 'warden', family: 'undead', variant: 0, label: 'Bone Warden' },
-  ...VARIANTS.map((v) => ({ kind: 'grunt' as const, family: 'bandit' as const, variant: v, label: `Bandit thug v${v}` })),
-  { kind: 'archer', family: 'bandit', variant: 0, label: 'Bandit archer' },
-  { kind: 'brute', family: 'bandit', variant: 0, label: 'Bandit leader' },
+  ...enemies,
   ...(Object.keys(PEOPLE) as PersonId[]).map((id) => ({ person: id, label: PEOPLE[id].label })),
   ...(Object.keys(CAST) as CastId[]).filter((id) => !(id in PEOPLE)).map((id) => ({ cast: id, label: CAST[id].label })),
 ];
