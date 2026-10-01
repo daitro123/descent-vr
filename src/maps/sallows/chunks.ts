@@ -62,7 +62,7 @@ function fenPrototypes(oak: Prototypes, lite: boolean): FenPrototypes {
     pollard: variants(3, pollard),
     lily: recolourEach(oak.lily, [FEN_PLANTS.lily]),
     deadTree: variants(3, deadTree),
-    juniper: recolourEach(oak.pine, FEN_PLANTS.juniper),
+    juniper: recolourEach(oak.bush, FEN_PLANTS.juniper),
     samphire: [...recolourEach(oak.grass, FEN_PLANTS.samphire), ...recolourEach(oak.flower.slice(2, 3), [FEN_PLANTS.lavender])],
     cotton: [oak.flower[1]],
     rock: recolourEach(oak.rock, [FEN_PLANTS.lichen]),
@@ -99,8 +99,8 @@ export function buildSallowsChunk(plan: SallowsPlan, key: ChunkKey, detail: Deta
     if (!full && pl.kind === 'reed' && reeds++ % 3 !== 0) continue;
     const variants = (full ? near : far)[pl.kind];
     const wide = !full && pl.kind === 'reed' ? 1.7 : 1;
-    // Juniper squat, willows broad and low.
-    const sy = pl.kind === 'juniper' ? 0.6 : pl.kind === 'willow' ? 0.85 : 1;
+    // Juniper squat and dark, willows broad and low.
+    const sy = pl.kind === 'juniper' ? 1.3 : pl.kind === 'willow' ? 0.85 : 1;
     s.set(pl.scale * wide, pl.scale * sy, pl.scale * wide);
     m.compose(p.set(pl.x, pl.y, pl.z), q.setFromAxisAngle(UP, pl.yaw), s);
     raw.stamp(variants[pl.seed % variants.length], m.clone(), 0.92 + ((pl.seed >> 4) % 17) / 100);
@@ -115,7 +115,7 @@ export function buildSallowsChunk(plan: SallowsPlan, key: ChunkKey, detail: Deta
     raw.stamp(g, new Matrix4().makeRotationY(st.yaw).setPosition(st.x, st.y, st.z));
   });
   plan.decks.forEach((d, i) => {
-    if (!region.owns(d.x, d.z)) return;
+    if (d.hidden || !region.owns(d.x, d.z)) return;
     let g = deckModels.get(i);
     if (!g) deckModels.set(i, (g = buildDeck(d)));
     raw.stamp(g, new Matrix4().makeRotationY(d.yaw).setPosition(d.x, 0, d.z));

@@ -41,9 +41,9 @@ export const SALLOWS = {
   bank: { road: 0.8, track: 0.7 },
   /** Over this many metres in from a seam the land blends to the seam's heights. */
   blend: { west: 30, north: 24 },
-  /** Decks you walk on in Reedholm, and the stilt houses' floors over the pool. */
-  deck: 0.6,
-  floor: 1.0,
+  /** Decks you walk on in Reedholm, and the stilt houses' floors over the pool: the same, so a porch meets its lane flush. */
+  deck: 0.9,
+  floor: 0.9,
 } as const;
 
 /** The Delta causeway's line where it crosses into Aldhaven, and the height of its bank there. */
@@ -98,7 +98,9 @@ export type FenStructureKind =
   | 'chapel' | 'grave' | 'sunkCottage' | 'hide' | 'decoys' | 'gibbet' | 'kiln' | 'chalkBank'
   | 'smokehouse' | 'crates' | 'cog' | 'tent'
   | 'sluice' | 'sluiceTower' | 'sluiceGate' | 'deepWall' | 'deepArch' | 'deepRoof' | 'drownedTower' | 'bellTower' | 'floodWall'
-  | 'bridge';
+  | 'bridge'
+  | 'stall' | 'revetment' | 'banner' | 'peatStack' | 'fencePosts' | 'plankBridge' | 'column' | 'deepHead' | 'brazier' | 'churchyard'
+  | 'washLine';
 
 export interface FenStructure {
   readonly kind: FenStructureKind;
@@ -116,6 +118,8 @@ export interface FenStructure {
   readonly variant: number;
   /** Its footprint is solid: a box you can't walk into. */
   readonly solid: boolean;
+  /** For a ring of piles round a holm: the turns (radians from its +Z, as `yaw` is) where a walkway or road crosses it, left open. */
+  readonly gaps?: readonly number[];
 }
 
 /** A road or track: its centre line (about a metre between samples), width, and the bank's height along it. */
@@ -135,6 +139,8 @@ export interface FenDeck extends Deck {
   readonly look: DeckLook;
   /** Rails along both sides, which you can't walk through. */
   readonly railed: boolean;
+  /** Walked on but drawn by something else: a stilt house's porch, which its house's model lays. */
+  readonly hidden?: boolean;
 }
 
 /** A light's glow (a lantern, a lit window) and a plume of smoke, for the zone's extras. */
@@ -186,13 +192,18 @@ const CHANNEL: readonly P2[] = [
   [452, 494], [448, 540], [452, 600], [462, 650], [470, 700], [490, 750], [530, 795], [590, 835], [650, 868], [700, 885], [748, 892],
 ];
 
-/** Reedholm: the pool it stands over, the landing, the plank square and the moot hall's island. */
+/**
+ * Reedholm: the wide pool it stands over (an oval, its middle flat and
+ * under water, so every stilt house has water under it), the landing's holm
+ * and the moot hall's island in it, the plank square between them and the
+ * forge's stone footing south of the square.
+ */
 export const REEDHOLM = {
-  pool: { x: 396, z: 612, r: 42 },
-  landing: { x: 364, z: 606, r: 9 },
-  square: { x: 392, z: 611, half: 7 },
-  moot: { x: 417, z: 612, r: 10 },
-  forge: { x: 392, z: 629, half: 4.5 },
+  pool: { x: 398, z: 619, rx: 57, rz: 48 },
+  landing: { x: 364, z: 608, r: 10 },
+  square: { x: 393, z: 611, hw: 9, hd: 8 },
+  moot: { x: 420, z: 611, r: 9 },
+  forge: { x: 393, z: 632, half: 4.5 },
 } as const;
 
 /** The places worth a look, and the levels of the land round them in the spec. */
@@ -214,20 +225,21 @@ export const PLACES = {
   kiln: { x: 294, z: 895 },
 } as const;
 
-/** The Sluice House's tower, on the Great Channel's west bank beside the Dyke Path. */
-const SLUICE_TOWER = { x: 441, z: 701 } as const;
+/** The Sluice House's tower, on the Great Channel's west bank, its door on the lock's walkway. */
+const SLUICE_TOWER = { x: 453.5, z: 697.5, w: 7 } as const;
 
 /** Raised ground: the holms and footings, each to `h` at its middle, out to `r`. */
-const HOLMS: readonly { x: number; z: number; r: number; h: number }[] = [
-  { ...REEDHOLM.landing, h: 0.7 },
-  { ...REEDHOLM.moot, h: 0.7 },
-  { ...PLACES.gibbet, r: 7, h: 0.9 },
+const HOLMS: readonly { x: number; z: number; r: number; h: number; steep?: boolean }[] = [
+  // The landing's holm and the moot hall's island are built up behind timber staithes: flat to their rims, then down into the pool.
+  { ...REEDHOLM.landing, h: 0.85, steep: true },
+  { ...REEDHOLM.moot, h: 0.85, steep: true },
+  { ...PLACES.gibbet, r: 8, h: 1.0 },
   { ...PLACES.withy, r: 20, h: 0.9 },
   { ...PLACES.odo, r: 17, h: 1.3 },
   { ...PLACES.eelworks, r: 11, h: 0.8 },
   { ...PLACES.tollHouse, r: 9, h: 1.4 },
   { ...PLACES.customs, r: 7, h: 0.9 },
-  { x: 445, z: 700, r: 11, h: 1.2 },
+  { x: SLUICE_TOWER.x, z: SLUICE_TOWER.z, r: 12, h: 1.2 },
   { x: 489, z: 696, r: 7, h: 1.2 },
   { ...PLACES.hythe, r: 15, h: 0.7 },
   { ...PLACES.kiln, r: 9, h: 2.2 },
@@ -235,18 +247,18 @@ const HOLMS: readonly { x: number; z: number; r: number; h: number }[] = [
   { x: 566, z: 732, r: 6, h: 0.4 },
 ];
 
-/** Hollows where the water stands: Reedholm's pool, flooded Cockle End and the drowned town's basin. */
+/** Hollows where the water stands: flooded Cockle End, the moat round the Gibbet Willow's holm and the drowned town's basin. */
 const HOLLOWS: readonly { x: number; z: number; r: number; h: number }[] = [
-  { ...REEDHOLM.pool, h: -0.45 },
   { ...PLACES.cockleEnd, r: 24, h: -0.5 },
+  { ...PLACES.gibbet, r: 20, h: -0.35 },
   { ...PLACES.drownedTown, r: 58, h: -0.7 },
 ];
 
 /** The lodes: shallow side channels, wadeable. */
 const LODES: readonly (readonly P2[])[] = [
   [[426, 614], [440, 616], [452, 618]],
-  [[408, 644], [404, 668], [401, 690]],
-  [[296, 690], [312, 730], [336, 748], [360, 760]],
+  [[408, 650], [404, 668], [401, 690]],
+  [[296, 690], [312, 730], [338, 757], [362, 771]],
   [[520, 610], [560, 600], [610, 596], [660, 590], [700, 586]],
   [[600, 760], [630, 800], [640, 840]],
 ];
@@ -254,34 +266,67 @@ const LODES: readonly (readonly P2[])[] = [
 /** The roads: each runs on a bank, and every one of them keeps you out of deep water. */
 const ROADS: readonly { id: string; pts: readonly P2[]; width: number; logs?: boolean; track?: boolean; first?: number }[] = [
   // The Fen road from Brackenmoor, a log road over the bog to Reedholm's landing.
-  { id: 'fen', pts: [[FEN_ROAD.x, FEN_ROAD.road.z], [272, 543], [292, 546], [318, 556], [340, 572], [355, 590], [362, 602]], width: FEN_ROAD.road.width, logs: true, first: FEN_ROAD.road.y },
+  { id: 'fen', pts: [[FEN_ROAD.x, FEN_ROAD.road.z], [272, 543], [292, 546], [318, 556], [340, 572], [355, 590], [362, 603]], width: FEN_ROAD.road.width, logs: true, first: FEN_ROAD.road.y },
   // The Delta causeway in from Aldhaven, by the toll house, to where its boardwalk begins.
   { id: 'causeway', pts: [[CAUSEWAY.x, 500], [CAUSEWAY.x, 512], [380, 526]], width: CAUSEWAY.width, first: CAUSEWAY.y },
-  // The Dyke Path: Reedholm's moot island south along the Great Channel's west bank, past the Sluice House, to the old bridge.
-  { id: 'dyke', pts: [[425, 618], [436, 640], [444, 668], [450, 690], [456, 718], [464, 742], [478, 764], [494, 782], [510, 796]], width: 3.2 },
-  // Over the old bridge, on to the drowned town's edge.
-  { id: 'drowned', pts: [[534, 776], [548, 758], [562, 740], [574, 724]], width: 3.2 },
+  // The Dyke Path: Reedholm's moot island south along the Great Channel's west bank, past the Sluice House's tower, to the old bridge.
+  { id: 'dyke', pts: [[424, 619], [434, 640], [440, 668], [443, 690], [447, 712], [457, 738], [471, 760], [490, 780], [510, 796]], width: 3.2 },
+  // Over the old bridge and along the drowned town's ring dyke, past the Drowned Tower, north to Smugglers' Hythe on the eastern flats.
+  { id: 'drowned', pts: [[534, 776], [552, 772], [578, 773], [604, 770], [624, 772], [644, 760], [655, 735], [659, 705], [663, 674], [669, 648], [675, 632], [679.5, 626.5]], width: 3.2 },
   // The Chalk Road: south-west from the landing along a dyke, past the Lime Kiln, out towards Sunreach.
   { id: 'chalk', pts: [[358, 614], [350, 640], [342, 680], [336, 720], [331, 760], [318, 810], [304, 858], [292, 884], [276, 900], [258, 905]], width: 3.4 },
   // Tracks to the places off the roads.
   { id: 'cockle', pts: [[340, 700], [324, 708], [316, 712]], width: 2.2, track: true },
-  { id: 'withy', pts: [[333, 748], [352, 760], [366, 766]], width: 2.2, track: true },
+  { id: 'withy', pts: [[333, 742], [352, 752], [366, 764], [374, 774]], width: 2.2, track: true },
   { id: 'odo', pts: [[318, 812], [308, 824]], width: 2.2, track: true },
-  { id: 'eelworks', pts: [[444, 668], [426, 682], [410, 694]], width: 2.2, track: true },
-  { id: 'mire', pts: [[478, 764], [462, 790], [446, 814], [436, 828]], width: 2.2, track: true },
-  { id: 'hythe', pts: [[598, 700], [620, 680], [642, 660], [662, 640], [676, 628]], width: 2.2, track: true },
+  { id: 'eelworks', pts: [[440, 668], [424, 682], [410, 694]], width: 2.2, track: true },
+  { id: 'mire', pts: [[471, 760], [458, 790], [446, 814], [436, 828]], width: 2.2, track: true },
+  // Into the drowned town off the ring dyke: an old street, raised, to the flood walls.
+  { id: 'street', pts: [[566, 772], [566, 756], [568, 742], [570, 732]], width: 3, track: true },
 ];
 
-/** The causeway's boardwalk on to Reedholm's square, over a water lode. */
-const BOARDWALK: readonly P2[] = [[380, 524], [382, 545], [384, 570], [386, 594], [387, 604]];
+/** The causeway's boardwalk on to Reedholm's square, over open water the reeds close in on. */
+const BOARDWALK: readonly P2[] = [[380, 524], [382, 545], [384, 570], [386, 590], [386.5, 603.3]];
 
-/** Reedholm's lanes: plank walkways out from the square, with houses either side. */
+/**
+ * Reedholm's lanes: plank walkways out from the square and the forge's
+ * footing, with houses either side, each ending on a road's bank or at a
+ * jetty out over the pool.
+ */
 const LANES: readonly (readonly P2[])[] = [
-  [[385, 617], [374, 628], [364, 642]],
-  [[397, 633], [410, 640], [424, 644]],
-  [[399, 606], [410, 597], [422, 592], [433, 590]],
-  [[385, 605], [372, 596], [360, 590]],
+  // North-west, round the landing's holm to the Fen road.
+  [[384.6, 605.6], [376, 600], [366, 596.5], [360.8, 595.2]],
+  // North-east, past the eel jetty to Mother Sedge's hut.
+  [[401.4, 605.6], [410, 598.5], [421, 594], [433.4, 591]],
+  // South-west, out over the pool to a jetty.
+  [[384.6, 616.4], [377, 624], [370, 632], [364, 641.5]],
+  // South-east from the forge, out to the Dyke Path.
+  [[397.5, 636.6], [408, 642], [420, 646], [431, 648.5], [435.2, 649.2]],
+  // South off the moot hall's island, down to the south-east lane.
+  [[418.6, 618.5], [416.5, 630], [414.2, 643.6]],
+  // North off the north-west lane, out over the pool to a jetty.
+  [[376.5, 600.6], [375.2, 590], [373.6, 580.5]],
+  // North off the north-east lane, between the inn and the eel jetty.
+  [[409.6, 599.2], [409.2, 590], [408.6, 581]],
 ];
+
+/** Lanes' width, and a stilt house's porch: how far out it reaches, so it meets its lane's edge. */
+export const LANE = { width: 3, porch: 1.8 } as const;
+
+/** Old Wenna's eel jetty, north off the north-east lane towards the causeway. */
+const EEL_JETTY: readonly P2[] = [[421.6, 594.4], [421, 582]];
+
+/** The ferry's jetty, south off the landing's holm, where Hob's flat boat ties up. */
+const FERRY_JETTY: readonly P2[] = [[362.5, 615.5], [362.5, 627]];
+
+/** A plank jetty off Smugglers' Hythe's shell bank, to where the boats come in. */
+const HYTHE_JETTY: readonly P2[] = [[690, 627], [699, 628.5]];
+
+/** A landing stage at the Cockle End track's end, out over the flood towards the cottages. */
+const COCKLE_JETTY: readonly P2[] = [[316.5, 711.8], [309.5, 713]];
+
+/** Mother Sedge's hut at the north-east lane's end, facing back down it. */
+const HERB_HUT = { x: 437.3, z: 591, yaw: -Math.PI / 2 } as const;
 
 // ------------------------------------------------------------------ the plan
 
@@ -298,7 +343,7 @@ export function planSallows(): SallowsPlan {
   for (const lode of LODES) cut(ground, sampleCurve(lode, 1), SALLOWS.lode);
   cut(ground, channel, SALLOWS.channel);
   // Under the boardwalk, a lode of open water.
-  cut(ground, sampleCurve(BOARDWALK, 1).slice(3), { half: 2.2, bed: -0.35, shoulder: 2 });
+  cut(ground, sampleCurve(BOARDWALK, 1).slice(4), { half: 4.5, bed: -0.4, shoulder: 3 });
 
   // 2. The roads, each on a bank.
   const roads = ROADS.map((r): FenRoad => {
@@ -319,9 +364,6 @@ export function planSallows(): SallowsPlan {
   meetNorth(ground);
 
   const heightField = (x: number, z: number) => ground.at(x, z);
-  const decks = planDecks(heightField);
-  const deckSet = new Decks(decks);
-  const heightAt = (x: number, z: number) => Math.max(ground.at(x, z), deckSet.at(x, z));
 
   // How far each ground vertex is from the nearest road's edge, and from the Great Channel's middle.
   const roadDistance = new Float32Array(ground.data.length).fill(Infinity);
@@ -331,15 +373,20 @@ export function planSallows(): SallowsPlan {
   }
   const channelField = lineField(ground, channel, 20).d;
   const vertex = (x: number, z: number) => ground.row(z) * ground.cols + ground.col(x);
-  const fields: Fields = {
-    road: (x, z) => roadDistance[vertex(x, z)],
-    channel: (x, z) => channelField[vertex(x, z)],
-    decks: deckSet,
-  };
+  const road = (x: number, z: number) => roadDistance[vertex(x, z)];
+  const inChannel = (x: number, z: number) => channelField[vertex(x, z)];
+
+  // The walkways first, then Reedholm's houses along them, whose porches you walk onto too.
+  const walks = planDecks(heightField);
+  const town = planHouses(heightField, { road, channel: inChannel, decks: new Decks(walks) });
+  const decks = [...walks, ...town.porches];
+  const deckSet = new Decks(decks);
+  const heightAt = (x: number, z: number) => Math.max(ground.at(x, z), deckSet.at(x, z));
+  const fields: Fields = { road, channel: inChannel, decks: deckSet };
 
   const walkable = new Walkable(walkableAreas());
   const colliders = new Colliders(walkable);
-  const structures = placeStructures(heightField, fields);
+  const structures = placeStructures(heightField, fields, town.houses);
   for (const s of structures) if (s.solid) colliders.addBox({ x: s.x, z: s.z, hw: s.w / 2, hd: s.d / 2, yaw: s.yaw });
   addChannelBanks(colliders, channel, decks);
   for (const d of decks) if (d.railed) addRails(colliders, d);
@@ -414,7 +461,10 @@ function fenHeight(x: number, z: number): number {
   const mire = smoothstep(40, 26, Math.hypot(x - PLACES.mire.x, z - PLACES.mire.z));
   h = lerp(h, 0.08 + (valueNoise(x * 0.35, z * 0.35, 207) - 0.5) * 0.8, mire);
   for (const p of HOLLOWS) h = lerp(h, p.h + (valueNoise(x * 0.2, z * 0.2, 209) - 0.5) * 0.2, smoothstep(p.r, p.r * 0.6, Math.hypot(x - p.x, z - p.z)));
-  for (const p of HOLMS) h = Math.max(h, lerp(h, p.h + (valueNoise(x * 0.3, z * 0.3, 211) - 0.5) * 0.12, smoothstep(p.r, p.r * 0.55, Math.hypot(x - p.x, z - p.z))));
+  // Reedholm's pool: flat and knee deep under the whole town, banking up only at its rim.
+  const { pool } = REEDHOLM;
+  h = lerp(h, -0.55 + (valueNoise(x * 0.2, z * 0.2, 209) - 0.5) * 0.12, smoothstep(1, 0.74, Math.hypot((x - pool.x) / pool.rx, (z - pool.z) / pool.rz)));
+  for (const p of HOLMS) h = Math.max(h, lerp(h, p.h + (valueNoise(x * 0.3, z * 0.3, 211) - 0.5) * (p.steep ? 0.05 : 0.12), smoothstep(p.r, p.steep ? p.r - 2 : p.r * 0.55, Math.hypot(x - p.x, z - p.z))));
   // Kiln Edge: the fen dries onto chalk in the south-west, in low banks.
   const chalk = smoothstep(350, 320, x) * smoothstep(850, 880, z);
   h = Math.max(h, lerp(h, 1.0 + fbm(x * 0.05, z * 0.05, 213) * 2.2, chalk));
@@ -570,29 +620,123 @@ export const CROSSINGS = {
   bridge: across(522, 786, 5),
 } as const;
 
-/** Every deck you walk on: Reedholm's square, walkways, lanes and the forge's footing, the causeway's boardwalk, the sluice's walkway and the old bridge. */
+/** Every deck you walk on: Reedholm's square, walkways, lanes, jetties and the forge's footing, the causeway's boardwalk, the sluice's walkway and the old bridge. */
 function planDecks(ground: (x: number, z: number) => number): FenDeck[] {
-  const { square, forge } = REEDHOLM;
-  const flat = () => SALLOWS.deck;
+  const { square, forge, landing, moot } = REEDHOLM;
+  const deck = SALLOWS.deck;
+  const flat = () => deck;
+  /** A lane's height: the deck's over the pool, and a bank's where it lands on one, so it never steps or sinks. */
+  const onto = (x: number, z: number) => Math.max(deck, ground(x, z) + 0.04);
   const decks: FenDeck[] = [
-    { ...deckBetween([square.x, square.z - square.half], [square.x, square.z + square.half], 2 * square.half, flat(), flat()), look: 'plank', railed: false },
-    { ...deckBetween([forge.x, forge.z - forge.half], [forge.x, forge.z + forge.half], 2 * forge.half, flat(), flat()), look: 'stone', railed: false },
-    // From the landing to the square, and on to the moot hall's island: the main walkway, wide enough for crowds.
-    ...walkway([[REEDHOLM.landing.x + 6, 609], [square.x - square.half + 0.1, 610.5]], 3.6, flat),
-    ...walkway([[square.x + square.half - 0.1, 612], [REEDHOLM.moot.x - 6, 612]], 3.6, flat),
+    { ...deckBetween([square.x, square.z - square.hd], [square.x, square.z + square.hd], 2 * square.hw, deck, deck), look: 'plank', railed: false },
+    { ...deckBetween([forge.x, forge.z - forge.half], [forge.x, forge.z + forge.half], 2 * forge.half, deck, deck), look: 'stone', railed: false },
+    // From the landing to the square, and on to the moot hall's island: the main walkway, railed and wide enough for crowds.
+    ...walkway([[landing.x + 6.5, square.z], [square.x - square.hw + 0.1, square.z]], 4, flat, 'plank', true, 20),
+    ...walkway([[square.x + square.hw - 0.1, square.z], [moot.x - 5.5, square.z]], 4, flat, 'plank', true, 20),
     // The forge's footing off the square's south side.
-    ...walkway([[square.x, square.z + square.half - 0.1], [forge.x, forge.z - forge.half + 0.1]], 2.4, flat),
-    // The lanes.
-    ...LANES.flatMap((lane) => walkway(lane, 2.4, flat)),
+    ...walkway([[forge.x, square.z + square.hd - 0.1], [forge.x, forge.z - forge.half + 0.1]], 3, flat),
+    // The lanes, and the jetties off them.
+    ...LANES.flatMap((lane) => walkway(lane, LANE.width, onto)),
+    ...walkway(EEL_JETTY, 2, flat),
+    ...walkway(FERRY_JETTY, 2.2, onto),
     // The causeway's boardwalk, from its bank down to the square.
-    ...walkway(BOARDWALK, 3, (x, z) => (z < 530 ? Math.max(ground(x, z), SALLOWS.deck) : lerp(0.9, SALLOWS.deck, smoothstep(530, 600, z)))),
+    ...walkway(BOARDWALK, 3, onto),
+    // Out beyond Reedholm: the Hythe's jetty and Cockle End's landing stage.
+    ...walkway(HYTHE_JETTY, 2, onto),
+    ...walkway(COCKLE_JETTY, 1.8, onto),
   ];
+  // The drowned town's old street ends on a stone quay before the flood walls.
+  decks.push({ ...deckBetween([569, 735], [571.5, 722.5], 7, 0.9, 0.9), look: 'stone', railed: false });
   // Over the Great Channel: the sluice's walkway, its rails solid, and the old Deepking bridge, arched.
   const [sw, se] = CROSSINGS.sluice;
   decks.push({ ...deckBetween(sw, se, 2.6, ground(...sw), ground(...se)), look: 'stone', railed: true });
   const [bw, be] = CROSSINGS.bridge;
   decks.push({ ...deckBetween(bw, be, 3.4, ground(...bw), ground(...be), 1.2), look: 'stone', railed: true });
   return decks;
+}
+
+/** A footprint on the floor: middle, turn, half extents along its own X and Z. */
+interface Rect {
+  readonly x: number;
+  readonly z: number;
+  readonly yaw: number;
+  readonly hw: number;
+  readonly hd: number;
+}
+
+/** Do two footprints overlap, each grown by `margin`? (Separating axes.) */
+function overlaps(a: Rect, b: Rect, margin = 0): boolean {
+  const axes = [a.yaw, b.yaw].flatMap((y) => [[Math.cos(y), -Math.sin(y)], [Math.sin(y), Math.cos(y)]] as const);
+  for (const [ax, az] of axes) {
+    const reach = (r: Rect) => {
+      const [c, s] = [Math.cos(r.yaw), Math.sin(r.yaw)];
+      // The rect's own X and Z in world terms, projected on the axis.
+      return Math.abs((c * ax - s * az) * (r.hw + margin)) + Math.abs((s * ax + c * az) * (r.hd + margin));
+    };
+    const gap = Math.abs((a.x - b.x) * ax + (a.z - b.z) * az);
+    if (gap > reach(a) + reach(b)) return false;
+  }
+  return true;
+}
+
+/**
+ * Reedholm's stilt houses: along both sides of every lane, every few metres,
+ * and round the square's south and east edges, each facing its lane with its
+ * porch reaching exactly to the lane's edge (the porch a deck of its own,
+ * drawn by its house), standing only where there's water under it and
+ * nothing else built in the way. Seeded, so the same every time.
+ */
+function planHouses(ground: (x: number, z: number) => number, fields: Fields): { houses: FenStructure[]; porches: FenDeck[] } {
+  const rand = mulberry32(4211);
+  const houses: FenStructure[] = [];
+  const porches: FenDeck[] = [];
+  const taken: Rect[] = [];
+  let seed = 600;
+  /** A house facing (fx, fz), its porch's edge at (px, pz): there if it fits. */
+  const place = (px: number, pz: number, fx: number, fz: number): boolean => {
+    const w = 4.4 + rand() * 1.6;
+    const d = 3.9 + rand() * 0.8;
+    const h = 2.3 + rand() * 0.5;
+    const variant = Math.floor(rand() * 8);
+    const back = LANE.porch + d / 2;
+    const x = px - fx * back;
+    const z = pz - fz * back;
+    const yaw = Math.atan2(fx, fz);
+    // The house and its porch, and room round them.
+    const all: Rect = { x: px - (fx * (d + LANE.porch)) / 2, z: pz - (fz * (d + LANE.porch)) / 2, yaw, hw: w / 2 + 0.3, hd: (d + LANE.porch) / 2 };
+    const corners = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => [x + Math.cos(yaw) * sx * (w / 2 + 0.4) + Math.sin(yaw) * sz * (d / 2 + 0.4), z - Math.sin(yaw) * sx * (w / 2 + 0.4) + Math.cos(yaw) * sz * (d / 2 + 0.4)] as const));
+    // Water under it (or the pool's muddy rim), off the roads, out of the channel, on no walkway.
+    if (corners.some(([cx, cz]) => ground(cx, cz) > 0.35 || fields.road(cx, cz) < 1 || fields.channel(cx, cz) < SALLOWS.channel.half + 3 || fields.decks.on(cx, cz, 0.2))) return false;
+    if (fields.decks.on(x, z, Math.max(w, d) / 2) || taken.some((t) => overlaps(t, all, 0.5))) return false;
+    taken.push(all);
+    houses.push({ kind: 'stiltHouse', x, y: SALLOWS.water, z, yaw, w, d, h, seed: seed++, variant, solid: true });
+    // The porch: from the house's front wall out over its lane's edge a little, so there's no gap underfoot.
+    const front: P2 = [x + fx * (d / 2 - 0.2), z + fz * (d / 2 - 0.2)];
+    const edge: P2 = [px + fx * 0.25, pz + fz * 0.25];
+    porches.push({ ...deckBetween(front, edge, w, SALLOWS.floor, SALLOWS.floor), look: 'plank', railed: false, hidden: true });
+    return true;
+  };
+  const half = LANE.width / 2;
+  LANES.forEach((lane, li) => {
+    const line = sampleCurve(lane, 0.5);
+    const len = line.length * 0.5;
+    for (const side of [-1, 1]) {
+      for (let s = 4.5 + (side > 0 ? 0 : 2.5) + li; s < len - 3; s += 6.4) {
+        const i = Math.min(line.length - 2, Math.round(s / 0.5));
+        const [a, b] = [line[i], line[i + 1]];
+        const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+        // The lane's side, and the house's front facing back across it.
+        const [nx, nz] = [(-(b[1] - a[1]) / l) * side, ((b[0] - a[0]) / l) * side];
+        if (place(a[0] + nx * half, a[1] + nz * half, -nx, -nz)) s += rand() * 1.2;
+      }
+    }
+  });
+  // Round the square: two on its south edge either side of the forge's walkway, one on its east edge, all facing onto it.
+  const { square } = REEDHOLM;
+  place(square.x - 5.5, square.z + square.hd, 0, -1);
+  place(square.x + 6, square.z + square.hd, 0, -1);
+  place(square.x + square.hw, square.z + 5.6, -1, 0);
+  return { houses, porches };
 }
 
 /** Solid rails along both long sides of a deck. */
@@ -639,9 +783,9 @@ function addChannelBanks(colliders: Colliders, line: readonly P2[], decks: reado
 
 // ------------------------------------------------------------------ structures
 
-/** Everything built, the lie of the land under it given by `ground`. */
-function placeStructures(ground: (x: number, z: number) => number, fields: Fields): FenStructure[] {
-  const out: FenStructure[] = [];
+/** Everything built, the lie of the land under it given by `ground`, Reedholm's houses (`houses`) already planned. */
+function placeStructures(ground: (x: number, z: number) => number, fields: Fields, houses: readonly FenStructure[]): FenStructure[] {
+  const out: FenStructure[] = [...houses];
   let seed = 1;
   const add = (kind: FenStructureKind, x: number, z: number, yaw: number, o: Partial<Omit<FenStructure, 'kind' | 'x' | 'z' | 'yaw'>> = {}) =>
     out.push({ kind, x, z, yaw, y: o.y ?? ground(x, z), w: o.w ?? 1, d: o.d ?? 1, h: o.h ?? 1, seed: o.seed ?? seed++, variant: o.variant ?? 0, solid: o.solid ?? false });
@@ -650,42 +794,74 @@ function placeStructures(ground: (x: number, z: number) => number, fields: Field
   const free = (x: number, z: number, r: number) =>
     fields.road(x, z) > r + 1 && !fields.decks.on(x, z, r) && out.every((s) => Math.hypot(s.x - x, s.z - z) > r + Math.hypot(s.w, s.d) / 2);
   const { square, moot, forge, landing } = REEDHOLM;
+  const deck = SALLOWS.deck;
+  const [sx0, sx1, sz0, sz1] = [square.x - square.hw, square.x + square.hw, square.z - square.hd, square.z + square.hd];
 
-  // Reedholm: the moot hall on its island facing the square, the inn across the square's north side facing it, the forge on its stone footing.
+  // Reedholm: the moot hall on its island facing the square down the main walkway, the inn on the square's north side, its porch on the square, and the forge on its stone footing.
   add('mootHall', moot.x + 1.5, moot.z, -Math.PI / 2, { w: 9, d: 7, h: 4, solid: true });
-  add('inn', square.x + 1.5, square.z - square.half - 5.2, 0, { y: SALLOWS.water, w: 10, d: 8, h: 3.6, solid: true });
-  add('forge', forge.x, forge.z + 0.8, Math.PI, { y: SALLOWS.deck, w: 6, d: 5, h: 3, solid: true });
-  add('herbHut', 438, 588, -Math.PI / 2, { y: SALLOWS.water, w: 4.2, d: 4, h: 2.6, solid: true });
-  add('eelTraps', 437, 595, 0.3, { y: SALLOWS.water });
-  add('mapboard', landing.x + 3.5, landing.z - 3.2, -Math.PI / 2 + 0.2, { solid: true, w: 1.6, d: 0.4 });
-  add('signpost', landing.x + 2.8, landing.z + 3.4, 0, { variant: 0, solid: true, w: 0.3, d: 0.3 });
-  add('raft', 371, 621, 0.5, { y: SALLOWS.water, w: 4, d: 5 });
-  add('smokeShed', landing.x - 4, landing.z + 5, 0.4, { w: 3.4, d: 3, h: 2.6, solid: true });
-  add('smokeShed', 417, 625, Math.PI, { y: SALLOWS.water, w: 3.4, d: 3, h: 2.6, solid: true });
-  add('netRack', landing.x - 5, landing.z - 4, 1.2, { w: 4 });
-  add('netRack', moot.x - 1, moot.z + 8, 0.1, { w: 4 });
-  for (const [x, z, yaw] of [[square.x - 4, square.z - 3, 0], [square.x + 4, square.z + 4, 0], [landing.x + 5, landing.z - 1.6, 0], [moot.x - 5, moot.z - 2.4, 0]] as const) {
-    add('lanternPost', x, z, yaw, { y: x === landing.x + 5 ? ground(x, z) : SALLOWS.deck, solid: true, w: 0.25, d: 0.25 });
+  add('inn', square.x + 3, sz0 - 5.1, 0, { y: SALLOWS.water, w: 10, d: 8, h: 3.6, solid: true });
+  add('forge', forge.x, forge.z + 0.8, Math.PI, { y: deck, w: 6, d: 5, h: 3, solid: true });
+  // Timber staithes round the landing's holm and the moot hall's island, where the pool laps them.
+  for (const holm of [landing, moot]) {
+    const r = holm.r - 1.4;
+    const gaps: number[] = [];
+    for (let a = 0; a < Math.PI * 2; a += 0.02) {
+      const [x, z] = [holm.x + Math.sin(a) * r, holm.z + Math.cos(a) * r];
+      if (fields.decks.on(x, z, 0.5) || fields.road(x, z) < 1.2) gaps.push(a);
+    }
+    out.push({ kind: 'revetment', x: holm.x, y: ground(holm.x, holm.z), z: holm.z, yaw: 0, w: r, d: r, h: 1, seed: seed++, variant: 0, solid: false, gaps });
   }
-  // The punts tied up round the pool and the landing.
-  for (const [x, z, yaw] of [[372, 615, 1.4], [374, 602, 1.7], [404, 601, 0.2], [428, 616, 1.5], [411, 626, 2.8], [380, 641, 0.9], [430, 604, 3.0]] as const) add('punt', x, z, yaw, { y: SALLOWS.water, d: 4.6, variant: Math.round(x) % 3 });
-  // The stilt houses along the lanes, facing them, with a porch onto each.
+  // Mother Sedge's hut, herbs under its eaves, and Old Wenna's eel traps along her jetty.
+  add('herbHut', HERB_HUT.x, HERB_HUT.z, HERB_HUT.yaw, { y: SALLOWS.water, w: 4.2, d: 4, h: 2.6, solid: true });
+  for (const [x, z, yaw] of [[419.2, 586, 0.3], [423, 589.5, 1.9], [419.4, 591.2, 2.6]] as const) add('eelTraps', x, z, yaw, { y: SALLOWS.water });
+  // The landing: the map board and signpost by the Fen road's end, a smoking shed and nets drying, a woad banner on the holm.
+  add('mapboard', landing.x + 2, landing.z - 4.6, -Math.PI / 2 + 0.25, { solid: true, w: 1.6, d: 0.4 });
+  add('signpost', landing.x + 1.6, landing.z + 3.6, 0, { variant: 0, solid: true, w: 0.3, d: 0.3 });
+  add('banner', landing.x - 2.4, landing.z + 0.4, 0.4, { h: 5.5, solid: true, w: 0.3, d: 0.3 });
+  add('smokeShed', landing.x - 6.5, landing.z + 1, 1.2, { w: 3.4, d: 3, h: 2.6, solid: true });
+  add('netRack', landing.x - 6, landing.z - 4.5, 1.2, { w: 4 });
+  add('crates', landing.x + 4.4, landing.z + 5.2, 0.3, { solid: true, w: 2.2, d: 2.2 });
+  // The refugees' raft moored off the south-west lane.
+  add('raft', 370, 640.5, 0.75, { y: SALLOWS.water, w: 4, d: 5 });
+  add('smokeShed', 405.5, 627.5, Math.PI / 2, { y: SALLOWS.water, w: 3.4, d: 3, h: 2.6, solid: true });
+  add('netRack', moot.x - 1, moot.z + 8.4, 0.1, { w: 4 });
+  // The square: stalls along its south edge either side of the forge's walkway, crates and barrels by the inn, lanterns flanking each walkway's mouth.
+  add('stall', square.x - 4.2, sz1 - 1.4, Math.PI, { y: deck, w: 3.2, d: 1.6, h: 2.4, solid: true, variant: 0 });
+  add('stall', square.x + 4.6, sz1 - 1.4, Math.PI, { y: deck, w: 3.2, d: 1.6, h: 2.4, solid: true, variant: 1 });
+  add('crates', sx0 + 4.8, sz0 + 1.3, 1.2, { y: deck, solid: true, w: 1.8, d: 1.8 });
+  for (const [x, z] of [[sx0 + 0.6, square.z - 2.6], [sx0 + 0.6, square.z + 2.6], [sx1 - 0.6, square.z - 2.6], [sx1 - 0.6, square.z + 2.6], [forge.x - 1.3, sz1 + 1.6], [landing.x + 5, landing.z - 2.6], [moot.x - 4.8, moot.z - 2.8]] as const) {
+    add('lanternPost', x, z, x < forge.x - 1 ? Math.PI / 2 : -Math.PI / 2, { y: Math.max(deck, ground(x, z)), solid: true, w: 0.25, d: 0.25 });
+  }
+  // Lanterns along the lanes, on their edges, never in front of a house's door.
+  const byDoor = (x: number, z: number) =>
+    houses.some((h) => {
+      const [dx, dz] = [x - h.x, z - h.z];
+      const across = dx * Math.cos(h.yaw) - dz * Math.sin(h.yaw);
+      const out = dx * Math.sin(h.yaw) + dz * Math.cos(h.yaw);
+      return Math.abs(across) < h.w / 2 + 0.6 && out > 0 && out < h.d / 2 + LANE.porch + 1;
+    });
   LANES.forEach((lane, li) => {
     const line = sampleCurve(lane, 1);
-    for (let s = 5; s < line.length - 2; s += 7) {
-      const [a, b] = [line[s], line[s + 1]];
-      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-      const [nx, nz] = [-(b[1] - a[1]) / len, (b[0] - a[0]) / len];
-      for (const side of [-1, 1]) {
-        if ((s + li + (side > 0 ? 1 : 0)) % 5 === 0) continue;
-        const x = a[0] + nx * side * 5.4;
-        const z = a[1] + nz * side * 5.4;
-        if (!free(x, z, 3.2)) continue;
-        add('stiltHouse', x, z, faceTo(x, z, a[0], a[1]), { y: SALLOWS.water, w: 5, d: 4.2, h: 2.4, solid: true, variant: (s + li * 3 + side) & 3 });
-      }
+    const side = li % 2 ? 1 : -1;
+    const at = (i: number): P2 => {
+      const [a, b] = [line[i], line[i + 1]];
+      const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+      return [a[0] + (-(b[1] - a[1]) / l) * side * (LANE.width / 2 - 0.2), a[1] + ((b[0] - a[0]) / l) * side * (LANE.width / 2 - 0.2)];
+    };
+    for (let i0 = 9 + li * 2; i0 < line.length - 4; i0 += 14) {
+      const i = [i0, i0 + 2, i0 - 2, i0 + 4, i0 - 4].find((j) => j > 2 && j < line.length - 4 && !byDoor(...at(j)));
+      if (i === undefined) continue;
+      const [a, b] = [line[i], line[i + 1]];
+      const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+      const [x, z] = at(i);
+      add('lanternPost', x, z, Math.atan2(-(-(b[1] - a[1]) / l) * side, -((b[0] - a[0]) / l) * side), { y: deck, solid: true, w: 0.25, d: 0.25 });
     }
   });
-  // Houses on dry ground along the Fen road's last stretch, before the landing.
+  // The punts tied up round the pool: off the lanes, the jetties and the landing; Hob's flat boat at the ferry jetty.
+  for (const [x, z, yaw, v] of [[365.4, 621, 0.02, 3], [359.6, 624, 3.1, 0], [418.6, 584, 0.05, 1], [424, 586, 3.0, 0], [380, 633.5, 0.8, 2], [404, 652, 1.6, 1], [427, 640.5, 1.5, 0], [404.5, 591, 2.3, 2], [352, 603.5, 1.9, 1], [375, 594, 1.2, 0]] as const) {
+    if (!fields.decks.on(x, z, 1.2) && fields.road(x, z) > 1.5) add('punt', x, z, yaw, { y: SALLOWS.water, d: v === 3 ? 7 : 4.6, variant: v });
+  }
+  // A few houses on dry ground along the Fen road's last stretch, before the landing.
   for (const [x, z, tx, tz] of [[325, 570, 329, 564], [352, 575, 347, 581], [338, 586, 347, 581]] as const) add('stiltHouse', x, z, faceTo(x, z, tx, tz), { w: 5, d: 4.2, h: 2.4, solid: true, variant: Math.round(x) & 3 });
 
   // The Last Stone by the Fen road at the seam.
@@ -698,69 +874,122 @@ function placeStructures(ground: (x: number, z: number) => number, fields: Field
   add('customsRuin', PLACES.customs.x, PLACES.customs.z, 0.4, { w: 6, d: 5, h: 2, solid: true });
   add('watchPost', PLACES.watchPost.x, PLACES.watchPost.z, -2.2, { y: SALLOWS.water, w: 3, d: 3, h: 3.4, solid: true });
 
-  // The Gibbet Willow on its lone holm, its cage hanging.
+  // Peat cut along the Fen road, stacked to dry.
+  for (const [x, z, yaw] of [[296, 553, 0.3], [309, 557.5, 0.5], [331, 576, 0.9], [286, 538, 0.1]] as const) if (free(x, z, 1.6)) add('peatStack', x, z, yaw, { solid: true, w: 2.4, d: 1.4 });
+
+  // The Gibbet Willow on its lone holm in its moat of black water, its cage hanging, a rotten punt sunk at its foot.
   add('gibbet', PLACES.gibbet.x, PLACES.gibbet.z, 0.7, { h: 9, solid: true, w: 1.6, d: 1.6 });
+  add('punt', PLACES.gibbet.x - 9, PLACES.gibbet.z + 5, 2.4, { y: -0.18, d: 4.6, variant: 4 });
 
-  // Cockle End: a fen village drowned to its eaves.
-  for (const [dx, dz, yaw] of [[-12, -6, 0.3], [-2, -13, 0.1], [-14, 6, 2.6], [-4, 9, 2.9], [6, 12, 3.4], [-21, -2, 1.4]] as const) {
-    add('sunkCottage', PLACES.cockleEnd.x + dx, PLACES.cockleEnd.z + dz, yaw, { y: SALLOWS.water, w: 6, d: 4.5, h: 2.6, solid: true });
+  // Cockle End: a fen village drowned to its eaves, the raiders' planks laid loft to loft, old garden fences poking out of the water, a line of washing.
+  const cockle = [[-12, -6, 0.3], [-2, -13, 0.1], [-14, 6, 2.6], [-4, 9, 2.9], [6, 12, 3.4], [-21, -2, 1.4]] as const;
+  for (const [dx, dz, yaw] of cockle) add('sunkCottage', PLACES.cockleEnd.x + dx, PLACES.cockleEnd.z + dz, yaw, { y: SALLOWS.water, w: 6, d: 4.5, h: 2.6, solid: true });
+  for (const [a, b] of [[0, 1], [2, 3], [0, 2]] as const) {
+    const [ax, az] = [PLACES.cockleEnd.x + cockle[a][0], PLACES.cockleEnd.z + cockle[a][1]];
+    const [bx, bz] = [PLACES.cockleEnd.x + cockle[b][0], PLACES.cockleEnd.z + cockle[b][1]];
+    add('plankBridge', (ax + bx) / 2, (az + bz) / 2, Math.atan2(bx - ax, bz - az), { y: SALLOWS.water + 1.55, w: 0.9, d: Math.hypot(bx - ax, bz - az) - 4.4 });
   }
+  for (const [x, z, yaw, w] of [[310, 702, 1.2, 9], [294, 726, 0.2, 11], [282, 711, 1.7, 7]] as const) add('fencePosts', x, z, yaw, { y: SALLOWS.water, w });
+  add('washLine', PLACES.cockleEnd.x - 8, PLACES.cockleEnd.z + 1.5, 1.3, { y: SALLOWS.water, w: 5 });
+  add('punt', PLACES.cockleEnd.x + 4, PLACES.cockleEnd.z - 3, 0.9, { y: SALLOWS.water, d: 4.6, variant: 1 });
 
-  // The Withy Holm: a wildfowler's hide and his decoys in the shallows.
+  // The Withy Holm: a wildfowler's hide, his nets and decoys, his punt in the shallows.
   add('hide', PLACES.withy.x + 6, PLACES.withy.z + 8, 2.6, { w: 3, d: 2.6, h: 2, solid: true });
+  add('netRack', PLACES.withy.x + 1, PLACES.withy.z + 9, 0.4, { w: 3.6 });
   add('decoys', PLACES.withy.x + 13, PLACES.withy.z + 15, 0, { y: SALLOWS.water });
   add('punt', PLACES.withy.x + 15, PLACES.withy.z + 4, 1.1, { y: SALLOWS.water, d: 4.6 });
 
-  // Saint Odo's Chapel and its graveyard.
+  // Saint Odo's Chapel, its graveyard inside a low wall with its gate towards the track.
   add('chapel', PLACES.odo.x - 2, PLACES.odo.z - 3, Math.PI * 0.75, { w: 10, d: 6, h: 4, solid: true });
-  for (let i = 0; i < 12; i++) {
-    const a = 0.6 + i * 0.36;
-    const r = 8 + (i % 3) * 2;
+  add('churchyard', PLACES.odo.x, PLACES.odo.z, Math.atan2(318 - PLACES.odo.x, 812 - PLACES.odo.z), { w: 13.5 });
+  for (let i = 0; i < 14; i++) {
+    const a = 0.6 + i * 0.33;
+    const r = 7.5 + (i % 3) * 1.8;
     add('grave', PLACES.odo.x + Math.cos(a) * r, PLACES.odo.z + Math.sin(a) * r, a + Math.PI / 2, { variant: i % 3 });
   }
 
-  // The Eelworks: a ruined smokehouse, crates and punts, the smugglers' now.
+  // The Eelworks: a ruined smokehouse, crates, a brazier and punts, the smugglers' now.
   add('smokehouse', PLACES.eelworks.x, PLACES.eelworks.z + 1, 0.2, { w: 8, d: 5, h: 3, solid: true });
   add('crates', PLACES.eelworks.x + 6, PLACES.eelworks.z - 4, 0.5, { solid: true, w: 2.2, d: 2.2 });
+  add('brazier', PLACES.eelworks.x + 2.5, PLACES.eelworks.z - 5, 0, { solid: true, w: 0.7, d: 0.7 });
   add('punt', PLACES.eelworks.x - 4, PLACES.eelworks.z - 10, 0.1, { y: SALLOWS.water, d: 4.6 });
   add('eelTraps', PLACES.eelworks.x - 2, PLACES.eelworks.z - 12, 1.4, { y: SALLOWS.water });
 
-  // The Sluice House: its lock across the Great Channel, gates open, its tower on the west bank, and the gate chained shut on the east.
+  // The Sluice House: its lock across the Great Channel, gates open, its tower on the west bank by the walkway's end, and the gate chained shut on the east.
   const [sw, se] = CROSSINGS.sluice;
   // The walkway's own +Z runs west to east across the channel; the lock's +X does.
   const across = Math.atan2(se[0] - sw[0], se[1] - sw[1]);
-  add('sluice', (sw[0] + se[0]) / 2, (sw[1] + se[1]) / 2, across - Math.PI / 2, { y: SALLOWS.water, w: 2 * SALLOWS.channel.half + 4, d: 6, h: 6 });
-  add('sluiceTower', SLUICE_TOWER.x, SLUICE_TOWER.z, across - Math.PI / 2, { w: 6, d: 6, h: 14, solid: true });
+  add('sluice', (sw[0] + se[0]) / 2, (sw[1] + se[1]) / 2, across - Math.PI / 2, { y: SALLOWS.water, w: 2 * SALLOWS.channel.half + 4, d: 7, h: 6 });
+  add('sluiceTower', SLUICE_TOWER.x, SLUICE_TOWER.z, across - Math.PI / 2, { w: SLUICE_TOWER.w, d: SLUICE_TOWER.w, h: 15, solid: true });
   add('sluiceGate', se[0] - (se[0] - sw[0]) * 0.08, se[1] - (se[1] - sw[1]) * 0.08, across, { y: ground(...se), w: 2.8, d: 0.3, solid: true });
+  // The Lantern Men's stronghold round the tower: crates, a brazier, a tent.
+  for (const [kind, x, z, yaw] of [['crates', 452, 709.5, 0.4], ['brazier', 450.6, 704.5, 0], ['tent', 456.5, 712.5, 0.4], ['crates', 459, 692, 1.1]] as const) {
+    if (free(x, z, kind === 'tent' ? 2 : 1)) add(kind, x, z, yaw, kind === 'tent' ? { w: 3, d: 3.4, h: 2.2, solid: true } : { solid: true, w: kind === 'brazier' ? 0.7 : 2.2, d: kind === 'brazier' ? 0.7 : 2.2 });
+  }
 
   // The old Deepking bridge.
   const [bw, be] = CROSSINGS.bridge;
   add('bridge', (bw[0] + be[0]) / 2, (bw[1] + be[1]) / 2, Math.atan2(be[0] - bw[0], be[1] - bw[1]), { y: SALLOWS.water, w: 3.4, d: Math.hypot(be[0] - bw[0], be[1] - bw[1]), h: 1.2 });
 
-  // The Drowned Town: Vellmar's roofs, arches and walls above the water, flood marks on its edge, its bell tower and the leaning Drowned Tower.
+  // The Drowned Town, Vellmar: its streets still square under the water, a house's stone roof or broken walls on each plot, columns and arches
+  // along the streets, carved faces fallen in them, flood marks on the walls by its quay, its bell tower and the leaning Drowned Tower.
   const town = mulberry32(911);
   const { x: tx, z: tz } = PLACES.drownedTown;
-  for (let i = 0; i < 26; i++) {
-    const a = town() * Math.PI * 2;
-    const r = 8 + town() * 42;
-    const x = tx + Math.cos(a) * r;
-    const z = tz + Math.sin(a) * r;
-    const yaw = Math.round(town() * 4) * (Math.PI / 2) + 0.12;
-    const pick = town();
-    const kind: FenStructureKind = pick < 0.45 ? 'deepWall' : pick < 0.7 ? 'deepRoof' : 'deepArch';
-    if (!free(x, z, 4) || Math.hypot(x - PLACES.drownedTower.x, z - PLACES.drownedTower.z) < 10 || Math.hypot(x - tx + 16, z - tz + 18) < 8) continue;
-    add(kind, x, z, yaw, { y: Math.min(ground(x, z), SALLOWS.water) - 0.2, w: 4 + town() * 6, d: kind === 'deepWall' ? 1.2 : 4 + town() * 3, h: 1.5 + town() * 3.5, solid: true });
+  const grid = 0.12;
+  const [gc, gs] = [Math.cos(grid), Math.sin(grid)];
+  /** A point `u` m along the town's own X and `v` along its Z from its middle. */
+  const plot = (u: number, v: number): [number, number] => [tx + u * gc + v * gs, tz - u * gs + v * gc];
+  const bell = plot(-14, -14);
+  const sunk = (x: number, z: number) => Math.min(ground(x, z), SALLOWS.water) - 0.2;
+  const clearOf = (x: number, z: number) => Math.hypot(x - PLACES.drownedTower.x, z - PLACES.drownedTower.z) > 11 && Math.hypot(x - bell[0], z - bell[1]) > 8 && Math.hypot(x - 568, z - 714) > 12;
+  for (let u = -42; u <= 42; u += 14) {
+    for (let v = -42; v <= 42; v += 14) {
+      const [x, z] = plot(u, v);
+      if (Math.hypot(u, v) > 52 || !clearOf(x, z) || !free(x, z, 4)) continue;
+      const pick = town();
+      const turn = grid + (town() < 0.5 ? 0 : Math.PI / 2);
+      if (pick < 0.44) {
+        add('deepRoof', x, z, turn, { y: sunk(x, z), w: 6 + town() * 2.5, d: 5 + town() * 2.5, h: 2 + town() * 2.2, solid: true, variant: Math.floor(town() * 3) });
+      } else if (pick < 0.66) {
+        // A house's walls without its roof: two sides of it, broken off.
+        const [ax, az] = plot(u, v - 3.5);
+        add('deepWall', ax, az, grid, { y: sunk(ax, az), w: 7, d: 1.1, h: 1.6 + town() * 2.4, solid: true });
+        const [bx, bz] = plot(u - 3.5, v);
+        add('deepWall', bx, bz, grid + Math.PI / 2, { y: sunk(bx, bz), w: 6, d: 1.1, h: 1.2 + town() * 2.6, solid: true });
+      } else if (pick < 0.78) {
+        for (const du of [-3, 3]) {
+          const [cx, cz] = plot(u + du, v + 7);
+          if (town() < 0.8) add('column', cx, cz, grid, { y: sunk(cx, cz), h: 1.5 + town() * 4, solid: true, w: 1.2, d: 1.2, variant: Math.floor(town() * 2) });
+        }
+      } else if (pick < 0.88) {
+        // An arch over the street beside the plot.
+        const [ax, az] = plot(u + 7, v);
+        if (free(ax, az, 3)) add('deepArch', ax, az, grid + Math.PI / 2, { y: sunk(ax, az), w: 5.5 + town() * 2, d: 1.2, h: 2.4 + town() * 2, solid: true });
+      }
+    }
   }
-  add('bellTower', tx - 16, tz - 18, 0.12, { y: -0.6, w: 5, d: 5, h: 9, solid: true });
-  add('drownedTower', PLACES.drownedTower.x, PLACES.drownedTower.z, 0.12, { y: -0.6, w: 7, d: 7, h: 30, solid: true });
-  for (const [x, z, yaw] of [[556, 722, 0.9], [566, 710, 0.6], [580, 700, 0.4]] as const) add('floodWall', x, z, yaw, { y: ground(x, z) - 0.3, w: 5, d: 1, h: 3.2, solid: true });
+  // The carved faces of the Deepkings' magistrates, fallen in the streets.
+  for (const [u, v, yaw] of [[7, 14, 2.2], [-21, 21, 0.6]] as const) {
+    const [x, z] = plot(u, v);
+    if (free(x, z, 2)) add('deepHead', x, z, grid + yaw, { y: sunk(x, z) + 0.1, w: 3, h: 3, solid: true });
+  }
+  add('bellTower', bell[0], bell[1], grid, { y: -0.6, w: 5, d: 5, h: 9, solid: true });
+  add('drownedTower', PLACES.drownedTower.x, PLACES.drownedTower.z, grid, { y: -0.6, w: 7, d: 7, h: 30, solid: true });
+  for (const [x, z, yaw] of [[556, 722, 0.9], [566, 711, 0.6], [580, 704, 0.2]] as const) add('floodWall', x, z, yaw, { y: ground(x, z) - 0.3, w: 5, d: 1, h: 3.2, solid: true });
 
-  // Smugglers' Hythe: a cog beached on the shell bank, a jetty of crates and a tent.
-  add('cog', PLACES.hythe.x + 9, PLACES.hythe.z + 4, 0.35, { y: 0.1, w: 5, d: 16, h: 6, solid: true });
+  // Smugglers' Hythe: a cog beached on the shell bank, a jetty out to the sea's edge, crates, a tent, lanterns and a brazier.
+  add('cog', PLACES.hythe.x + 9, PLACES.hythe.z + 9, 0.35, { y: 0.1, w: 5, d: 16, h: 6, solid: true });
   add('tent', PLACES.hythe.x - 6, PLACES.hythe.z - 3, 2.2, { w: 3, d: 3.4, h: 2.2, solid: true });
   add('crates', PLACES.hythe.x - 1, PLACES.hythe.z + 6, 1.1, { solid: true, w: 2.2, d: 2.2 });
   add('crates', PLACES.hythe.x + 1, PLACES.hythe.z - 7, 0.3, { solid: true, w: 2.2, d: 2.2 });
+  add('crates', PLACES.hythe.x + 6.5, PLACES.hythe.z - 2.5, 2.0, { solid: true, w: 2.2, d: 2.2 });
+  add('brazier', PLACES.hythe.x - 2.5, PLACES.hythe.z + 0.5, 0, { solid: true, w: 0.7, d: 0.7 });
+  add('washLine', PLACES.hythe.x - 6, PLACES.hythe.z + 5, 0.3, { w: 4.5 });
+  for (const [x, z] of [[PLACES.hythe.x + 4, PLACES.hythe.z - 1.5], [HYTHE_JETTY[1][0] - 0.6, HYTHE_JETTY[1][1] - 1]] as const) {
+    add('lanternPost', x, z, -Math.PI / 2, { y: Math.max(SALLOWS.deck, ground(x, z)), solid: true, w: 0.25, d: 0.25 });
+  }
   add('punt', PLACES.hythe.x - 10, PLACES.hythe.z + 10, 2.0, { y: SALLOWS.water, d: 4.6 });
+  add('punt', HYTHE_JETTY[1][0] - 2, HYTHE_JETTY[1][1] + 1.8, 1.5, { y: SALLOWS.water, d: 4.6, variant: 2 });
 
   // The Lime Kiln at the fen's dry south-west edge, and the first white chalk banks past it.
   add('kiln', PLACES.kiln.x, PLACES.kiln.z, 0.6, { w: 6, d: 6, h: 4.5, solid: true });
@@ -796,6 +1025,16 @@ function lightsAndSmoke(structures: readonly FenStructure[]): { lights: FenGlow[
         plumes.push({ x: cx, y: cy, z: cz, fire: false });
         break;
       }
+      case 'sluiceTower': {
+        const [x, y, z] = at(s, 0, 2.7, s.w / 2 + 1.4);
+        lights.push({ x, y, z, size: 1.0, color: amber });
+        const top = (s.w / 2) * (1 - (0.16 * (s.h - 1.1)) / (s.h + 1.5)) + 1.0;
+        for (const [lx, lz] of [[0, top], [top, 0], [-top, 0], [0, -top]] as const) {
+          const [gx, gy, gz] = at(s, lx, s.h - 1.6, lz);
+          lights.push({ x: gx, y: gy, z: gz, size: 0.8, color: amber });
+        }
+        break;
+      }
       case 'forge': {
         const [x, y, z] = at(s, 0, 0.9, 0.5);
         lights.push({ x, y, z, size: 1.4, color: 0xff7a30 });
@@ -821,11 +1060,17 @@ function lightsAndSmoke(structures: readonly FenStructure[]): { lights: FenGlow[
         break;
       }
       case 'stiltHouse':
-        if (s.variant === 1 && s.y === SALLOWS.water) {
+        if ((s.variant & 3) === 1 && s.y === SALLOWS.water) {
           const [x, y, z] = at(s, 1.2, SALLOWS.floor + 1.2, s.d / 2 + 0.1);
           lights.push({ x, y, z, size: 0.7, color: amber });
         }
         break;
+      case 'brazier': {
+        const [x, y, z] = at(s, 0, 1.15, 0);
+        lights.push({ x, y, z, size: 1.2, color: 0xff7a30 });
+        plumes.push({ x, y: y + 0.6, z, fire: true });
+        break;
+      }
       case 'tollHouse': {
         const [x, y, z] = at(s, 0, 2.2, s.d / 2 + 0.3);
         lights.push({ x, y, z, size: 0.9, color: amber });
@@ -885,14 +1130,17 @@ function placePlants(ground: HeightGrid, walkable: Walkable, fields: Fields, roa
       for (let gx = land.minX + spacing / 2; gx < land.maxX; gx += spacing) fn(gx + (rand() - 0.5) * spacing, gz + (rand() - 0.5) * spacing);
     }
   };
-  const reedholm = (x: number, z: number) => Math.hypot(x - REEDHOLM.pool.x, z - REEDHOLM.pool.z) < REEDHOLM.pool.r - 4;
+  const { pool } = REEDHOLM;
+  const reedholm = (x: number, z: number) => Math.hypot((x - pool.x) / pool.rx, (z - pool.z) / pool.rz) < 0.92;
+  // The Gibbet Willow stands alone on its holm, nothing else as tall near it.
+  const gibbet = (x: number, z: number) => Math.hypot(x - PLACES.gibbet.x, z - PLACES.gibbet.z) < 24;
   const mire = (x: number, z: number) => Math.hypot(x - PLACES.mire.x, z - PLACES.mire.z) < 36;
   const kilnEdge = (x: number, z: number) => x < 345 && z > 862;
 
   // Willow and alder carr on the holms; pollarded willows along the dykes.
   scatter(7, (x, z) => {
     const h = ground.at(x, z);
-    if (h < 0.35 || rand() > 0.8 * carr(x, z) || !clear(x, z, 2.5) || reedholm(x, z) || kilnEdge(x, z) || x > 660) return;
+    if (h < 0.35 || rand() > 0.8 * carr(x, z) || !clear(x, z, 2.5) || reedholm(x, z) || kilnEdge(x, z) || gibbet(x, z) || x > 660) return;
     add(rand() < 0.6 ? 'willow' : 'alder', x, z, 0.65 + rand() * 0.4);
   });
   for (const r of roads) {
@@ -904,7 +1152,7 @@ function placePlants(ground: HeightGrid, walkable: Walkable, fields: Fields, roa
       const off = r.width / 2 + 2.2;
       const x = a[0] + (-(b[1] - a[1]) / len) * off * side;
       const z = a[1] + ((b[0] - a[0]) / len) * off * side;
-      if (clear(x, z, 1) && !inChannel(x, z)) add('pollard', x, z, 0.85 + rand() * 0.3);
+      if (clear(x, z, 1) && !inChannel(x, z) && !gibbet(x, z) && !reedholm(x, z)) add('pollard', x, z, 0.85 + rand() * 0.3);
     }
   }
   // A few willows round Reedholm's landing, and the gibbet's holm left bare.
