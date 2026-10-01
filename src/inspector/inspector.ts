@@ -16,7 +16,7 @@ import {
   Vector3,
   type WebGLRenderer,
 } from 'three';
-import { buildCharacter, type EnemyKind, type Family, type WeaponSpec } from '../models/characters';
+import { buildCharacter, type EnemyKind, FAMILIES, type Family, type FamilyDef, type Fighter, type WeaponSpec } from '../models/characters';
 import { createModelMaterial, type ModelMaterial } from '../models/materials';
 import { buildPerson, PEOPLE, type PersonId } from '../models/people';
 import { ANIMALS, type AnimalId } from '../models/animals';
@@ -33,8 +33,8 @@ import { animalClips, castClips, type Clip, clipsFor, type MutablePose, personCl
 // Works in the headset and on the desktop page.
 
 export type InspectorEntry =
-  /** An enemy: its behaviour, its family's body, and which of its looks. */
-  | { kind: EnemyKind; family: Family; variant: number; label: string }
+  /** An enemy: its behaviour, its family's body, and which of its looks (or which of its named fighters). */
+  | { kind: EnemyKind; family: Family; variant: number; named?: string; label: string }
   /** A friendly character: Hale or one of Oakvale's villagers. */
   | { person: PersonId; label: string }
   /** One of the cast a zone places as a villager, beyond Oakvale's (people/cast.ts). */
@@ -42,21 +42,22 @@ export type InspectorEntry =
   /** One of the animals a zone places (models/animals.ts). */
   | { animal: AnimalId; label: string };
 
-const VARIANTS = [0, 1, 2, 3, 4, 5];
+/** Each look of every enemy family's fighters ("Grunt v0" to "v5", "Archer"), then its named fighters ("Captain Silas Crake"). */
+const enemies = (Object.keys(FAMILIES) as Family[]).flatMap((family) => [
+  ...(Object.entries(FAMILIES[family].fights) as [EnemyKind, Fighter][]).flatMap(([kind, f]) =>
+    Array.from({ length: f.looks }, (_, variant) => ({ kind, family, variant, label: f.looks > 1 ? `${f.label} v${variant}` : f.label })),
+  ),
+  ...Object.entries((FAMILIES[family] as FamilyDef).named ?? {}).map(([named, f]) => ({ kind: f.kind, family, variant: 0, named, label: f.label })),
+]);
 
 /**
- * Every model the game builds: the undead (grunts come in six helmet, cloth
- * and weapon combos), the bandits (thugs in six looks and weapons), then
- * Marshal Hale and the villagers, then the rest of the cast zones place.
+ * Every model the game builds: each enemy family's (the undead's grunts in
+ * six helmet, cloth and weapon combos, the bandits' thugs in six looks and
+ * weapons, and so on), then Marshal Hale and the villagers, then the rest of
+ * the cast zones place.
  */
 export const ENTRIES: InspectorEntry[] = [
-  ...VARIANTS.map((v) => ({ kind: 'grunt' as const, family: 'undead' as const, variant: v, label: `Grunt v${v}` })),
-  { kind: 'archer', family: 'undead', variant: 0, label: 'Archer' },
-  { kind: 'brute', family: 'undead', variant: 0, label: 'Brute' },
-  { kind: 'warden', family: 'undead', variant: 0, label: 'Bone Warden' },
-  ...VARIANTS.map((v) => ({ kind: 'grunt' as const, family: 'bandit' as const, variant: v, label: `Bandit thug v${v}` })),
-  { kind: 'archer', family: 'bandit', variant: 0, label: 'Bandit archer' },
-  { kind: 'brute', family: 'bandit', variant: 0, label: 'Bandit leader' },
+  ...enemies,
   ...(Object.keys(PEOPLE) as PersonId[]).map((id) => ({ person: id, label: PEOPLE[id].label })),
   ...(Object.keys(CAST) as CastId[]).filter((id) => !(id in PEOPLE)).map((id) => ({ cast: id, label: CAST[id].label })),
   ...(Object.keys(ANIMALS) as AnimalId[]).map((id) => ({ animal: id, label: ANIMALS[id].label })),
@@ -161,8 +162,8 @@ export class Inspector {
         b = { rig: new QuadRig(a.proportions, a.dress, material, a.seed), weapon: null, material, clips: animalClips(e.animal) };
       }
       else {
-        const { rig, weapon } = buildCharacter(e.kind, { material, family: e.family, variant: e.variant });
-        b = { rig, weapon, material, clips: clipsFor(e.kind, e.family) };
+        const { rig, weapon } = buildCharacter(e.kind, { material, family: e.family, variant: e.variant, named: e.named });
+        b = { rig, weapon, material, clips: clipsFor(e.kind, e.family, e.named) };
       }
       this.built.set(index, b);
     }

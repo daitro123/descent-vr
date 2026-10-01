@@ -1038,6 +1038,21 @@ export const CONFIG = {
     farmer: { lean: 4, shift: 1.2, look: 3, lift: 0.8 }, // s each: a lean before each shift of weight, the look after every second one, the hand going up and down
     // Standing about, for anyone with no work of their own: weight on one foot, then the other, and a look round each side now and then.
     stand: { rest: 5, shift: 1.4, turn: 0.7, glance: 2.2, look: 0.75, hip: 0.025 }, // s on a foot, shifting, turning the head and looking; rad the head turns; m the hips shift
+    // The guards' loops (models/guards.ts), each in s unless it says otherwise.
+    guard: {
+      // At a gate or a door: weight from foot to foot, a long look up the road, and the polearm lifted and grounded now and then.
+      sentry: { rest: 6, shift: 1.6, turn: 1.1, watch: 3.5, look: 1.0, lift: 0.5, ground: 0.25 }, // look: rad the head and chest turn up the road
+      // The royal guard at attention: nearly still, the eyes going to one side now and then and back.
+      attention: { still: 9, eyes: 0.6, glance: 1.8, look: 0.3 }, // look: rad
+      // The recruits at the dummies: a chop and a slash with the grunt's own strikes, `rounds` times, then a rest; everyone at it keeps time together.
+      drill: { ready: 0.8, windup: 0.6, strike: 0.22, recover: 0.6, rounds: 2, rest: 3.5 },
+      // The quartermaster: a blade raised to sight along its edge and turned, lowered, and hung on the rack (round to their left).
+      blades: { raise: 1.0, sight: 2.6, lower: 0.9, turn: 1.0, hang: 1.1, hold: 0.6, rest: 1.5 },
+      // Leaning on a polearm: a sigh now and then, and a look off to one side.
+      lean: { rest: 5, sigh: 2.2, turn: 1.2, look: 3, away: 0.9 }, // away: rad
+      // At a fence round a hole: leaning in to peer down, looking along it, straightening to look round.
+      peer: { stand: 4, down: 1.4, scan: 4, up: 1.2, turn: 0.8, look: 2 },
+    },
   },
 
   // Talking to Hale on a board that unfolds beside them: the talk prototype's

@@ -204,6 +204,12 @@ export interface PostPlan {
   readonly level?: number;
   /** Who it is: bandits wear the human body, the undead are skeletons. */
   readonly family: Family;
+  /**
+   * Which of its family's named fighters it is, if one (FamilyDef.named): a
+   * leader or a boss dressed for this post, fighting with its own behaviour,
+   * which `behaviour` must be. The Lantern Men's 'leader', 'crake'.
+   */
+  readonly named?: string;
   readonly x: number;
   readonly z: number;
   /** As a model turns about +Y: its front faces (sin yaw, cos yaw), so 0 faces +Z. */

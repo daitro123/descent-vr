@@ -119,7 +119,7 @@ export const LOOT_LEVELS: readonly number[] = Array.from({ length: CONFIG.loot.l
 /** An item that comes at every loot level has one id per level: its base id and the level. */
 export const levelled = (base: string, level: number): ItemId => `${base}-${level}`;
 
-/** Oakvale's junk, by who drops it: the base id, its name and its model. */
+/** Junk, by the enemy family that drops it: the base id, its name and its model. */
 export const JUNK = {
   bandit: [
     ['worn-trinket', 'Worn Trinket', 'trinket'],
@@ -128,6 +128,22 @@ export const JUNK = {
   undead: [
     ['bone-charm', 'Bone Charm', 'charm'],
     ['grave-dust', 'Grave Dust', 'dust'],
+  ],
+  corvane: [
+    ['tithe-tally', 'Tithe Tally', 'tally'],
+    ['key-badge', 'Black Key Badge', 'key-badge'],
+  ],
+  smuggler: [
+    ['tarred-twine', 'Tarred Twine', 'twine'],
+    ['lantern-shutter', 'Bent Lantern Shutter', 'shutter'],
+  ],
+  undergate: [
+    ['cellar-key', 'Rusted Cellar Key', 'cellar-key'],
+    ['loaded-dice', 'Loaded Dice', 'dice'],
+  ],
+  raider: [
+    ['eel-hook', 'Rusty Eel Hook', 'eel-hook'],
+    ['reed-charm', 'Plaited Reed Charm', 'reed-charm'],
   ],
 } as const satisfies Record<Family, readonly (readonly [string, string, string])[]>;
 
