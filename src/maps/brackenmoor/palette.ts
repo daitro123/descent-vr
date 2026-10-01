@@ -18,6 +18,8 @@ export const MOOR_GROUND = {
 export const MOOR_PLANTS = {
   bracken: [0xa0602e, 0x8c4f26, 0xa87a38, 0x7e7a3c] as const,
   heather: [0x7a4a72, 0x8e5a86, 0x6a4262] as const,
+  /** Moor grass in its tussocks: olive, bleached straw at its tips late in the year. */
+  tussock: [0x86844a, 0x9e9458, 0x75733e, 0xa69a5c] as const,
   bush: [0x5e6a34, 0x6a6e38, 0x55602e] as const,
   pine: [0x324a30, 0x3a5234, 0x42563a] as const,
   lichen: 0x8a8a6a,

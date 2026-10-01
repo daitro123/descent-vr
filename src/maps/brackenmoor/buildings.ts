@@ -74,6 +74,7 @@ export function buildMoorStructure(s: MoorStructure): BufferGeometry {
     case 'cart': cart(b, s.variant, rand); break;
     case 'wagon': wagon(b); break;
     case 'garden': garden(b, s.w, s.d, rand); break;
+    case 'yard': yard(b, s.w, s.extra?.[0] ?? 2, s.variant, rand); break;
     case 'hide': hide(b, s.w, s.d); break;
     case 'crates': crates(b, rand); break;
     case 'borderStone': standingStone(b, [0, 0, 0], s.h, 0, [0.05, -0.04], false); break;
@@ -1327,6 +1328,60 @@ function garden(b: ModelBuilder, w: number, d: number, rand: Rand): void {
   }
   for (const z of [-d / 2, d / 2]) b.box(w + 0.3, 0.6, 0.3, { at: [0, 0.2, z], color: B.gritDark });
   for (const x of [-w / 2, w / 2]) b.box(0.3, 0.6, d, { at: [x, 0.2, 0], color: B.gritDark });
+}
+
+/**
+ * A terraced house's back yard, out from its back wall (z 0) along -Z as far
+ * as `depth`: a water butt under the downpipe and a coal store on the side
+ * the lean-to isn't, then, room allowing, a vegetable bed or a hen house, and
+ * a washing line across the end with the week's wash on it.
+ */
+function yard(b: ModelBuilder, w: number, depth: number, look: number, rand: Rand): void {
+  const L = houseLook(look);
+  const side = L.outshut !== 0 ? -L.outshut : look % 2 ? 1 : -1;
+  const sx = side * (w / 2 - 0.55);
+  b.cyl(0.34, 0.3, 0.86, 8, { at: [sx, 0.43, -0.45], color: PAL.wood, jitter: 0.1 });
+  b.cyl(0.36, 0.36, 0.07, 8, { at: [sx, 0.66, -0.45], color: PAL.iron, jitter: 0.05 });
+  b.box(0.09, 3.6, 0.09, { at: [sx, 2.3, -0.06], color: 0x2c2c2e, jitter: 0.05 });
+  const cx = sx - side * 1.35;
+  b.box(1.1, 0.8, 0.8, { at: [cx, 0.4, -0.48], color: B.timber, jitter: 0.12 });
+  b.box(1.24, 0.07, 0.94, { at: [cx, 0.84, -0.48], rot: [-0.12, 0, 0], color: B.slateDark, jitter: 0.08 });
+  if (depth >= 3.2 && look % 3 === 2) {
+    // A vegetable bed: dug earth, its rows of greens.
+    const bw = w - 1.6;
+    b.box(bw, 0.12, 1.7, { at: [0, 0.02, -depth + 1.05], color: B.peatCut, jitter: 0.1 });
+    // Cabbages, leeks and kale, a row of each, plant by plant.
+    const greens = [0x5a6e3a, 0x5a7060, 0x4e6234];
+    for (let k = 0; k < 3; k++) {
+      const n = Math.floor((bw - 0.3) / 0.42);
+      for (let i = 0; i < n; i++) {
+        const px = -bw / 2 + 0.36 + i * 0.42 + (rand() - 0.5) * 0.08;
+        b.box(0.3, 0.2 + rand() * 0.12, 0.3, { at: [px, 0.16, -depth + 0.5 + k * 0.52], rot: [0, rand() * 1.5, 0], color: greens[k], jitter: 0.18 });
+      }
+    }
+  } else if (depth >= 2.8 && look % 5 === 1) {
+    // A hen house on legs, its ramp down.
+    const hx = -side * (w / 2 - 1.1);
+    b.box(1.1, 0.7, 0.9, { at: [hx, 0.75, -depth + 0.8], color: B.timber, jitter: 0.12 });
+    b.box(1.3, 0.07, 1.1, { at: [hx, 1.15, -depth + 0.8], rot: [0.2, 0, 0], color: B.slateDark });
+    for (const lx of [-0.45, 0.45]) b.box(0.08, 0.4, 0.08, { at: [hx + lx, 0.2, -depth + 0.8], color: PAL.woodDark });
+    b.box(0.3, 0.04, 0.8, { at: [hx, 0.22, -depth + 1.55], rot: [0.5, 0, 0], color: PAL.wood });
+  }
+  if (depth >= 2.4 && look % 4 !== 0) {
+    // The washing line across the yard's end.
+    const lz = -Math.min(depth - 0.3, 3.4);
+    const half = w / 2 - 0.6;
+    for (const px of [-half, half]) b.box(0.1, 2.0, 0.1, { at: [px, 1.0, lz], color: PAL.woodDark, jitter: 0.08 });
+    b.box(half * 2, 0.025, 0.025, { at: [0, 1.88, lz], color: 0xc8c0a8, jitter: 0 });
+    const wash = [B.wool, 0xc8c0a8, B.dyes[look % 4], 0x6a7a8a, B.dyes[(look + 2) % 4], 0xe0d8c4];
+    let x = -half + 0.4;
+    for (let k = 0; x < half - 0.5; k++) {
+      const cw = 0.45 + rand() * 0.5;
+      const ch = 0.5 + rand() * 0.4;
+      b.box(cw, ch, 0.03, { at: [x + cw / 2, 1.86 - ch / 2, lz], rot: [0, 0, (rand() - 0.5) * 0.06], color: wash[(k + look) % wash.length], jitter: 0.06 });
+      x += cw + 0.25 + rand() * 0.5;
+    }
+  }
 }
 
 /** The Kerchiefs' hide in the drained pool: a tarp over poles, sacks of grave goods under it. */

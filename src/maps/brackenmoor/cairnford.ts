@@ -95,7 +95,11 @@ function row(ctx: TownContext, id: string, from: P2, lots: readonly Lot[], gap =
     const off = road.width / 2 + TOWN.set + d / 2;
     const [x, z] = [p.x + nx * off, p.z + nz * off];
     const yaw = Math.atan2(-nx, -nz);
-    if (storeys > 0) ctx.add('house', x, z, yaw, w, d, storeys, look);
+    if (storeys > 0) {
+      ctx.add('house', x, z, yaw, w, d, storeys, look);
+      // Its back yard, out from its back wall.
+      ctx.add('yard', x - Math.sin(yaw) * (d / 2), z - Math.cos(yaw) * (d / 2), yaw, w, 4, 1, look);
+    }
     out.push({ x, z, yaw });
     s += w / 2 + gap;
   }

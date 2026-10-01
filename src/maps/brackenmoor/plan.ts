@@ -89,7 +89,7 @@ export const MOOR_ATMOSPHERE: Atmosphere = {
 };
 
 /** What grows or lies on the moor. Bracken, heather, cotton grass and reeds are undergrowth, too small for a stand-in. */
-export type MoorKind = 'bracken' | 'heather' | 'bush' | 'gorse' | 'rock' | 'pine' | 'hawthorn' | 'rowan' | 'reed' | 'cotton' | 'cypress' | 'crag' | 'scree';
+export type MoorKind = 'bracken' | 'heather' | 'tussock' | 'bush' | 'gorse' | 'rock' | 'pine' | 'hawthorn' | 'rowan' | 'reed' | 'cotton' | 'cypress' | 'crag' | 'scree';
 
 export interface MoorPlant {
   readonly kind: MoorKind;
@@ -114,7 +114,7 @@ export type MoorStructureKind =
   | 'barrow' | 'hollowhill' | 'dromos' | 'spoil' | 'tent' | 'ragPole' | 'ladder' | 'lookout' | 'peatStack' | 'peatBank'
   | 'hut' | 'jetty' | 'boat' | 'grave' | 'stall' | 'cart' | 'garden' | 'hide' | 'crates' | 'borderStone' | 'longStone' | 'marketCross'
   | 'quay' | 'well' | 'trough' | 'bench' | 'barrels' | 'postbox' | 'woodpile' | 'cartShed' | 'wagon' | 'hayrick' | 'townGate'
-  | 'bollard' | 'graves' | 'stable' | 'hedge' | 'sundial' | 'fieldGate' | 'campfire' | 'crane' | 'blocks' | 'eelTraps'
+  | 'bollard' | 'graves' | 'stable' | 'hedge' | 'sundial' | 'fieldGate' | 'campfire' | 'crane' | 'blocks' | 'eelTraps' | 'yard'
   | 'waymark' | 'tor' | 'rack';
 
 /**
@@ -958,6 +958,26 @@ function placeStructures(ground: HeightGrid, roads: readonly MoorRoad[], beck: {
   const out: MoorStructure[] = [];
   let seed = 1;
   const add = (kind: MoorStructureKind, x: number, z: number, yaw: number, w = 1, d = 1, h = 1, variant = 0, extra?: readonly number[]) => {
+    if (kind === 'yard') {
+      // A back yard runs out from its house's back wall as far as it's clear of the roads, the beck and the yard walls.
+      const clearAt = (u: number, v: number) => {
+        const px = x + Math.cos(yaw) * u - Math.sin(yaw) * v;
+        const pz = z - Math.sin(yaw) * u - Math.cos(yaw) * v;
+        const b = nearestOnPolyline(beck.line, px, pz);
+        return (
+          roads.every((r) => nearestOnPolyline(r.line, px, pz).d > r.width / 2 + 0.5) &&
+          b.d > beck.half(b.i + b.t) + 1.4 &&
+          YARD_WALLS.every((wl) => nearestOnPolyline(wl, px, pz).d > 0.6)
+        );
+      };
+      let depth = 0;
+      for (let v = 0.5; v <= d; v += 0.25) {
+        if (![-w / 2 + 0.3, 0, w / 2 - 0.3].every((u) => clearAt(u, v))) break;
+        depth = v;
+      }
+      if (depth < 1.5) return;
+      extra = [depth];
+    }
     out.push({ kind, x, y: ground.at(x, z), z, yaw, w, d, h, variant, seed: seed++, ...(extra ? { extra } : {}) });
   };
   const road = (id: string) => roads.find((r) => r.id === id)!;
@@ -1177,6 +1197,12 @@ function planPaving(roads: readonly MoorRoad[]): Paving {
   };
 }
 
+/** The back walls of the Kingsroad's yards, north and south of it. */
+const YARD_WALLS: P2[][] = [
+  [[56, 350.5], [70, 349.2], [80, 347.8], [92, 346.2]],
+  [[66, 386.4], [80, 384.6], [94, 382]],
+];
+
 /**
  * The walls: field walls of rough gritstone across the moor, the landlord's
  * enclosure in dressed stone (built straight across an older wall) and
@@ -1202,10 +1228,9 @@ function planWalls(roads: readonly MoorRoad[], decks: readonly Deck[]): MoorWall
     // The old wall the enclosure was built straight across.
     [[84, 300], [118, 294], [150, 290]],
     // The back walls of the Kingsroad's yards, and the wagon yard's.
-    [[56, 350.5], [70, 349.2], [80, 347.8], [92, 346.2]],
+    ...YARD_WALLS,
     [[92, 346.2], [106, 345.4], [106, 356]],
     [[91, 346.2], [91, 357]],
-    [[66, 386.4], [80, 384.6], [94, 382]],
     // The chapel's graveyard wall, its gate toward the town.
     [[ch.x + 10.5, ch.z - 3], [ch.x + 10.5, ch.z - 12], [ch.x - 12, ch.z - 12], [ch.x - 12, ch.z + 12], [ch.x + 10.5, ch.z + 12], [ch.x + 10.5, ch.z + 3]],
   ];
@@ -1332,7 +1357,15 @@ function placePlants(
     const out = walkable.distance(x, z);
     if (out < 6 || !onLand(x, z) || rand() > 0.75 || onMound(x, z)) return;
     const g = grade(x, z);
-    if (g > 0.55 && rand() < 0.55) add('crag', x, z, 1.7 + rand() * 1.7, downhill(x, z) + (rand() - 0.5) * 0.5);
+    if (g > 0.55 && rand() < 0.55) {
+      // A crag runs along the slope: shorter where the ground falls away under its ends, none where even a short one's would.
+      const yaw = downhill(x, z) + (rand() - 0.5) * 0.5;
+      const g0 = ground.at(x, z);
+      const held = (k: number) => [-1, 1].every((e) => ground.at(x + Math.cos(yaw) * 1.4 * k * e, z - Math.sin(yaw) * 1.4 * k * e) > g0 - 1.1 * k);
+      let k = 1.7 + rand() * 1.7;
+      while (k > 1.3 && !held(k)) k *= 0.8;
+      if (held(k)) add('crag', x, z, k, yaw);
+    }
     else if (g > 0.3 && rand() < 0.35) add('scree', x, z, 1.6 + rand() * 1.6, downhill(x, z));
   });
   // Low bilberry bushes and yellow-flecked gorse, scattered where you walk.
@@ -1365,6 +1398,8 @@ function placePlants(
     const h = heather(x, z) * fade;
     if (roll < 0.8 * b) add('bracken', x, z, 1.4 + rand() * 0.9);
     else if (roll < 0.8 * b + 0.3 * h) add('heather', x, z, 0.5 + rand() * 0.35);
+    // Between the patches, the moor's own coarse grass in tussocks, thickest beside the ways.
+    else if (rand() < (0.6 - 0.5 * Math.max(b, h)) * (near(x, z, 10) ? 1 : 0.5)) add('tussock', x + (rand() - 0.5), z + (rand() - 0.5), 0.7 + rand() * 0.5);
   });
   // Rowans along the beck's banks, now and then.
   for (let i = 4; i < beck.line.length - 4; i += 9) {
@@ -1377,6 +1412,20 @@ function placePlants(
     const px = x + (-(nz - z) / len) * off * side;
     const pz = z + ((nx - x) / len) * off * side;
     if (clear(px, pz, 1.5) && inBog(px, pz) === 0 && !inSquare(px, pz) && !town(px, pz)) add('rowan', px, pz, 0.85 + rand() * 0.3);
+  }
+  // Stones along the beck's edges out on the moor, some in the water, some up on the bank.
+  for (let i = 1; i < beck.line.length - 1; i++) {
+    const [x, z] = beck.line[i];
+    const [nx, nz] = beck.line[i + 1];
+    const len = Math.hypot(nx - x, nz - z) || 1;
+    for (const side of [-1, 1]) {
+      if (rand() > 0.5) continue;
+      const off = beck.halves[i] + (rand() - 0.6) * 0.9;
+      const px = x + (-(nz - z) / len) * off * side;
+      const pz = z + ((nx - x) / len) * off * side;
+      if (town(px, pz) || inTown(px, pz) > 0.1 || inBog(px, pz) > 0.2 || decks.on(px, pz, 1) || roadAt(px, pz) < 1.5 || colliders.blocked(px, pz, 0.6)) continue;
+      add('rock', px, pz, 0.3 + rand() * 0.45);
+    }
   }
   // A stand of old hawthorns at the Long Stones.
   const { from, to } = MOOR.longStones;

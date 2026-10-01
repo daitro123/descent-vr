@@ -14,7 +14,8 @@ import { KINGSROAD } from '../kingsroad';
 import type { WallLook } from '../props';
 import { recolour, recolourEach } from '../recolour';
 import { buildMoorStructure } from './buildings';
-import { bracken, drySouth, heather, inBog, inEnclosure, inTown, MOOR, onHollowhill, type MoorKind, type MoorPlan, type MoorStructureKind, planBrackenmoor } from './plan';
+import { TOWN } from './cairnford';
+import { bracken, drySouth, heather, inBog, inEnclosure, inTown, MOOR, onHollowhill, type MoorKind, type MoorPlan, type MoorStructureKind, type Paving, planBrackenmoor } from './plan';
 import { MOOR_BUILD, MOOR_GROUND, MOOR_LAND, MOOR_PLANTS, MOOR_TREES } from './palette';
 
 // Brackenmoor's chunk builder: one 40 m chunk of its plan at full detail or
@@ -29,7 +30,7 @@ import { MOOR_BUILD, MOOR_GROUND, MOOR_LAND, MOOR_PLANTS, MOOR_TREES } from './p
 const UP = new Vector3(0, 1, 0);
 
 /** Too small to see from a stand-in's distance. */
-const UNDERGROWTH: ReadonlySet<MoorKind> = new Set(['bracken', 'heather', 'cotton', 'reed', 'scree']);
+const UNDERGROWTH: ReadonlySet<MoorKind> = new Set(['bracken', 'heather', 'tussock', 'cotton', 'reed', 'scree']);
 
 /** Brackenmoor's chunks, west to east along each row, north to south. */
 export function moorChunks(): ChunkKey[] {
@@ -68,6 +69,7 @@ function moorPrototypes(oak: Prototypes, far: boolean): MoorPrototypes {
     // Each tuft shape twice, the second set's colours two on, so a shape isn't always the same colour.
     bracken: [...recolourEach(oak.grass, MOOR_PLANTS.bracken), ...recolourEach(oak.grass, MOOR_PLANTS.bracken.slice(2))],
     heather: recolourEach(oak.rock, MOOR_PLANTS.heather, true),
+    tussock: recolourEach(oak.grass, MOOR_PLANTS.tussock),
     bush: recolourEach(oak.bush, MOOR_PLANTS.bush),
     // Gorse: a bush darker and spikier green, flecked with its yellow flowers.
     gorse: oak.bush.map((g, v) => fleck(recolour(g, MOOR_TREES.gorse[v % 2]), MOOR_TREES.gorseFlower, v)),
@@ -116,7 +118,9 @@ function crag(v: number, far: boolean): BufferGeometry {
     y += bh - 0.02;
     span *= 0.72 + rand() * 0.12;
   }
-  if (!far) b.box(0.7, 0.42, 0.55, { at: [(rand() - 0.5) * 1.6, 0.1, 0.9 + rand() * 0.4], rot: [rand() * 0.3, rand() * 3, rand() * 0.3], color: GRIT[v % 4], jitter: 0.15 });
+  // The fallen block lies down the slope at its foot, as low as a crag's slope drops it.
+  const fz = 0.9 + rand() * 0.4;
+  if (!far) b.box(0.7, 0.42, 0.55, { at: [(rand() - 0.5) * 1.6, 0.1 - 0.75 * fz, fz], rot: [rand() * 0.3, rand() * 3, rand() * 0.3], color: GRIT[v % 4], jitter: 0.15 });
   return b.build();
 }
 
@@ -149,7 +153,7 @@ function fleck(g: BufferGeometry, hex: number, seed: number, share = 0.16): Buff
 const SMALL: ReadonlySet<MoorStructureKind> = new Set([
   'signpost', 'mapboard', 'crates', 'cart', 'grave', 'ragPole', 'ladder', 'stall', 'peatStack', 'garden', 'boat', 'cairn',
   'bench', 'barrels', 'postbox', 'woodpile', 'bollard', 'waymark', 'sundial', 'eelTraps', 'trough', 'campfire', 'rack',
-  'blocks', 'graves', 'well', 'fieldGate', 'spoil', 'wagon', 'hedge',
+  'blocks', 'graves', 'well', 'fieldGate', 'spoil', 'wagon', 'hedge', 'yard',
 ]);
 
 /** Each structure's model, made the first time a chunk needs it. */
@@ -189,8 +193,10 @@ export function buildMoorChunk(plan: MoorPlan, key: ChunkKey, detail: Detail): C
   const bridge = plan.decks[0];
   const paved = pavedAt(plan);
   if (full) {
-    addRoads(raw, plan.ground, plan.roads, region, MOOR_GROUND.grass, (x, z) => Math.hypot(x - bridge.x, z - bridge.z) < bridge.hd - 0.6 || paved(x, z) !== null);
-    addPaving(raw, plan, region, paved);
+    // The dirt runs up to the setts' own edge, under them no further.
+    const edge = pavingEdge(plan);
+    addRoads(raw, plan.ground, plan.roads, region, MOOR_GROUND.grass, (x, z) => Math.hypot(x - bridge.x, z - bridge.z) < bridge.hd - 0.6 || edge(x, z) > 0.6);
+    addPaving(raw, plan, region, paved, edge);
   }
 
   const { near, far } = plants();
@@ -296,6 +302,52 @@ function drystone(b: ModelBuilder, a: P2, c: P2, heightAt: (x: number, z: number
 /** Which of Cairnford's setts (if any) cover (x, z): the streets' and the square's setts, a kerb, the footways' flags. */
 type Paved = 'sett' | 'kerb' | 'flag' | 'ring' | null;
 
+/**
+ * How far inside Cairnford's paving (x, z) is, by its outer edge: positive
+ * over it, negative off it. Where it crosses a half-metre cell, the cell is cut
+ * along it, so a footway's edge runs as straight as its street.
+ */
+function pavingEdge(plan: MoorPlan): (x: number, z: number) => number {
+  const { rects, strips } = plan.paving;
+  // Each strip's box, a metre wider than it: past that, a metre off is as far off as matters to a half-metre cell.
+  const lines = strips
+    .filter((st) => st.line.length > 1)
+    .map((st) => {
+      const xs = st.line.map((p) => p[0]);
+      const zs = st.line.map((p) => p[1]);
+      const m = st.half + 1;
+      return { ...st, minX: Math.min(...xs) - m, maxX: Math.max(...xs) + m, minZ: Math.min(...zs) - m, maxZ: Math.max(...zs) + m };
+    });
+  // A strip's paving stops square across its street where the street goes on unpaved: at an end that's out of the
+  // square, the other strips and the bridge's foot. Elsewhere its end rounds into what it meets.
+  const bridge = TOWN.bridge;
+  const loose = (p: P2, self: Paving['strips'][number]) =>
+    !rects.some((r) => p[0] > r.minX - 1 && p[0] < r.maxX + 1 && p[1] > r.minZ - 1 && p[1] < r.maxZ + 1) &&
+    !strips.some((o) => o !== self && o.line.length > 1 && nearestOnPolyline(o.line, ...p).d < o.half + 1) &&
+    Math.abs(p[0] - bridge.x) + Math.min(Math.abs(p[1] - bridge.from), Math.abs(p[1] - bridge.to)) > 4;
+  const square = new Map(strips.map((st) => [st.line, st.line.length > 1 ? [loose(st.line[0], st), loose(st.line[st.line.length - 1], st)] : [false, false]]));
+  const inside = (line: readonly P2[], half: number, x: number, z: number) => {
+    const n = nearestOnPolyline(line, x, z);
+    const [start, finish] = square.get(line)!;
+    const end = finish && n.i === line.length - 2 && n.t >= 1 ? 1 : start && n.i === 0 && n.t <= 0 ? -1 : 0;
+    if (end === 0) return half - n.d;
+    const [p, q] = end > 0 ? [line[line.length - 2], line[line.length - 1]] : [line[1], line[0]];
+    const len = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
+    const [dx, dz] = [(q[0] - p[0]) / len, (q[1] - p[1]) / len];
+    return Math.min(half - Math.abs((x - q[0]) * -dz + (z - q[1]) * dx), -((x - q[0]) * dx + (z - q[1]) * dz));
+  };
+  return (x, z) => {
+    let best = -1;
+    for (const r of rects) best = Math.max(best, Math.min(x - r.minX, r.maxX - x, z - r.minZ, r.maxZ - z));
+    for (const st of lines) {
+      if (best > 0.5) break;
+      if (x < st.minX || x > st.maxX || z < st.minZ || z > st.maxZ) continue;
+      best = Math.max(best, inside(st.line, st.half, x, z));
+    }
+    return best;
+  };
+}
+
 /** A paving lookup over the plan's paving: by strip, its road's half width telling the carriageway from the footway. */
 function pavedAt(plan: MoorPlan): (x: number, z: number) => Paved {
   const { paving } = plan;
@@ -331,7 +383,7 @@ function pavedAt(plan: MoorPlan): (x: number, z: number) => Paved {
  * little over it, each split as the ground's own cells are so it lies flat on
  * them; the setts mottled, the kerbs pale, the flags a metre square.
  */
-function addPaving(raw: MeshBuffer, plan: MoorPlan, region: Region, paved: (x: number, z: number) => Paved): void {
+function addPaving(raw: MeshBuffer, plan: MoorPlan, region: Region, paved: (x: number, z: number) => Paved, edge: (x: number, z: number) => number): void {
   const { ground } = plan;
   const { rects, strips } = plan.paving;
   const near = [...rects, ...strips.flatMap((st) => st.line.map(([x, z]) => ({ minX: x - st.half, maxX: x + st.half, minZ: z - st.half, maxZ: z + st.half })))].some(
@@ -343,19 +395,42 @@ function addPaving(raw: MeshBuffer, plan: MoorPlan, region: Region, paved: (x: n
   const kerb = new Color(MOOR_BUILD.sill);
   const col = new Color();
   const cell = 0.5;
-  const v = (x: number, z: number): [number, number, number] => [x, ground.at(x, z) + 0.05, z];
-  for (let z = region.minZ; z < region.maxZ; z += cell) {
-    for (let x = region.minX; x < region.maxX; x += cell) {
-      const kind = paved(x + cell / 2, z + cell / 2);
-      if (kind === null) continue;
+  // A little over the dirt roads' ribbons, which run on under the setts' edge.
+  const v = (x: number, z: number): [number, number, number] => [x, ground.at(x, z) + 0.08, z];
+  // The edge's distance at every cell corner, once.
+  const cols = Math.round((region.maxX - region.minX) / cell) + 1;
+  const rows = Math.round((region.maxZ - region.minZ) / cell) + 1;
+  const inside = new Float32Array(cols * rows);
+  for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) inside[j * cols + i] = edge(region.minX + i * cell, region.minZ + j * cell);
+  for (let j = 0, z = region.minZ; j < rows - 1; j++, z += cell) {
+    for (let i = 0, x = region.minX; i < cols - 1; i++, x += cell) {
+      const s = [inside[j * cols + i], inside[j * cols + i + 1], inside[(j + 1) * cols + i + 1], inside[(j + 1) * cols + i]];
+      if (s.every((e) => e < 0)) continue;
+      const kind = paved(x + cell / 2, z + cell / 2) ?? 'flag';
       if (kind === 'flag') col.copy(flags[Math.floor(hash01(Math.floor(x), Math.floor(z), 401) * flags.length)]);
       else if (kind === 'kerb') col.copy(kerb).multiplyScalar(0.92 + hash01(Math.floor(x), Math.floor(z), 403) * 0.1);
       else if (kind === 'ring') col.copy(flags[Math.floor(hash01(x * 2, z * 2, 405) * flags.length)]).multiplyScalar(0.94);
       else col.copy(setts[Math.floor(hash01(x * 2, z * 2, 407) * setts.length)]);
       col.multiplyScalar(0.95 + hash01(x * 2, z * 2, 409) * 0.08);
-      const [a, b, c, d] = [v(x, z), v(x + cell, z), v(x, z + cell), v(x + cell, z + cell)];
-      raw.tri(a, b, c, col);
-      raw.tri(b, d, c, col);
+      if (s.every((e) => e >= 0)) {
+        const [a, b, c, d] = [v(x, z), v(x + cell, z), v(x, z + cell), v(x + cell, z + cell)];
+        raw.tri(a, b, c, col);
+        raw.tri(b, d, c, col);
+        continue;
+      }
+      // On the edge: only the part of the cell inside it, round its corners in turn.
+      const corners: P2[] = [[x, z], [x + cell, z], [x + cell, z + cell], [x, z + cell]];
+      const poly: [number, number, number][] = [];
+      for (let k = 0; k < 4; k++) {
+        const [e0, e1] = [s[k], s[(k + 1) % 4]];
+        const [p, q] = [corners[k], corners[(k + 1) % 4]];
+        if (e0 >= 0) poly.push(v(...p));
+        if (e0 >= 0 !== e1 >= 0) {
+          const t = e0 / (e0 - e1);
+          poly.push(v(p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t));
+        }
+      }
+      for (let k = 1; k < poly.length - 1; k++) raw.tri(poly[0], poly[k], poly[k + 1], col);
     }
   }
   // The kerbs: dressed stones along both edges of each street's carriageway, but where another street's crosses.
@@ -385,7 +460,7 @@ function addPaving(raw: MeshBuffer, plan: MoorPlan, region: Region, paved: (x: n
 }
 
 /** How much flatter than it's wide a plant stands. */
-const SQUASH: Partial<Record<MoorKind, number>> = { heather: 0.45, cotton: 0.7, gorse: 1.15, cypress: 3.2, crag: 0.85 };
+const SQUASH: Partial<Record<MoorKind, number>> = { heather: 0.45, tussock: 0.75, cotton: 0.7, gorse: 1.15, cypress: 3.2, crag: 0.85 };
 
 /** The border stone, modelled once. */
 let stoneModel: BufferGeometry | null = null;
