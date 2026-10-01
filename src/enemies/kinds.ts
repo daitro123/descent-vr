@@ -221,6 +221,8 @@ export interface EnemyOptions {
   family?: EnemyFamily;
   /** Which of its family's looks for its behaviour. */
   variant?: number;
+  /** One of its family's named fighters in place of its behaviour's (FamilyDef.named): a leader, a boss. */
+  named?: string;
   /** Its behaviour's level-1 numbers, if not the usual ones (the `?duel` duelist). */
   def?: EnemyConfig;
 }
@@ -357,8 +359,8 @@ export class Biter extends MeleeEnemy {
  * camp, so they play with the numbers in CONFIG as they are.
  */
 export function createEnemy(kind: EnemyKind, x: number, z: number, options: EnemyOptions = {}): Enemy {
-  const { level = 1, inCamp = false, family = 'undead', variant = 0 } = options;
-  const traits = { family, variant, level, def: enemyNumbers(options.def ?? CONFIG.enemies[kind], level, inCamp) };
+  const { level = 1, inCamp = false, family = 'undead', variant = 0, named } = options;
+  const traits = { family, variant, named, level, def: enemyNumbers(options.def ?? CONFIG.enemies[kind], level, inCamp) };
   switch (kind) {
     case 'grunt':
       return new Grunt(kind, x, z, traits);

@@ -138,10 +138,10 @@ function holdClip(kind: HumanoidKind, name: string, pose: Pose, hold: number, dr
   };
 }
 
-/** Every animation the game plays for this behaviour, in this family's body, in a stable order. */
-export function clipsFor(kind: HumanoidKind, family: Family = 'undead'): Clip[] {
+/** Every animation the game plays for this behaviour, in this family's body (or its named fighter's), in a stable order. */
+export function clipsFor(kind: HumanoidKind, family: Family = 'undead', named?: string): Clip[] {
   const def: EnemyConfig = CONFIG.enemies[kind];
-  const p = proportionsOf(kind, family);
+  const p = proportionsOf(kind, family, named);
   const clips: Clip[] = [idleClip(kind), walkClip(kind, p)];
   // One clip per distinct attack pose; the first config entry supplies the timings.
   const seen = new Set<string>();

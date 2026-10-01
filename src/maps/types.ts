@@ -161,7 +161,7 @@ export interface PostPlan {
   readonly role?: Extract<Role, 'leader' | 'deepBrute'>;
   /** Its level, if not its camp's (the mine's deep brutes). */
   readonly level?: number;
-  /** Who it is: the undead are skeletons, the bandits and House Corvane's men wear the human body, leeches and adders are crawlers. */
+  /** Who it is: the undead are skeletons, the bandits, House Corvane's men, the smugglers and the raiders wear the human body, leeches and adders are crawlers. */
   readonly family: EnemyFamily;
   /**
    * Which of its family's looks, if a set one. A leech's are 0 the black mire
@@ -169,6 +169,12 @@ export interface PostPlan {
    * skeleton takes one at random and a leech is a mire leech.
    */
   readonly variant?: number;
+  /**
+   * Which of its family's named fighters it is, if one (FamilyDef.named): a
+   * leader or a boss dressed for this post, fighting with its own behaviour,
+   * which `behaviour` must be. The Lantern Men's 'leader', 'crake'.
+   */
+  readonly named?: string;
   readonly x: number;
   readonly z: number;
   /** As a model turns about +Y: its front faces (sin yaw, cos yaw), so 0 faces +Z. */

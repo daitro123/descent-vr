@@ -81,8 +81,12 @@ How an enemy fights, and so what it tests in the player: the grunt (reading a sw
 _Avoid_: kind, type, class, AI
 
 **Family**:
-Who an enemy is, whatever its behaviour: the bandits, House Corvane's bailiffs, the undead, leeches or adders. A bandit archer and an undead archer share a behaviour but not a family. A family wears one body, the human body, the skeleton or the crawler, and fields a look for each behaviour it fights with (leeches and adders only bite).
+Who an enemy is, whatever its behaviour: the bandits, House Corvane's bailiffs, the Lantern Men, the undead, leeches or adders. A bandit archer and an undead archer share a behaviour but not a family. A family wears one body, the human body, the skeleton or the crawler, and fields a look for each behaviour it fights with (leeches and adders only bite).
 _Avoid_: faction, race, type
+
+**Named fighter**:
+One of a family's fighters dressed for one place, and never one of its everyday looks: a camp's leader (the Lantern Men's bosun in his woad sash, Abel Thatch at Cockle End) or a named enemy such as Captain Silas Crake. It fights with an ordinary behaviour, at the post in its camp that names it; a boss fight of its own, as the Warden's, is something else.
+_Avoid_: unique, elite, rare, champion
 
 **Rooted**, **frozen**, **slowed**:
 What an ability can hold an enemy in for a while. Rooted, it can't walk but strikes what's in reach; frozen, it does nothing until the time runs out or a hit breaks it; slowed, it walks and winds up slower by a fraction. Brutes take half; the Warden ignores roots and freezes.

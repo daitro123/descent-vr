@@ -17,7 +17,7 @@ import {
   Vector3,
   type WebGLRenderer,
 } from 'three';
-import { buildCharacter, FAMILIES, type Family, type Fighter, type HumanoidKind, type WeaponSpec } from '../models/characters';
+import { buildCharacter, FAMILIES, type Family, type FamilyDef, type Fighter, type HumanoidKind, type WeaponSpec } from '../models/characters';
 import { CRAWLER_LOOKS, type CrawlerLook } from '../models/crawler';
 import { CRITTER_LOOKS, type CritterLook } from '../models/critters';
 import { createModelMaterial, type ModelMaterial } from '../models/materials';
@@ -35,8 +35,8 @@ import { crawlerShowpiece, critterShowpiece, type Moment, type Showpiece } from 
 // Works in the headset and on the desktop page.
 
 export type InspectorEntry =
-  /** An enemy: its behaviour, its family's body, and which of its looks. */
-  | { kind: HumanoidKind; family: Family; variant: number; label: string }
+  /** An enemy: its behaviour, its family's body, and which of its looks (or which of its named fighters). */
+  | { kind: HumanoidKind; family: Family; variant: number; named?: string; label: string }
   /** A friendly character: Hale or one of Oakvale's villagers. */
   | { person: PersonId; label: string }
   /** One of the cast a zone places as a villager, beyond Oakvale's (people/cast.ts). */
@@ -46,12 +46,13 @@ export type InspectorEntry =
   /** A crawler: a leech or the adder (models/crawler.ts), crawling and fighting as a biter. */
   | { crawler: CrawlerLook; label: string };
 
-/** Each look of every enemy family's fighters: "Grunt v0" to "v5", "Archer". */
-const enemies = (Object.keys(FAMILIES) as Family[]).flatMap((family) =>
-  (Object.entries(FAMILIES[family].fights) as [HumanoidKind, Fighter][]).flatMap(([kind, f]) =>
+/** Each look of every enemy family's fighters ("Grunt v0" to "v5", "Archer"), then its named fighters ("Captain Silas Crake"). */
+const enemies = (Object.keys(FAMILIES) as Family[]).flatMap((family) => [
+  ...(Object.entries(FAMILIES[family].fights) as [HumanoidKind, Fighter][]).flatMap(([kind, f]) =>
     Array.from({ length: f.looks }, (_, variant) => ({ kind, family, variant, label: f.looks > 1 ? `${f.label} v${variant}` : f.label })),
   ),
-);
+  ...Object.entries((FAMILIES[family] as FamilyDef).named ?? {}).map(([named, f]) => ({ kind: f.kind, family, variant: 0, named, label: f.label })),
+]);
 
 /**
  * Every model the game builds: each enemy family's (the undead's grunts in
@@ -173,8 +174,8 @@ export class Inspector {
       else if ('critter' in e) b = this.shown(critterShowpiece(e.critter, material), material);
       else if ('crawler' in e) b = this.shown(crawlerShowpiece(e.crawler, material), material);
       else {
-        const { rig, weapon } = buildCharacter(e.kind, { material, family: e.family, variant: e.variant });
-        b = this.rigged(rig, weapon, material, clipsFor(e.kind, e.family));
+        const { rig, weapon } = buildCharacter(e.kind, { material, family: e.family, variant: e.variant, named: e.named });
+        b = this.rigged(rig, weapon, material, clipsFor(e.kind, e.family, e.named));
       }
       this.built.set(index, b);
     }

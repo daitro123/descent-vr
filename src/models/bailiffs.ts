@@ -65,7 +65,7 @@ function cheekFrom(p: Proportions): Vector3 {
  * along it, the prod across its front and the string spanned back to the nut.
  * A crossbow strikes nothing, so its spec is the bow's placeholder.
  */
-function crossbow(ctx: DressContext): WeaponSpec {
+export function crossbow(ctx: DressContext): WeaponSpec {
   const grip = new Vector3(0, -0.06, 0);
   const cheek = cheekFrom(ctx.p);
   const back = cheek.clone().sub(grip).normalize();
@@ -86,7 +86,7 @@ function crossbow(ctx: DressContext): WeaponSpec {
 }
 
 /** A case of bolts at the right hip. */
-function boltCase(ctx: DressContext): void {
+export function boltCase(ctx: DressContext): void {
   ctx
     .on('hips')
     .box(0.07, 0.24, 0.09, { at: [-0.2, -0.1, -0.02], rot: [0, 0, -0.08], color: PAL.leatherDark })

@@ -1,6 +1,8 @@
 import type { Material } from 'three';
 import { BANDITS } from './bandits';
 import { BAILIFFS } from './bailiffs';
+import { RAIDERS } from './raiders';
+import { LANTERN_MEN, UNDERGATE } from './smugglers';
 import { bow } from './bow';
 import type { Vec3 } from './kit';
 import { PAL } from './palette';
@@ -10,8 +12,10 @@ import { type BoneName, type DressContext, type Proportions, Rig } from './rig';
 // primitives. Sizes are in metres; `s` scales bone thickness, not length. An
 // enemy's body comes from its family as well as its behaviour: the undead are
 // the skeletons here (and the brute's stitched flesh); the bandits
-// (bandits.ts) and House Corvane's bailiffs (bailiffs.ts) wear the human body
-// (human.ts). Every family is an entry in FAMILIES.
+// (bandits.ts), House Corvane's bailiffs (bailiffs.ts), the smugglers
+// (smugglers.ts: the Lantern Men and the Undergate) and the fen raiders
+// (raiders.ts) wear the human body (human.ts). Every family is an entry in
+// FAMILIES.
 
 /** An enemy's behaviour: how it fights. A biter strikes low at your legs (a leech, an adder). */
 export type EnemyKind = 'grunt' | 'archer' | 'brute' | 'warden' | 'biter';
@@ -60,8 +64,20 @@ export interface Fighter {
 export interface FamilyDef {
   readonly body: Exclude<EnemyBody, 'crawler'>;
   readonly fights: Partial<Record<HumanoidKind, Fighter>>;
+  /**
+   * Its named fighters: each dressed apart from the rest, for one place, and
+   * asked for there by name (a camp post's `named`): the Lantern Men's leaders
+   * in their woad sashes, Captain Crake. A camp's other members never wear
+   * them, whatever look they're given.
+   */
+  readonly named?: Readonly<Record<string, NamedFighter>>;
   /** Varies its per-face shading, with its look. */
   readonly seed: number;
+}
+
+/** A family's fighter for one place, a leader or a boss, fighting with the behaviour `kind`. */
+export interface NamedFighter extends Fighter {
+  readonly kind: HumanoidKind;
 }
 
 const PI = Math.PI;
@@ -425,6 +441,9 @@ export const FAMILIES = {
   undead: UNDEAD,
   bandit: BANDITS,
   corvane: BAILIFFS,
+  smuggler: LANTERN_MEN,
+  undergate: UNDERGATE,
+  raider: RAIDERS,
 } satisfies Record<string, FamilyDef>;
 
 /** Who an enemy on a skeleton or the human body is, whatever its behaviour: one of FAMILIES. */
@@ -444,25 +463,38 @@ export interface BuildOptions {
   family?: Family;
   /** Which of its family's looks for its behaviour: varies helmets, cloth, faces and weapons. */
   variant?: number;
+  /** One of its family's named fighters (FamilyDef.named) in place of its behaviour's: a leader, a boss. */
+  named?: string;
 }
 
-/** `family`'s fighter with the behaviour `kind`: there's none of some (only the undead have a Warden). */
-export function fighterOf(kind: HumanoidKind, family: Family = 'undead'): Fighter {
+/**
+ * `family`'s fighter with the behaviour `kind`, or its named fighter `named`:
+ * there's none of some (only the undead have a Warden), and a named fighter
+ * fights only with its own behaviour.
+ */
+export function fighterOf(kind: HumanoidKind, family: Family = 'undead', named?: string): Fighter {
+  if (named !== undefined) {
+    const own: NamedFighter | undefined = (FAMILIES[family] as FamilyDef).named?.[named];
+    if (!own) throw new Error(`No ${named} among the ${family} family`);
+    if (own.kind !== kind) throw new Error(`The ${family} family's ${named} fights as a ${own.kind}, not a ${kind}`);
+    return own;
+  }
   const fighter: Fighter | undefined = FAMILIES[family].fights[kind];
   if (!fighter) throw new Error(`No ${kind} among the ${family} family`);
   return fighter;
 }
 
-/** The bone lengths of an enemy with this behaviour and family. */
-export function proportionsOf(kind: HumanoidKind, family: Family = 'undead'): Proportions {
-  return fighterOf(kind, family).proportions;
+/** The bone lengths of an enemy with this behaviour and family (or this named fighter of it). */
+export function proportionsOf(kind: HumanoidKind, family: Family = 'undead', named?: string): Proportions {
+  return fighterOf(kind, family, named).proportions;
 }
 
 export function buildCharacter(kind: HumanoidKind, opts: BuildOptions = {}): CharacterModel {
   const variant = opts.variant ?? 0;
   const family = opts.family ?? 'undead';
-  const fighter = fighterOf(kind, family);
+  const fighter = fighterOf(kind, family, opts.named);
+  const seed = FAMILIES[family].seed + variant * 7 + (opts.named === undefined ? 0 : 101);
   let weapon: WeaponSpec | undefined;
-  const rig = new Rig(fighter.proportions, (ctx) => (weapon = fighter.dress(ctx, variant)), opts.material, FAMILIES[family].seed + variant * 7);
+  const rig = new Rig(fighter.proportions, (ctx) => (weapon = fighter.dress(ctx, variant)), opts.material, seed);
   return { rig, weapon: weapon! };
 }

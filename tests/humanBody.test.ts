@@ -1,16 +1,18 @@
 import { Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { type Clip, clipsFor, type MutablePose } from '../src/inspector/clips';
-import { buildCharacter, type HumanoidKind as EnemyKind, FAMILIES, type Family, proportionsOf } from '../src/models/characters';
+import { buildCharacter, type HumanoidKind as EnemyKind, FAMILIES, type Family, type FamilyDef, proportionsOf } from '../src/models/characters';
 import { GUARDS } from '../src/models/guards';
 import { BUILDS, type BuildName, body, head, type Look, pommelOf } from '../src/models/human';
 import { buildPerson, PEOPLE, type PersonId } from '../src/models/people';
 import { BONES, Rig } from '../src/models/rig';
+import { SMUGGLERS } from '../src/models/smugglers';
 import { Wardrobe } from '../src/people/cast';
 
 // The human body (models/human.ts) and everyone who wears it: the families of
-// the living who fight you (the bandits, models/bandits.ts, and House
-// Corvane's bailiffs, models/bailiffs.ts), the friendly characters
+// the living who fight you (the bandits, models/bandits.ts, House Corvane's
+// bailiffs, models/bailiffs.ts, and the Sallows' smugglers and fen raiders,
+// models/smugglers.ts and models/raiders.ts), the friendly characters
 // (models/people.ts) and the guards (models/guards.ts).
 // These check what a player would notice of a body: it stands on its soles at
 // its height, it plays every enemy animation as the skeletons do, and each
@@ -31,18 +33,20 @@ function plain(build: BuildName): Rig {
 /** The families who wear the human body. */
 const LIVING = (Object.keys(FAMILIES) as Family[]).filter((f) => FAMILIES[f].body === 'human');
 
-/** Every fighter of the living, dressed: each look of each kind each family fields. */
-const FIGHTERS: [string, Family, EnemyKind, number][] = LIVING.flatMap((family) =>
-  (Object.entries(FAMILIES[family].fights) as [EnemyKind, { label: string; looks: number }][]).flatMap(([kind, f]) =>
+/** Every fighter of the living, dressed: each look of each kind each family fields, and its named fighters (a leader, a boss). */
+const FIGHTERS: [string, Family, EnemyKind, number, string?][] = LIVING.flatMap((family) => [
+  ...(Object.entries(FAMILIES[family].fights) as [EnemyKind, { label: string; looks: number }][]).flatMap(([kind, f]) =>
     Array.from({ length: f.looks }, (_, v): [string, Family, EnemyKind, number] => [f.looks > 1 ? `${f.label} v${v}` : f.label, family, kind, v]),
   ),
-);
+  ...Object.entries((FAMILIES[family] as FamilyDef).named ?? {}).map(([named, f]): [string, Family, EnemyKind, number, string] => [f.label, family, f.kind, 0, named]),
+]);
 
 /** Every character that wears the human body, as the game builds them. */
 const HUMANS: [string, () => Rig][] = [
-  ...FIGHTERS.map(([name, family, kind, variant]): [string, () => Rig] => [name, () => buildCharacter(kind, { family, variant }).rig]),
+  ...FIGHTERS.map(([name, family, kind, variant, named]): [string, () => Rig] => [name, () => buildCharacter(kind, { family, variant, named }).rig]),
   ...(Object.keys(PEOPLE) as PersonId[]).map((id): [string, () => Rig] => [PEOPLE[id].label, () => buildPerson(id)]),
   ...(Object.keys(GUARDS) as (keyof typeof GUARDS)[]).map((id): [string, () => Rig] => [GUARDS[id].label, () => new Wardrobe().dress(id)]),
+  ...(Object.keys(SMUGGLERS) as (keyof typeof SMUGGLERS)[]).map((id): [string, () => Rig] => [SMUGGLERS[id].label, () => new Wardrobe().dress(id)]),
 ];
 
 const _v = new Vector3();
@@ -119,8 +123,8 @@ describe('every fighter of the living', () => {
     expect(LIVING).toEqual(expect.arrayContaining(['bandit', 'corvane']));
   });
 
-  it.each(FIGHTERS)('%s plays each of its animations dressed, feet where a skeleton’s go', (_name, family, kind, variant) => {
-    playsLikeASkeleton(buildCharacter(kind, { family, variant }).rig, kind, clipsFor(kind, family));
+  it.each(FIGHTERS)('%s plays each of its animations dressed, feet where a skeleton’s go', (_name, family, kind, variant, named) => {
+    playsLikeASkeleton(buildCharacter(kind, { family, variant, named }).rig, kind, clipsFor(kind, family, named));
   });
 });
 

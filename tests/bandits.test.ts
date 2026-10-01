@@ -5,6 +5,8 @@ import { createEnemy } from '../src/enemies/kinds';
 import { AttackTokens } from '../src/enemies/tokens';
 import { BANDIT_BUILDS } from '../src/models/bandits';
 import { BAILIFF_BUILDS } from '../src/models/bailiffs';
+import { RAIDER_BUILDS } from '../src/models/raiders';
+import { LANTERN_BUILDS, UNDERGATE_BUILDS } from '../src/models/smugglers';
 import { type EnemyKind, FAMILIES, type Family } from '../src/models/characters';
 import { BUILDS } from '../src/models/human';
 import type { Rig } from '../src/models/rig';
@@ -40,7 +42,13 @@ function far(): EnemyContext {
 const hipsY = (e: ReturnType<typeof createEnemy>) => e.rig.bones.hips.getWorldPosition(new Vector3()).y;
 
 /** The build each family of the living makes each of its fighters in. */
-const BUILT: Partial<Record<Family, Partial<Record<EnemyKind, keyof typeof BUILDS>>>> = { bandit: BANDIT_BUILDS, corvane: BAILIFF_BUILDS };
+const BUILT: Partial<Record<Family, Partial<Record<EnemyKind, keyof typeof BUILDS>>>> = {
+  bandit: BANDIT_BUILDS,
+  corvane: BAILIFF_BUILDS,
+  smuggler: LANTERN_BUILDS,
+  undergate: UNDERGATE_BUILDS,
+  raider: RAIDER_BUILDS,
+};
 
 /** Every fighter of every family of the living. */
 const LIVING: [Family, EnemyKind][] = (Object.keys(FAMILIES) as Family[])
