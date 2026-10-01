@@ -188,7 +188,7 @@ check((await zone()) === 'aldhaven', `on to Aldhaven (${await zone()})`);
 
 if (want('city-market')) {
   await standLooking(340, 352, 348, 340, 5);
-  await frame('aldhaven-market-pigeons', 7, -2.6, 1);
+  await frame('aldhaven-market-pigeons', 10, -2.6, 1);
   await shot('city-market-pigeons');
   const p = await flock('aldhaven-market-pigeons');
   check(p?.length === 10 && p.every((b) => b.doing === 'stand' || b.doing === 'walk'), `the market's pigeons feeding: ${p?.map((b) => b.doing).join(',')}`);

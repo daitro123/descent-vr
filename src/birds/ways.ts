@@ -786,7 +786,7 @@ class Swim extends Life {
     const flier = (b: Bird) => b.look !== 'swan';
     birds.forEach((b, i) => {
       const d = far(b, you);
-      const scared = (you.wading && d < shy) || d < shy * 0.45;
+      const scared = (d < shy && you.wading) || d < shy * 0.45;
       switch (this.state[i]) {
         case PEACE:
           if (scared && flier(b)) {

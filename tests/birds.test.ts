@@ -301,6 +301,18 @@ describe('the birds in the world', () => {
     expect(birds.root.children.length).toBe(0);
   });
 
+  it('asks the zone’s water (dear on the moor) only when a flock wants to know if you’re wading', () => {
+    let asked = 0;
+    const near: Surroundings = { ...FLAT, waterAt: (x, z) => (asked++, FLAT.waterAt(x, z)) };
+    const birds = new Birds(() => {}, material);
+    birds.add(plans(3), near);
+    const you = { x: 60, y: 1.7, z: 30 } as never as import('three').Vector3;
+    birds.fill(you);
+    asked = 0;
+    for (let i = 0; i < 20; i++) birds.update(DT, you);
+    expect(asked).toBe(0);
+  });
+
   it('builds every flock round you at once as you load in', () => {
     const birds = new Birds(() => {}, material);
     birds.add(plans(4), FLAT);

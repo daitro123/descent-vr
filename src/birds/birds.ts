@@ -114,10 +114,39 @@ export class Flock {
   }
 }
 
+/**
+ * You, as one flock sees you this frame. Whether you're wading is asked of
+ * the zone's water only when a flock wants it (ducks), and once a frame: a
+ * zone's `waterAt` can be dear (Brackenmoor's walks the beck).
+ */
+class Seen implements You {
+  x = 0;
+  z = 0;
+  private wet: boolean | null = null;
+
+  constructor(private readonly near: Surroundings) {}
+
+  at(x: number, z: number): this {
+    this.x = x;
+    this.z = z;
+    this.wet = null;
+    return this;
+  }
+
+  get wading(): boolean {
+    if (this.wet === null) {
+      const water = this.near.waterAt(this.x, this.z);
+      this.wet = !Number.isNaN(water) && water > this.near.heightAt(this.x, this.z) + 0.05;
+    }
+    return this.wet;
+  }
+}
+
 /** One flock placed, built or not. */
 interface Slot {
   readonly plan: FlockPlan;
   readonly near: Surroundings;
+  readonly you: Seen;
   flock: Flock | null;
   /** How far you are from where it keeps (its reach taken off), and from it for building: a built one counts `hysteresis` nearer. */
   far: number;
@@ -129,7 +158,6 @@ export class Birds {
   readonly root = new Group();
   private readonly slots: Slot[] = [];
   private readonly order: Slot[] = [];
-  private readonly you = { x: 0, z: 0, wading: false };
 
   constructor(
     private readonly hear: Hear = () => {},
@@ -140,7 +168,7 @@ export class Birds {
 
   /** Take in a zone's flocks (as it's loaded), each living in `near`: none is built until you come near. */
   add(flocks: readonly FlockPlan[], near: Surroundings): void {
-    for (const plan of flocks) this.slots.push({ plan, near, flock: null, far: Infinity, rank: Infinity });
+    for (const plan of flocks) this.slots.push({ plan, near, you: new Seen(near), flock: null, far: Infinity, rank: Infinity });
   }
 
   /** Every flock placed, built or not. */
@@ -175,14 +203,7 @@ export class Birds {
   update(dt: number, you: Vector3, near: number = CONFIG.birds.near): void {
     this.reckon(you);
     this.rebuild(CONFIG.birds.perFrame, near);
-    for (const s of this.slots) {
-      if (!s.flock) continue;
-      const water = s.near.waterAt(you.x, you.z);
-      this.you.x = you.x;
-      this.you.z = you.z;
-      this.you.wading = !Number.isNaN(water) && water > s.near.heightAt(you.x, you.z) + 0.05;
-      s.flock.update(dt, this.you);
-    }
+    for (const s of this.slots) s.flock?.update(dt, s.you.at(you.x, you.z));
   }
 
   private reckon(you: Vector3): void {
