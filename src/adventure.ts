@@ -1,5 +1,6 @@
 import { Euler, Object3D, type PerspectiveCamera, Quaternion, type Scene, Vector3, type WebGLRenderer } from 'three';
 import { type Ability, type AdventureEvent, AdventureState, type Effect } from './adventureState';
+import { Birds, surroundingsOf } from './birds/birds';
 import { type Shape, unlockLine } from './classes';
 import { CHAINS } from './quests';
 import { Combat } from './combat/combat';
@@ -150,6 +151,8 @@ export class Adventure {
   readonly people: Population;
   /** What they hang from: hidden with the outdoors. */
   private readonly peopleRoot: Object3D;
+  /** Every zone's birds, flock by flock, built as you come near them (their root hidden with the outdoors). */
+  readonly birds = new Birds((call, x, y, z) => sfx[call](new Vector3(x, y, z)));
   /** The alchemy bench in the house by the well; null in a zone without the house. The herbalist at its end is a villager. */
   readonly bench: AlchemyBench | null = null;
   /** The wind, the birds in the trees and each place's sound where it is. */
@@ -446,8 +449,9 @@ export class Adventure {
     const people = worldPopulation(this.world);
     this.people = people.population;
     this.peopleRoot = people.root;
-    scene.add(this.peopleRoot);
+    scene.add(this.peopleRoot, this.birds.root);
     this.world.stageWith(null, this.peopleRoot);
+    this.world.stageWith(null, this.birds.root);
     this.populate(zone, false);
     for (const n of neighbours) this.populate(n, true);
     // The smith's hammer rings on the anvil with each blow of their work.
@@ -501,6 +505,7 @@ export class Adventure {
     // Whoever lives round where you stand, there before the first frame (and uploaded with the chunks).
     this.camps.fill(_a.set(x, 0, z));
     this.people.fill(_a, this.peopleNear);
+    this.birds.fill(_a, this.birdsNear);
     // Oakvale round where you stand, all at once behind the page, and compiled now rather than when
     // it first comes into view (the World does that with the first fill). A save made over the pass
     // loads there, in Brackenmoor's air, with Oakvale streaming in behind you.
@@ -523,6 +528,11 @@ export class Adventure {
     return Math.min(CONFIG.population.near, this.world.outdoorsSeen);
   }
 
+  /** How near flocks are built: CONFIG.birds.near, or only as far as you can see through the fog. */
+  private get birdsNear(): number {
+    return Math.min(CONFIG.birds.near, this.world.outdoorsSeen);
+  }
+
   /**
    * Take in a zone's villagers and camps as it's loaded. The starting zone's
    * camps stand from the start, as they always have (they're made with the
@@ -530,6 +540,7 @@ export class Adventure {
    */
   private populate(zone: Zone, lazy: boolean): void {
     this.people.add(zone.people);
+    this.birds.add(zone.birds, surroundingsOf(zone));
     if (lazy) this.camps.add(zone.camps, this.world, true);
   }
 
@@ -541,7 +552,7 @@ export class Adventure {
     this.world.update(dt, player.camera);
     // With a door shut behind you, what stands outside isn't drawn either.
     const outdoors = this.world.outdoorsShown;
-    this.pickups.root.visible = this.hale.root.visible = this.villagers.root.visible = this.peopleRoot.visible = this.chests.outdoors.visible = outdoors;
+    this.pickups.root.visible = this.hale.root.visible = this.villagers.root.visible = this.peopleRoot.visible = this.birds.root.visible = this.chests.outdoors.visible = outdoors;
     for (const { mesh, interior } of this.gathering.meshes) if (interior === null) mesh.visible = outdoors;
     if (this.anvil) this.anvil.frame.visible = outdoors;
     this.showCamps(outdoors);
@@ -610,6 +621,7 @@ export class Adventure {
     this.updateBag(dt);
     this.villagers.update(dt, you.head, this.state);
     this.people.update(dt, you.head, this.peopleNear);
+    this.birds.update(dt, you.head, this.birdsNear);
     // Talking to the herbalist holds the bench off: it takes your hands once the talk ends.
     this.bench?.update(dt, this.fighting, this.herbalistBoard.isOpen);
     this.pickUp();
@@ -1375,6 +1387,7 @@ export class Adventure {
     // Behind the fade, who lives round where you wake and the chunks round it, at once.
     this.camps.fill(_a.set(x, 0, z));
     this.people.fill(_a, this.peopleNear);
+    this.birds.fill(_a, this.birdsNear);
     this.world.fill(x, z);
     this.lastHp = this.player.hp;
     this.combat.clear();
