@@ -1,4 +1,5 @@
 import { CONFIG } from '../config';
+import { CHOP, DRAW, IDLE, SLASH_R } from '../enemies/poses';
 import { blendPoses, type Pose } from '../models/rig';
 import type { PersonId } from '../models/people';
 
@@ -308,6 +309,164 @@ function herbalistLoop(): WorkLoop {
   ]);
 }
 
+// ------------------------------------------------------------------ the robed and named figures
+
+// Each is played over the figure's own stand (models/stands.ts), so whatever
+// they hold stays held: a book, a ledger, a staff, a coin box, a sword.
+
+/** Reading a book held before the chest: a page turned now and then, and a look up over it at the street. */
+function readLoop(stand: Pose): WorkLoop {
+  const R = CONFIG.villagers.figures.read;
+  const read = still(stand);
+  // The right hand sweeps across the open pages and back.
+  const across = still(plus(stand, { upperArmR: [-0.12, 0.3, 0.06], forearmR: [-0.2, 0.25, 0], handR: [-0.3, 0, 0], head: [0.05, 0.08, 0] }));
+  const page: Segment = { time: R.page, at: (u) => mix(read, across, Math.sin(Math.PI * u)) };
+  // Over the top of the book (and the spectacles, if they wear them), along the street to their left.
+  const up = still(plus(stand, { head: [-0.5, 0.35, 0], spine: [-0.04, 0.08, 0] }));
+  return loop([hold(R.read, read), page, hold(R.read * 0.7, read), move(R.lift, read, up), hold(R.look, up), move(R.lift, up, read), hold(R.read * 0.5, read), page]);
+}
+
+/** Writing in a ledger held open on the left palm: bursts of strokes, the pen down a line, and a look up to smile at a passer-by. */
+function ledgerLoop(stand: Pose): WorkLoop {
+  const W = CONFIG.villagers.figures.ledger;
+  const pen = still(stand);
+  // The quill scratches back and forth along a line, moving along it as it goes.
+  const writing = (drop: number): Segment => ({
+    time: W.write,
+    at: (u) => {
+      const a = 2 * Math.PI * W.strokes * W.write * u;
+      const k = ease(clamp01(Math.min(u, 1 - u) / 0.08));
+      return still(plus(stand, { forearmR: [0.05 * k * Math.sin(a) + drop, -0.12 * u, 0], handR: [0.12 * k * Math.sin(a * 2), 0, 0] }));
+    },
+  });
+  const nextLine = (from: number, to: number): Segment => ({ time: W.line, at: (u) => still(plus(stand, { forearmR: [from + (to - from) * ease(u), -0.12 * (1 - ease(u)), 0] })) });
+  const up = still(plus(stand, { head: [-0.55, -0.25, 0], spine: [-0.05, -0.06, 0] }));
+  return loop([writing(0), nextLine(0, 0.06), writing(0.06), { time: W.line, at: (u) => still(plus(stand, { forearmR: [0.06 * (1 - ease(u)), -0.12 * (1 - ease(u)), 0] })) }, move(W.lift, pen, up), hold(W.look, up), move(W.lift, up, pen)]);
+}
+
+/** Counting coins out of a box on the left palm: each lifted out, looked at and dropped back, then a look up. */
+function coinsLoop(stand: Pose): WorkLoop {
+  const C = CONFIG.villagers.figures.coins;
+  const over = still(stand);
+  const lifted = still(plus(stand, { upperArmR: [-0.12, 0, -0.04], forearmR: [-0.3, 0, 0], handR: [-0.2, 0, 0], head: [-0.1, 0, 0] }));
+  const one: Segment[] = [move(C.lift, over, lifted), { time: C.drop, at: (u) => mix(lifted, over, u * u) }];
+  const counted = Array.from({ length: C.count }, () => one).flat();
+  const up = still(plus(stand, { head: [-0.5, 0.2, 0] }));
+  return loop([...counted, hold(C.rest, over), move(C.lift, over, up), hold(C.look, up), move(C.lift, up, over), hold(C.rest, over)]);
+}
+
+/**
+ * A hedge priest over the graves: the right hand into the salt bag at the
+ * hip, then a throw out ahead, fanning to the right, the left, ahead; then
+ * the hand on the breast and the head bowed. The spade in the left fist
+ * stays planted.
+ */
+function saltLoop(stand: Pose): WorkLoop {
+  const S = CONFIG.villagers.figures.salt;
+  const s = still(stand);
+  const dip = still(plus(stand, { spine: [0.12, -0.12, 0], head: [0.25, -0.2, 0], upperArmR: [0.1, 0, 0.05], forearmR: [-0.55, 0, 0], handR: [0.3, 0, 0] }));
+  const thrown = (y: number) =>
+    still(plus(stand, { spine: [0.05, y * 0.6, 0], head: [0.1, y * 0.4, 0], upperArmR: [-1.1, y, -0.15], forearmR: [-0.15, 0, 0], handR: [-0.4, 0, 0] }));
+  const throws = [-0.5, 0.35, -0.05].slice(0, S.throws).flatMap((y) => [move(S.dip, s, dip), { time: S.throw, at: (u: number) => mix(dip, thrown(y), ease(u)) }, move(S.throw, thrown(y), s)]);
+  const prayer = still(plus(stand, { spine: [0.08, 0, 0], head: [0.45, 0, 0], upperArmR: [-0.45, 0.55, -0.05], forearmR: [-1.7, 0.4, 0] }));
+  return loop([...throws, move(S.dip, s, prayer), hold(S.pray, prayer), move(S.dip, prayer, s), hold(S.rest, s)]);
+}
+
+/** Hands folded: the head bowed in prayer, raised, a while still, then a glance down at the floor at their feet. */
+function prayLoop(stand: Pose): WorkLoop {
+  const P = CONFIG.villagers.figures.pray;
+  const s = still(stand);
+  const bowed = still(plus(stand, { spine: [0.06, 0, 0], head: [0.5, 0, 0] }));
+  const down = still(plus(stand, { spine: [0.04, 0.1, 0], head: [0.55, 0.3, 0] }));
+  return loop([move(P.bow, s, bowed), hold(P.prayer, bowed), move(P.lift, bowed, s), hold(P.rest, s), move(P.lift, s, down), hold(P.glance, down), move(P.lift, down, s), hold(P.rest, s)]);
+}
+
+/**
+ * The almoner at a trestle before her: the loaf in her right hand laid on it,
+ * the left hand setting it straight; then she turns to her left and stoops to
+ * the basket there for the next.
+ */
+function almsLoop(stand: Pose): WorkLoop {
+  const A = CONFIG.villagers.figures.alms;
+  const s = still(stand);
+  const lay = still(plus(stand, { spine: [0.32, 0, 0], head: [0.3, 0, 0], upperArmR: [-0.75, 0.15, 0.05], forearmR: [-0.35, 0, 0], upperArmL: [-0.65, -0.2, 0], forearmL: [-0.4, 0, 0] }));
+  const set = still(plus(stand, { spine: [0.36, 0, 0], head: [0.32, 0, 0], upperArmR: [-0.8, 0.15, 0.05], forearmR: [-0.2, 0, 0], upperArmL: [-0.8, -0.25, 0], forearmL: [-0.25, 0, 0] }));
+  const basket = still(plus(stand, { spine: [0.45, 0.55, 0], head: [0.3, 0.2, 0], upperArmR: [-0.6, 0.3, 0], forearmR: [-0.2, 0, 0], thighR: [-0.15, 0, 0], shinR: [0.25, 0, 0] }), 0, [0.02, -0.05, 0]);
+  return loop([move(A.reach, s, lay), move(A.lay, lay, set), hold(A.lay, set), move(A.reach, set, s), hold(A.rest, s), move(A.turn, s, basket), hold(A.take, basket), move(A.turn, basket, s), hold(A.rest, s)]);
+}
+
+/** The right arm lifted from wherever it rests to an open hand, palm up, as they talk. */
+const SPEAKING: Pose = { upperArmR: [-0.45, 0.3, -0.2], forearmR: [-1.05, 0.2, 0], handR: [-0.2, 0, -0.9] };
+
+/** Talking to someone beside them: an open hand lifted and moved as they speak, a nod, the hand back. */
+function converseLoop(stand: Pose): WorkLoop {
+  const C = CONFIG.villagers.figures.converse;
+  const s = still(stand);
+  const open = { ...stand, ...SPEAKING, head: [0, 0.12, 0.04] as const };
+  const speak: Segment = { time: C.speak, at: (u) => still(plus(open, { forearmR: [0.15 * Math.sin(u * Math.PI * 3), 0, 0], handR: [0, 0.2 * Math.sin(u * Math.PI * 2), 0], head: [0.05 * Math.sin(u * Math.PI * 4), 0, 0] })) };
+  const nod = still(plus(stand, { head: [0.25, 0.1, 0] }));
+  return loop([hold(C.rest, s), move(C.raise, s, still(open)), speak, move(C.lower, still(open), s), move(C.nod * 0.5, s, nod), move(C.nod * 0.5, nod, s), hold(C.rest * 0.6, s)]);
+}
+
+/** Pointing out to their right at the ships with the right arm, then a look down to their left at the ledger beside them. */
+function pointLoop(stand: Pose): WorkLoop {
+  const P = CONFIG.villagers.figures.point;
+  const s = still(stand);
+  const pointing = still({ ...plus(stand, { spine: [-0.03, -0.18, 0], head: [-0.08, -0.4, 0] }), upperArmR: [-1.45, -0.45, -0.2], forearmR: [-0.15, 0, 0], handR: [0, 0, 0] });
+  const check = still(plus(stand, { spine: [0.1, 0.2, 0], head: [0.45, 0.45, 0] }));
+  return loop([hold(P.rest, s), move(P.raise, s, pointing), hold(P.point, pointing), move(P.lower, pointing, s), move(P.turn, s, check), hold(P.check, check), move(P.turn, check, s)]);
+}
+
+/**
+ * A drill master's slow form with a drawn sword: up into the grunt's ready
+ * stance, a chop and a forehand slash with the grunt's own wind-ups and
+ * strikes, slowed and held at their ends so recruits can see them, then the
+ * sword down while they watch.
+ */
+function formLoop(stand: Pose): WorkLoop {
+  const F = CONFIG.villagers.figures.form;
+  const rest = still(stand);
+  const ready = still(IDLE.grunt);
+  const cut = (a: { windup: Pose; strike: Pose }): Segment[] => [
+    move(F.windup, ready, still(a.windup)),
+    hold(F.hold * 0.5, still(a.windup)),
+    move(F.strike, still(a.windup), still(a.strike)),
+    hold(F.hold, still(a.strike)),
+    move(F.recover, still(a.strike), ready),
+  ];
+  return loop([move(F.ready, rest, ready), ...cut(CHOP), ...cut(SLASH_R), move(F.ready, ready, rest), hold(F.rest, rest)]);
+}
+
+/** A ranger's draw, aim and loose, with the archer's own poses: drawn to the cheek, held, loosed, and back to a long watch down the range. */
+function looseLoop(stand: Pose): WorkLoop {
+  const L = CONFIG.villagers.figures.loose;
+  const rest = still(stand);
+  const drawn = still(DRAW.windup);
+  const loosed = still(DRAW.strike);
+  const watch = still(plus(stand, { head: [-0.05, 0.4, 0], spine: [0, 0.1, 0] }));
+  return loop([
+    move(L.draw, rest, drawn),
+    hold(L.aim, drawn),
+    { time: L.release, at: (u) => mix(drawn, loosed, u) },
+    hold(L.follow, loosed),
+    move(L.back, loosed, rest),
+    hold(L.rest * 0.4, rest),
+    move(L.back, rest, watch),
+    hold(L.rest * 0.6, watch),
+    move(L.back, watch, rest),
+  ]);
+}
+
+/** Fletching an arrow held level before the chest: the feathers smoothed with the left hand, then the shaft raised to the eye, sighted along and turned. */
+function fletchLoop(stand: Pose): WorkLoop {
+  const F = CONFIG.villagers.figures.fletch;
+  const s = still(stand);
+  const stroke: Segment = { time: F.stroke, at: (u) => still(plus(stand, { upperArmL: [0.15 * Math.sin(Math.PI * u), -0.1 * Math.sin(Math.PI * u), 0], forearmL: [0.25 * Math.sin(Math.PI * u), 0, 0] })) };
+  const raised = plus(stand, { upperArmR: [-0.35, 0.15, 0], forearmR: [-0.25, 0, 0], head: [-0.3, 0.05, 0], upperArmL: [0.25, 0, 0], forearmL: [0.6, 0, 0] });
+  const sight: Segment = { time: F.sight, at: (u) => still(plus(raised, { handR: [0, 0.8 * Math.sin(2 * Math.PI * u), 0] })) };
+  return loop([...Array.from({ length: F.strokes }, () => stroke), hold(F.rest, s), move(F.raise, s, still(raised)), sight, move(F.lower, still(raised), s), hold(F.rest, s)]);
+}
+
 // ------------------------------------------------------------------ standing about
 
 /**
@@ -349,6 +508,17 @@ function standLoop(stand: Pose): WorkLoop {
  */
 export const WORKS = {
   stand: (stand: Pose) => standLoop(stand),
+  read: (stand: Pose) => readLoop(stand),
+  ledger: (stand: Pose) => ledgerLoop(stand),
+  coins: (stand: Pose) => coinsLoop(stand),
+  salt: (stand: Pose) => saltLoop(stand),
+  pray: (stand: Pose) => prayLoop(stand),
+  alms: (stand: Pose) => almsLoop(stand),
+  converse: (stand: Pose) => converseLoop(stand),
+  point: (stand: Pose) => pointLoop(stand),
+  form: (stand: Pose) => formLoop(stand),
+  loose: (stand: Pose) => looseLoop(stand),
+  fletch: (stand: Pose) => fletchLoop(stand),
   smith: (_stand: Pose, turn: number) => smithLoop(turn),
   innkeeper: () => innkeeperLoop(),
   farmer: () => farmerLoop(),

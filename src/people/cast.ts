@@ -1,8 +1,11 @@
 import type { BufferGeometry, Material } from 'three';
+import { CLERGY } from '../models/clergy';
 import { COMMONERS } from '../models/commoners';
+import { GENTRY } from '../models/gentry';
 import { BUILDS } from '../models/human';
 import { PEOPLE, type Person } from '../models/people';
 import { Rig } from '../models/rig';
+import { TRAINERS } from '../models/trainers';
 
 /**
  * Every friendly character a zone can place as a villager (maps/types.ts
@@ -16,6 +19,9 @@ export const CAST = {
   smith: PEOPLE.smith,
   farmer: PEOPLE.farmer,
   herbalist: PEOPLE.herbalist,
+  ...CLERGY,
+  ...GENTRY,
+  ...TRAINERS,
   ...COMMONERS,
 } satisfies Record<string, Person>;
 
