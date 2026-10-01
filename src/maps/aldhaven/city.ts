@@ -64,6 +64,9 @@ export function buildAldhaven(given?: AldhavenPlan): Zone {
     mine: null,
     villagers: [],
     people: [],
+    // Within 100 m the cathedral front and the Aldbridge break the frame budget; within 50 m every
+    // spot fits, and the busiest circle has 45 people (aldhaven-inhabitants.md).
+    crowd: { near: 50, most: 45 },
     respawnPoints: [],
     pickups: [],
     chests: [],

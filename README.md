@@ -215,6 +215,7 @@ src/
     indexedDb.ts     the browser's adapter: IndexedDB, one strict transaction per write
     controller.ts    when to write: what's earned, zone changes, every 30 s, leaving; one write in flight (unit tested)
   quests.ts          the quest chain as data: objectives, rewards and what Hale says
+  story.ts           who's where as the quests go on: people and camps there from or until a quest's moment
   game.ts            the arena (?arena): owns its systems; wave director, spawning, summons, death/victory
   showcase.ts        the arena's title-screen bestiary (?showcase)
   prototype/         throwaway prototypes kept for trying on the headset, each behind its URL flag
@@ -265,7 +266,7 @@ src/
     throne.ts        the Warden on its throne at the mine's foot: seated, fighting, resetting, beaten (unit tested)
   people/            Marshal Hale (turns to you, waves, the "!" or "?"), the villagers at work and their barks;
                      cast.ts is every friendly character a zone can place, population.ts builds each zone's villagers
-                     as you come near them and drops them as you leave (unit tested)
+                     as you come near them and drops them as you leave, fallen.ts lays the dead still (unit tested)
   world/             the World: one light rig, sky and radial fog, the streamer and its chunk worker, Ground
                      for every zone, the seam's crossing and blended air, interiors and the mine with their
                      switch, the ambience's mix; also the arena's crypt hall, glows, blob shadows, orbs, smoke

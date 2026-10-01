@@ -363,9 +363,9 @@ export const CONFIG = {
   // same step, so a fight against your own level plays like the arena at any
   // level. The arena is level 1 with every base ability of its class.
   levels: {
-    xp: 100, // level L needs this × (L − 1) more XP than level L − 1: 100, 300, 600 and 1,000 in all to 2, 3, 4 and 5; 19,000 to 20
-    cap: 5, // the top level the content has quests and camps for; XP past it is dropped
-    most: 20, // the highest a test may raise the cap to (`&cap=`): the curve is sketched to 20
+    xp: 100, // level L needs this × (L − 1) more XP than level L − 1: 100, 300, 600 and 1,000 in all to 2, 3, 4 and 5; 19,000 to 20, 78,000 to 40
+    cap: 5, // the top level the content has quests and camps for; XP past it is dropped. Raised as each zone's quests come (Brackenmoor's are 5 to 12)
+    most: 40, // the highest a test may raise the cap to (`&cap=`): the world's (zones/world-map.md in the project's files; the Hollow North is 32 to 40)
     grey: 5, // an enemy this many levels or more below you pays no XP
     step: 0.2, // an enemy's health and damage, times 1 + this per level above 1 (your attributes make the same step)
     killXp: 10, // a kill pays this per enemy level…
@@ -758,7 +758,7 @@ export const CONFIG = {
     // What a chest holds (.scratch/inventory/issues/13-oakvales-chests.md): `coins` × its level,
     // and one piece of gear of your class at its level, of a rarity by `gear`'s chances.
     chest: { coins: 5, gear: { green: 0.8, blue: 0.2 } satisfies Partial<Record<Rarity, number>> },
-    levels: 5, // loot's items come at item levels 1 to this; an enemy above it drops this level's
+    levels: 40, // loot's items come at item levels 1 to this; an enemy above it drops this level's
     lifetime: 300, // s a drop lies, through your death too
     most: 12, // drops lying at once: past this the oldest goes
     ring: 0.4, // m from the pouch its items lie, round it

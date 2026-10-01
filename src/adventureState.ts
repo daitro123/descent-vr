@@ -22,7 +22,7 @@ import { attributesAt, type ItemId, itemOf, type Worn, WORN_NOTHING } from './it
 import { chestSeed, type Loot, rollChest, rollLoot, seeded } from './loot';
 import type { CampId } from './maps/types';
 import type { Family } from './models/characters';
-import { BARKS, type Chain, CHAINS, type GiverId, type Item, type Objective, type Place, type Quest, QUEST_ITEM, type QuestId, type Sword, SWORDS, type VillagerId } from './quests';
+import { BARKS, type Chain, CHAINS, type GiverId, type Item, type Objective, type Place, type Quest, QUEST_ITEM, type QuestId, type QuestMoment, type Sword, SWORDS, type VillagerId } from './quests';
 import { fits, type Knobs, knobsOf, pointsAt, refusal, type Spent, spentAll, spentIn, type Talent, TALENT, talentAbilities, type TalentRefusal, tierOpen, type Tree } from './talents';
 
 // The rules of progress in the Adventure, with no three.js in it: events in,
@@ -649,15 +649,17 @@ export class AdventureState {
     return { target: h.quest.objectives[line].place ?? h.quest.place, line };
   }
 
+  /** Has `moment` come: has its quest reached its stage, or gone past it? (Who's where in the world asks: story.ts.) */
+  reached(moment: QuestMoment): boolean {
+    const h = this.find(moment.quest);
+    return h !== undefined && STAGES.indexOf(h.stage) >= STAGES.indexOf(moment.stage);
+  }
+
   /** The line `villager` barks as you pass, for where the chain stands. */
   bark(villager: VillagerId): string {
-    const reached = (quest: QuestId, stage: Stage) => {
-      const h = this.find(quest);
-      return h !== undefined && STAGES.indexOf(h.stage) >= STAGES.indexOf(stage);
-    };
     let line = '';
     for (const b of BARKS[villager]) {
-      if ((!b.from || reached(b.from.quest, b.from.stage)) && (!b.learned || this.professions.has(b.learned))) line = b.line;
+      if ((!b.from || this.reached(b.from)) && (!b.learned || this.professions.has(b.learned))) line = b.line;
     }
     return line;
   }
