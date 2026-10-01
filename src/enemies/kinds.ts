@@ -367,17 +367,26 @@ const easeIn = (t: number) => t * t;
 /**
  * A wolf (CONFIG.wolf), on the four-legged body (enemies/wolf.ts): a grunt's
  * turn-taking, but each of its attacks starts from its own distance, the
- * spring from a few metres out (`from` to `reach`) and the bite up close, and
- * in between it closes in. The spring carries it at you (its `surge`, in
- * Enemy) and up off the ground (`leap`, here). Struck dead, it rolls onto its side.
+ * spring from a few metres out (`from` to `reach`) and the bite up close. It
+ * makes up its mind which as it comes in, and closes in till it's there, so a
+ * wolf meaning to bite runs on through its spring's distance. The spring
+ * carries it at you (its `surge`, in Enemy) and up off the ground (`leap`,
+ * here). Struck dead, it rolls onto its side.
  */
 export class Wolf extends MeleeEnemy {
   /** m it's up off the ground, mid-spring. */
   private lift = 0;
+  /** The attack it means to make this turn, chosen as it comes in. */
+  private meant: AttackConfig | null = null;
 
   protected chooseAttack(dist: number): AttackConfig | null {
-    const fits = this.def.attacks.filter((a) => dist >= (a.from ?? 0) && dist <= (a.reach ?? this.def.attackRange));
-    return fits.length ? this.pick(fits) : null;
+    const fits = (a: AttackConfig) => dist >= (a.from ?? 0) && dist <= (a.reach ?? this.def.attackRange);
+    const meant = (this.meant ??= this.pick(this.def.attacks));
+    // Already too close for a spring: whatever it can do from here.
+    const now = fits(meant) ? meant : dist < (meant.from ?? 0) ? this.def.attacks.find(fits) : undefined;
+    if (!now) return null;
+    this.meant = null;
+    return now;
   }
 
   protected barHeight(): number {

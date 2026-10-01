@@ -157,12 +157,28 @@ describe('a wolf', () => {
     expect(run(lunge, player(dist, 1.6, { y: 0.95, tilt: 0.2 }), dist).contacts[0]).toBe('shield');
   });
 
-  it('springs from its run-up, bites up close, and closes in between', () => {
-    const w = testWolf();
-    expect(w.choose(0.8)?.pose).toBe('bite');
-    expect(w.choose((lunge.from! + lunge.reach!) / 2)?.pose).toBe('lunge');
-    expect(w.choose((W.attackRange + lunge.from!) / 2)).toBeNull();
-    expect(w.choose(lunge.reach! + 0.5)).toBeNull();
+  it('means to spring or to bite as it comes in, closing in till it can', () => {
+    const mid = (lunge.from! + lunge.reach!) / 2;
+    const seen = new Set<string>();
+    // Each wolf's mind is its own (two bites to a spring, by their weights): enough wolves to see both.
+    for (let n = 0; n < 60 && seen.size < 2; n++) {
+      const w = testWolf();
+      // Out of reach of either: it closes in, its mind made up.
+      expect(w.choose(lunge.reach! + 0.5)).toBeNull();
+      const there = w.choose(mid);
+      if (there) {
+        expect(there.pose).toBe('lunge');
+        seen.add('lunge');
+      } else {
+        // Meaning to bite, it runs on through the spring's distance; between the two it closes in.
+        expect(w.choose((W.attackRange + lunge.from!) / 2)).toBeNull();
+        expect(w.choose(0.8)?.pose).toBe('bite');
+        seen.add('bite');
+      }
+    }
+    expect([...seen].sort()).toEqual(['bite', 'lunge']);
+    // Already closer than a spring needs: it bites, whatever it meant.
+    for (let n = 0; n < 4; n++) expect(testWolf().choose(0.8)?.pose).toBe('bite');
   });
 
   it('dies rolling onto its side', () => {
