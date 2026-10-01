@@ -238,8 +238,8 @@ function workClip(name: string, work: WorkLoop): Clip {
  * One of the cast a zone places (people/cast.ts): standing at ease, standing
  * about (the work of anyone without one), strolling, as a villager walks
  * their route at their build's pace (people/villagers.ts), and the works
- * they're made for (a guard's sentry, a recruit's drill), turning on the spot
- * aside.
+ * they're made for (a guard's sentry, a recruit's drill, a book read, a ledger
+ * written in), turning on the spot aside.
  */
 export function castClips(id: CastId): Clip[] {
   const person: Person = CAST[id];
