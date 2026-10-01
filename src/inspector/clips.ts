@@ -159,9 +159,9 @@ export function clipsFor(kind: HumanoidKind, family: Family = 'undead', named?: 
   }
   clips.push(holdClip(kind, 'stagger', STAGGER, def.staggerTime * 0.6));
   if (kind === 'warden') clips.push(holdClip(kind, 'kneel', KNEEL, CONFIG.warden.kneelTime, KNEEL_DROP * p.hipY));
-  // Only the dead claw up out of the ground, or come up out of the water they lie in; the bog's beasts heave up out of the mud.
+  // Only the dead claw up out of the ground, or come up out of the water they lie in (the bog's dead too); the bog's beasts heave up out of the mud.
   const body = FAMILIES[family].body;
-  if (body === 'skeleton') clips.push(holdClip(kind, 'rise', RISE, 0.8), holdClip(kind, 'surface', SURFACE, 0.8));
+  if (body === 'skeleton' || body === 'corpse') clips.push(holdClip(kind, 'rise', RISE, 0.8), holdClip(kind, 'surface', SURFACE, 0.8));
   if (body === 'mud') clips.push(holdClip(kind, 'mound', MOUND, 1.2, MOUND_DROP * p.hipY));
   return clips;
 }

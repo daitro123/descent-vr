@@ -145,6 +145,20 @@ export const JUNK = {
     ['eel-hook', 'Rusty Eel Hook', 'eel-hook'],
     ['reed-charm', 'Plaited Reed Charm', 'reed-charm'],
   ],
+  moorBandit: [
+    ['matted-fleece', 'Matted Fleece', 'fleece'],
+    ['tarnished-earring', 'Tarnished Earring', 'trinket'],
+    ['grave-bead', 'Grave Bead', 'grave-bead'],
+    ['broken-pick-tip', 'Broken Pick Tip', 'pick-tip'],
+  ],
+  lampCrew: [
+    ['lamp-wick', 'Spent Lamp Wick', 'cloth'],
+    ['glyph-chip', 'Glyph-cut Chip', 'glyph-chip'],
+  ],
+  bogDead: [
+    ['frayed-rope', 'Frayed Rope', 'rope'],
+    ['blackened-torc', 'Blackened Torc', 'torc'],
+  ],
   drowned: [
     ['corroded-deep-coin', 'Corroded Deepking Coin', 'deep-coin'],
     ['silted-knucklebone', 'Silted Knucklebone', 'silted-bone'],

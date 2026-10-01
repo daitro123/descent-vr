@@ -77,10 +77,11 @@ const MUD = 0x3a3022;
 /** What flies from the living that aren't people: a leech's the blood it drank, darkened; an adder's. */
 const CREATURE_BLOOD: Partial<Record<Enemy['family'], number>> = { leech: 0x3a0e0c, snake: 0x6a1410 };
 
-/** The blood that flies from `enemy`, or null for the dead, who are bones (bar the brute's dark ichor, the default). */
+/** The blood that flies from `enemy`, or null for the dead, who are bones (bar the brute's and the bog's corpses' dark ichor, the default). */
 function bloodOf(enemy: Enemy): number | undefined | null {
   if (enemy.body === 'human') return HUMAN_BLOOD;
   if (enemy.body === 'mud') return MUD;
+  if (enemy.body === 'corpse') return undefined;
   if (enemy.body === 'crawler') return CREATURE_BLOOD[enemy.family];
   return enemy.kind === 'brute' ? undefined : null;
 }
