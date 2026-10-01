@@ -683,6 +683,12 @@ export class World implements Ground {
     return this.mineFloor(x, z) ?? this.zoneAt(x, z)?.heightAt(x, z) ?? 0;
   }
 
+  waterAt(x: number, z: number): number | null {
+    for (const { interior } of this.interiors) if (interior.groundAt(x, z) !== null) return null;
+    if (this.mineFloor(x, z) !== null) return null;
+    return this.zoneAt(x, z)?.waterAt?.(x, z) ?? null;
+  }
+
   /** The mine's floor at (x, z), once you've come in by its mouth and while it reaches there; else null. */
   private mineFloor(x: number, z: number): number | null {
     const u = this.underground;

@@ -2,7 +2,7 @@ import { Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
 import { attackClip, type MutablePose } from '../src/inspector/clips';
-import { buildCharacter, type EnemyKind, type Family } from '../src/models/characters';
+import { buildCharacter, type HumanoidKind as EnemyKind, type Family } from '../src/models/characters';
 import { buildLongsword } from '../src/models/gear';
 
 // Blades should land edge first. These play each melee swing with the game's

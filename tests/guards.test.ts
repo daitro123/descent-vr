@@ -2,7 +2,7 @@ import { Color, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { castClips, type MutablePose } from '../src/inspector/clips';
 import type { PersonPlan } from '../src/maps/types';
-import { buildCharacter, type EnemyKind, FAMILIES } from '../src/models/characters';
+import { buildCharacter, FAMILIES, type HumanoidKind } from '../src/models/characters';
 import { GUARDS, LIVERY } from '../src/models/guards';
 import { HUE } from '../src/models/human';
 import type { Person } from '../src/models/people';
@@ -158,7 +158,7 @@ function wears(rig: Rig, hex: number): boolean {
 
 describe('whose they are, by their colours', () => {
   /** Every fighter of House Corvane, each look. */
-  const BAILIFFS: [string, () => Rig][] = (Object.entries(FAMILIES.corvane.fights) as [EnemyKind, { label: string; looks: number }][]).flatMap(([kind, f]) =>
+  const BAILIFFS: [string, () => Rig][] = (Object.entries(FAMILIES.corvane.fights) as [HumanoidKind, { label: string; looks: number }][]).flatMap(([kind, f]) =>
     Array.from({ length: f.looks }, (_, variant): [string, () => Rig] => [`${f.label} ${variant}`, () => buildCharacter(kind, { family: 'corvane', variant }).rig]),
   );
 
