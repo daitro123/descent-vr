@@ -992,6 +992,22 @@ export const CONFIG = {
     walk: { speed: 1.1, pause: 4 }, // m/s strolling a route (each build has its own pace: human.ts `Gait`), s standing at each end
   },
 
+  // The birds every zone places by data, flock by flock (birds/birds.ts): each
+  // flock one mesh and one draw call, built as you come near it and dropped as
+  // you leave, like the villagers; how near you come before each kind takes
+  // fright, and what it does then, is birds/ways.ts.
+  birds: {
+    near: 120, // m from a flock's ground (its middle less its reach) that it's built and shown: gulls circle high and are seen from far…
+    hysteresis: 30, // m: …and dropped once you're this much farther
+    perFrame: 1, // flocks built a frame as you walk
+    // How near you come (m, on the ground plane) before a bird takes fright, by look or by family.
+    shy: { crow: 10, pigeon: 4, gull: 7, hen: 3, grouse: 6, duck: 8, swan: 5, goose: 4.5, heron: 12 } as Record<string, number>,
+    shallows: 0.6, // m of water at most a heron stands in
+    calm: 4, // s you've been gone (past twice its fright distance) before a startled bird comes back to where it was
+    away: 75, // s a covey or a heron keeps to where it fled before going home, once you're out of sight of both
+    call: { reach: 45, gap: 1.6 }, // m you hear a bird call from; s at least between one flock's calls (a flush's clatter excepted)
+  },
+
   // The animals a zone places (animals/herds.ts): built as you come near, as
   // its villagers are, and sharing a body per look. Sheep graze about their
   // home and scatter from you; dogs lie, trot about or follow; horses stand

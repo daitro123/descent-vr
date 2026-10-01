@@ -17,6 +17,7 @@ import {
   Vector3,
   type WebGLRenderer,
 } from 'three';
+import { BIRD_LOOKS, type BirdLookId } from '../models/bird';
 import { buildCharacter, FAMILIES, type Family, type FamilyDef, type Fighter, type HumanoidKind, type WeaponSpec } from '../models/characters';
 import { CRAWLER_LOOKS, type CrawlerLook } from '../models/crawler';
 import { CRITTER_LOOKS, type CritterLook } from '../models/critters';
@@ -28,6 +29,7 @@ import type { Rig } from '../models/rig';
 import { XRInput } from '../player/input';
 import { TextPanel } from '../ui/panel';
 import { CAST, type CastId, Wardrobe } from '../people/cast';
+import { birdShowpiece } from './birds';
 import { animalClips, castClips, type Clip, clipsFor, type MutablePose, personClips } from './clips';
 import { crawlerShowpiece, critterShowpiece, type Moment, type Showpiece, wolfShowpiece } from './creatures';
 import { WOLF_COATS } from '../enemies/wolf';
@@ -51,7 +53,9 @@ export type InspectorEntry =
   /** A wolf in one of its coats (enemies/wolf.ts), trotting and fighting. */
   | { wolf: number; label: string }
   /** One of the animals a zone places (models/animals.ts), on the four-legged skeleton. */
-  | { animal: AnimalId; label: string };
+  | { animal: AnimalId; label: string }
+  /** A bird, alone on the turntable (models/bird.ts): a flock of one. */
+  | { bird: BirdLookId; label: string };
 
 /** Each look of every enemy family's fighters ("Grunt v0" to "v5", "Archer"), then its named fighters ("Captain Silas Crake"). */
 const enemies = (Object.keys(FAMILIES) as Family[]).flatMap((family) => [
@@ -65,7 +69,7 @@ const enemies = (Object.keys(FAMILIES) as Family[]).flatMap((family) => [
  * Every model the game builds: each enemy family's (the undead's grunts in
  * six helmet, cloth and weapon combos, the bandits' thugs in six looks and
  * weapons, and so on), then Marshal Hale and the villagers, then the rest of
- * the cast zones place.
+ * the cast zones place, the critters, crawlers and animals, and the birds.
  */
 export const ENTRIES: InspectorEntry[] = [
   ...enemies,
@@ -75,6 +79,7 @@ export const ENTRIES: InspectorEntry[] = [
   ...(Object.keys(CRAWLER_LOOKS) as CrawlerLook[]).map((look) => ({ crawler: look, label: CRAWLER_LOOKS[look].label })),
   ...Array.from({ length: WOLF_COATS }, (_, v) => ({ wolf: v, label: `Wolf v${v}` })),
   ...(Object.keys(ANIMALS) as AnimalId[]).map((id) => ({ animal: id, label: ANIMALS[id].label })),
+  ...(Object.keys(BIRD_LOOKS) as BirdLookId[]).map((id) => ({ bird: id, label: BIRD_LOOKS[id].label })),
 ];
 
 export const SPEEDS = [1, 0.5, 0.25, 0.1];
@@ -184,6 +189,7 @@ export class Inspector {
       else if ('animal' in e) b = this.animal(e.animal, material);
       else if ('crawler' in e) b = this.shown(crawlerShowpiece(e.crawler, material), material);
       else if ('wolf' in e) b = this.shown(wolfShowpiece(e.wolf, material), material);
+      else if ('bird' in e) b = this.shown(birdShowpiece(e.bird, material), material);
       else {
         const { rig, weapon } = buildCharacter(e.kind, { material, family: e.family, variant: e.variant, named: e.named });
         b = this.rigged(rig, weapon, material, clipsFor(e.kind, e.family, e.named));

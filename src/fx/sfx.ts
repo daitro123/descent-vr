@@ -581,6 +581,98 @@ export const sfx = {
       tone(f * 1.05, f * 0.93, d, 'sine', 0.1 * g, at, t);
     });
   },
+
+  // The birds the zones place (birds/ways.ts): each flock's calls, and the noise of a flock going up.
+
+  /** A crow: two or three harsh, flat caws. */
+  caw(at?: Where) {
+    const f = 560 + Math.random() * 120;
+    const n = 2 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < n; i++) {
+      const t = i * (0.38 + Math.random() * 0.08);
+      tone(f, f * 0.78, 0.26, 'sawtooth', 0.05, at, t);
+      noise(0.24, 0.12, 1300, at, 'bandpass', t, 3);
+    }
+  },
+  /** A raven: a deep, hollow kronk, once or twice. */
+  croak(at?: Where) {
+    const f = 250 + Math.random() * 50;
+    const n = 1 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < n; i++) {
+      const t = i * 0.5;
+      tone(f, f * 0.8, 0.28, 'sawtooth', 0.06, at, t);
+      tone(f * 2, f * 1.55, 0.2, 'square', 0.015, at, t + 0.02);
+      noise(0.22, 0.08, 700, at, 'bandpass', t, 4);
+    }
+  },
+  /** A hen: a few low, idle bok-boks. */
+  cluck(at?: Where) {
+    const f = 330 + Math.random() * 70;
+    const n = 2 + Math.floor(Math.random() * 4);
+    let t = 0;
+    for (let i = 0; i < n; i++) {
+      tone(f, f * 0.8, 0.07, 'triangle', 0.09, at, t);
+      noise(0.05, 0.05, 900, at, 'bandpass', t, 3);
+      t += 0.12 + Math.random() * 0.18;
+    }
+  },
+  /** A hen scattering: a rush of boks and a rising squawk. */
+  cackle(at?: Where) {
+    const f = 380 + Math.random() * 80;
+    for (let i = 0; i < 5; i++) tone(f, f * 0.85, 0.06, 'triangle', 0.09, at, i * 0.09);
+    tone(f * 1.6, f * 2.6, 0.32, 'sawtooth', 0.045, at, 0.5);
+    noise(0.3, 0.06, 1500, at, 'bandpass', 0.5, 3);
+  },
+  /** A mallard: a run of nasal quacks, each a little quieter. */
+  quack(at?: Where) {
+    const f = 430 + Math.random() * 70;
+    const n = 2 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < n; i++) {
+      const t = i * (0.22 + Math.random() * 0.05);
+      tone(f, f * 0.82, 0.15, 'sawtooth', 0.06 * (1 - i * 0.15), at, t);
+      noise(0.12, 0.05, 1100, at, 'bandpass', t, 5);
+    }
+  },
+  /** A goose: honks, brassy and loud. */
+  honk(at?: Where) {
+    const f = 380 + Math.random() * 60;
+    const n = 1 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < n; i++) {
+      const t = i * 0.32;
+      tone(f * 0.95, f * 1.05, 0.22, 'square', 0.04, at, t);
+      tone(f * 2, f * 2.1, 0.2, 'sawtooth', 0.02, at, t);
+    }
+  },
+  /** A goose standing its ground: a long breathy hiss. */
+  hiss(at?: Where) {
+    noise(0.9, 0.16, 4200, at, 'highpass', 0, 0.8);
+  },
+  /** A heron going up: a harsh, grating fraank. */
+  krank(at?: Where) {
+    const f = 300 + Math.random() * 60;
+    tone(f, f * 0.72, 0.4, 'sawtooth', 0.07, at);
+    noise(0.38, 0.12, 900, at, 'bandpass', 0, 2.5);
+  },
+  /** A red grouse flushed: a fast stutter, then go-back, go-back. */
+  goback(at?: Where) {
+    const f = 820 + Math.random() * 100;
+    for (let i = 0; i < 7; i++) tone(f, f * 0.8, 0.05, 'square', 0.03, at, i * (0.09 - i * 0.006));
+    for (let i = 0; i < 2; i++) {
+      const t = 0.62 + i * 0.42;
+      tone(f * 0.9, f * 0.75, 0.1, 'square', 0.035, at, t);
+      tone(f * 1.1, f * 0.7, 0.2, 'square', 0.035, at, t + 0.13);
+    }
+  },
+  /** A covey's wings going up: a low, whirring flutter. */
+  whirr(at?: Where) {
+    noise(0.7, 0.3, 220, at, 'bandpass', 0, 1.5);
+    for (let i = 0; i < 14; i++) noise(0.03, 0.12, 400 + Math.random() * 300, at, 'bandpass', i * 0.045, 2);
+  },
+  /** A flock of pigeons bursting up: a clatter of wings. */
+  clatter(at?: Where) {
+    for (let i = 0; i < 18; i++) noise(0.035, 0.18, 700 + Math.random() * 900, at, 'bandpass', Math.random() * 0.6, 1.5);
+    noise(0.6, 0.12, 300, at, 'bandpass', 0, 1);
+  },
 };
 
 /** The one-shot sounds, by name. */
