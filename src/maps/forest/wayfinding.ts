@@ -66,11 +66,12 @@ export function buildSignNames(post: Structure): Mesh {
   const rowH = Math.round(h * SIGN_PPM);
   const ctx = canvas(rowW, rowH * boards.length);
   if (ctx) {
-    ctx.fillStyle = hex(BUILD.plank, 0.92);
+    ctx.fillStyle = hex(plan.faded ? BUILD.weatheredPlank : BUILD.plank, 0.92);
     ctx.fillRect(0, 0, rowW, rowH * boards.length);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#f2e6c8';
+    // A weathered board's letters are worn almost to the wood.
+    ctx.fillStyle = plan.faded ? 'rgba(232, 226, 210, 0.42)' : '#f2e6c8';
     ctx.font = `bold ${Math.round(rowH * 0.78)}px ${FONT}`;
     boards.forEach((b, i) => ctx.fillText(b.name, rowW / 2, rowH * (i + 0.54), rowW * 0.96));
   }

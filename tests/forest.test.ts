@@ -1,7 +1,7 @@
 import { Vector3 } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
-import { buildLayout, CHESTS, FOREST, type ForestLayout, HALE, HERBS, localToWorld, MAP_BOARD, POND, SIGNPOSTS, type StructureKind, TENT, VEINS, worldToLocal } from '../src/maps/forest/layout';
+import { buildLayout, CHESTS, FOREST, type ForestLayout, HALE, HERBS, localToWorld, MAP_BOARD, NORTH_PASS, POND, SIGNPOSTS, type StructureKind, TENT, VEINS, worldToLocal } from '../src/maps/forest/layout';
 import { MINE, minePiece } from '../src/maps/forest/mine';
 import type { CampPlan, ChestPlan } from '../src/maps/types';
 import { nearestOnPolyline } from '../src/maps/forest/noise';
@@ -716,7 +716,8 @@ describe('the village respawn point', () => {
 });
 
 describe('finding the way', () => {
-  const signposts = () => layout.structures.filter((s) => s.kind === 'signpost');
+  // The road signs: not the Old North Pass's weathered waymark (see its own tests).
+  const signposts = () => layout.structures.filter((s) => s.kind === 'signpost' && !SIGNPOSTS[s.variant].faded);
   const onRoad = (x: number, z: number) => layout.roadDistance.at(x, z) < 0.2;
   /** Is (x, z) off every road, the whole footprint of `s` round it? */
   const offRoads = (s: { x: number; z: number; yaw: number; hw: number; hd: number }) => {
@@ -839,5 +840,66 @@ describe('finding the way', () => {
       if (p.fire) expect(p.y - ground).toBeLessThan(1);
       else expect(p.y - ground).toBeGreaterThan(5);
     }
+  });
+});
+
+describe('the Old North Pass', () => {
+  const { play } = FOREST;
+  const cart = () => layout.paths.find((p) => p.id === 'northPass')!;
+  const one = (kind: StructureKind) => layout.structures.filter((s) => s.kind === kind);
+  /** Distance from (x, z) to the cut's floor line. */
+  const toCut = (x: number, z: number) => nearestOnPolyline(NORTH_PASS.line, x, z).d;
+
+  it("cuts a notch in the northern ridge just east of the mine's front, lower than the ridge either side of it", () => {
+    const mine = one('mine')[0];
+    const [footX, footZ] = NORTH_PASS.line[0];
+    expect(footX).toBeGreaterThan(mine.x);
+    expect(Math.hypot(footX - mine.x, footZ - mine.z)).toBeLessThan(30);
+    for (const [x, z] of NORTH_PASS.line.filter(([, lz]) => lz < -play - 10)) {
+      const floor = layout.ground.at(x, z);
+      for (const side of [-1, 1]) expect(layout.ground.at(x + side * (NORTH_PASS.half + 10), z), `(${x}, ${z})`).toBeGreaterThan(floor + 5);
+    }
+  });
+
+  it("heaps the slide's boulders in the cut, past where you can walk, and leaves where you can walk as it was", () => {
+    expect(layout.slide.length).toBe(NORTH_PASS.slide.boulders + NORTH_PASS.slide.scree);
+    for (const r of layout.slide) {
+      expect(r.z).toBeLessThan(-play + 3);
+      expect(toCut(r.x, r.z)).toBeLessThan(NORTH_PASS.half + 4);
+    }
+    // Nothing to climb: the slide and the cut past the play area's edge are out of reach.
+    const [toeX, toeZ] = NORTH_PASS.line[1];
+    expect(layout.walkable.contains(toeX, toeZ)).toBe(false);
+    expect(layout.walkable.contains(toeX, -play + 0.5)).toBe(true);
+    expect(one('rockslide')).toHaveLength(1);
+  });
+
+  it('grows no trees in the cut or on its cart road', () => {
+    const trees = layout.plants.filter((p) => ['oak', 'goldOak', 'pine', 'young'].includes(p.kind));
+    expect(trees.filter((t) => t.z < -play && toCut(t.x, t.z) < NORTH_PASS.half + 2)).toEqual([]);
+    expect(trees.filter((t) => nearestOnPolyline(cart().line, t.x, t.z).d < cart().width / 2 + 1.5)).toEqual([]);
+  });
+
+  it('runs the old cart road off the main road below the mine up into the slide, where it is buried', () => {
+    const main = layout.paths.find((p) => p.id === 'main')!;
+    const [sx, sz] = cart().line[0];
+    expect(nearestOnPolyline(main.line, sx, sz).d).toBeLessThan(main.width / 2 + 0.5);
+    const [ex, ez] = cart().line[cart().line.length - 1];
+    expect(ez).toBeLessThan(-play);
+    expect(layout.slide.some((r) => Math.hypot(r.x - ex, r.z - ez) < 6)).toBe(true);
+  });
+
+  it('stands a weathered cairn by the cart road, where you can walk to it, a faded waymark for the North Road stuck in it', () => {
+    const [cairn] = one('cairn');
+    expect(layout.walkable.contains(cairn.x, cairn.z)).toBe(true);
+    const { d } = nearestOnPolyline(cart().line, cairn.x, cairn.z);
+    expect(d).toBeGreaterThan(cart().width / 2 + cairn.hw);
+    expect(d).toBeLessThan(cart().width / 2 + 4);
+    const mark = layout.structures.find((s) => s.kind === 'signpost' && SIGNPOSTS[s.variant].faded)!;
+    expect([mark.x, mark.z]).toEqual([cairn.x, cairn.z]);
+    expect(SIGNPOSTS[mark.variant].boards.map((b) => b.name)).toEqual(['North Road']);
+    // Its board points north, up the road into the slide.
+    expect(Math.cos(SIGNPOSTS[mark.variant].boards[0].a)).toBeLessThan(-0.7);
+    expect(layout.colliders.blocked(cairn.x, cairn.z, 0)).toBe(true);
   });
 });

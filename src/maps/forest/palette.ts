@@ -28,6 +28,8 @@ export const EARTH = {
   bark: 0x5a4430,
   barkDark: 0x45331f,
   cutWood: 0xc8a26a,
+  /** Old snow on the high ground north, over the Old North Pass. */
+  snow: 0xe2e6ea,
 } as const;
 
 export const BUILD = {
@@ -44,6 +46,9 @@ export const BUILD = {
   warmWindow: 0xffc870,
   blue: 0x2c4a8a,
   canvas: 0xcbbd98,
+  /** Wood left out in the weather for years: the Old North Pass's waymark. */
+  weathered: 0x6a645a,
+  weatheredPlank: 0x8a8274,
 } as const;
 
 export const CROP = {
