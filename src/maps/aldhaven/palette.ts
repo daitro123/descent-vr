@@ -8,8 +8,8 @@ export const CITY_GROUND = {
   setts: 0xcfc3a6,
   settsDark: 0xb8ab8c,
   settsLight: 0xddd3b8,
-  basalt: 0x4a4750,
-  basaltDark: 0x37353d,
+  basalt: 0x625e68,
+  basaltDark: 0x524e58,
   grass: 0x7a9a4e,
   grassLight: 0x8eac58,
   grassDry: 0xa3a85e,
@@ -21,14 +21,17 @@ export const CITY_GROUND = {
   granite: 0x7c7e84,
   graniteDark: 0x5e6066,
   gorse: 0x8a8a3a,
+  /** The back yards' packed earth, worn grass at its edges. */
+  yard: 0x8a7656,
+  yardDark: 0x75634a,
 } as const;
 
 export const CITY_BUILD = {
   limestone: 0xe2d6ba,
   limestoneShade: 0xcbbd9c,
   limestoneDark: 0xb0a281,
-  basalt: 0x2e2c33,
-  basaltLight: 0x403d46,
+  basalt: 0x4a4651,
+  basaltLight: 0x5d5964,
   plaster: 0xe8dcc0,
   plasterWarm: 0xe6cfa4,
   plasterRose: 0xdcc0ac,
@@ -49,6 +52,9 @@ export const CITY_BUILD = {
   sail: 0xe8e0c8,
   straw: 0xd8b85a,
   iron: 0x4a4b52,
+  granite: 0x8a8780,
+  graniteDark: 0x6e6b66,
+  soil: 0x5a4430,
 } as const;
 
 /** The crown's and the great houses' colours, for doors, banners and awnings. */

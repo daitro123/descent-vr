@@ -551,6 +551,19 @@ export const sfx = {
     const n = 5 + Math.floor(Math.random() * 4);
     for (let i = 0; i < n; i++) tone(f * 1.55, f * 1.35, 0.09, 'sine', 0.06 * (1 - i / (n + 2)), at, 1.35 + i * 0.1);
   },
+  /** A herring gull over the harbour: a few laughing cries, each a quick rise and a long fall, the last ones shorter. */
+  gull(at?: Where) {
+    const f = 1050 + Math.random() * 250;
+    const n = 2 + Math.floor(Math.random() * 4);
+    let t = 0;
+    for (let i = 0; i < n; i++) {
+      const d = i === 0 ? 0.32 : 0.16 + Math.random() * 0.06;
+      tone(f * 0.8, f * 1.15, 0.05, 'triangle', 0.06, at, t);
+      tone(f * 1.15, f * 0.62, d, 'triangle', 0.07, at, t + 0.05);
+      tone(f * 2.3, f * 1.3, d * 0.8, 'sine', 0.012, at, t + 0.05);
+      t += d + 0.09 + Math.random() * 0.05;
+    }
+  },
   /** A wood pigeon: coo, COO-coo, coo-coo. */
   coo(at?: Where) {
     const f = 430 + Math.random() * 60;

@@ -1343,6 +1343,28 @@ export const CONFIG = {
         ref: 30, // m within which it isn't quieter for distance: it carries
       },
     },
+    // Aldhaven's own ambience, placed nowhere: a steady wind off the sea over
+    // the surf's slow swell, and gulls crying now and then over the harbour
+    // and the roofs (the quays' lapping and the river are placed, as places).
+    harbour: {
+      wind: {
+        level: 0.6,
+        band: [320, 440], // Hz: each side's band's middle, between the woods' and the moor's
+        gust: [0.06, 0.1], // Hz: steadier than the moor's
+        depth: 0.5,
+        // The surf under it: noise below `cutoff` Hz, `level` as loud as a side's band, swelling at `swell` Hz by `depth` of that.
+        surf: { cutoff: 300, level: 0.5, swell: 0.11, depth: 0.6 },
+      },
+      call: {
+        every: [4, 13], // s between cries (random in range)
+        near: 15, // m off, at the nearest…
+        far: 45, // …and the farthest
+        height: [6, 18], // m over your head
+        last: 2.5, // s a cry holds its slot
+        level: 0.9,
+        ref: 20, // m within which it isn't quieter for distance
+      },
+    },
     // Birdsong: now and then a call from a tree `near` to `far` m off. Each try
     // picks a spot at random and a bird calls only if a tree stands within
     // `tree` m of it, so the open fields hear fewer.

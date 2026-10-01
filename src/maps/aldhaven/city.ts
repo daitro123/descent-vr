@@ -1,11 +1,11 @@
 import { Color, Group, Matrix4, Mesh, MeshLambertMaterial, Vector3 } from 'three';
 import { TreeCover } from '../../world/ambience';
 import { Glows } from '../../world/glows';
-import { smoothstep } from '../forest/noise';
+import { fbm, lerp, smoothstep } from '../forest/noise';
 import { MeshBuffer } from '../forest/terrain';
 import type { Zone } from '../types';
 import { aldhavenChunks, buildAldhavenChunk } from './chunks';
-import { CITY_WATER } from './palette';
+import { CITY_GROUND, CITY_WATER } from './palette';
 import { ALDHAVEN, ALDHAVEN_ATMOSPHERE, type AldhavenPlan, planAldhaven } from './plan';
 
 /**
@@ -14,8 +14,11 @@ import { ALDHAVEN, ALDHAVEN_ATMOSPHERE, type AldhavenPlan, planAldhaven } from '
  * water (the river, the harbour, the tidal flats and the sea out to the fog,
  * and the King's Garden's pond) and the glows of the harbour light, the
  * Collegium's lamp room, the Great Forge's hearth and the cathedral's gilt
- * sunburst. Nothing lives here yet and nothing can hurt you: no camps, no
- * people, nowhere to wake, no interiors. It meets Brackenmoor on its west
+ * sunburst; and the Greyspine's feet past its north edge, the gorge going on
+ * up into them. Its own air is the harbour's: the wind off the sea, the
+ * surf, the gulls; the river, the quays, the forge and the windmill sound
+ * where they are. Nothing lives here yet and nothing can hurt you: no camps,
+ * no people, nowhere to wake, no interiors. It meets Brackenmoor on its west
  * edge, over the Kingsroad, and the Sallows on its south, over the causeway.
  */
 export function buildAldhaven(given?: AldhavenPlan): Zone {
@@ -36,7 +39,7 @@ export function buildAldhaven(given?: AldhavenPlan): Zone {
   glowAt('collegium', [3.5, 28.5, 0], 6, 0xcfe8ff);
   glowAt('forge', [-4, 2.2, -2.7], 3, 0xff7a2a);
   glowAt('cathedral', [0, 48.6, 18], 4, 0xffe08a);
-  root.add(water, glows.mesh);
+  root.add(water, buildBackdrop(plan), glows.mesh);
 
   let time = 0;
   return {
@@ -63,9 +66,9 @@ export function buildAldhaven(given?: AldhavenPlan): Zone {
     pickups: [],
     chests: [],
     spots: [],
-    sounds: [],
+    sounds: plan.sounds,
     trees: new TreeCover(plan.trees),
-    ambience: 'woods',
+    ambience: 'harbour',
     bounds: plan.walkable.bounds,
     landmarks: plan.landmarks,
     heightAt: plan.heightAt,
@@ -114,7 +117,7 @@ function buildWater(plan: AldhavenPlan): Mesh {
     flush(ground.cols - 1);
   }
   // On past the land: the sea to the east and round its north-east corner. South is the Sallows, with its own water.
-  const far = 500;
+  const far = 3000;
   const sea = shades[3];
   const coast = land.minX + (ALDHAVEN.coast - ALDHAVEN.land.minX) + 4;
   quad(land.maxX, land.minZ - far, land.maxX + far, land.maxZ, sea);
@@ -130,5 +133,101 @@ function buildWater(plan: AldhavenPlan): Mesh {
   }
   const mesh = new Mesh(raw.geometry(), new MeshLambertMaterial({ vertexColors: true, emissive: 0x0c1c24 }));
   mesh.name = 'aldhaven-water';
+  return mesh;
+}
+
+/**
+ * The Greyspine's feet past the north edge, where no zone is yet: one mesh,
+ * its first row the city's own ground along its edge vertex for vertex, rising
+ * north into grey fells, bare rock higher, snow on the tops; the gorge going on
+ * up into them out of the north-west, the Ald in it; down to the sea in the
+ * east. Seen, never walked: it lies past where you can go.
+ */
+function buildBackdrop(plan: AldhavenPlan): Mesh {
+  const { ground, land } = plan;
+  const { at, gorge, ald, coast } = ALDHAVEN;
+  const raw = new MeshBuffer();
+  const reach = 180;
+  const dz = 4;
+  // A few columns on west of the edge, tucked under Brackenmoor's moor where it reaches north past the Kingsroad's seam.
+  const tuck = 5;
+  const cols = ground.cols + tuck;
+  const rows = Math.round(reach / dz) + 1;
+  const xAt = (i: number) => ground.x(i - tuck);
+  // The gorge's line north of the edge, in the city's frame: on from the Ald's, bending north-west.
+  const gorgeX = (d: number) => ald.line[0][0] - 0.12 * d - 0.0009 * d * d;
+  const heightAt = (i: number, d: number): number => {
+    const wx = xAt(i);
+    const x = wx - at.x;
+    const z = land.minZ - d;
+    // The fells: great masses rising north, sharp ridges between, highest in the west over the gorge, down to the sea in the east.
+    const mass = fbm(wx * 0.009, z * 0.009, 241);
+    const ridge = 1 - Math.abs(2 * fbm(wx * 0.022, z * 0.022, 243) - 1);
+    const fell = 16 + smoothstep(0, 150, d) * (28 + 52 * mass) + 20 * ridge * smoothstep(10, 70, d);
+    const east = smoothstep(coast + 10, coast - 50, x);
+    // The gorge: its floor and the river in it, between cliffs.
+    const off = Math.abs(x - gorgeX(d));
+    const half = gorge.half - 4 * smoothstep(0, 80, d);
+    const floor = 2.6 + 0.06 * d;
+    const bed = lerp(-3, floor, smoothstep(ald.half - 1, ald.half + 2.5, off));
+    let h = lerp(fell * east - 6 * (1 - east), bed, smoothstep(half + 12, half, off));
+    // Low along the west, under the moor's edge (Brackenmoor's land reaches 80 m north of ours there).
+    const west = smoothstep(land.minX - 10, land.minX + 40, wx);
+    h = lerp(26, h, lerp(west, 1, smoothstep(70, 100, d)));
+    // Blended from the city's own edge, vertex for vertex along it.
+    const edge = i >= tuck ? ground.get(i - tuck, 0) : 26;
+    return lerp(edge, h, smoothstep(0, 24, d));
+  };
+  const h = new Float32Array(cols * rows);
+  for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) h[j * cols + i] = heightAt(i, j * dz);
+  const grass = new Color(CITY_GROUND.grassDry);
+  const rock = new Color(CITY_GROUND.granite);
+  const rockDark = new Color(CITY_GROUND.graniteDark);
+  const snow = new Color(0xe8ecf0);
+  const mud = new Color(CITY_GROUND.mud);
+  const col = new Color();
+  const v = (i: number, j: number): [number, number, number] => [xAt(i), h[j * cols + i], land.minZ - j * dz];
+  for (let j = 0; j < rows - 1; j++) {
+    for (let i = 0; i < cols - 1; i++) {
+      const a = v(i, j);
+      const b = v(i + 1, j);
+      const c = v(i, j + 1);
+      const d = v(i + 1, j + 1);
+      for (const [p, q, r] of [
+        [a, c, b],
+        [b, c, d],
+      ] as const) {
+        const y = (p[1] + q[1] + r[1]) / 3;
+        const ux = q[0] - p[0];
+        const uy = q[1] - p[1];
+        const uz = q[2] - p[2];
+        const wx = r[0] - p[0];
+        const wy = r[1] - p[1];
+        const wz = r[2] - p[2];
+        const nx = uy * wz - uz * wy;
+        const ny = uz * wx - ux * wz;
+        const nz = ux * wy - uy * wx;
+        const up = Math.abs(ny) / (Math.hypot(nx, ny, nz) || 1);
+        col.copy(grass).lerp(rock, smoothstep(0.85, 0.6, up)).lerp(rockDark, smoothstep(0.6, 0.35, up) * 0.6);
+        col.lerp(rock, smoothstep(40, 60, y) * 0.7).lerp(snow, smoothstep(68, 82, y) * smoothstep(0.45, 0.7, up));
+        if (y < 0.4) col.lerp(mud, 0.8);
+        raw.tri(p, q, r, col.clone().multiplyScalar(0.94 + 0.12 * fbm(p[0] * 0.2, p[2] * 0.2, 247)));
+      }
+    }
+  }
+  // The Ald in the gorge, at the water line.
+  const water = new Color(CITY_WATER.harbour);
+  const y = ALDHAVEN.water;
+  for (let j = 0; j < rows - 1; j++) {
+    const [d0, d1] = [j * dz, (j + 1) * dz];
+    const [x0, x1] = [gorgeX(d0) + at.x, gorgeX(d1) + at.x];
+    const w = ald.half + 1;
+    const [z0, z1] = [land.minZ - d0, land.minZ - d1];
+    // Wound as the ground's are, its rows running north.
+    raw.tri([x0 - w, y, z0], [x1 - w, y, z1], [x0 + w, y, z0], water);
+    raw.tri([x0 + w, y, z0], [x1 - w, y, z1], [x1 + w, y, z1], water);
+  }
+  const mesh = new Mesh(raw.geometry(), new MeshLambertMaterial({ vertexColors: true }));
+  mesh.name = 'aldhaven-greyspine';
   return mesh;
 }

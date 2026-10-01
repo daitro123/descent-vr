@@ -1,10 +1,11 @@
 import { CONFIG } from '../../config';
-import type { Tree } from '../../world/ambience';
+import type { PlaceSound, Tree } from '../../world/ambience';
 import type { Atmosphere } from '../../world/atmosphere';
 import { type Box, Colliders } from '../forest/colliders';
-import { fbm, lerp, mulberry32, nearestOnPolyline, type P2, sampleCurve, smoothstep } from '../forest/noise';
+import { fbm, lerp, mulberry32, nearestOnPolyline, type P2, sampleCurve, smoothstep, valueNoise } from '../forest/noise';
 import { HeightGrid } from '../heightGrid';
 import { KINGSROAD, kingsroadHeight, kingsroadSeam } from '../kingsroad';
+import { along, heightsAlong, lineField, smoothHeights } from '../lines';
 import { CAUSEWAY, northEdgeHeight } from '../sallows/plan';
 import type { Seam, SideSeam, Spot } from '../types';
 import { Walkable } from '../walkable';
@@ -55,10 +56,19 @@ export const ALDHAVEN = {
     southGate: { x: -21, z: 112 },
     width: 7,
   },
+  /**
+   * The Ald above the city: out of the gorge in the north-west, down the
+   * valley between the moor's crest and the west wall, and round into the
+   * water gate. Its centre line, its half-width, and how wide it opens at the
+   * water gate (the city's reach is 32 m across).
+   */
+  ald: { line: [[-121, -146], [-122, -110], [-123, -60], [-123, -10], [-122, 22], [-119, 38], [-114, 52], [-108, 60]] as const, half: 6.5, mouth: 16 },
   /** The Aldbridge: its roadway's middle, its deck's width, and where it lands on either bank. */
   bridge: { x: -30, width: 14, road: 7, from: 40, to: 80, rise: 1.5 },
-  /** The mole out to the harbour light. */
-  mole: { line: [[111, 24], [146, 38], [150, 45]] as const, width: 7, height: 2.3 },
+  /** The Kingsbridge, the Kingsroad's last stretch over the Ald to the Kingsgate (along X): its ends, its line, its deck's width and heights, and its hump. */
+  kingsbridge: { x0: -133, x1: -113.5, z: -15, width: 7.5, y0: 3.9, y1: 3.2, rise: 0.5 },
+  /** The mole out to the harbour light: a built stone pier, its top at `height`. */
+  mole: { line: [[111, 24], [146, 38], [150, 45]] as const, width: 7, height: 2.4 },
   /**
    * The Delta causeway south over the tidal flats from the south gate, and the
    * flats' depth under the water. It bends south-west to cross into the
@@ -66,10 +76,16 @@ export const ALDHAVEN = {
    */
   causeway: { x: -21, width: 8, height: 1.9, line: [[-21, 110], [-21, 121], [-40, 133], [-40, 142]] as const },
   flats: -0.5,
-  /** The gorge's mouth: the valley road between cliffs, north of the North Gate. */
-  gorge: { x: 25, half: 22, from: -118, cliff: 28 },
+  /**
+   * The gorge's mouth in the north-west, where the Ald and the valley road
+   * come down out of the Greyspine: its floor's middle and half-width, where
+   * the hills along the north edge begin, and how high they rise by the
+   * land's edge (the Greyspine's own fells go on up past it, city.ts). The
+   * Gorgegate stands across the road at `gate`.
+   */
+  gorge: { x: -110, half: 19, from: -124, cliff: 13, road: -103, gate: -132 },
   /** Over this many metres in from a seam the land blends to the seam's heights: Brackenmoor's ridge west, the Sallows' fen south. */
-  blend: { west: 30, south: 24 },
+  blend: { west: 16, south: 24 },
 } as const;
 
 if (ALDHAVEN.causeway.line.at(-1)![0] + ALDHAVEN.at.x !== CAUSEWAY.x) throw new Error("Aldhaven's causeway must cross into the Sallows on theirs");
@@ -91,15 +107,17 @@ export const ALDHAVEN_ATMOSPHERE: Atmosphere = {
 /** What can stand in the city: a building, a landmark, a stretch of wall, a prop. */
 export type PieceKind =
   | 'house' | 'warehouse' | 'inn' | 'hall' | 'townhouse' | 'barracks' | 'forge' | 'lodge' | 'stables' | 'barn' | 'windmill'
-  | 'cathedral' | 'keep' | 'collegium' | 'lighthouse' | 'crane' | 'bridge'
+  | 'cathedral' | 'keep' | 'collegium' | 'lighthouse' | 'crane' | 'bridge' | 'kingsbridge' | 'beacon' | 'mole'
   | 'wall' | 'tower' | 'gatehouse' | 'waterGate' | 'gorgegate' | 'quay' | 'lowWall'
   | 'marketCross' | 'stall' | 'lamp' | 'well' | 'statue' | 'grave' | 'butt' | 'dummy' | 'bench'
-  | 'crates' | 'barrels' | 'cart' | 'ship' | 'boat' | 'signpost' | 'mapboard' | 'banner' | 'sinkhole' | 'haystack' | 'bollard' | 'pondRim';
+  | 'crates' | 'barrels' | 'cart' | 'ship' | 'boat' | 'signpost' | 'mapboard' | 'banner' | 'sinkhole' | 'haystack' | 'bollard' | 'pondRim'
+  | 'fountain' | 'kerb' | 'tent' | 'bundle' | 'nets' | 'vats' | 'rack' | 'woodpile' | 'shed' | 'sacks' | 'anchor' | 'planter';
 
 /** Too small to see from a stand-in's distance. */
 export const SMALL: ReadonlySet<PieceKind> = new Set<PieceKind>([
   'stall', 'lamp', 'well', 'statue', 'grave', 'butt', 'dummy', 'bench', 'crates', 'barrels', 'cart', 'boat',
   'signpost', 'mapboard', 'banner', 'sinkhole', 'haystack', 'bollard', 'pondRim',
+  'fountain', 'kerb', 'tent', 'bundle', 'nets', 'vats', 'rack', 'woodpile', 'shed', 'sacks', 'anchor', 'planter',
 ]);
 
 /**
@@ -121,6 +139,10 @@ export interface Piece {
   readonly variant: number;
   readonly district: District;
   readonly seed: number;
+  /** How far the street in front of a building lies below its floor: it gets steps down to it. */
+  readonly drop?: number;
+  /** How far down a building's plinth reaches under its floor (a house on the Aldbridge sits on the deck). */
+  readonly footing?: number;
 }
 
 /** What grows in and round the city. */
@@ -165,9 +187,13 @@ export interface AldhavenPlan {
   readonly landmarks: readonly { label: string; x: number; z: number }[];
   /** Its trees, for birds to call from. */
   readonly trees: readonly Tree[];
+  /** The places that sound where they are: the river under the bridges, the water at the quays, the Great Forge, the windmill. */
+  readonly sounds: readonly PlaceSound[];
   /** What a point on the ground is: in the walls and paved, which district, a garden, a field. */
   surface(x: number, z: number): Surface;
   heightAt(x: number, z: number): number;
+  /** The height of a built deck you walk on at (x, z) (the Aldbridge, the Kingsbridge, the mole), or null off them all. */
+  deckAt(x: number, z: number): number | null;
 }
 
 /** What the ground is at a point, for its colour. */
@@ -177,10 +203,16 @@ export interface Surface {
   readonly basalt: boolean;
   readonly garden: boolean;
   readonly field: boolean;
+  /** A street's worn middle (paved), rather than a square's or a yard's setts. */
+  readonly street: boolean;
+  /** A back yard behind the houses: packed earth and grass, not setts. */
+  readonly yard: boolean;
 }
 
 const PI = Math.PI;
-const { river, coast, hill, wall, gates, bridge, mole, causeway, gorge } = ALDHAVEN;
+/** The escarpment's foot over the Ald, west (x in the city's frame): the fields lie east of it, its face climbs west. */
+const ESCARPMENT = -141.5;
+const { river, coast, hill, wall, gates, bridge, kingsbridge, mole, causeway, gorge, ald } = ALDHAVEN;
 
 /** How far (x, z) is from the causeway's line, in the city's frame. */
 function offCauseway(x: number, z: number): number {
@@ -216,9 +248,30 @@ export function insideWalls(x: number, z: number, margin = 0): boolean {
   return cross / Math.hypot(bx - ax, bz - az) > margin;
 }
 
-/** Is (x, z) in the river or the harbour basin (between its banks)? */
+/** How far along the Ald's line each of its points is, as a share of the whole. */
+const ALD_ALONG = (() => {
+  const out = [0];
+  for (let i = 1; i < ald.line.length; i++) out.push(out[i - 1] + Math.hypot(ald.line[i][0] - ald.line[i - 1][0], ald.line[i][1] - ald.line[i - 1][1]));
+  return out.map((d) => d / out[out.length - 1]);
+})();
+
+/**
+ * How far (x, z) lies outside the Ald's banks above the city, negative in
+ * the water (in the city's frame). It widens round the bend into the water
+ * gate, to meet the city's reach. Only outside the west wall: inside it the
+ * city's reach is the river.
+ */
+export function offAld(x: number, z: number): number {
+  if (x > wall.west - 1) return Infinity;
+  const n = nearestOnPolyline(ald.line, x, z);
+  const along = lerp(ALD_ALONG[n.i], ALD_ALONG[n.i + 1], n.t);
+  return n.d - lerp(ald.half, ald.mouth, smoothstep(0.8, 1, along));
+}
+
+/** Is (x, z) in the river or the harbour basin (between its banks), or in the Ald above the city? */
 function inRiver(x: number, z: number, margin = 0): boolean {
-  return x < coast + 30 && z > northEdge(x) - margin && z < southEdge(x) + margin;
+  const reach = x > wall.west - 4 && x < coast + 30 && z > northEdge(x) - margin && z < southEdge(x) + margin;
+  return reach || offAld(x, z) < margin;
 }
 
 /** Crown Hill's rise at (x, z). */
@@ -235,29 +288,33 @@ function cityHeight(x: number, z: number): number {
   const nearRiver = Math.min(Math.abs(z - northEdge(x)), Math.abs(z - southEdge(x)));
   h = lerp(ALDHAVEN.quay, h, smoothstep(4, 16, nearRiver));
   h += crownHill(x, z);
-  // The land climbs west toward the moor's ridge (its last stretch blends to the ridge's heights, src/maps/kingsroad.ts).
-  h += 7 * smoothstep(-112, -162, x) * (0.8 + 0.4 * fbm(x * 0.03, z * 0.03, 203));
-  // The gorge's mouth: cliffs either side of the valley road, which climbs gently north.
-  const north = smoothstep(gorge.from + 2, gorge.from - 14, z);
-  const valley = smoothstep(gorge.half, gorge.half - 10, Math.abs(x - gorge.x));
-  h += north * (gorge.cliff * (1 - valley) * (0.85 + 0.3 * fbm(x * 0.05, z * 0.05, 205)) + 3 * valley);
+  // The Kingsgate's way in, level with the Kingsbridge's east end.
+  h = lerp(h, kingsbridge.y1, smoothstep(15, 7, Math.hypot(x - gates.kingsgate.x, (z - gates.kingsgate.z) * 1.3)));
+  // The hills along the north edge, the Greyspine's feet, and the gorge the Ald and the valley road come down out of, in the north-west.
+  // Their toe wanders a little; they rise more steeply as they go, to the land's edge.
+  const toe = gorge.from - 3 * fbm(x * 0.04, 3, 219);
+  const t = Math.min(1, Math.max(0, (toe - z) / (toe - land.minZ)));
+  const hills = t * t * (1.6 - 0.6 * t);
+  const floor = smoothstep(gorge.half, gorge.half - 8, Math.abs(x - gorge.x));
+  h += hills * (gorge.cliff * (1 - floor) * (0.8 + 0.4 * fbm(x * 0.05, z * 0.05, 205)) + 1.6 * floor);
   // The south bank is low and flat; past the south wall, the tidal flats under a hand of water.
   if (z > southEdge(x)) h = lerp(h, ALDHAVEN.quay + (fbm(x * 0.03, z * 0.03, 207) - 0.5) * 0.4, smoothstep(southEdge(x), southEdge(x) + 6, z) * (x > wall.west ? 1 : 0.4));
   if (z > wall.south + 1.5) h = lerp(h, ALDHAVEN.flats, smoothstep(wall.south + 1.5, wall.south + 4, z));
   // A reed bank along the land's south edge, low dunes, so the flats' end is a shore.
   h += 1.4 * smoothstep(land.maxZ - 14, land.maxZ, z) * smoothstep(wall.south, wall.south + 6, z);
-  // The river and the harbour: quay walls inside the walls, grassy banks outside.
-  const soft = x < wall.west - 2 ? 3 : 0;
+  // Over the Ald, west, the moor's escarpment: the fields rise gently from the river to its foot, then its face climbs
+  // steeply to the crest, on down to the flats (its last stretch blends to the Kingsroad seam's ridge, src/maps/kingsroad.ts).
+  h += (1.6 * smoothstep(-129, ESCARPMENT, x) + 15 * smoothstep(ESCARPMENT, -162, x)) * (0.85 + 0.3 * fbm(x * 0.03, z * 0.03, 203));
+  // The river: the city's reach between quay walls, from the water gate to the sea; the Ald above it between grassy banks.
   const n = northEdge(x);
   const s = southEdge(x);
-  const inside = smoothstep(n - soft, n + 2 + soft, z) * smoothstep(s + soft, s - 2 - soft, z);
-  h = lerp(h, river.bed + (fbm(x * 0.1, z * 0.1, 209) - 0.5) * 0.6, inside);
+  const reach = smoothstep(n, n + 2, z) * smoothstep(s, s - 2, z) * smoothstep(wall.west - 8, wall.west - 3, x);
+  const upper = smoothstep(3.5, -1.5, offAld(x, z));
+  h = lerp(h, river.bed + (fbm(x * 0.1, z * 0.1, 209) - 0.5) * 0.6, Math.max(reach, upper));
   // The sea.
   const shore = shoreAt(z);
   h = lerp(h, -5 - smoothstep(shore, shore + 40, x) * 3, smoothstep(shore - (z < wall.ne[3] - 4 ? 4 : 0), shore + 2, x));
-  // Raised ways over the water: the mole and the causeway.
-  const m = nearestOnPolyline(mole.line, x, z).d;
-  h = lerp(h, mole.height, smoothstep(mole.width / 2 + 1.5, mole.width / 2, m));
+  // The causeway, raised over the flats. (The mole is built, on the sea bed.)
   if (z > wall.south - 2) h = lerp(h, causeway.height, smoothstep(causeway.width / 2 + 1.5, causeway.width / 2, offCauseway(x, z)));
   return h;
 }
@@ -268,27 +325,59 @@ export function deckHeight(z: number): number {
   return ALDHAVEN.quay + bridge.rise * Math.sin(PI * t);
 }
 
+/** The Kingsbridge's deck height at x along it: down from the west bank to the Kingsgate, humped over the Ald. */
+export function kingsDeck(x: number): number {
+  const { x0, x1, y0, y1, rise } = kingsbridge;
+  const t = Math.min(1, Math.max(0, (x - x0) / (x1 - x0)));
+  return lerp(y0, y1, t) + rise * Math.sin(PI * t);
+}
+
 /** Is (x, z) on the Aldbridge's deck? */
 function onBridge(x: number, z: number): boolean {
   return Math.abs(x - bridge.x) <= bridge.width / 2 && z >= bridge.from && z <= bridge.to;
+}
+
+/** Is (x, z) on the Kingsbridge's deck? */
+function onKingsbridge(x: number, z: number): boolean {
+  return x >= kingsbridge.x0 && x <= kingsbridge.x1 && Math.abs(z - kingsbridge.z) <= kingsbridge.width / 2;
+}
+
+/** The mole's round head under the harbour light. */
+const MOLE_HEAD = { r: 6.5 } as const;
+
+/** Is (x, z) on the mole (out past the sea wall), or its head? */
+function onMole(x: number, z: number): boolean {
+  if (x < coast - 0.5) return false;
+  const [hx, hz] = mole.line[mole.line.length - 1];
+  return nearestOnPolyline(mole.line, x, z).d <= mole.width / 2 || Math.hypot(x - hx, z - hz) <= MOLE_HEAD.r;
+}
+
+/** The height of the deck you'd stand on at (x, z) in the city's frame (a bridge, the mole), or null. */
+function deckAtCity(x: number, z: number): number | null {
+  if (onBridge(x, z)) return deckHeight(z);
+  if (onKingsbridge(x, z)) return kingsDeck(x);
+  if (onMole(x, z)) return mole.height;
+  return null;
 }
 
 // ------------------------------------------------------------------ streets
 
 /** The streets and roads, in the city's frame: [points, width, dirt?]. */
 const STREETS: readonly (readonly [readonly P2[], number, boolean?])[] = [
-  // The Kingsroad, from the moor's edge down to the Kingsgate, and in through it to the market.
-  [[[-162, -24], [-140, -21], [-122, -16], [-108, -15]], 5.5, true],
+  // The Kingsroad, from the moor's crest down to the Kingsbridge, over the Ald to the Kingsgate, and in through it to the market.
+  [[[-162, -24], [-151, -22.6], [-141, -18.6], [-134, -15.3], [-124, -15], [-113, -15], [-108, -15]], 5.5, true],
   [[[-112, -15], [-90, -15]], 7],
+  // The farm track off it, down the Ald's west bank to the barn and the windmill in the river's bend.
+  [[[-136, -16], [-136.5, -4], [-136, 24], [-133, 50], [-129.5, 70], [-127, 88]], 3, true],
   // High Street, the market to the cathedral's west gate.
   [[[-50, -15], [-20, -16], [6, -15]], 7],
   // The Crown terrace: from the market up round the hill's south face and down to the harbour.
   [[[-52, -36], [-30, -44], [0, -46], [40, -44], [72, -40], [90, -26], [96, -10]], 7],
   // Up to the keep's gate.
   [[[0, -46], [0, -63]], 6],
-  // North Street, from the terrace to the North Gate, and on as the valley road into the gorge.
+  // North Street, from the terrace to the North Gate, and out of it as the valley road: west under the north wall, and up the Ald's east bank into the gorge, through the Gorgegate.
   [[[20, -45], [25, -72], [22, -98], [20, -114]], 6],
-  [[[20, -110], [22, -124], [26, -142]], 5.5, true],
+  [[[20, -110], [20, -118], [10, -121], [-30, -121.5], [-70, -121], [-92, -121.5], [-101, -125], [-103, -132], [-103, -143]], 5, true],
   // The lane up beside the King's Garden.
   [[[-46, -40], [-52, -74], [-54, -106]], 5],
   // The river streets on the north bank, either side of the bridge head, on to the Long Quay.
@@ -410,7 +499,8 @@ export class Plot {
 export function districtAt(x: number, z: number): District {
   if (!insideWalls(x, z, -4)) return 'fields';
   if (z > southEdge(x)) return x > 50 ? 'harbour' : 'guild';
-  if (x > 64) return 'harbour';
+  // The harbour: east of the close, and the Long Quay along the basin's north side.
+  if (x > 64 || (x > 50 && z > 12)) return 'harbour';
   if (x >= 6 && x <= 66 && z >= -38 && z <= 18) return 'close';
   if (z > 4 + 16 * (fbm(x * 0.05, 7, 215) - 0.5) && x > -50) return 'oldTown';
   if (z < -36 && x > -56) return 'crown';
@@ -434,24 +524,46 @@ export function planAldhaven(): AldhavenPlan {
   const rand = mulberry32(1871);
   const streets: Street[] = STREETS.map(([pts, width, dirt]) => ({ line: sampleCurve(pts, 1), width, dirt: dirt ?? false }));
 
-  // ---- Where houses may not stand.
+  // ---- The ground first: the city's own, blended at its edges to its neighbours', the roads outside the walls laid into it.
+  const ox = at.x;
+  const oz = at.z;
+  const worldLand = { minX: land.minX + ox, maxX: land.maxX + ox, minZ: land.minZ + oz, maxZ: land.maxZ + oz };
+  const cols = Math.round((land.maxX - land.minX) / cell) + 1;
+  const rows = Math.round((land.maxZ - land.minZ) / cell) + 1;
+  const ground = new HeightGrid(worldLand.minX, worldLand.minZ, cols, rows, cell);
+  ground.each((x, z, k) => (ground.data[k] = cityHeight(x - ox, z - oz)));
+  // The edges blend to the neighbours' heights, so the zones agree exactly on their lines.
+  meetWest(ground);
+  meetSouth(ground);
+  layRoads(ground, streets);
+  // What stands and grows stands on the ground as it ends up (or on a bridge's deck, or the mole), in the city's frame.
+  const ground0 = (x: number, z: number) => deckAtCity(x, z) ?? ground.at(x + ox, z + oz);
+
+  // ---- Where houses may not stand, and where the paved streets' worn middles run.
   const plot = new Plot(land.minX, land.minZ, land.maxX, land.maxZ);
-  plot.mark(land.minX, land.maxX, land.minZ, land.maxZ, (x, z) => !insideWalls(x, z, wall.thick / 2 + 0.6) || inRiver(x, z, 1.5) || Math.abs(x - bridge.x) < bridge.width / 2 + 1 && z > 30 && z < 90);
+  plot.mark(land.minX, land.maxX, land.minZ, land.maxZ, (x, z) => !insideWalls(x, z, wall.thick / 2 + 0.6) || inRiver(x, z, 1.5) || (Math.abs(x - bridge.x) < bridge.width / 2 + 1 && z > 30 && z < 90));
+  const worn = new Plot(land.minX, land.minZ, land.maxX, land.maxZ);
   for (const s of streets) {
     const r = s.width / 2 + 0.4;
     for (const [px, pz] of s.line) plot.mark(px - r, px + r, pz - r, pz + r, (x, z) => Math.hypot(x - px, z - pz) < r);
+    if (s.dirt) continue;
+    const m = s.width / 2 - 1;
+    for (const [px, pz] of s.line) worn.mark(px - m, px + m, pz - m, pz + m, (x, z) => Math.hypot(x - px, z - pz) < m);
   }
   for (const [x0, x1, z0, z1] of OPEN) plot.mark(x0, x1, z0, z1, () => true);
   for (const [cx, cz, r] of OPEN_ROUND) plot.mark(cx - r, cx + r, cz - r, cz + r, (x, z) => Math.hypot(x - cx, z - cz) < r);
 
   const pieces: Omit<Piece, 'y'>[] = [];
+  /** Where something solid already stands, squares and quays included: so the clutter doesn't pile up on itself. */
+  const taken = new Plot(land.minX, land.minZ, land.maxX, land.maxZ);
   const boxes: Box[] = [];
   const circles: { x: number; z: number; r: number }[] = [];
   let seed = 1;
   const put = (kind: PieceKind, x: number, z: number, yaw: number, o: Partial<Omit<Piece, 'kind' | 'x' | 'z' | 'yaw' | 'y'>> = {}, solid: 'box' | 'circle' | 'none' = 'box') => {
-    const p = { kind, x, z, yaw, w: o.w ?? 1, d: o.d ?? 1, h: o.h ?? 0, storeys: o.storeys ?? 1, variant: o.variant ?? 0, district: o.district ?? districtAt(x, z), seed: o.seed ?? seed++ };
+    const p = { kind, x, z, yaw, w: o.w ?? 1, d: o.d ?? 1, h: o.h ?? 0, storeys: o.storeys ?? 1, variant: o.variant ?? 0, district: o.district ?? districtAt(x, z), seed: o.seed ?? seed++, footing: o.footing };
     pieces.push(p);
     if (solid !== 'none' && kind !== 'wall' && kind !== 'tower') plot.claim({ x, z, w: p.w, d: p.d, yaw });
+    if (solid !== 'none') taken.claim({ x, z, w: p.w, d: p.d, yaw });
     if (solid === 'box') boxes.push({ x, z, hw: p.w / 2, hd: p.d / 2, yaw });
     else if (solid === 'circle') circles.push({ x, z, r: Math.max(p.w, p.d) / 2 });
     return p;
@@ -576,19 +688,39 @@ export function planAldhaven(): AldhavenPlan {
   // The barracks against the north wall, its yard in front with the drill posts.
   building('barracks', 55, -102, 0, 26, 9, { storeys: 2 });
   for (let i = 0; i < 4; i++) put('dummy', 46 + i * 6, -88, PI, { w: 0.6, d: 0.6, h: 1.8 }, 'circle');
-  // The Great Market: the Gilded Gull on the north side; the bank and the Exchange on the south.
+  // The Great Market: the Gilded Gull on the north side; the bank and the Exchange on the south; the
+  // market cross in the middle ringed by stalls, more stalls along the sides, and carts and goods between.
   building('inn', -70, -44, 0, 16, 11, { storeys: 3, variant: 0, district: 'market' });
   building('hall', -82, 13, PI, 14, 11, { storeys: 2, variant: 1, district: 'market' });
   building('hall', -58, 13, PI, 14, 11, { storeys: 2, variant: 2, district: 'market' });
-  put('marketCross', -70, -15, 0, { w: 4, d: 4, h: 6 }, 'circle');
+  put('marketCross', -70, -15, 0, { w: 5, d: 5, h: 8 }, 'circle');
+  let stalls = 0;
+  const stall = (x: number, z: number, yaw: number) => {
+    put('stall', x, z, yaw, { w: 3.6, d: 2.4, h: 2.8, variant: stalls++ });
+    // The stallholder's stock behind it.
+    const bx = x - Math.sin(yaw) * 2.1 + Math.cos(yaw) * (rand() - 0.5) * 2;
+    const bz = z - Math.cos(yaw) * 2.1 - Math.sin(yaw) * (rand() - 0.5) * 2;
+    put(['crates', 'barrels', 'sacks'][Math.floor(rand() * 3)] as PieceKind, bx, bz, rand() * PI, { w: 1.2, d: 1.2, variant: Math.floor(rand() * 3) }, 'circle');
+  };
   for (let k = 0; k < 8; k++) {
     const a = (k / 8) * PI * 2 + PI / 8;
-    put('stall', -70 + Math.sin(a) * 11.5, -15 + Math.cos(a) * 11.5, a + PI, { w: 3.2, d: 2, h: 2.6, variant: k });
+    stall(-70 + Math.sin(a) * 12.5, -15 + Math.cos(a) * 12.5, a + PI);
   }
-  // Inside the Kingsgate: the Watch house, and the coaching yard's stables across the way.
+  for (const x of [-81, -76, -64, -59]) stall(x, -31, 0);
+  for (const z of [-27, -21.5, -8.5, -3]) {
+    stall(-88, z, PI / 2);
+    stall(-52, z, -PI / 2);
+  }
+  put('cart', -77, 1.5, 0.3, { w: 1.6, d: 3 });
+  put('cart', -63, 0.5, -0.5, { w: 1.6, d: 3 });
+  for (const [x, z] of [[-65, -10], [-75, -10], [-65, -20], [-75, -20]] as const) put('lamp', x, z, 0, { w: 0.3, d: 0.3, h: 3.4 }, 'circle');
+  // Inside the Kingsgate: the Watch house, the coaching yard's stables across the way, a trough for the horses.
   building('hall', -100, -27, 0, 12, 8, { storeys: 2, variant: 3, district: 'market' });
   building('stables', -100, 6, PI, 14, 7);
   put('cart', -96, -2, 0.4, { w: 1.6, d: 3 });
+  put('fountain', -104, -21, PI / 2, { w: 3.2, d: 1.4, h: 1.6 });
+  put('haystack', -106, 1, 0.4, { w: 2, d: 2, h: 1.8 }, 'circle');
+  put('barrels', -94, 3, 0.2, { w: 1.2, d: 1.2 }, 'circle');
   // Old Town: the Lamplit Collegium's tower, the Drowned Lamp, the old well and the fenced-off sinkhole.
   building('collegium', 10, 29, PI, 12, 9, { h: 30, district: 'oldTown' });
   building('inn', 40, 30, PI, 12, 9, { storeys: 3, variant: 1, district: 'oldTown' });
@@ -611,25 +743,49 @@ export function planAldhaven(): AldhavenPlan {
   // The harbour mole and its light; ships at anchor in the basin and boats at the wharf.
   put('lighthouse', 150, 45, PI, { w: 8, d: 8, h: 20 }, 'circle');
   for (const [x, z, yaw, v] of [[72, 52, PI / 2, 0], [98, 64, PI / 2 + 0.15, 1], [74, 78, -PI / 2, 2], [126, 60, PI / 2 - 0.3, 1]] as const) put('ship', x, z, yaw, { w: 5, d: 17, h: 14, variant: v }, 'none');
-  for (const [x, z, yaw] of [[-92, 78, PI / 2], [-80, 78.5, PI / 2 + 0.2], [-66, 78, PI / 2], [10, 46, 0.1], [-50, 74, -0.2]] as const) put('boat', x, z, yaw, { w: 1.5, d: 4.5 }, 'none');
+  for (const [x, z, yaw] of [[-92, 72.5, PI / 2], [-80, 73, PI / 2 + 0.2], [-66, 72.5, PI / 2], [10, 47, 0.1], [-50, 71, -0.2], [104, 34.5, PI / 2 - 0.1], [60, 89, -PI / 2]] as const) put('boat', x, z, yaw, { w: 1.5, d: 4.5 }, 'none');
+  // A river barge at the wharf, and a ship alongside the Long Quay under the crane's jib.
+  put('boat', -100, 71.5, PI / 2, { w: 3.4, d: 11, variant: 1 }, 'none');
+  put('ship', 82, 35, PI / 2, { w: 5, d: 17, h: 14, variant: 2 }, 'none');
   // The Aldbridge, and the narrow houses crowding along it.
   put('bridge', bridge.x, (bridge.from + bridge.to) / 2, 0, { w: bridge.width, d: bridge.to - bridge.from, h: bridge.rise }, 'none');
   for (const side of [-1, 1]) {
     for (const z of [47, 54, 66, 73]) {
-      put('house', bridge.x + side * (bridge.road / 2 + 1.7), z, side < 0 ? PI / 2 : -PI / 2, { w: 6, d: 3.4, storeys: 2, district: 'oldTown' });
+      put('house', bridge.x + side * (bridge.road / 2 + 1.7), z, side < 0 ? PI / 2 : -PI / 2, { w: 6, d: 3.4, storeys: 2, district: 'oldTown', footing: 0.9 });
     }
   }
-  // Outside the walls: the Gorgegate across the valley road, a windmill, a barn and haystacks in the fields.
-  put('gorgegate', gorge.x, -131, PI, { w: 2 * gorge.half + 6, d: 4, h: 12 }, 'none');
-  for (const side of [-1, 1]) {
-    boxes.push({ x: gorge.x + side * 9, z: -131, hw: 5, hd: 2, yaw: 0 });
+  // ---- Outside the walls.
+  // The Kingsbridge: the Kingsroad's last stretch, over the Ald to the Kingsgate.
+  put('kingsbridge', (kingsbridge.x0 + kingsbridge.x1) / 2, kingsbridge.z, 0, { w: kingsbridge.x1 - kingsbridge.x0, d: kingsbridge.width, h: kingsbridge.rise, district: 'fields' }, 'none');
+  // Westwatch: the ruined beacon tower on the moor's last crest, over the Kingsroad, looking down on the city.
+  put('beacon', -151, -41, PI / 2, { w: 6, d: 6, h: 9, district: 'fields' }, 'circle');
+  // The Gorgegate across the valley road where the Ald comes out of the gorge, its west tower on the river's bank and a chain
+  // boom across the water to the far side. Shut for now: the road north waits on Greyfell.
+  put('gorgegate', gorge.road, gorge.gate, PI, { w: 26, d: 5, h: 12, district: 'fields' }, 'none');
+  boxes.push({ x: gorge.road, z: gorge.gate, hw: 13, hd: 2.5, yaw: 0 });
+  // A windmill, a barn at the farm track's end and haystacks on the land in the river's bend.
+  put('windmill', -118, 97, PI / 2, { w: 6, d: 6, h: 14, district: 'fields' }, 'circle');
+  building('barn', -131, 99.5, PI, 9, 14, { storeys: 1, district: 'fields' });
+  for (const [x, z] of [[-138.5, 89], [-139.5, 95.5], [-122, 106]] as const) put('haystack', x, z, rand() * PI, { w: 2.6, d: 2.6, h: 2.4, district: 'fields' }, 'circle');
+  put('cart', -124.5, 92, 2.2, { w: 1.6, d: 3, district: 'fields' });
+  put('woodpile', -137.5, 103, PI / 2, { w: 3.2, d: 1.4, h: 1.2, district: 'fields' });
+  // The mole, built out from the sea wall to the harbour light's round head.
+  for (let k = 0; k < mole.line.length - 1; k++) {
+    const [ax, az] = mole.line[k];
+    const [bx, bz] = mole.line[k + 1];
+    const from = k === 0 ? (coast - ax) / (bx - ax) : 0;
+    const [sx, sz] = [ax + (bx - ax) * from, az + (bz - az) * from];
+    const len = Math.hypot(bx - sx, bz - sz);
+    put('mole', (sx + bx) / 2, (sz + bz) / 2, Math.atan2(bx - sx, bz - sz), { w: mole.width, d: len + (k === 0 ? 0.6 : 0.3), district: 'harbour' }, 'none');
   }
-  put('windmill', -138, -64, PI / 2, { w: 6, d: 6, h: 14, district: 'fields' }, 'circle');
-  building('barn', -142, -84, PI / 2, 9, 14, { storeys: 1, district: 'fields' });
-  for (const [x, z] of [[-130, -78], [-126, -86], [-128, -94]] as const) put('haystack', x, z, rand() * PI, { w: 2.6, d: 2.6, h: 2.4, district: 'fields' }, 'circle');
+  {
+    const [hx, hz] = mole.line[mole.line.length - 1];
+    put('mole', hx, hz, 0, { w: MOLE_HEAD.r * 2, d: MOLE_HEAD.r * 2, variant: 1, district: 'harbour' }, 'none');
+  }
 
   // ---- Signposts, map boards, lamps and the quays' clutter.
-  put('signpost', -118, -20, -PI / 2, { variant: 0, h: 2.6 }, 'circle');
+  put('signpost', -137, -20.5, -PI / 2, { variant: 0, h: 2.6 }, 'circle');
+  put('signpost', 27, -117.5, PI, { variant: 0, h: 2.6 }, 'circle');
   put('signpost', -42, 34, PI / 4, { variant: 1, h: 2.6 }, 'circle');
   put('signpost', 16, -47, 0, { variant: 2, h: 2.6 }, 'circle');
   put('signpost', -16, 108, PI, { variant: 3, h: 2.6 }, 'circle');
@@ -648,25 +804,51 @@ export function planAldhaven(): AldhavenPlan {
     }
   }
   for (const [x, z] of [[-35, -5], [-5, -5], [-82, -12], [95, -14], [-30, 92], [20, 92]] as const) put('lamp', x, z, 0, { w: 0.3, d: 0.3, h: 3.4 }, 'circle');
-  const clutter = (x0: number, x1: number, z0: number, z1: number, n: number) => {
-    for (let k = 0; k < n; k++) {
+  /** Goods piled on a quay or a wharf: crates, barrels and sacks, `n` heaps scattered over the box, none on another. */
+  const cargo = (x0: number, x1: number, z0: number, z1: number, n: number, kinds: readonly PieceKind[] = ['crates', 'barrels', 'sacks']) => {
+    for (let k = 0, tries = 0; k < n && tries < n * 8; tries++) {
       const x = x0 + rand() * (x1 - x0);
       const z = z0 + rand() * (z1 - z0);
-      put(rand() < 0.55 ? 'crates' : 'barrels', x, z, rand() * PI, { w: 1.6, d: 1.6, variant: Math.floor(rand() * 3) }, 'circle');
+      if (!taken.fits({ x, z, w: 2.2, d: 2.2, yaw: 0 })) continue;
+      put(kinds[Math.floor(rand() * kinds.length)], x, z, rand() * PI, { w: 1.4, d: 1.4, variant: Math.floor(rand() * 3) }, 'circle');
+      k++;
     }
   };
-  clutter(56, 74, 15, 22, 4);
-  clutter(92, 110, 15, 22, 4);
-  clutter(56, 110, 94, 97, 5);
-  clutter(-100, -60, 79, 81.5, 4);
+  // The Long Quay: cargo stacked between the warehouses and the water, nets drying, an anchor, the fish market's stalls.
+  cargo(54, 76, 14, 21, 7);
+  cargo(90, 111, 14, 20, 6);
+  for (const x of [60, 66]) put('nets', x, 24, 0, { w: 3.2, d: 0.4, h: 2.2 });
+  put('anchor', 99, 25.5, 0.3, { w: 1.6, d: 1.0 }, 'circle');
+  for (const x of [94, 100, 106]) put('stall', x, 18.5, PI, { w: 3.6, d: 2.4, h: 2.8, variant: 3 + (x % 3) });
+  // The south quay.
+  cargo(54, 111, 93.5, 97.5, 8);
+  put('nets', 70, 94, PI, { w: 3.2, d: 0.4, h: 2.2 });
+  put('cart', 96, 97, PI / 2 + 0.2, { w: 1.6, d: 3 });
+  // Guild Row's wharf along the river: goods for the barges, the tanners' racks, the dyers' vats, timber for the joiners.
+  cargo(-104, -60, 77.5, 81.5, 7);
+  cargo(-12, 36, 77.5, 81.5, 5, ['crates', 'barrels']);
+  for (const x of [-10, -4]) put('rack', x, 80.5, PI, { w: 3, d: 0.6, h: 2.2 });
+  put('vats', 6, 79.8, 0, { w: 4.2, d: 2, h: 1 });
+  put('vats', 20, 79.8, 0, { w: 4.2, d: 2, h: 1, variant: 1 });
+  put('woodpile', 30, 80.2, 0, { w: 4, d: 1.6, h: 1.4 });
+  put('woodpile', -52, 80.2, 0, { w: 3.2, d: 1.6, h: 1.2 });
+  // Mooring bollards along the quays' edges.
   for (let x = 58; x < 112; x += 9) put('bollard', x, 29.2, 0, { w: 0.5, d: 0.5 }, 'circle');
   for (let x = 58; x < 112; x += 9) put('bollard', x, 92.8, 0, { w: 0.5, d: 0.5 }, 'circle');
+  for (const x of [-104, -84, -64, -10, 10, 30]) put('bollard', x, 76.9, 0, { w: 0.5, d: 0.5 }, 'circle');
+  // Lamps along the quays' edges, so the water's edge reads at dusk.
+  for (let x = 62; x < 112; x += 16) {
+    put('lamp', x, 28.6, PI, { w: 0.3, d: 0.3, h: 3.4 }, 'circle');
+    put('lamp', x + 8, 93.4, 0, { w: 0.3, d: 0.3, h: 3.4 }, 'circle');
+  }
+  for (const x of [-96, -72, -6, 16]) put('lamp', x, 77.6, 0, { w: 0.3, d: 0.3, h: 3.4 }, 'circle');
+  // Outside the North Gate, under the wall: the first refugees from the north, a few shelters and their bundles.
+  for (const [x, z, yaw] of [[-2, -116, 0.1], [5, -115.8, -0.15], [34, -116.2, 0.05]] as const) put('tent', x, z, yaw, { w: 3, d: 2.4, h: 1.8, district: 'fields' });
+  for (const [x, z] of [[1.5, -117.4], [8.5, -116.8], [30.5, -117], [37, -117.6], [12, -116]] as const) put('bundle', x, z, rand() * PI, { w: 1, d: 1, district: 'fields' }, 'circle');
   // Banners: the crown's on the market and the keep, Corvane's crimson on its house.
   for (const [x, z, yaw, v] of [[-90, -36, PI / 4, 0], [-50, -36, -PI / 4, 0], [-28, -51.6, 0, 1], [40, -53.6, 0, 2], [70, -53.6, 0, 3]] as const) put('banner', x, z, yaw, { h: 6, variant: v }, 'none');
-  put('bench', -62, -31, PI, { w: 2, d: 0.6 }, 'none');
-  put('bench', -78, -31, PI, { w: 2, d: 0.6 }, 'none');
-  put('bench', -90, -70, PI / 2, { w: 2, d: 0.6 }, 'none');
-  put('bench', -74, -82, -PI / 2, { w: 2, d: 0.6 }, 'none');
+  // Benches under the plane trees and in the gardens.
+  for (const [x, z, yaw] of [[-86, -27.5, PI], [-54, -27.5, PI], [-90, -70, PI / 2], [-74, -82, -PI / 2], [-96, -60, PI], [20, -24, -PI / 2], [30, 10, PI]] as const) put('bench', x, z, yaw, { w: 2, d: 0.6 }, 'none');
 
   // ---- The houses: rows along every street inside the walls, fronts to the street.
   for (const s of streets) {
@@ -741,6 +923,47 @@ export function planAldhaven(): AldhavenPlan {
     plants.push({ kind, x, z, yaw: rand() * PI * 2, scale, seed: Math.floor(rand() * 1e6) });
     if (solid) circles.push({ x, z, r: solid * scale });
   };
+
+  // ---- The back yards: what's left between the houses, behind the rows, each with a shed, a woodpile, a tree, a cart or the
+  // household's barrels, or left bare. Their ground is packed earth and grass, not setts (see `surface`).
+  for (let z = land.minZ + 1.5; z < land.maxZ; z += 3) {
+    for (let x = land.minX + 1.5; x < land.maxX; x += 3) {
+      const px = x + (rand() - 0.5);
+      const pz = z + (rand() - 0.5);
+      if (!insideWalls(px, pz, 4)) continue;
+      const f = { x: px, z: pz, w: 2.8, d: 2.8, yaw: 0 };
+      if (!plot.fits(f)) continue;
+      const yaw = Math.floor(rand() * 4) * (PI / 2) + (rand() - 0.5) * 0.2;
+      const r = rand();
+      if (r < 0.2) {
+        plot.claim(f);
+        plant('plane', px, pz, 0.5 + rand() * 0.2, 0.3);
+      } else if (r < 0.36) put('shed', px, pz, yaw, { w: 2.6, d: 2, h: 2.3, variant: Math.floor(rand() * 3) });
+      else if (r < 0.5) put('woodpile', px, pz, yaw, { w: 2.4, d: 1.2, h: 1.1 });
+      else if (r < 0.66) put(rand() < 0.5 ? 'barrels' : 'crates', px, pz, yaw, { w: 1.4, d: 1.4, variant: Math.floor(rand() * 3) }, 'circle');
+      else if (r < 0.72) put('cart', px, pz, yaw, { w: 1.6, d: 3 });
+      else if (r < 0.8) put('planter', px, pz, yaw, { w: 2.2, d: 1, h: 0.6, variant: Math.floor(rand() * 3) });
+      else plot.claim(f);
+    }
+  }
+  // What's still open between the houses, and not a street's or a square's: a yard.
+  const yards = new Uint8Array(plot.taken.length);
+  for (let j = 1; j < plot.rows - 1; j++) {
+    for (let i = 1; i < plot.cols - 1; i++) {
+      let open = 0;
+      for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) open += plot.taken[(j + dj) * plot.cols + i + di] ? 0 : 1;
+      if (open >= 6) yards[j * plot.cols + i] = 1;
+    }
+  }
+  for (const p of pieces) {
+    // Under the sheds, the woodpiles and the yards' clutter, too.
+    if (p.kind !== 'shed' && p.kind !== 'woodpile' && p.kind !== 'planter' && p.kind !== 'cart') continue;
+    for (const [x, z] of Plot.samples(p, 1)) {
+      const [i, j] = [Math.floor(x - land.minX), Math.floor(z - land.minZ)];
+      if (i >= 0 && j >= 0 && i < plot.cols && j < plot.rows) yards[j * plot.cols + i] = 1;
+    }
+  }
+
   // Plane trees at the market's corners and along the terrace; trees in the close's garden.
   for (const [x, z] of [[-86, -31], [-54, -31], [-86, 1], [-54, 1], [-40, -40], [20, -42], [56, -38]] as const) plant('plane', x, z, 1.05 + rand() * 0.2, 0.45);
   for (let k = 0; k < 7; k++) plant('plane', 14 + k * 7.5 + rand() * 2, -31 + rand() * 3, 0.7 + rand() * 0.2, 0.35);
@@ -757,31 +980,50 @@ export function planAldhaven(): AldhavenPlan {
     if (Math.hypot(x - pond.x, z - pond.z) < pond.r + 1) continue;
     plant(rand() < 0.3 ? 'flower' : 'grass', x, z, 0.8 + rand() * 0.5);
   }
-  // Outside the walls: hedgerows round the fields, the orchard, gorse up the moor's slope, pines on the gorge's cliffs, reeds on the flats, rocks on the shore.
+  // Outside the walls: hedgerows round the fields up the west bank and in the river's bend, the orchard, gorse up the moor's
+  // crest, reeds along the Ald, pines on the Greyspine's feet and in the gorge, reeds on the flats, rocks on the shore.
+  const nearRoad = (x: number, z: number, m: number) => streets.some((s) => nearestOnPolyline(s.line, x, z).d < s.width / 2 + m);
   const hedge = (ax: number, az: number, bx: number, bz: number) => {
     const len = Math.hypot(bx - ax, bz - az);
-    for (let s = 0; s < len; s += 1.7) plant('hedge', ax + ((bx - ax) * s) / len + (rand() - 0.5) * 0.4, az + ((bz - az) * s) / len + (rand() - 0.5) * 0.4, 0.9 + rand() * 0.3);
+    for (let s = 0; s < len; s += 1.7) {
+      const [x, z] = [ax + ((bx - ax) * s) / len + (rand() - 0.5) * 0.4, az + ((bz - az) * s) / len + (rand() - 0.5) * 0.4];
+      if (!nearRoad(x, z, 1) && offAld(x, z) > 2) plant('hedge', x, z, 0.9 + rand() * 0.3);
+    }
   };
-  hedge(-155, -30, -118, -30);
-  hedge(-155, -55, -118, -55);
-  hedge(-155, -100, -118, -100);
-  hedge(-118, -110, -118, -30);
-  hedge(-118, -8, -118, 34);
-  hedge(-155, 10, -122, 10);
-  for (let x = -152; x < -118; x += 6) for (let z = 84; z < 108; z += 6) plant('orchard', x + (rand() - 0.5), z + (rand() - 0.5), 0.75 + rand() * 0.25, 0.3);
+  // The fields' hedges: along the escarpment's foot, across the strips down to the river, flanking the road.
+  hedge(ESCARPMENT, -106, ESCARPMENT, -31);
+  hedge(ESCARPMENT, -8, ESCARPMENT, 34);
+  for (const z of [-100, -72, -46, 8]) hedge(ESCARPMENT, z, -131.5, z);
+  hedge(-147, -29, -139, -25.5);
+  hedge(-146, -11.5, -139.5, -11);
+  hedge(ESCARPMENT, 82, -131, 82);
+  // The orchard below the escarpment, west of the bend.
+  for (const x of [-139.5, -135.5, -131.5]) {
+    for (let z = 38; z < 80; z += 5.5) {
+      const [px, pz] = [x + (rand() - 0.5), z + (rand() - 0.5)];
+      if (offAld(px, pz) > 3.5 && !nearRoad(px, pz, 1.8)) plant('orchard', px, pz, 0.75 + rand() * 0.25, 0.3);
+    }
+  }
+  // The first pines at the gorge's mouth, by the valley road.
+  for (const [x, z] of [[-95, -127], [-93, -134], [-97, -139], [-115.5, -138]] as const) plant('pine', x, z, 0.9 + rand() * 0.3, 0.32);
   const scatter = (spacing: number, fn: (x: number, z: number) => void) => {
     for (let z = land.minZ + spacing / 2; z < land.maxZ; z += spacing) for (let x = land.minX + spacing / 2; x < land.maxX; x += spacing) fn(x + (rand() - 0.5) * spacing, z + (rand() - 0.5) * spacing);
   };
-  const nearRoad = (x: number, z: number, m: number) => streets.some((s) => nearestOnPolyline(s.line, x, z).d < s.width / 2 + m);
+  const nearPiece = (x: number, z: number) => !taken.fits({ x, z, w: 1.2, d: 1.2, yaw: 0 });
   scatter(5, (x, z) => {
-    if (insideWalls(x, z, -4) || inRiver(x, z, 2) || x > shoreAt(z) - 2 || nearRoad(x, z, 1.5)) return;
-    const h = cityHeight(x, z);
-    if (z < gorge.from - 3 && h > 8) {
-      if (Math.abs(x - gorge.x) < gorge.half - 4) return;
-      if (rand() < 0.45) plant('pine', x, z, 0.8 + rand() * 0.5, 0.32);
+    if (insideWalls(x, z, -4) || inRiver(x, z, 1.2) || x > shoreAt(z) - 2 || nearRoad(x, z, 1.5) || deckAtCity(x, z) !== null || nearPiece(x, z)) return;
+    const h = ground0(x, z);
+    const bank = offAld(x, z);
+    if (z < gorge.from - 2 && h > 7) {
+      if (rand() < 0.5) plant('pine', x, z, 0.8 + rand() * 0.5, 0.32);
       else if (rand() < 0.3) plant('rock', x, z, 0.8 + rand() * 1.6, 0.6);
-    } else if (x < -150 && rand() < 0.3) plant(rand() < 0.6 ? 'bush' : 'rock', x, z, 0.7 + rand() * 0.6);
-    else if (z > wall.south + 4 && h < 0.4 && rand() < 0.35) plant('reed', x, z, 0.9 + rand() * 0.5);
+    } else if (bank < 3.5) {
+      if (rand() < 0.55) plant('reed', x, z, 0.9 + rand() * 0.5);
+      else if (rand() < 0.1 && bank > 1.8 && z > gorge.from) plant('oak', x, z, 0.55 + rand() * 0.2, 0.35);
+    } else if (x < ESCARPMENT + 1) {
+      if (rand() < 0.35) plant(rand() < 0.65 ? 'bush' : 'rock', x, z, 0.7 + rand() * 0.6);
+      else if (rand() < 0.5) plant('grass', x, z, 0.8 + rand() * 0.6);
+    } else if (z > wall.south + 4 && h < 0.4 && rand() < 0.35) plant('reed', x, z, 0.9 + rand() * 0.5);
     else if (z > ALDHAVEN.land.maxZ - 14 && rand() < 0.6) plant('reed', x, z, 1 + rand() * 0.5);
     else if (x > coast - 6 && z < wall.ne[3] && rand() < 0.4) plant('rock', x, z, 0.8 + rand() * 1.5);
     else if (rand() < 0.4 && h > 0.5) plant('grass', x, z, 0.8 + rand() * 0.6);
@@ -789,19 +1031,7 @@ export function planAldhaven(): AldhavenPlan {
   });
 
   // ---- Into the world: move everything from the city's frame to its place.
-  const ox = at.x;
-  const oz = at.z;
-  const worldLand = { minX: land.minX + ox, maxX: land.maxX + ox, minZ: land.minZ + oz, maxZ: land.maxZ + oz };
-  const cols = Math.round((land.maxX - land.minX) / cell) + 1;
-  const rows = Math.round((land.maxZ - land.minZ) / cell) + 1;
-  const ground = new HeightGrid(worldLand.minX, worldLand.minZ, cols, rows, cell);
-  ground.each((x, z, k) => (ground.data[k] = cityHeight(x - ox, z - oz)));
-  // The edges blend to the neighbours' heights, so the zones agree exactly on their lines.
-  meetWest(ground);
-  meetSouth(ground);
-  const heightAt = (x: number, z: number) => (onBridge(x - ox, z - oz) ? deckHeight(z - oz) : ground.at(x, z));
-  // What stands and grows stands on the ground as it ends up, the edges' blends and all.
-  const ground0 = (x: number, z: number) => (onBridge(x, z) ? deckHeight(z) : ground.at(x + ox, z + oz));
+  const heightAt = (x: number, z: number) => ground0(x - ox, z - oz);
   const move = (p: P2): P2 => [p[0] + ox, p[1] + oz];
 
   const walkable = new Walkable(walkableAreas().map((area) => area.map(move)));
@@ -809,21 +1039,74 @@ export function planAldhaven(): AldhavenPlan {
   for (const b of boxes) colliders.addBox({ ...b, x: b.x + ox, z: b.z + oz });
   for (const c of circles) colliders.addCircle({ ...c, x: c.x + ox, z: c.z + oz });
 
-  const footY = (p: Omit<Piece, 'y'>): number => {
-    if (p.kind === 'bridge' || p.kind === 'ship' || p.kind === 'boat' || p.kind === 'waterGate') return ALDHAVEN.water;
-    if (p.kind === 'quay') return ALDHAVEN.quay;
-    if (onBridge(p.x, p.z)) return deckHeight(p.z);
-    if (p.kind === 'wall' || p.kind === 'tower') return Math.min(...Plot.samples(p, 0).map(([x, z]) => ground0(x, z)));
-    // A building stands on the highest corner of its plot, its plinth showing down the slope; a prop on the ground under it.
-    if (SMALL.has(p.kind) || p.kind === 'gatehouse' || p.kind === 'gorgegate') return ground0(p.x, p.z);
-    return Math.max(...Plot.samples(p, 0).map(([x, z]) => ground0(x, z)));
+  /** The buildings that stand at their door: level with the street in front, dug into the slope behind. */
+  const DOORS: ReadonlySet<PieceKind> = new Set<PieceKind>(['house', 'warehouse', 'inn', 'hall', 'townhouse', 'barracks', 'forge', 'lodge', 'stables', 'barn', 'collegium', 'cathedral', 'keep']);
+  const footY = (p: Omit<Piece, 'y'>): { y: number; drop: number } => {
+    if (p.kind === 'bridge' || p.kind === 'kingsbridge' || p.kind === 'ship' || p.kind === 'boat' || p.kind === 'waterGate') return { y: ALDHAVEN.water, drop: 0 };
+    if (p.kind === 'quay') return { y: ALDHAVEN.quay, drop: 0 };
+    if (p.kind === 'mole') return { y: mole.height, drop: 0 };
+    const deck = deckAtCity(p.x, p.z);
+    if (deck !== null) return { y: deck, drop: 0 };
+    const under = Plot.samples(p, 0).map(([x, z]) => ground0(x, z));
+    // Walls and towers sink their footings into the slope; a prop stands on the ground under it.
+    if (p.kind === 'wall' || p.kind === 'tower' || p.kind === 'beacon') return { y: Math.min(...under), drop: 0 };
+    if (SMALL.has(p.kind) || p.kind === 'gatehouse' || p.kind === 'gorgegate') return { y: ground0(p.x, p.z), drop: 0 };
+    const top = Math.max(...under);
+    if (!DOORS.has(p.kind)) return { y: top, drop: 0 };
+    // A building's floor is level with the street at its door, but never more than a plinth below its highest corner:
+    // where the street falls away further, steps go down to it.
+    const out = p.d / 2 + 0.8;
+    const front = ground0(p.x + Math.sin(p.yaw) * out, p.z + Math.cos(p.yaw) * out);
+    const y = Math.min(top + 0.15, Math.max(front, top - 1.4));
+    return { y, drop: Math.max(0, y - front) };
   };
-  const placed: Piece[] = pieces.map((p) => ({ ...p, y: footY(p), x: p.x + ox, z: p.z + oz }));
+  const placed: Piece[] = pieces.map((p) => {
+    const { y, drop } = footY(p);
+    return { ...p, y, x: p.x + ox, z: p.z + oz, ...(drop > 0.12 ? { drop } : {}) };
+  });
   const grown: CityPlant[] = plants.map((p) => ({ ...p, y: ground0(p.x, p.z), x: p.x + ox, z: p.z + oz }));
   const TREE_HEIGHT: Partial<Record<CityPlantKind, number>> = { plane: 9, oak: 9, pine: 8, orchard: 4 };
   const trees = grown.filter((p) => TREE_HEIGHT[p.kind]).map((p) => ({ x: p.x, y: p.y, z: p.z, height: (TREE_HEIGHT[p.kind] ?? 0) * p.scale }));
 
-  const surface = (x: number, z: number): Surface => surfaceAt(x - ox, z - oz);
+  // The places that sound where they are.
+  const sound = (id: PlaceSound['id'], x: number, z: number, y = ground0(x, z) + 1): PlaceSound => ({ id, x: x + ox, y, z: z + oz, interior: null });
+  const sounds: PlaceSound[] = [
+    sound('stream', bridge.x, 60, 1),
+    sound('stream', wall.west - 2, 60, 1),
+    sound('stream', -123, -15, 1),
+    sound('stream', -121, -118, 1),
+    sound('dock', 80, 30),
+    sound('dock', 100, 92),
+    sound('dock', -80, 77),
+    sound('dock', 132, 32),
+    sound('dock', 10, 44),
+    sound('forge', -64, 92),
+    sound('windmill', -124, 100, ground0(-124, 100) + 10),
+  ];
+
+  /** What the ground is at (x, z) in the world. */
+  const cellOf = (x: number, z: number) => {
+    const [i, j] = [Math.floor(x - land.minX), Math.floor(z - land.minZ)];
+    return i >= 0 && j >= 0 && i < plot.cols && j < plot.rows ? j * plot.cols + i : -1;
+  };
+  const surface = (wx: number, wz: number): Surface => {
+    const x = wx - ox;
+    const z = wz - oz;
+    const k = cellOf(x, z);
+    const garden = (x > -108 && x < -58 && z > -108 && z < -52) || (x > 8 && x < 64 && z > -36 && z < 16);
+    const inside = insideWalls(x, z, -2);
+    const yard = inside && !garden && k >= 0 && yards[k] === 1;
+    const causewayTop = z > wall.south - 2 && offCauseway(x, z) < causeway.width / 2 + 0.3;
+    const paved = (inside && !garden && !yard) || causewayTop;
+    // Old Town's black setts, ragged at their edge where the pale ones were laid over them.
+    const jx = (valueNoise(x * 0.6, z * 0.6, 313) - 0.5) * 5;
+    const jz = (valueNoise(x * 0.6, z * 0.6, 317) - 0.5) * 5;
+    const basalt = paved && inside && districtAt(x + jx, z + jz) === 'oldTown';
+    const street = paved && inside && k >= 0 && worn.taken[k] === 1;
+    const westBank = x < -127 && x > ESCARPMENT && z > -106 && z < 34 && offAld(x, z) > 2.5 && Math.abs(z + 17) > 5;
+    const inBend = x < wall.west - 3 && x > -126 && z > 82 && z < 111 && offAld(x, z) > 2.5;
+    return { paved, basalt, garden, field: !inside && (westBank || inBend), street, yard };
+  };
   const west = kingsroadSeam([-1, 0]);
   const westSeam: SideSeam = { ...west, heights: west.heights.map((_, k) => ground.get(0, k)) };
   const southSeam: Seam = {
@@ -846,9 +1129,10 @@ export function planAldhaven(): AldhavenPlan {
     plants: grown,
     colliders,
     pond: { x: pond.x + ox, z: pond.z + oz, r: pond.r, y: ground0(pond.x, pond.z) + 0.55 },
-    spawn: { x: -146 + ox, z: -21.5 + oz, yaw: -PI / 2 - 0.08 },
+    spawn: { x: -146 + ox, z: -21 + oz, yaw: -PI / 2 - 0.08 },
     landmarks: [
-      landmark('The Kingsroad', -146, -21.5),
+      landmark('The Kingsroad', -146, -21),
+      landmark('The Kingsbridge', -123, -15),
       landmark('The Kingsgate', -104, -15),
       landmark('The Great Market', -70, -24),
       landmark('The Cathedral of the Dawn', 0, -15),
@@ -861,13 +1145,52 @@ export function planAldhaven(): AldhavenPlan {
       landmark('The harbour light', 128, 31),
       landmark("The King's Garden", -82, -62),
       landmark('The North Gate', 20, -106),
-      landmark('The Gorgegate', 25, -121),
+      landmark('The valley road', -40, -121),
+      landmark('The Gorgegate', gorge.road, gorge.gate + 6),
       landmark('The Delta causeway', -30.5, 127),
     ],
     trees,
+    sounds,
     surface,
     heightAt,
+    deckAt: (x, z) => deckAtCity(x - ox, z - oz),
   };
+}
+
+/**
+ * Lay the roads outside the walls into `ground` (world metres; `streets` in
+ * the city's frame): each road's bed eased to a smooth run of heights, and
+ * its shoulders blended back to the land. The Kingsroad comes down from the
+ * seam's cutting (src/maps/kingsroad.ts) at an even grade to the
+ * Kingsbridge's west end; the others follow the land, smoothed. The seams'
+ * own lines (the west column, the south row) are left as they are.
+ */
+function layRoads(ground: HeightGrid, streets: readonly Street[]): void {
+  const { at, land } = ALDHAVEN;
+  const toWorld = (line: readonly P2[]): P2[] => line.map(([x, z]) => [x + at.x, z + at.z]);
+  for (const [n, s] of streets.entries()) {
+    if (!s.dirt) continue;
+    // The Kingsroad stops at the Kingsbridge: the river runs under the rest.
+    const line = n === 0 ? s.line.filter(([x]) => x <= kingsbridge.x0 + 0.5) : s.line;
+    const world = toWorld(line);
+    const heights =
+      n === 0
+        ? line.map(([x]) => lerp(KINGSROAD.road.y, kingsbridge.y0, Math.min(1, Math.max(0, (x - land.minX) / (kingsbridge.x0 - land.minX)))))
+        : smoothHeights(heightsAlong(ground, world), 6, 4, { first: true, last: true });
+    const half = s.width / 2 + 0.4;
+    const shoulder = 3;
+    const field = lineField(ground, world, half + shoulder);
+    const last = ground.rows - 1;
+    for (let j = 0; j < ground.rows; j++) {
+      for (let i = 1; i < ground.cols; i++) {
+        if (j === last) continue;
+        const k = j * ground.cols + i;
+        const d = field.d[k];
+        if (d > half + shoulder) continue;
+        ground.data[k] = lerp(ground.data[k], along(heights, field.at[k]), smoothstep(half + shoulder, half, d));
+      }
+    }
+  }
 }
 
 /**
@@ -908,34 +1231,75 @@ function meetSouth(ground: HeightGrid): void {
   }
 }
 
-/** What the ground is at (x, z), in the city's frame. */
-function surfaceAt(x: number, z: number): Surface {
-  const inGarden = (x > -108 && x < -58 && z > -108 && z < -52) || (x > 8 && x < 64 && z > -36 && z < 16);
-  const quays = nearestOnPolyline(mole.line, x, z).d < mole.width / 2 + 0.5 || (z > wall.south - 2 && offCauseway(x, z) < causeway.width / 2 + 0.3);
-  const paved = (insideWalls(x, z, -2) && !inGarden) || quays;
-  const basalt = paved && districtAt(x, z) === 'oldTown';
-  const field = !insideWalls(x, z, -4) && x < wall.west - 6 && x > -158 && (z < river.north - 4 || (z > river.south + 4 && z < wall.south)) && Math.abs(z + 18) > 6;
-  return { paved, basalt, garden: inGarden, field };
+/**
+ * Convex strips along one bank of the Ald outside the walls (`side` 1 its
+ * east bank, -1 its west), from `margin` m off its water `reach` m out, from
+ * where the bank leaves the gorge's cliffs. With `cap`, on round the river's
+ * end at the water gate.
+ */
+function aldBanks(side: 1 | -1, margin: number, reach: number, cap: boolean): P2[][] {
+  const pts = ald.line;
+  const halfAt = (t: number) => lerp(ald.half, ald.mouth, smoothstep(0.8, 1, t));
+  const rays: { p: P2; n: P2 }[] = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [ax, az] = pts[i];
+    const [bx, bz] = pts[i + 1];
+    const len = Math.hypot(bx - ax, bz - az);
+    const n: P2 = [((bz - az) / len) * side, (-(bx - ax) / len) * side];
+    const steps = Math.max(1, Math.ceil(len / 6));
+    for (let k = 0; k <= steps; k++) {
+      const t = k / steps;
+      const r = halfAt(lerp(ALD_ALONG[i], ALD_ALONG[i + 1], t)) + margin;
+      rays.push({ p: [ax + (bx - ax) * t + n[0] * r, az + (bz - az) * t + n[1] * r], n });
+    }
+  }
+  if (cap) {
+    // Round the end, from the last bank's normal to straight on.
+    const [ex, ez] = pts[pts.length - 1];
+    const [px, pz] = pts[pts.length - 2];
+    const len = Math.hypot(ex - px, ez - pz);
+    const fwd: P2 = [(ex - px) / len, (ez - pz) / len];
+    const last = rays[rays.length - 1].n;
+    const r = ald.mouth + margin;
+    for (let k = 1; k <= 4; k++) {
+      const a = (k / 4) * (PI / 2);
+      const n: P2 = [last[0] * Math.cos(a) + fwd[0] * Math.sin(a), last[1] * Math.cos(a) + fwd[1] * Math.sin(a)];
+      rays.push({ p: [ex + n[0] * r, ez + n[1] * r], n });
+    }
+  }
+  const out: P2[][] = [];
+  for (let k = 0; k < rays.length - 1; k++) {
+    const a = rays[k];
+    const b = rays[k + 1];
+    if (a.p[1] < gorge.from || b.p[1] < gorge.from) continue;
+    if (Math.hypot(b.p[0] - a.p[0], b.p[1] - a.p[1]) < 1e-6 && a.n[0] === b.n[0] && a.n[1] === b.n[1]) continue;
+    out.push([a.p, b.p, [b.p[0] + b.n[0] * reach, b.p[1] + b.n[1] * reach], [a.p[0] + a.n[0] * reach, a.p[1] + a.n[1] * reach]]);
+  }
+  return out;
 }
 
 /**
- * Where you can walk, in the city's frame: the north bank (inside and out,
- * to the gorge's cliffs), the valley road up between them, the south bank,
- * the Aldbridge, the mole, the causeway and the Kingsroad's last stretch,
- * the two reaching over their seams. Convex areas that overlap where
- * they join; the river, the harbour and the sea are outside them all, and
- * the walls keep you to the gates.
+ * Where you can walk, in the city's frame: the north bank inside the walls
+ * and out, under the north wall to the gorge's mouth and up the valley road
+ * to the Gorgegate; the narrow bank between the Ald and the west wall; the
+ * fields over the Ald, west and round its bend; the south bank; the
+ * Kingsbridge, the Aldbridge, the mole and the causeway, and the Kingsroad
+ * and the causeway on over their seams. Convex areas that overlap where they
+ * join; the river, the harbour and the sea are outside them all, and the
+ * walls keep you to the gates.
  */
 function walkableAreas(): P2[][] {
   const { basin } = river;
   const e = 1;
-  const westEdge = -150;
-  const moleArea = (a: readonly number[], b: readonly number[], half: number): P2[] => {
+  const westEdge = ESCARPMENT - 0.5;
+  /** Out from the Ald's east bank, along the west wall's foot. */
+  const eastBank = -114;
+  const strip = (a: readonly number[], b: readonly number[], half: number, ends = 1): P2[] => {
     const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
     const nx = (-(b[1] - a[1]) / len) * half;
     const nz = ((b[0] - a[0]) / len) * half;
-    const ux = ((b[0] - a[0]) / len) * 1;
-    const uz = ((b[1] - a[1]) / len) * 1;
+    const ux = ((b[0] - a[0]) / len) * ends;
+    const uz = ((b[1] - a[1]) / len) * ends;
     return [
       [a[0] + nx - ux, a[1] + nz - uz],
       [b[0] + nx + ux, b[1] + nz + uz],
@@ -943,29 +1307,41 @@ function walkableAreas(): P2[][] {
       [a[0] - nx - ux, a[1] - nz - uz],
     ];
   };
+  const octagon = (cx: number, cz: number, r: number): P2[] => Array.from({ length: 8 }, (_, k) => [cx + r * Math.cos((k * PI) / 4 + PI / 8), cz + r * Math.sin((k * PI) / 4 + PI / 8)] as P2);
   const [m0, m1, m2] = mole.line;
   const [, c1, c2, c3] = causeway.line;
   const { land } = ALDHAVEN;
+  const seam = CONFIG.world.ground.seam;
   const kz = KINGSROAD.road.z - ALDHAVEN.at.z;
+  const kb = kingsbridge;
   return [
-    // The north bank, from the gorge's cliffs down to the river streets.
-    [[westEdge, gorge.from], [70, gorge.from], [108, -90], [coast - e, wall.ne[3]], [coast - e, basin.north - e], [westEdge, basin.north - e]],
-    [[westEdge, basin.north - e - 1], [basin.to, basin.north - e - 1], [basin.from, river.north - e], [westEdge, river.north - e]],
-    // The valley road, up into the gorge.
-    [[gorge.x - 12, gorge.from + 2], [gorge.x + 12, gorge.from + 2], [gorge.x + 12, ALDHAVEN.land.minZ + 4], [gorge.x - 12, ALDHAVEN.land.minZ + 4]],
+    // The north bank, from the Greyspine's feet down to the river streets, the strip along the west wall's foot with it.
+    [[eastBank, gorge.from], [70, gorge.from], [108, -90], [coast - e, wall.ne[3]], [coast - e, basin.north - e], [wall.west + 2, basin.north - e], [eastBank, 22]],
+    [[wall.west + 1.5, basin.north - e - 1], [basin.to, basin.north - e - 1], [basin.from, river.north - e], [wall.west + 1.5, river.north - e]],
+    // The valley road up the gorge's floor to the Gorgegate.
+    [[eastBank, gorge.from + 6], [gorge.x + 17, gorge.from + 6], [gorge.x + 13, gorge.gate + 1], [eastBank, gorge.gate + 1]],
+    // The fields over the Ald, under the escarpment, and round its bend.
+    ...aldBanks(-1, 1.2, 14, true),
+    [[westEdge, gorge.from], [-134, gorge.from], [-134, 80], [westEdge, 80]],
+    [[westEdge, 80], [wall.west - 2, 80], [wall.west - 2, wall.south - 1], [westEdge, wall.south - 1]],
     // The south bank.
-    [[westEdge, river.south + e], [basin.from, river.south + e], [basin.to, basin.south + e + 1], [westEdge, basin.south + e + 1]],
-    [[westEdge, basin.south + e], [coast - e, basin.south + e], [coast - e, wall.south - 1], [westEdge, wall.south - 1]],
+    [[wall.west + 1.5, river.south + e], [basin.from, river.south + e], [basin.to, basin.south + e + 1], [wall.west + 1.5, basin.south + e + 1]],
+    [[wall.west + 1.5, basin.south + e], [coast - e, basin.south + e], [coast - e, wall.south - 1], [wall.west + 1.5, wall.south - 1]],
     // The causeway over the flats, on over the seam into the Sallows by CONFIG.world.ground.seam.
-    moleArea([causeway.x, wall.south - 2], c1, 3.2),
-    moleArea(c1, c2, 3.2),
-    moleArea(c2, [c3[0], ALDHAVEN.land.maxZ + CONFIG.world.ground.seam - 1], 3.2),
-    // The Kingsroad's last stretch, on over the seam into Brackenmoor by CONFIG.world.ground.seam.
-    [[land.minX - CONFIG.world.ground.seam, kz - 8], [westEdge + 4, kz - 7], [westEdge + 4, kz + 9], [land.minX - CONFIG.world.ground.seam, kz + 8]],
+    strip([causeway.x, wall.south - 2], c1, 3.2),
+    strip(c1, c2, 3.2),
+    strip(c2, [c3[0], land.maxZ + seam - 1], 3.2),
+    // The Kingsroad's last stretch down off the crest through its cutting, on over the seam into Brackenmoor by CONFIG.world.ground.seam.
+    [[land.minX - seam, kz - 7], [-150, kz - 5.5], [-150, kz + 7], [land.minX - seam, kz + 7]],
+    strip([-151, -22.6], [-141, -18.6], 4.5),
+    strip([-141, -18.6], [-133, -15.3], 4.5),
+    // The Kingsbridge's deck, between its parapets.
+    [[kb.x0 - 2, kb.z - kb.width / 2 + 0.7], [kb.x1 + 1.5, kb.z - kb.width / 2 + 0.7], [kb.x1 + 1.5, kb.z + kb.width / 2 - 0.7], [kb.x0 - 2, kb.z + kb.width / 2 - 0.7]],
     // The Aldbridge's roadway.
     [[bridge.x - bridge.road / 2 + 0.3, river.north - 3], [bridge.x + bridge.road / 2 - 0.3, river.north - 3], [bridge.x + bridge.road / 2 - 0.3, river.south + 3], [bridge.x - bridge.road / 2 + 0.3, river.south + 3]],
-    // The mole, out to the harbour light.
-    moleArea([coast - 4, m0[1] - (m1[1] - m0[1]) * (4 / (m1[0] - m0[0]))], m1, mole.width / 2 - 0.8),
-    moleArea(m1, m2, mole.width / 2 - 0.8),
+    // The mole, out to the harbour light, and round its head.
+    strip([coast - 4, m0[1] - (m1[1] - m0[1]) * (4 / (m1[0] - m0[0]))], m1, mole.width / 2 - 0.8),
+    strip(m1, m2, mole.width / 2 - 0.8),
+    octagon(m2[0], m2[1], MOLE_HEAD.r - 0.9),
   ];
 }

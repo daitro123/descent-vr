@@ -9,8 +9,8 @@ import { audio, type AudioKit, sfx } from './sfx';
 
 // The zones' ambience, played (spec, "Sound"): Oakvale's light wind that
 // isn't placed anywhere and its birds calling now and then from the trees
-// round you, Brackenmoor's stronger, lower wind and its lone curlew, crossfading
-// over the seam, each place's sound where it is, and the mine's own air past its bend. Which
+// round you, Brackenmoor's stronger, lower wind and its lone curlew, Aldhaven's
+// sea wind and surf under its gulls, crossfading over the seams, each place's sound where it is, and the mine's own air past its bend. Which
 // ambient sounds play, and which are placed by HRTF, is world/ambience.ts's
 // pure rule, and how loud and muffled each part is follows the light's cues
 // by world/mix.ts's; this keeps the Web Audio graph in step with both. No
@@ -80,6 +80,7 @@ interface AirKind {
 const AIRS: Record<ZoneAmbience, AirKind> = {
   woods: { wind: 'wind', level: CONFIG.sound.wind.level, calls: (zone) => new BirdSong(zone.trees), bird: CONFIG.sound.birds },
   moor: { wind: 'moorWind', level: CONFIG.sound.moor.wind.level, calls: () => new LoneCall(), bird: CONFIG.sound.moor.call },
+  harbour: { wind: 'seaWind', level: CONFIG.sound.harbour.wind.level, calls: () => new LoneCall(Math.random, CONFIG.sound.harbour.call, 'gull'), bird: CONFIG.sound.harbour.call },
 };
 
 /** A zone as the ambience plays it: its own ambience, its places and its trees. */
@@ -89,7 +90,7 @@ export type ZoneSounds = Pick<Zone, 'id' | 'ambience' | 'sounds' | 'trees'>;
 interface ZoneAir {
   readonly id: string;
   readonly kind: ZoneAmbience;
-  /** Who calls in it: birds in the trees, or the lone curlew. */
+  /** Who calls in it: birds in the trees, the lone curlew, or the gulls. */
   readonly calls: BirdSong | LoneCall;
   /** Into the outdoors, at its share; null until audio is unlocked. */
   gain: GainNode | null;
