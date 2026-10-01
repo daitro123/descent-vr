@@ -79,7 +79,7 @@ const STAGE_Z = -1.8;
 const MIN_SCALE = 0.2;
 const MAX_SCALE = 3;
 /** A model taller than this (m) is stood smaller to fit, as the giant build is: scale it up for its true size. */
-const FIT_HEIGHT = 2.8;
+const FIT_HEIGHT = 3.5;
 const FLICK_ON = 0.6;
 const FLICK_OFF = 0.3;
 
