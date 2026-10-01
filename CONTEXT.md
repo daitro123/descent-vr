@@ -140,6 +140,10 @@ _Avoid_: worm model, snake rig
 A small creature that lives about its spot and never fights: a hare or rabbit that bolts zig-zagging, a frog that leaps into the water, a rat that scurries along its wall into a gap. Each comes back once you've been away a while. Not an enemy, and not a villager.
 _Avoid_: ambient animal, wildlife, mob
 
+**Bird flock**:
+Birds a zone places together, living one way: hens pecking about a yard, pigeons that burst up off a market square onto the stalls' awnings, a covey of grouse hidden in the heather, ravens each on its standing stone, gulls circling a harbour, ducks on a pond, a lone heron in the shallows. They take fright as you come near and come back once you've gone. It is drawn as one, however many birds are in it. Not an animal (that's livestock and pets), not an enemy, and not a critter. Plain "flock" is the sheep's.
+_Avoid_: bird spawn, bird group, mob
+
 **Camp**:
 A group of enemies that lives at one place and refills some time after it is cleared: the bandits at the farm, at the lumber camp and at the watchtower, and the undead in the mine. A boss is never part of a camp. (The lumber camp is a place; the bandits there are its camp.) A camp can be neutral until a quest turns it, leaving you be unless you hurt one of it, and can come or go with a quest.
 _Avoid_: spawn, pack, mob

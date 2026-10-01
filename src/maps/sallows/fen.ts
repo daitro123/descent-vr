@@ -6,6 +6,7 @@ import type { Zone } from '../types';
 import { buildWaterSheet } from '../waterSheet';
 import { buildSallowsChunk, sallowsChunks, sallowsPlan } from './chunks';
 import { SALLOWS, SALLOWS_ATMOSPHERE, type SallowsPlan } from './plan';
+import { SALLOWS_BIRDS } from './birds';
 import { FEN_WATER } from './palette';
 
 /**
@@ -49,6 +50,7 @@ export function buildSallows(given?: SallowsPlan): Zone {
     mine: null,
     villagers: [],
     people: [],
+    birds: SALLOWS_BIRDS,
     // The fog closes at 75 m anyway; Reedholm's landing will have 29 within it (sallows-inhabitants.md).
     crowd: { near: 80, most: 30 },
     animals: [],
@@ -62,6 +64,7 @@ export function buildSallows(given?: SallowsPlan): Zone {
     bounds: plan.walkable.bounds,
     landmarks: plan.landmarks,
     heightAt: plan.heightAt,
+    // The meres, the lodes and the channel: one water line over every hollow below it.
     waterAt: (x, z) => (plan.heightAt(x, z) < SALLOWS.water ? SALLOWS.water : null),
     resolve: (p, radius) => plan.colliders.resolve(p, radius),
     collide: (p, radius) => plan.colliders.pushOut(p, radius),
