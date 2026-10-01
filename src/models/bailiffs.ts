@@ -86,7 +86,7 @@ export function crossbow(ctx: DressContext): WeaponSpec {
 }
 
 /** A case of bolts at the right hip. */
-function boltCase(ctx: DressContext): void {
+export function boltCase(ctx: DressContext): void {
   ctx
     .on('hips')
     .box(0.07, 0.24, 0.09, { at: [-0.2, -0.1, -0.02], rot: [0, 0, -0.08], color: PAL.leatherDark })

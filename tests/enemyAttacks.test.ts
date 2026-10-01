@@ -155,6 +155,16 @@ describe.each([
   ['bailiff with a cudgel', () => new TestGrunt('grunt', 0, 0, { family: 'corvane' })],
   ['bailiff with an iron-bound club', () => new TestGrunt('grunt', 0, 0, { family: 'corvane', variant: 1 })],
   ['bailiff shieldman', () => new TestBrute('brute', 0, 0, { family: 'corvane' })],
+  ['Lantern Man with a cutlass', () => new TestGrunt('grunt', 0, 0, { family: 'smuggler' })],
+  ['Lantern Man with a boat hook', () => new TestGrunt('grunt', 0, 0, { family: 'smuggler', variant: 1 })],
+  ['Lantern Men dredger with a dredging hook', () => new TestBrute('brute', 0, 0, { family: 'smuggler' })],
+  ['Lantern Men dredger with a beetle', () => new TestBrute('brute', 0, 0, { family: 'smuggler', variant: 1 })],
+  ['Lantern Men leader', () => new TestBrute('brute', 0, 0, { family: 'smuggler', named: 'leader' })],
+  ['Captain Crake', () => new TestBrute('brute', 0, 0, { family: 'smuggler', named: 'crake' })],
+  ['Undergate thief', () => new TestGrunt('grunt', 0, 0, { family: 'undergate' })],
+  ['fen raider', () => new TestGrunt('grunt', 0, 0, { family: 'raider' })],
+  ['fen raider peat cutter', () => new TestBrute('brute', 0, 0, { family: 'raider' })],
+  ['Abel Thatch', () => new TestBrute('brute', 0, 0, { family: 'raider', named: 'headman' })],
   ['moor thug with a billhook', () => new TestGrunt('grunt', 0, 0, { family: 'moorBandit' })],
   ['moor thug with a long knife', () => new TestGrunt('grunt', 0, 0, { family: 'moorBandit', variant: 1 })],
   ['Red Annis', () => new TestBrute('brute', 0, 0, { family: 'moorBandit' })],
@@ -246,7 +256,7 @@ describe('slams and shots', () => {
     expect(r.slams[0].z).toBeGreaterThan(1.7);
   });
 
-  it.each(['undead', 'bandit', 'corvane', 'moorBandit', 'lampCrew'] as const)('an %s archer looses one arrow at full draw, from about head height', (family) => {
+  it.each(['undead', 'bandit', 'corvane', 'smuggler', 'undergate', 'raider', 'moorBandit', 'lampCrew'] as const)('an %s archer looses one arrow at full draw, from about head height', (family) => {
     const a = new TestArcher('archer', 0, 0, { family });
     const r = run(a, a.def.attacks[0], player(6, 1.6), 6);
     expect(r.shots).toHaveLength(1);
@@ -258,19 +268,27 @@ describe('slams and shots', () => {
 // The brute's reach (its attack range and body radius) was set for the undead
 // brute's bigger body; the bandit leader and Corvane's shieldman fight with the
 // same behaviour on the human body's big build, swinging a felling axe and a
-// long mace. On Brackenmoor, Red Annis fights with it on a woman's build, her
-// crook-blade's long staff making up the difference; the diggers swing a pick
-// and a sledge on the big build; the bog dead's brute is the undead brute's
-// body in peat.
+// long mace, and so do the Sallows' brutes and leaders: the dredgers' hook and
+// beetle, the Lantern Men leader's boarding axe, Captain Crake's long cutlass,
+// the peat cutter's spade and Abel Thatch's slasher. On Brackenmoor, Red Annis
+// fights with it on a woman's build, her crook-blade's long staff making up
+// the difference; the diggers swing a pick and a sledge on the big build; the
+// bog dead's brute is the undead brute's body in peat.
 describe.each([
   ['bandit leader', 'bandit'],
   ['bailiff shieldman', 'corvane'],
+  ['Lantern Men dredger with a dredging hook', 'smuggler'],
+  ['Lantern Men dredger with a beetle', 'smuggler', 1],
+  ['Lantern Men leader', 'smuggler', 0, 'leader'],
+  ['Captain Crake', 'smuggler', 0, 'crake'],
+  ['fen raider peat cutter', 'raider'],
+  ['Abel Thatch', 'raider', 0, 'headman'],
   ['Red Annis', 'moorBandit'],
   ['Kerchief digger', 'digger'],
   ['lamp crew sledge', 'lampCrew'],
   ['bog dead brute', 'bogDead'],
-] as const)("the %s's reach", (_name, family) => {
-  const make = () => new TestBrute('brute', 0, 0, { family });
+] as const)("the %s's reach", (_name, family, variant = 0, named?: string) => {
+  const make = () => new TestBrute('brute', 0, 0, { family, variant, named });
   const probe = make();
   /** As close as you can get: its body against yours. */
   const touching = probe.def.radius + CONFIG.player.bodyRadius;
@@ -292,7 +310,7 @@ describe.each([
   });
 });
 
-describe.each(['undead', 'bandit', 'corvane', 'moorBandit', 'lampCrew'] as const)('%s archer aim', (family) => {
+describe.each(['undead', 'bandit', 'corvane', 'smuggler', 'undergate', 'raider', 'moorBandit', 'lampCrew'] as const)('%s archer aim', (family) => {
   /**
    * Draw one arrow at a player whose head starts at `head` (and moves by
    * `move` per second), from an archer at the origin facing `yaw`. Returns how

@@ -97,11 +97,14 @@ describe('each role', () => {
 });
 
 describe('what drops', () => {
-  it("is the enemy's family's junk: bandits' trinkets and cloth, the undead's charms and dust, Corvane's tallies and badges", () => {
+  it("is the enemy's family's junk: bandits' trinkets and cloth, the undead's charms and dust, Corvane's tallies and badges, the Sallows' twine and hooks", () => {
     const bases = (family: Family) => new Set(itemsOf(many(kill('leader', 3, family)), 'junk').map((i) => i.id.replace(/-\d+$/, '')));
     expect(bases('bandit')).toEqual(new Set(['worn-trinket', 'torn-cloth']));
     expect(bases('undead')).toEqual(new Set(['bone-charm', 'grave-dust']));
     expect(bases('corvane')).toEqual(new Set(['tithe-tally', 'key-badge']));
+    expect(bases('smuggler')).toEqual(new Set(['tarred-twine', 'lantern-shutter']));
+    expect(bases('undergate')).toEqual(new Set(['cellar-key', 'loaded-dice']));
+    expect(bases('raider')).toEqual(new Set(['eel-hook', 'reed-charm']));
   });
 
   it("is at the enemy's level, up to the loot levels", () => {
